@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/need.dart';
 import 'coordination_repository.dart';
+import 'firestore_mission_mapper.dart';
 
 class FirestoreCoordinationRepository implements CoordinationRepository {
   FirestoreCoordinationRepository(this._firestore);
@@ -10,10 +12,28 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
 
   @override
   Stream<List<CoordinationNeed>> watchMissions() {
-    return _firestore
-        .collection('missions')
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map(_missionFromDocument).toList());
+    return _firestore.collection('missions').snapshots().map((snapshot) {
+      final missions = snapshot.docs
+          .map(
+            (document) => FirestoreMissionMapper.fromFirestore(
+              id: document.id,
+              data: document.data(),
+            ),
+          )
+          .where((mission) => mission.isActive)
+          .toList();
+      missions.sort((left, right) {
+        final leftDate = left.startAt;
+        final rightDate = right.startAt;
+        if (leftDate == null && rightDate == null) {
+          return left.id.compareTo(right.id);
+        }
+        if (leftDate == null) return 1;
+        if (rightDate == null) return -1;
+        return leftDate.compareTo(rightDate);
+      });
+      return missions;
+    });
   }
 
   @override
@@ -22,6 +42,38 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         .collection('locations')
         .snapshots()
         .map((snapshot) => snapshot.docs.map(_locationFromDocument).toList());
+  }
+
+  @override
+  Future<String> createMission(MissionDraft draft) async {
+    final reference = _firestore.collection('missions').doc();
+    debugPrint('Publication Firestore mission : début');
+    debugPrint('Identifiant mission généré : ${reference.id}');
+    try {
+      await reference.set(
+        FirestoreMissionMapper.toFirestore(
+          id: reference.id,
+          draft: draft,
+          serverTimestamp: FieldValue.serverTimestamp(),
+        ),
+      );
+      debugPrint('Publication Firestore mission réussie : ${reference.id}');
+      return reference.id;
+    } on FirebaseException catch (error, stackTrace) {
+      if (error.code == 'permission-denied') {
+        debugPrint(
+          'Publication Firestore refusée (permission-denied). '
+          'Vérifier les règles de la collection missions.',
+        );
+      }
+      debugPrint('Erreur Firestore createMission : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('Erreur createMission : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    }
   }
 
   @override
@@ -43,10 +95,19 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         throw const RepositoryException('Mission introuvable');
       }
       final data = snapshot.data()!;
-      final requiredMk = _int(data['requiredPhysiotherapists']);
-      final requiredPp = _int(data['requiredPodiatrists']);
-      var registeredMk = _int(data['registeredPhysiotherapists']);
-      var registeredPp = _int(data['registeredPodiatrists']);
+      final usesCurrentSchema = data.containsKey('requiredMk');
+      final requiredMk = _int(
+        data['requiredMk'] ?? data['requiredPhysiotherapists'],
+      );
+      final requiredPp = _int(
+        data['requiredPp'] ?? data['requiredPodiatrists'],
+      );
+      var registeredMk = _int(
+        data['registeredMk'] ?? data['registeredPhysiotherapists'],
+      );
+      var registeredPp = _int(
+        data['registeredPp'] ?? data['registeredPodiatrists'],
+      );
 
       switch (profession) {
         case VolunteerProfession.mk:
@@ -82,34 +143,14 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         'createdAt': now,
       });
       transaction.update(missionRef, {
-        'registeredPhysiotherapists': registeredMk,
-        'registeredPodiatrists': registeredPp,
+        usesCurrentSchema ? 'registeredMk' : 'registeredPhysiotherapists':
+            registeredMk,
+        usesCurrentSchema ? 'registeredPp' : 'registeredPodiatrists':
+            registeredPp,
         'status': status.name,
         'updatedAt': now,
       });
     });
-  }
-
-  CoordinationNeed _missionFromDocument(
-    QueryDocumentSnapshot<Map<String, dynamic>> document,
-  ) {
-    final data = document.data();
-    return CoordinationNeed(
-      id: document.id,
-      place: data['place'] as String? ?? 'À renseigner',
-      group: _enumByName(
-        TerritorialGroup.values,
-        data['group'] as String?,
-        TerritorialGroup.partnerSites,
-      ),
-      date: data['date'] as String? ?? 'À renseigner',
-      time: data['time'] as String? ?? 'À renseigner',
-      requiredPhysiotherapists: _int(data['requiredPhysiotherapists']),
-      registeredPhysiotherapists: _int(data['registeredPhysiotherapists']),
-      requiredPodiatrists: _int(data['requiredPodiatrists']),
-      registeredPodiatrists: _int(data['registeredPodiatrists']),
-      equipment: List<String>.from(data['equipment'] as List? ?? const []),
-    );
   }
 
   ResponsePlace _locationFromDocument(

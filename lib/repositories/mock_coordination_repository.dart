@@ -34,6 +34,30 @@ class MockCoordinationRepository implements CoordinationRepository {
   }
 
   @override
+  Future<String> createMission(MissionDraft draft) async {
+    final id = 'mock-mission-${_missions.length + 1}';
+    final mission = CoordinationNeed(
+      id: id,
+      locationId: draft.location.id,
+      place: draft.location.name,
+      group: draft.location.group,
+      date: _dateLabel(draft.startAt),
+      time: '${_timeLabel(draft.startAt)} — ${_timeLabel(draft.endAt)}',
+      startAt: draft.startAt,
+      endAt: draft.endAt,
+      requiredPhysiotherapists: draft.requiredPhysiotherapists,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: draft.requiredPodiatrists,
+      registeredPodiatrists: 0,
+      equipment: List.of(draft.equipment),
+      details: draft.details,
+    );
+    _missions.add(mission);
+    _missionUpdates.add(List.unmodifiable(_missions));
+    return id;
+  }
+
+  @override
   Future<void> createEngagement({
     required String missionId,
     required String firstName,
@@ -72,4 +96,14 @@ class MockCoordinationRepository implements CoordinationRepository {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
+
+  static String _dateLabel(DateTime value) {
+    return '${_two(value.day)}/${_two(value.month)}/${value.year}';
+  }
+
+  static String _timeLabel(DateTime value) {
+    return '${_two(value.hour)}:${_two(value.minute)}';
+  }
+
+  static String _two(int value) => value.toString().padLeft(2, '0');
 }

@@ -16,19 +16,18 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
 
-  static const _screens = [
-    SlotsScreen(),
-    CreateNeedScreen(),
-    CoordinationScreen(),
-    PlacesScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      const SlotsScreen(),
+      CreateNeedScreen(onViewMission: () => setState(() => _currentIndex = 0)),
+      const CoordinationScreen(),
+      const PlacesScreen(),
+    ];
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(index: _currentIndex, children: _screens),
+        child: IndexedStack(index: _currentIndex, children: screens),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

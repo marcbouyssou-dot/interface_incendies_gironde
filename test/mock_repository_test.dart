@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 
 void main() {
@@ -68,5 +69,33 @@ void main() {
 
     expect(updated.single.status, NeedStatus.complete);
     expect(repository.volunteers.single.email, isNull);
+  });
+
+  test('a created mock mission is emitted immediately by the stream', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: [places.first],
+    );
+    final emissions = <List<CoordinationNeed>>[];
+    final subscription = repository.watchMissions().listen(emissions.add);
+    await Future<void>.delayed(Duration.zero);
+
+    await repository.createMission(
+      MissionDraft(
+        location: places.first,
+        startAt: DateTime(2026, 7, 30, 22),
+        endAt: DateTime(2026, 7, 31, 2),
+        requiredPhysiotherapists: 2,
+        requiredPodiatrists: 1,
+        equipment: const ['Tables'],
+        details: '',
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(emissions.last, hasLength(1));
+    expect(emissions.last.single.place, places.first.name);
+    expect(emissions.last.single.time, '22:00 — 02:00');
+    await subscription.cancel();
   });
 }

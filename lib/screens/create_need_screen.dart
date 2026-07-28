@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
 import '../models/need.dart';
+import '../repositories/coordination_repository.dart';
 import '../repositories/repository_scope.dart';
+import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 
 class CreateNeedScreen extends StatefulWidget {
-  const CreateNeedScreen({super.key});
+  const CreateNeedScreen({super.key, this.onViewMission});
+
+  final VoidCallback? onViewMission;
 
   @override
   State<CreateNeedScreen> createState() => _CreateNeedScreenState();
@@ -15,11 +18,31 @@ class CreateNeedScreen extends StatefulWidget {
 class _CreateNeedScreenState extends State<CreateNeedScreen> {
   int _physiotherapists = 4;
   int _podiatrists = 1;
-  String? _selectedPlace;
+  ResponsePlace? _selectedLocation;
+  DateTime? _selectedDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
   final Set<String> _equipment = {'Tables', 'Serviettes'};
+  final _detailsController = TextEditingController();
+  bool _publishing = false;
+  String? _errorMessage;
+  _PublishedMission? _publishedMission;
+
+  @override
+  void dispose() {
+    _detailsController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_publishedMission != null) {
+      return _MissionPublishedView(
+        mission: _publishedMission!,
+        onViewMission: widget.onViewMission,
+        onCreateAnother: _resetForm,
+      );
+    }
     return PageContainer(
       child: ListView(
         key: const PageStorageKey('create'),
@@ -45,15 +68,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     builder: (context, snapshot) {
                       final locations =
                           snapshot.data ?? const <ResponsePlace>[];
-                      final selected =
-                          locations.any(
-                            (location) => location.id == _selectedPlace,
-                          )
-                          ? _selectedPlace
-                          : null;
                       return DropdownButtonFormField<String>(
+                        key: const Key('mission-location'),
                         isExpanded: true,
-                        initialValue: selected,
+                        initialValue: _selectedLocation?.id,
                         hint: const Text('Choisir un lieu'),
                         items: locations
                             .map(
@@ -66,28 +84,56 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                               ),
                             )
                             .toList(),
-                        onChanged: (value) =>
-                            setState(() => _selectedPlace = value),
+                        onChanged: _publishing
+                            ? null
+                            : (id) => setState(() {
+                                _selectedLocation = locations
+                                    .where((location) => location.id == id)
+                                    .firstOrNull;
+                                _errorMessage = null;
+                              }),
                         icon: const Icon(Icons.keyboard_arrow_down_rounded),
                       );
                     },
                   ),
                   const SizedBox(height: 18),
-                  const Row(
+                  _PickerField(
+                    key: const Key('mission-date'),
+                    label: 'Date',
+                    value: _selectedDate == null
+                        ? 'Choisir une date'
+                        : _formatDate(_selectedDate!),
+                    icon: Icons.calendar_today_rounded,
+                    onTap: _publishing ? null : _pickDate,
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
                     children: [
                       Expanded(
-                        child: _DemoField(
-                          label: 'Date',
-                          value: '30/07/2026',
-                          icon: Icons.calendar_today_rounded,
+                        child: _PickerField(
+                          key: const Key('mission-start-time'),
+                          label: 'Début',
+                          value: _startTime == null
+                              ? 'Choisir'
+                              : _formatTime(_startTime!),
+                          icon: Icons.schedule_rounded,
+                          onTap: _publishing
+                              ? null
+                              : () => _pickTime(isStart: true),
                         ),
                       ),
-                      SizedBox(width: 12),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: _DemoField(
-                          label: 'Horaires',
-                          value: '09:00 — 13:00',
+                        child: _PickerField(
+                          key: const Key('mission-end-time'),
+                          label: 'Fin',
+                          value: _endTime == null
+                              ? 'Choisir'
+                              : _formatTime(_endTime!),
                           icon: Icons.schedule_rounded,
+                          onTap: _publishing
+                              ? null
+                              : () => _pickTime(isStart: false),
                         ),
                       ),
                     ],
@@ -98,19 +144,25 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                   _QuotaStepper(
                     label: 'MK nécessaires',
                     value: _physiotherapists,
-                    onRemove: _physiotherapists > 0
+                    removeKey: const Key('mk-remove'),
+                    onRemove: !_publishing && _physiotherapists > 0
                         ? () => setState(() => _physiotherapists--)
                         : null,
-                    onAdd: () => setState(() => _physiotherapists++),
+                    onAdd: _publishing
+                        ? null
+                        : () => setState(() => _physiotherapists++),
                   ),
                   const SizedBox(height: 8),
                   _QuotaStepper(
                     label: 'PP nécessaires',
                     value: _podiatrists,
-                    onRemove: _podiatrists > 0
+                    removeKey: const Key('pp-remove'),
+                    onRemove: !_publishing && _podiatrists > 0
                         ? () => setState(() => _podiatrists--)
                         : null,
-                    onAdd: () => setState(() => _podiatrists++),
+                    onAdd: _publishing
+                        ? null
+                        : () => setState(() => _podiatrists++),
                   ),
                   const SizedBox(height: 18),
                   const _FieldLabel('Matériel demandé'),
@@ -130,11 +182,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                               (item) => FilterChip(
                                 label: Text(item),
                                 selected: _equipment.contains(item),
-                                onSelected: (selected) => setState(
-                                  () => selected
-                                      ? _equipment.add(item)
-                                      : _equipment.remove(item),
-                                ),
+                                onSelected: _publishing
+                                    ? null
+                                    : (selected) => setState(
+                                        () => selected
+                                            ? _equipment.add(item)
+                                            : _equipment.remove(item),
+                                      ),
                                 selectedColor: AppColors.orangeSoft,
                                 checkmarkColor: AppColors.orange,
                                 side: const BorderSide(color: AppColors.border),
@@ -145,21 +199,42 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                   const SizedBox(height: 18),
                   const _FieldLabel('Précisions'),
                   const SizedBox(height: 8),
-                  const TextField(
+                  TextField(
+                    controller: _detailsController,
+                    enabled: !_publishing,
                     maxLines: 3,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       hintText: 'Accès, contact sur place, consignes…',
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Besoin enregistré dans le prototype'),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      _errorMessage!,
+                      key: const Key('mission-form-error'),
+                      style: const TextStyle(
+                        color: AppColors.red,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    icon: const Icon(Icons.arrow_forward_rounded),
-                    label: const Text('Publier le besoin'),
+                  ],
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    key: const Key('publish-mission'),
+                    onPressed: _publishing ? null : _publish,
+                    icon: _publishing
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.arrow_forward_rounded),
+                    label: Text(
+                      _publishing ? 'Publication…' : 'Publier le besoin',
+                    ),
                   ),
                 ],
               ),
@@ -167,6 +242,234 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? today,
+      firstDate: today,
+      lastDate: DateTime(today.year + 2, today.month, today.day),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _selectedDate = selected;
+        _errorMessage = null;
+      });
+    }
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final initial = isStart
+        ? _startTime ?? const TimeOfDay(hour: 8, minute: 0)
+        : _endTime ?? const TimeOfDay(hour: 12, minute: 0);
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        if (isStart) {
+          _startTime = selected;
+        } else {
+          _endTime = selected;
+        }
+        _errorMessage = null;
+      });
+    }
+  }
+
+  Future<void> _publish() async {
+    final validation = _validate();
+    if (validation != null) {
+      setState(() => _errorMessage = validation);
+      return;
+    }
+    final draft = _buildDraft();
+    setState(() {
+      _publishing = true;
+      _errorMessage = null;
+    });
+    debugPrint('Publication mission : début de validation confirmée');
+    try {
+      final id = await RepositoryScope.of(context).createMission(draft);
+      if (!mounted) return;
+      debugPrint('Publication mission confirmée : $id');
+      setState(() {
+        _publishing = false;
+        _publishedMission = _PublishedMission(id: id, draft: draft);
+      });
+    } catch (error, stackTrace) {
+      debugPrint('Publication mission échouée : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() {
+        _publishing = false;
+        _errorMessage = 'La mission n’a pas pu être publiée. Réessayez.';
+      });
+    }
+  }
+
+  String? _validate() {
+    if (_selectedLocation == null) return 'Choisissez un lieu';
+    if (_selectedDate == null) return 'Choisissez une date';
+    if (_startTime == null) return 'Choisissez une heure de début';
+    if (_endTime == null) return 'Choisissez une heure de fin';
+    if (_minutes(_startTime!) == _minutes(_endTime!)) {
+      return 'L’heure de fin doit être postérieure à l’heure de début';
+    }
+    if (_physiotherapists == 0 && _podiatrists == 0) {
+      return 'Indiquez au moins un professionnel nécessaire';
+    }
+    return null;
+  }
+
+  MissionDraft _buildDraft() {
+    final schedule = MissionSchedule.fromLocal(
+      date: _selectedDate!,
+      startMinutes: _minutes(_startTime!),
+      endMinutes: _minutes(_endTime!),
+    );
+    return MissionDraft(
+      location: _selectedLocation!,
+      startAt: schedule.startAt,
+      endAt: schedule.endAt,
+      requiredPhysiotherapists: _physiotherapists,
+      requiredPodiatrists: _podiatrists,
+      equipment: _equipment.toList(growable: false),
+      details: _detailsController.text,
+    );
+  }
+
+  void _resetForm() {
+    setState(() {
+      _selectedLocation = null;
+      _selectedDate = null;
+      _startTime = null;
+      _endTime = null;
+      _physiotherapists = 4;
+      _podiatrists = 1;
+      _equipment
+        ..clear()
+        ..addAll(['Tables', 'Serviettes']);
+      _detailsController.clear();
+      _errorMessage = null;
+      _publishedMission = null;
+    });
+  }
+
+  static int _minutes(TimeOfDay value) => value.hour * 60 + value.minute;
+  static String _formatDate(DateTime value) =>
+      '${_two(value.day)}/${_two(value.month)}/${value.year}';
+  static String _formatTime(TimeOfDay value) =>
+      '${_two(value.hour)}:${_two(value.minute)}';
+  static String _two(int value) => value.toString().padLeft(2, '0');
+}
+
+class _PublishedMission {
+  const _PublishedMission({required this.id, required this.draft});
+  final String id;
+  final MissionDraft draft;
+}
+
+class _MissionPublishedView extends StatelessWidget {
+  const _MissionPublishedView({
+    required this.mission,
+    required this.onViewMission,
+    required this.onCreateAnother,
+  });
+
+  final _PublishedMission mission;
+  final VoidCallback? onViewMission;
+  final VoidCallback onCreateAnother;
+
+  @override
+  Widget build(BuildContext context) {
+    final draft = mission.draft;
+    return PageContainer(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 48, 20, 36),
+        children: [
+          const Icon(
+            Icons.check_circle_rounded,
+            color: AppColors.green,
+            size: 56,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Mission publiée',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SummaryLine(label: 'Lieu', value: draft.location.name),
+                  const SizedBox(height: 14),
+                  _SummaryLine(
+                    label: 'Date',
+                    value: _CreateNeedScreenState._formatDate(draft.startAt),
+                  ),
+                  const SizedBox(height: 14),
+                  _SummaryLine(
+                    label: 'Horaires',
+                    value: '${_time(draft.startAt)} → ${_time(draft.endAt)}',
+                  ),
+                  const SizedBox(height: 14),
+                  _SummaryLine(
+                    label: 'Quotas',
+                    value:
+                        'MK ${draft.requiredPhysiotherapists} • '
+                        'PP ${draft.requiredPodiatrists}',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: onViewMission,
+            child: const Text('Voir la mission'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton(
+            onPressed: onCreateAnother,
+            child: const Text('Déclarer un autre besoin'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _time(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:'
+      '${value.minute.toString().padLeft(2, '0')}';
+}
+
+class _SummaryLine extends StatelessWidget {
+  const _SummaryLine({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: 3),
+        Text(value, style: Theme.of(context).textTheme.titleMedium),
+      ],
     );
   }
 }
@@ -177,12 +480,14 @@ class _QuotaStepper extends StatelessWidget {
     required this.value,
     required this.onRemove,
     required this.onAdd,
+    required this.removeKey,
   });
 
   final String label;
   final int value;
   final VoidCallback? onRemove;
-  final VoidCallback onAdd;
+  final VoidCallback? onAdd;
+  final Key removeKey;
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +503,7 @@ class _QuotaStepper extends StatelessWidget {
             child: Text(label, style: Theme.of(context).textTheme.titleMedium),
           ),
           IconButton(
+            key: removeKey,
             onPressed: onRemove,
             icon: const Icon(Icons.remove_rounded),
           ),
@@ -225,15 +531,19 @@ class _FieldLabel extends StatelessWidget {
       Text(label, style: Theme.of(context).textTheme.titleMedium);
 }
 
-class _DemoField extends StatelessWidget {
-  const _DemoField({
+class _PickerField extends StatelessWidget {
+  const _PickerField({
+    super.key,
     required this.label,
     required this.value,
     required this.icon,
+    required this.onTap,
   });
+
   final String label;
   final String value;
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -242,30 +552,38 @@ class _DemoField extends StatelessWidget {
       children: [
         _FieldLabel(label),
         const SizedBox(height: 8),
-        Container(
-          height: 54,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppColors.border),
+        Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: AppColors.border),
           ),
-          child: Row(
-            children: [
-              Icon(icon, size: 17, color: AppColors.textMuted),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              height: 54,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 17, color: AppColors.textMuted),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ],

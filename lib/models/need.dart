@@ -70,6 +70,11 @@ class CoordinationNeed {
     required this.requiredPodiatrists,
     required this.registeredPodiatrists,
     required this.equipment,
+    this.locationId,
+    this.startAt,
+    this.endAt,
+    this.details,
+    this.isActive = true,
   });
 
   final String id;
@@ -82,6 +87,11 @@ class CoordinationNeed {
   final int requiredPodiatrists;
   final int registeredPodiatrists;
   final List<String> equipment;
+  final String? locationId;
+  final DateTime? startAt;
+  final DateTime? endAt;
+  final String? details;
+  final bool isActive;
 
   String get area => group.label;
 
@@ -121,6 +131,11 @@ class CoordinationNeed {
       registeredPodiatrists:
           registeredPodiatrists ?? this.registeredPodiatrists,
       equipment: equipment,
+      locationId: locationId,
+      startAt: startAt,
+      endAt: endAt,
+      details: details,
+      isActive: isActive,
     );
   }
 }
