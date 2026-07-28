@@ -1,6 +1,6 @@
-# Icônes InterfaceRecup33
+# Icônes Recup33
 
-Remplacer les PNG existants, sans modifier leurs noms :
+Les PNG officiels utilisent les noms suivants :
 
 - `../favicon.png` : favicon du navigateur ;
 - `Icon-192.png` : icône PWA 192 × 192 ;
@@ -9,4 +9,6 @@ Remplacer les PNG existants, sans modifier leurs noms :
 - `Icon-maskable-512.png` : icône maskable 512 × 512.
 
 Les fichiers maskable doivent conserver une zone de sécurité suffisante autour
-du logo. Le manifeste et `index.html` référencent déjà ces chemins.
+du logo. Ils représentent uniquement le casque, la flamme et la signature
+institutionnelle : le nom de l’application ne doit jamais apparaître dans
+l’icône. Le manifeste et `index.html` référencent déjà ces chemins.

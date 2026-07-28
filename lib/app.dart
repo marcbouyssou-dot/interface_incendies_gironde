@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'screens/app_shell.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/mock_coordination_repository.dart';
 import 'repositories/repository_scope.dart';
+import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
 
 class FireCoordinationApp extends StatelessWidget {
@@ -16,10 +16,10 @@ class FireCoordinationApp extends StatelessWidget {
     return RepositoryScope(
       repository: repository ?? MockCoordinationRepository.instance,
       child: MaterialApp(
-        title: 'InterfaceRecup33',
+        title: 'Interface Récup',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
-        home: const AppShell(),
+        home: const SplashScreen(),
       ),
     );
   }

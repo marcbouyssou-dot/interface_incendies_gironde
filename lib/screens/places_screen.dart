@@ -47,16 +47,25 @@ class _PlacesScreenState extends State<PlacesScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Version RC1',
+                  'URPS MK Nouvelle-Aquitaine',
                   style: TextStyle(
                     color: AppColors.navy,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Version RC1',
+                  style: TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 const Text(
-                  '28 juillet 2026',
+                  '2026',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
                 const SizedBox(height: 20),

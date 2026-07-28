@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/need.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 
 class SlotsScreen extends StatefulWidget {
@@ -124,7 +125,7 @@ class _CrisisHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            const _UrpsLogoSlot(),
+            const BrandMark(),
             const SizedBox(width: 13),
             Expanded(
               child: Column(
@@ -169,33 +170,6 @@ class _CrisisHeader extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _UrpsLogoSlot extends StatelessWidget {
-  const _UrpsLogoSlot();
-
-  @override
-  Widget build(BuildContext context) {
-    // Remplacer l’icône par l’asset officiel URPS MK NA lorsqu’il sera fourni.
-    return Semantics(
-      label: 'Emplacement du logo URPS MK Nouvelle-Aquitaine',
-      image: true,
-      child: Container(
-        key: const Key('urps-logo-slot'),
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          color: AppColors.orangeSoft,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: const Icon(
-          Icons.local_fire_department_rounded,
-          color: AppColors.orange,
-          size: 28,
-        ),
-      ),
     );
   }
 }

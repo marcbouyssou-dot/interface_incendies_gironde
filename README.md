@@ -1,4 +1,4 @@
-# InterfaceRecup33
+# Interface Récup
 
 PWA Flutter de coordination en temps réel des professionnels volontaires.
 

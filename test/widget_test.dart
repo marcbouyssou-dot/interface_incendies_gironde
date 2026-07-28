@@ -13,6 +13,20 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('splash shows final branding before missions', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const FireCoordinationApp());
+
+    expect(find.text('InterfaceRecup33'), findsOneWidget);
+    expect(find.text('Incendies Gironde'), findsOneWidget);
+    expect(find.byKey(const Key('brand-logo-slot')), findsOneWidget);
+
+    await tester.pumpAndSettle();
+    expect(find.text('Encore 9 professionnels à mobiliser'), findsOneWidget);
+  });
+
   testWidgets('missions render immediately without overflow at iPhone width', (
     tester,
   ) async {
@@ -99,6 +113,9 @@ void main() {
     await tester.tap(find.text('Plus').last);
     await tester.pumpAndSettle();
 
+    expect(find.text('URPS MK Nouvelle-Aquitaine'), findsOneWidget);
+    expect(find.text('Version RC1'), findsOneWidget);
+    expect(find.text('2026'), findsOneWidget);
     await tester.tap(find.byKey(const Key('places-territorial-filter')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Médoc').last);
