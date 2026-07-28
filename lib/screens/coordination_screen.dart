@@ -38,7 +38,7 @@ class CoordinationScreen extends StatelessWidget {
     );
     final remaining = (required - mobilized).clamp(0, required);
     final coverage = required == 0
-        ? 1.0
+        ? 0.0
         : (mobilized / required).clamp(0, 1).toDouble();
     return PageContainer(
       child: CustomScrollView(
