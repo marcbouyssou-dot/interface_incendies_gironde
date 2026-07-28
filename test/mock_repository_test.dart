@@ -26,6 +26,7 @@ void main() {
       firstName: 'Jeanne',
       lastName: 'Martin',
       phone: '0600000000',
+      email: ' jeanne@example.fr ',
       profession: VolunteerProfession.mk,
     );
     await updatedEmission.future;
@@ -34,6 +35,7 @@ void main() {
     expect(emissions.last.single.registeredPhysiotherapists, 2);
     expect(emissions.last.single.coverage, greaterThan(needs.first.coverage));
     expect(repository.volunteers.single.firstName, 'Jeanne');
+    expect(repository.volunteers.single.email, 'jeanne@example.fr');
     await subscription.cancel();
   });
 
@@ -65,5 +67,6 @@ void main() {
     final updated = await repository.watchMissions().first;
 
     expect(updated.single.status, NeedStatus.complete);
+    expect(repository.volunteers.single.email, isNull);
   });
 }

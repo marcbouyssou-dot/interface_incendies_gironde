@@ -10,6 +10,7 @@ abstract interface class CoordinationRepository {
     required String firstName,
     required String lastName,
     required String phone,
+    String? email,
     required VolunteerProfession profession,
   });
 }

@@ -30,6 +30,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required String firstName,
     required String lastName,
     required String phone,
+    String? email,
     required VolunteerProfession profession,
   }) async {
     final missionRef = _firestore.collection('missions').doc(missionId);
@@ -62,13 +63,18 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       );
       final now = FieldValue.serverTimestamp();
 
-      transaction.set(volunteerRef, {
+      final volunteerData = <String, dynamic>{
         'firstName': firstName.trim(),
         'lastName': lastName.trim(),
         'phone': phone.trim(),
         'profession': profession.name,
         'createdAt': now,
-      });
+      };
+      final normalizedEmail = email?.trim();
+      if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
+        volunteerData['email'] = normalizedEmail;
+      }
+      transaction.set(volunteerRef, volunteerData);
       transaction.set(engagementRef, {
         'missionId': missionId,
         'volunteerId': volunteerRef.id,

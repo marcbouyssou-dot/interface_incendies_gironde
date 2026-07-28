@@ -47,12 +47,14 @@ class Volunteer {
     required this.firstName,
     required this.lastName,
     required this.phone,
+    this.email,
     required this.profession,
   });
 
   final String firstName;
   final String lastName;
   final String phone;
+  final String? email;
   final VolunteerProfession profession;
 }
 

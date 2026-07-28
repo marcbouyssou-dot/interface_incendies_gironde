@@ -39,6 +39,7 @@ class MockCoordinationRepository implements CoordinationRepository {
     required String firstName,
     required String lastName,
     required String phone,
+    String? email,
     required VolunteerProfession profession,
   }) async {
     final index = _missions.indexWhere((mission) => mission.id == missionId);
@@ -60,9 +61,15 @@ class MockCoordinationRepository implements CoordinationRepository {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim(),
+        email: _nullableTrim(email),
         profession: profession,
       ),
     );
     _missionUpdates.add(List.unmodifiable(_missions));
+  }
+
+  static String? _nullableTrim(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 }

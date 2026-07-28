@@ -124,24 +124,26 @@ class _CrisisHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: AppColors.orangeSoft,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.local_fire_department_rounded,
-                color: AppColors.orange,
-                size: 28,
-              ),
-            ),
+            const _UrpsLogoSlot(),
             const SizedBox(width: 13),
             Expanded(
-              child: Text(
-                'Interface Récup',
-                style: Theme.of(context).textTheme.headlineMedium,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'InterfaceRecup33',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Incendies Gironde',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -167,6 +169,33 @@ class _CrisisHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UrpsLogoSlot extends StatelessWidget {
+  const _UrpsLogoSlot();
+
+  @override
+  Widget build(BuildContext context) {
+    // Remplacer l’icône par l’asset officiel URPS MK NA lorsqu’il sera fourni.
+    return Semantics(
+      label: 'Emplacement du logo URPS MK Nouvelle-Aquitaine',
+      image: true,
+      child: Container(
+        key: const Key('urps-logo-slot'),
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: AppColors.orangeSoft,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Icon(
+          Icons.local_fire_department_rounded,
+          color: AppColors.orange,
+          size: 28,
+        ),
+      ),
     );
   }
 }

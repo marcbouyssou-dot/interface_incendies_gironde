@@ -17,7 +17,8 @@ void main() {
     tester,
   ) async {
     await pumpIPhone(tester);
-    expect(find.text('Interface Récup'), findsOneWidget);
+    expect(find.text('InterfaceRecup33'), findsOneWidget);
+    expect(find.text('Incendies Gironde'), findsOneWidget);
     expect(find.text('64 % de couverture'), findsOneWidget);
     expect(find.text('MÉRIGNAC'), findsOneWidget);
     expect(find.text('❤️ JE M’ENGAGE'), findsOneWidget);
@@ -40,6 +41,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('engagement form includes an optional email after profession', (
+    tester,
+  ) async {
+    await pumpIPhone(tester);
+    await tester.scrollUntilVisible(
+      find.text('❤️ JE M’ENGAGE'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(
+      find.byType(CustomScrollView).first,
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('❤️ JE M’ENGAGE').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profession'), findsOneWidget);
+    expect(find.text('Prénom'), findsOneWidget);
+    expect(find.text('Nom'), findsOneWidget);
+    expect(find.text('Téléphone'), findsOneWidget);
+    expect(find.text('Email (facultatif)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('all main screens are reachable without overflow', (
     tester,
   ) async {
@@ -55,7 +81,7 @@ void main() {
       );
     }
 
-    expect(find.text('Interface Récup'), findsOneWidget);
+    expect(find.text('InterfaceRecup33'), findsOneWidget);
   });
 
   testWidgets('slot filters update visible cards', (tester) async {

@@ -16,7 +16,7 @@ class FireCoordinationApp extends StatelessWidget {
     return RepositoryScope(
       repository: repository ?? MockCoordinationRepository.instance,
       child: MaterialApp(
-        title: 'Interface Récup Incendies Gironde',
+        title: 'InterfaceRecup33',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         home: const AppShell(),

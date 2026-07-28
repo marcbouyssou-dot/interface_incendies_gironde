@@ -506,6 +506,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   bool _submitting = false;
 
   @override
@@ -513,6 +514,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -542,6 +544,29 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 18),
+              Text(
+                'Profession',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              RadioGroup<VolunteerProfession>(
+                groupValue: _profession,
+                onChanged: (value) => setState(() => _profession = value!),
+                child: const Column(
+                  children: [
+                    RadioListTile<VolunteerProfession>(
+                      contentPadding: EdgeInsets.zero,
+                      value: VolunteerProfession.mk,
+                      title: Text('Masseur-kinésithérapeute'),
+                    ),
+                    RadioListTile<VolunteerProfession>(
+                      contentPadding: EdgeInsets.zero,
+                      value: VolunteerProfession.pp,
+                      title: Text('Pédicure-podologue'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -570,27 +595,13 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 decoration: const InputDecoration(labelText: 'Téléphone'),
                 validator: _required,
               ),
-              const SizedBox(height: 18),
-              Text(
-                'Votre profession',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              RadioGroup<VolunteerProfession>(
-                groupValue: _profession,
-                onChanged: (value) => setState(() => _profession = value!),
-                child: const Column(
-                  children: [
-                    RadioListTile<VolunteerProfession>(
-                      contentPadding: EdgeInsets.zero,
-                      value: VolunteerProfession.mk,
-                      title: Text('Masseur-kinésithérapeute'),
-                    ),
-                    RadioListTile<VolunteerProfession>(
-                      contentPadding: EdgeInsets.zero,
-                      value: VolunteerProfession.pp,
-                      title: Text('Pédicure-podologue'),
-                    ),
-                  ],
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(
+                  labelText: 'Email (facultatif)',
                 ),
               ),
               const SizedBox(height: 8),
@@ -626,6 +637,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         firstName: _firstNameController.text,
         lastName: _lastNameController.text,
         phone: _phoneController.text,
+        email: _emailController.text,
         profession: _profession,
       );
       if (!mounted) return;
