@@ -1,0 +1,207 @@
+import '../models/need.dart';
+
+const needs = <CoordinationNeed>[
+  CoordinationNeed(
+    id: 'mission-merignac',
+    place: 'Mérignac',
+    group: TerritorialGroup.bordeauxMetropole,
+    date: 'Mar. 29 juillet',
+    time: '08:00 — 12:00',
+    requiredPhysiotherapists: 4,
+    registeredPhysiotherapists: 1,
+    requiredPodiatrists: 0,
+    registeredPodiatrists: 0,
+    equipment: ['Tables', 'Huiles', 'Gels froids'],
+  ),
+  CoordinationNeed(
+    id: 'mission-langon',
+    place: 'Langon',
+    group: TerritorialGroup.southGironde,
+    date: 'Mar. 29 juillet',
+    time: '10:00 — 14:00',
+    requiredPhysiotherapists: 0,
+    registeredPhysiotherapists: 0,
+    requiredPodiatrists: 2,
+    registeredPodiatrists: 1,
+    equipment: ['Fauteuils', 'Kits de soin'],
+  ),
+  CoordinationNeed(
+    id: 'mission-parc-expositions',
+    place: 'Parc des Expositions de Bordeaux',
+    group: TerritorialGroup.partnerSites,
+    date: 'Mar. 29 juillet',
+    time: '14:00 — 19:00',
+    requiredPhysiotherapists: 6,
+    registeredPhysiotherapists: 4,
+    requiredPodiatrists: 2,
+    registeredPodiatrists: 1,
+    equipment: ['Tables', 'Serviettes'],
+  ),
+  CoordinationNeed(
+    id: 'mission-croix-rouge',
+    place: 'Croix-Rouge Bordeaux',
+    group: TerritorialGroup.partnerSites,
+    date: 'Mer. 30 juillet',
+    time: '09:00 — 13:00',
+    requiredPhysiotherapists: 3,
+    registeredPhysiotherapists: 3,
+    requiredPodiatrists: 1,
+    registeredPodiatrists: 1,
+    equipment: ['Tapis', 'Élastiques'],
+  ),
+  CoordinationNeed(
+    id: 'mission-la-teste',
+    place: 'La Teste-de-Buch / Pyla-sur-Mer',
+    group: TerritorialGroup.southBasin,
+    date: 'Mer. 30 juillet',
+    time: '13:00 — 18:00',
+    requiredPhysiotherapists: 4,
+    registeredPhysiotherapists: 2,
+    requiredPodiatrists: 1,
+    registeredPodiatrists: 1,
+    equipment: ['Tables', 'Gels froids'],
+  ),
+  CoordinationNeed(
+    id: 'mission-libourne',
+    place: 'Libourne',
+    group: TerritorialGroup.libournais,
+    date: 'Jeu. 31 juillet',
+    time: '07:00 — 11:00',
+    requiredPhysiotherapists: 2,
+    registeredPhysiotherapists: 2,
+    requiredPodiatrists: 0,
+    registeredPodiatrists: 0,
+    equipment: ['Tables', 'Serviettes', 'Huiles'],
+  ),
+];
+
+ResponsePlace _station(
+  String name,
+  TerritorialGroup group, {
+  int activeNeeds = 0,
+}) {
+  return ResponsePlace(
+    id: '${group.name}-${name.toLowerCase().replaceAll(' ', '-')}',
+    name: name,
+    type: ResponsePlaceType.sdisStation,
+    group: group,
+    activeNeeds: activeNeeds,
+  );
+}
+
+final places = <ResponsePlace>[
+  for (final name in const [
+    'Bordeaux Bastide',
+    'Bordeaux Benauge',
+    'Bordeaux Caudéran',
+    'Bordeaux Nord',
+    'Bordeaux Ornano',
+    'Bègles',
+    'Bassens',
+    'Bruges',
+    'Carbon-Blanc',
+    'Cenon',
+    'Eysines',
+    'Floirac',
+    'Le Haillan',
+    'Lormont',
+    'Mérignac',
+    'Pessac',
+    'Saint-Médard-en-Jalles',
+    'Talence',
+    "Villenave-d'Ornon",
+  ])
+    _station(
+      name,
+      TerritorialGroup.bordeauxMetropole,
+      activeNeeds: name == 'Mérignac' ? 1 : 0,
+    ),
+  for (final name in const [
+    'Arès / Lège-Cap-Ferret',
+    'Andernos-les-Bains / Lanton',
+  ])
+    _station(name, TerritorialGroup.northBasin),
+  for (final name in const [
+    'Arcachon',
+    'Biganos',
+    'Gujan-Mestras / Le Teich',
+    'La Teste-de-Buch / Pyla-sur-Mer',
+    'Marcheprime',
+    'Mios',
+  ])
+    _station(
+      name,
+      TerritorialGroup.southBasin,
+      activeNeeds: name == 'La Teste-de-Buch / Pyla-sur-Mer' ? 1 : 0,
+    ),
+  for (final name in const [
+    'Castelnau-de-Médoc',
+    'Carcans / Hourtin',
+    'Lacanau',
+    'Lesparre-Médoc',
+    'Pauillac',
+    'Soulac-sur-Mer / Le Verdon',
+    'Vendays-Montalivet',
+  ])
+    _station(name, TerritorialGroup.medoc),
+  for (final name in const [
+    'Belin-Béliet',
+    'Cestas',
+    'Créon',
+    'La Brède',
+    'Langon',
+    'Le Barp',
+    'Podensac',
+    'Saint-Symphorien',
+    'Salles',
+    'Bazas',
+    'Cadillac',
+    'La Réole',
+    'Sauveterre-de-Guyenne',
+    'Targon',
+  ])
+    _station(
+      name,
+      TerritorialGroup.southGironde,
+      activeNeeds: name == 'Langon' ? 1 : 0,
+    ),
+  for (final name in const [
+    'Branne',
+    'Castillon-la-Bataille',
+    'Coutras',
+    'Libourne',
+    'Pujols',
+    'Sainte-Foy-la-Grande',
+    'Saint-Denis-de-Pile',
+    'Saint-Émilion',
+    "Saint-Seurin-sur-l'Isle",
+  ])
+    _station(
+      name,
+      TerritorialGroup.libournais,
+      activeNeeds: name == 'Libourne' ? 1 : 0,
+    ),
+  for (final name in const [
+    'Blaye',
+    'Bourg',
+    'Cavignac',
+    'Saint-André-de-Cubzac',
+    'Saint-Ciers-sur-Gironde',
+    'Saint-Savin',
+  ])
+    _station(name, TerritorialGroup.hauteGironde),
+  const ResponsePlace(
+    id: 'parc-expositions-bordeaux',
+    name: 'Parc des Expositions de Bordeaux',
+    type: ResponsePlaceType.civilianReceptionSite,
+    group: TerritorialGroup.partnerSites,
+    activeNeeds: 1,
+  ),
+  const ResponsePlace(
+    id: 'croix-rouge-bordeaux',
+    name: 'Croix-Rouge Bordeaux',
+    type: ResponsePlaceType.redCross,
+    group: TerritorialGroup.partnerSites,
+    activeNeeds: 1,
+  ),
+];
