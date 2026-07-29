@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
@@ -48,11 +49,21 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
 
   Future<CoordinationRepository> _initializeFirebaseWork() async {
     if (Firebase.apps.isEmpty) await FirebaseBootstrap.initialize();
+    final auth = FirebaseAuth.instance;
+    if (auth.currentUser == null) {
+      await auth.signInAnonymously();
+    }
     final firestore = FirebaseFirestore.instance;
-    await FirestoreSeedService(
-      store: FirestoreLocationSeedStore(firestore),
-    ).seedLocationsIfEmpty();
-    return FirestoreCoordinationRepository(firestore);
+    const enableLocationSeed = bool.fromEnvironment(
+      'ENABLE_LOCATION_SEED',
+      defaultValue: false,
+    );
+    if (enableLocationSeed) {
+      await FirestoreSeedService(
+        store: FirestoreLocationSeedStore(firestore),
+      ).seedLocationsIfEmpty();
+    }
+    return FirestoreCoordinationRepository(firestore, auth);
   }
 
   void _retry() {
@@ -101,13 +112,13 @@ class _StartupError extends StatelessWidget {
           const Icon(Icons.cloud_off_rounded, color: AppColors.red, size: 44),
           const SizedBox(height: 16),
           Text(
-            'Impossible d’initialiser les lieux.',
+            'Connexion sécurisée impossible. Réessayez.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 8),
           Text(
-            'Vérifiez la connexion puis réessayez.',
+            'Vérifiez votre connexion.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),

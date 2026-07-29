@@ -27,6 +27,18 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   bool _publishing = false;
   String? _errorMessage;
   _PublishedMission? _publishedMission;
+  CoordinationRepository? _repository;
+  Stream<ResponsibleAccess?>? _responsibleAccess;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final repository = RepositoryScope.of(context);
+    if (!identical(repository, _repository)) {
+      _repository = repository;
+      _responsibleAccess = repository.watchResponsibleAccess();
+    }
+  }
 
   @override
   void dispose() {
@@ -36,6 +48,29 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final repository = _repository!;
+    return StreamBuilder<ResponsibleAccess?>(
+      stream: _responsibleAccess,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final access = snapshot.data;
+        if (access == null) {
+          return _ResponsibleLogin(repository: repository);
+        }
+        if (!access.active) {
+          return _ResponsibleLogin(
+            repository: repository,
+            initialMessage: 'Votre compte responsable est inactif.',
+          );
+        }
+        return _buildForm(context, access);
+      },
+    );
+  }
+
+  Widget _buildForm(BuildContext context, ResponsibleAccess access) {
     if (_publishedMission != null) {
       return _MissionPublishedView(
         mission: _publishedMission!,
@@ -55,6 +90,16 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                 'Les champs permettront au coordinateur de mobiliser les bons renforts.',
           ),
           const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _publishing
+                  ? null
+                  : RepositoryScope.of(context).signOutResponsible,
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: const Text('Se déconnecter'),
+            ),
+          ),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(18),
@@ -74,6 +119,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                         initialValue: _selectedLocation?.id,
                         hint: const Text('Choisir un lieu'),
                         items: locations
+                            .where((location) => access.canManage(location.id))
                             .map(
                               (location) => DropdownMenuItem(
                                 value: location.id,
@@ -370,6 +416,122 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   static String _formatTime(TimeOfDay value) =>
       '${_two(value.hour)}:${_two(value.minute)}';
   static String _two(int value) => value.toString().padLeft(2, '0');
+}
+
+class _ResponsibleLogin extends StatefulWidget {
+  const _ResponsibleLogin({required this.repository, this.initialMessage});
+
+  final CoordinationRepository repository;
+  final String? initialMessage;
+
+  @override
+  State<_ResponsibleLogin> createState() => _ResponsibleLoginState();
+}
+
+class _ResponsibleLoginState extends State<_ResponsibleLogin> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _loading = false;
+  String? _message;
+
+  @override
+  void initState() {
+    super.initState();
+    _message = widget.initialMessage;
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    if (_email.text.trim().isEmpty || _password.text.isEmpty) {
+      setState(() => _message = 'Identifiants incorrects.');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+    try {
+      await widget.repository
+          .signInResponsible(email: _email.text, password: _password.text)
+          .timeout(const Duration(seconds: 15));
+    } on RepositoryException catch (error) {
+      if (mounted) setState(() => _message = error.message);
+    } catch (error, stackTrace) {
+      debugPrint('Connexion responsable impossible : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) setState(() => _message = 'Identifiants incorrects.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageContainer(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 42, 20, 36),
+        children: [
+          const PageHeader(
+            eyebrow: 'Espace responsable',
+            title: 'Se connecter',
+            subtitle: 'Vous devez vous connecter pour déclarer un besoin.',
+          ),
+          const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  TextField(
+                    key: const Key('manager-email'),
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.email],
+                    decoration: const InputDecoration(
+                      labelText: 'Adresse email',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    key: const Key('manager-password'),
+                    controller: _password,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.password],
+                    onSubmitted: (_) => _loading ? null : _signIn(),
+                    decoration: const InputDecoration(
+                      labelText: 'Mot de passe',
+                    ),
+                  ),
+                  if (_message != null) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      _message!,
+                      style: const TextStyle(
+                        color: AppColors.red,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    key: const Key('manager-sign-in'),
+                    onPressed: _loading ? null : _signIn,
+                    child: Text(_loading ? 'Connexion…' : 'Se connecter'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PublishedMission {

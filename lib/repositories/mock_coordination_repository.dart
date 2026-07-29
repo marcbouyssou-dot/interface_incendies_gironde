@@ -18,6 +18,25 @@ class MockCoordinationRepository implements CoordinationRepository {
   final List<Volunteer> volunteers = [];
 
   final _missionUpdates = StreamController<List<CoordinationNeed>>.broadcast();
+  static const _mockAccess = ResponsibleAccess(
+    uid: 'mock-coordinator',
+    role: 'coordinator',
+    locationIds: {'*'},
+    active: true,
+  );
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() =>
+      Stream.value(_mockAccess);
+
+  @override
+  Future<ResponsibleAccess> signInResponsible({
+    required String email,
+    required String password,
+  }) async => _mockAccess;
+
+  @override
+  Future<void> signOutResponsible() async {}
 
   @override
   Stream<List<CoordinationNeed>> watchMissions() {

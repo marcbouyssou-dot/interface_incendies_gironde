@@ -22,6 +22,7 @@ void main() {
       id: 'mission-stable',
       draft: draft,
       serverTimestamp: Timestamp.fromDate(DateTime(2026, 7, 29)),
+      createdBy: 'manager-uid',
     );
     final mission = FirestoreMissionMapper.fromFirestore(
       id: 'mission-stable',
@@ -35,6 +36,7 @@ void main() {
     expect(data['registeredMk'], 0);
     expect(data['registeredPp'], 0);
     expect(data['isActive'], isTrue);
+    expect(data['createdBy'], 'manager-uid');
     expect(mission.locationId, places.first.id);
     expect(mission.place, places.first.name);
     expect(mission.startAt, start);

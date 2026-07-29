@@ -40,6 +40,7 @@ if [[ "${USE_FIREBASE:-false}" == "true" ]]; then
 
   build_arguments+=(
     "--dart-define=USE_FIREBASE=true"
+    "--dart-define=ENABLE_LOCATION_SEED=${ENABLE_LOCATION_SEED:-false}"
     "--dart-define=FIREBASE_API_KEY=${FIREBASE_API_KEY}"
     "--dart-define=FIREBASE_APP_ID=${FIREBASE_APP_ID}"
     "--dart-define=FIREBASE_MESSAGING_SENDER_ID=${FIREBASE_MESSAGING_SENDER_ID}"

@@ -146,7 +146,7 @@ class _PlaceCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    place.address ?? 'Adresse : À renseigner',
+                    place.publicAddressLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium,

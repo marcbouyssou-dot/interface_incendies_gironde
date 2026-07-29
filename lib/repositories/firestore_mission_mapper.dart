@@ -8,6 +8,7 @@ abstract final class FirestoreMissionMapper {
     required String id,
     required MissionDraft draft,
     required Object serverTimestamp,
+    required String createdBy,
   }) {
     return {
       'id': id,
@@ -26,6 +27,7 @@ abstract final class FirestoreMissionMapper {
       'createdAt': serverTimestamp,
       'updatedAt': serverTimestamp,
       'isActive': true,
+      'createdBy': createdBy,
     };
   }
 

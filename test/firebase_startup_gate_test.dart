@@ -17,7 +17,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('Impossible d’initialiser les lieux.'), findsOneWidget);
+    expect(
+      find.text('Connexion sécurisée impossible. Réessayez.'),
+      findsOneWidget,
+    );
     expect(find.text('Réessayer'), findsOneWidget);
 
     await tester.tap(find.text('Réessayer'));

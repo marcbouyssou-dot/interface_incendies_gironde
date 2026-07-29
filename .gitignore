@@ -32,6 +32,9 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+node_modules/
+data/location_address_dry_run.json
+data/location_address_backup.json
 
 # Symbolication related
 app.*.symbols

@@ -193,6 +193,30 @@ class _MissionRepository implements CoordinationRepository {
   int calls = 0;
   MissionDraft? lastDraft;
 
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() => Stream.value(
+    const ResponsibleAccess(
+      uid: 'test-manager',
+      role: 'coordinator',
+      locationIds: {'*'},
+      active: true,
+    ),
+  );
+
+  @override
+  Future<ResponsibleAccess> signInResponsible({
+    required String email,
+    required String password,
+  }) async => const ResponsibleAccess(
+    uid: 'test-manager',
+    role: 'coordinator',
+    locationIds: {'*'},
+    active: true,
+  );
+
+  @override
+  Future<void> signOutResponsible() async {}
+
   void complete() {
     if (!_completer.isCompleted) _completer.complete('created-mission');
   }

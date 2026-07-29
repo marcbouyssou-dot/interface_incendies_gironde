@@ -7,6 +7,15 @@ abstract interface class CoordinationRepository {
 
   Future<String> createMission(MissionDraft draft);
 
+  Stream<ResponsibleAccess?> watchResponsibleAccess();
+
+  Future<ResponsibleAccess> signInResponsible({
+    required String email,
+    required String password,
+  });
+
+  Future<void> signOutResponsible();
+
   Future<void> createEngagement({
     required String missionId,
     required String firstName,
@@ -15,6 +24,25 @@ abstract interface class CoordinationRepository {
     String? email,
     required VolunteerProfession profession,
   });
+}
+
+class ResponsibleAccess {
+  const ResponsibleAccess({
+    required this.uid,
+    required this.role,
+    required this.locationIds,
+    required this.active,
+  });
+
+  final String uid;
+  final String role;
+  final Set<String> locationIds;
+  final bool active;
+
+  bool get isCoordinator => active && role == 'coordinator';
+  bool get isSiteManager => active && role == 'site_manager';
+  bool canManage(String locationId) =>
+      isCoordinator || (isSiteManager && locationIds.contains(locationId));
 }
 
 class MissionDraft {

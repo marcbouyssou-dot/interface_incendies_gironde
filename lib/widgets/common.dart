@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
+import '../repositories/coordination_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
 import '../theme/app_theme.dart';
@@ -646,12 +647,20 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
           builder: (_) => EngagementConfirmationScreen(need: widget.need),
         ),
       );
-    } catch (_) {
+    } on RepositoryException catch (error) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error, stackTrace) {
+      debugPrint('Échec engagement : $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Inscription impossible. Veuillez réessayer.'),
+          content: Text('L’opération n’a pas pu être enregistrée. Réessayez.'),
         ),
       );
     }

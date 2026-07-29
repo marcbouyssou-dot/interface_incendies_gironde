@@ -1,0 +1,215 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function rolePath() {
+      return /databases/$(database)/documents/roles/$(request.auth.uid);
+    }
+
+    function currentRole() {
+      return get(rolePath()).data;
+    }
+
+    function hasActiveRole() {
+      return isSignedIn()
+        && exists(rolePath())
+        && currentRole().active == true;
+    }
+
+    function isCoordinator() {
+      return hasActiveRole() && currentRole().role == 'coordinator';
+    }
+
+    function isActiveSiteManager() {
+      return hasActiveRole() && currentRole().role == 'site_manager';
+    }
+
+    function canManageLocation(locationId) {
+      return isCoordinator()
+        || (isActiveSiteManager() && locationId in currentRole().locationIds);
+    }
+
+    function isVolunteerOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function validProfession(value) {
+      return value == 'mk' || value == 'pp';
+    }
+
+    function validVolunteerData(uid) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+          'equipment', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'uid', 'profession', 'firstName', 'lastName', 'phone', 'equipment',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == uid
+        && validProfession(request.resource.data.profession)
+        && request.resource.data.firstName is string
+        && request.resource.data.lastName is string
+        && request.resource.data.phone is string
+        && request.resource.data.equipment is list
+        && (!('email' in request.resource.data)
+          || request.resource.data.email is string);
+    }
+
+    function validMissionCreate(missionId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'locationId', 'locationName', 'territorialGroup', 'startAt',
+          'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
+          'requestedEquipment', 'details', 'status', 'createdAt', 'updatedAt',
+          'isActive', 'createdBy'
+        ])
+        && request.resource.data.keys().hasAll([
+          'id', 'locationId', 'locationName', 'territorialGroup', 'startAt',
+          'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
+          'requestedEquipment', 'details', 'status', 'createdAt', 'updatedAt',
+          'isActive', 'createdBy'
+        ])
+        && request.resource.data.id == missionId
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.registeredMk == 0
+        && request.resource.data.registeredPp == 0
+        && request.resource.data.requiredMk is int
+        && request.resource.data.requiredPp is int
+        && request.resource.data.requiredMk >= 0
+        && request.resource.data.requiredMk <= 50
+        && request.resource.data.requiredPp >= 0
+        && request.resource.data.requiredPp <= 50
+        && (request.resource.data.requiredMk > 0
+          || request.resource.data.requiredPp > 0)
+        && request.resource.data.startAt is timestamp
+        && request.resource.data.endAt is timestamp
+        && request.resource.data.endAt > request.resource.data.startAt
+        && request.resource.data.isActive == true
+        && request.resource.data.status == 'critical'
+        && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
+        && canManageLocation(request.resource.data.locationId);
+    }
+
+    function engagementPath(missionId, uid) {
+      return /databases/$(database)/documents/engagements/$(missionId + '_' + uid);
+    }
+
+    function volunteerPath(uid) {
+      return /databases/$(database)/documents/volunteers/$(uid);
+    }
+
+    function expectedStatus(data) {
+      return data.registeredMk >= data.requiredMk
+          && data.registeredPp >= data.requiredPp
+        ? 'complete'
+        : ((data.registeredMk + data.registeredPp) * 2
+            < (data.requiredMk + data.requiredPp)
+          ? 'critical'
+          : 'toComplete');
+    }
+
+    function validMissionCounterUpdate(missionId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let mkIncrement = request.resource.data.registeredMk
+          == resource.data.registeredMk + 1
+        && request.resource.data.registeredPp == resource.data.registeredPp;
+      let ppIncrement = request.resource.data.registeredPp
+          == resource.data.registeredPp + 1
+        && request.resource.data.registeredMk == resource.data.registeredMk;
+      let engagement = getAfter(
+        engagementPath(missionId, request.auth.uid)
+      ).data;
+      return isSignedIn()
+        && existsAfter(engagementPath(missionId, request.auth.uid))
+        && changed.hasOnly([
+          'registeredMk', 'registeredPp', 'status', 'updatedAt'
+        ])
+        && request.resource.data.registeredMk <= resource.data.requiredMk
+        && request.resource.data.registeredPp <= resource.data.requiredPp
+        && request.resource.data.status == expectedStatus(request.resource.data)
+        && engagement.missionId == missionId
+        && engagement.volunteerId == request.auth.uid
+        && ((mkIncrement && engagement.profession == 'mk')
+          || (ppIncrement && engagement.profession == 'pp'));
+    }
+
+    function validEngagementCreate(engagementId) {
+      let missionId = request.resource.data.missionId;
+      let missionBefore = get(
+        /databases/$(database)/documents/missions/$(missionId)
+      ).data;
+      let missionAfter = getAfter(
+        /databases/$(database)/documents/missions/$(missionId)
+      ).data;
+      let profession = request.resource.data.profession;
+      return isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'missionId', 'volunteerId', 'profession', 'createdAt', 'status'
+        ])
+        && request.resource.data.keys().hasAll([
+          'missionId', 'volunteerId', 'profession', 'createdAt', 'status'
+        ])
+        && engagementId == missionId + '_' + request.auth.uid
+        && request.resource.data.volunteerId == request.auth.uid
+        && validProfession(profession)
+        && request.resource.data.status == 'confirmed'
+        && existsAfter(volunteerPath(request.auth.uid))
+        && getAfter(volunteerPath(request.auth.uid)).data.uid
+          == request.auth.uid
+        && getAfter(volunteerPath(request.auth.uid)).data.profession
+          == profession
+        && exists(/databases/$(database)/documents/missions/$(missionId))
+        && existsAfter(
+          /databases/$(database)/documents/missions/$(missionId)
+        )
+        && missionBefore.isActive == true
+        && ((profession == 'mk'
+              && missionBefore.registeredMk < missionBefore.requiredMk
+              && missionAfter.registeredMk == missionBefore.registeredMk + 1
+              && missionAfter.registeredPp == missionBefore.registeredPp)
+          || (profession == 'pp'
+              && missionBefore.registeredPp < missionBefore.requiredPp
+              && missionAfter.registeredPp == missionBefore.registeredPp + 1
+              && missionAfter.registeredMk == missionBefore.registeredMk));
+    }
+
+    match /locations/{locationId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /missions/{missionId} {
+      allow read: if resource.data.isActive == true;
+      allow create: if isSignedIn() && validMissionCreate(missionId);
+      allow update: if validMissionCounterUpdate(missionId);
+      allow delete: if false;
+    }
+
+    match /volunteers/{uid} {
+      allow create, update: if isVolunteerOwner(uid)
+        && validVolunteerData(uid);
+      allow read: if isVolunteerOwner(uid);
+      allow delete: if false;
+    }
+
+    match /engagements/{engagementId} {
+      allow create: if validEngagementCreate(engagementId);
+      allow read: if isSignedIn()
+        && resource.data.volunteerId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /roles/{uid} {
+      allow get: if isVolunteerOwner(uid);
+      allow list, create, update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

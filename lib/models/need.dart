@@ -148,6 +148,7 @@ class ResponsePlace {
     required this.group,
     required this.activeNeeds,
     this.address,
+    this.structuredAddress,
   });
 
   final String id;
@@ -155,7 +156,92 @@ class ResponsePlace {
   final ResponsePlaceType type;
   final TerritorialGroup group;
   final String? address;
+  final LocationAddress? structuredAddress;
   final int activeNeeds;
 
   bool get isActive => activeNeeds > 0;
+
+  String? get verifiedAddress {
+    final value = structuredAddress;
+    if (value != null && value.isVerified) return value.fullAddress;
+    if (value == null && address != null && address!.trim().isNotEmpty) {
+      return address;
+    }
+    return null;
+  }
+
+  String get publicAddressLabel {
+    if (verifiedAddress != null) return verifiedAddress!;
+    if (structuredAddress?.status == AddressStatus.needsConfirmation) {
+      return 'Adresse à confirmer';
+    }
+    return 'Adresse à renseigner';
+  }
+}
+
+enum AddressStatus {
+  verifiedOfficial('verified_official'),
+  verifiedCrossSource('verified_cross_source'),
+  needsConfirmation('needs_confirmation'),
+  notFound('not_found');
+
+  const AddressStatus(this.firestoreValue);
+  final String firestoreValue;
+
+  static AddressStatus fromFirestore(Object? value) {
+    return values.firstWhere(
+      (status) => status.firestoreValue == value,
+      orElse: () => AddressStatus.notFound,
+    );
+  }
+}
+
+class LocationAddress {
+  const LocationAddress({
+    this.addressLine1,
+    this.addressLine2,
+    this.postalCode,
+    this.city,
+    this.country = 'France',
+    this.storedFullAddress,
+    this.latitude,
+    this.longitude,
+    this.status = AddressStatus.notFound,
+    this.sourceUrl,
+    this.sourceLabel,
+    this.verifiedAt,
+    this.notes,
+  });
+
+  final String? addressLine1;
+  final String? addressLine2;
+  final String? postalCode;
+  final String? city;
+  final String country;
+  final String? storedFullAddress;
+  final double? latitude;
+  final double? longitude;
+  final AddressStatus status;
+  final String? sourceUrl;
+  final String? sourceLabel;
+  final DateTime? verifiedAt;
+  final String? notes;
+
+  bool get isVerified =>
+      status == AddressStatus.verifiedOfficial ||
+      status == AddressStatus.verifiedCrossSource;
+
+  String get fullAddress {
+    final stored = storedFullAddress?.trim();
+    if (stored != null && stored.isNotEmpty) return stored;
+    return [
+      addressLine1,
+      addressLine2,
+      [
+        postalCode,
+        city,
+      ].whereType<String>().where((part) => part.trim().isNotEmpty).join(' '),
+      country,
+    ].whereType<String>().where((part) => part.trim().isNotEmpty).join(', ');
+  }
 }

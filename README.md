@@ -52,3 +52,94 @@ du statut de mission sont regroupées dans une transaction Firestore.
 7. Ouvrir la PWA sur un iPhone sans rechargement manuel.
 8. Vérifier le lieu, la date, les horaires et les quotas de la mission.
 9. Vérifier le document dans Firebase Console → Firestore → `missions`.
+# Sécurisation Firebase RC1
+
+Le fichier `firestore.rules` est une proposition sécurisée locale. Il ne doit
+pas être déployé avant la recette complète ci-dessous. Les règles temporaires
+actuellement publiées doivent être sauvegardées depuis la console Firebase
+avant toute bascule.
+
+## Bascule contrôlée
+
+1. Dans Firebase Authentication, activer **Anonyme** et
+   **Adresse email / Mot de passe**.
+2. Déployer l’application compatible avec l’authentification en conservant
+   encore les règles temporaires.
+3. Vérifier ouverture anonyme, missions, engagement et persistance après
+   fermeture.
+4. Créer manuellement un compte responsable dans Firebase Console. Aucune
+   inscription responsable n’existe dans l’application.
+5. Relever son UID et créer `roles/{uid}` :
+
+   ```json
+   {
+     "role": "site_manager",
+     "locationIds": ["identifiant-lieu-autorise"],
+     "active": true
+   }
+   ```
+
+   Un coordinateur utilise `role: "coordinator"` et `locationIds: ["*"]`.
+6. Tester la connexion responsable, le filtrage des lieux et la publication
+   avec les règles temporaires.
+7. Depuis `firebase_tests`, exécuter `npm install`, puis `npm test`. Ces tests
+   utilisent uniquement l’émulateur et nécessitent Java.
+8. Tester sur un projet Firebase de recette, puis seulement après validation :
+
+   ```bash
+   firebase login
+   firebase use mobilisation-sante
+   firebase deploy --only firestore:rules
+   ```
+
+9. Tester immédiatement sur Mac et iPhone : lieux, missions, déclaration
+   autorisée, engagement anonyme, compteurs, second engagement refusé et
+   publication non autorisée refusée.
+
+Firebase Auth ne maintient qu’un utilisateur par instance. Le choix RC1 est :
+navigation normale sous identité anonyme ; une connexion responsable remplace
+temporairement cette identité ; « Se déconnecter » recrée immédiatement une
+session anonyme.
+
+## Amorçage des lieux
+
+`ENABLE_LOCATION_SEED` vaut `false` par défaut. Sur Netlify, conserver :
+
+```text
+ENABLE_LOCATION_SEED=false
+```
+
+L’activer uniquement sur un environnement vide avec des règles permettant
+explicitement l’amorçage, puis le désactiver. Les règles RC1 interdisent toute
+écriture cliente dans `locations`.
+
+## Retour arrière
+
+1. Ne pas supprimer `firestore.rules`.
+2. En cas de blocage terrain après publication, restaurer immédiatement depuis
+   Firebase Console la copie datée des règles temporaires.
+3. Vérifier le rétablissement sur Mac et iPhone.
+4. Corriger et rejouer les tests émulateur avant toute nouvelle publication.
+
+# Adresses vérifiées
+
+Le registre est `data/locations_verified.csv` et son audit
+`data/locations_address_audit.md`. Les lignes non validées ne sont jamais
+importées.
+
+L’outil d’administration est séparé de l’application :
+
+```bash
+cd scripts
+npm install
+export FIREBASE_PROJECT_ID="projet-de-recette"
+gcloud auth application-default login
+node update_location_addresses.mjs --dry-run
+node update_location_addresses.mjs --apply
+```
+
+Le dry-run est obligatoire et lié par empreinte au CSV et au projet. Le mode
+`--apply` refuse un identifiant inconnu, sauvegarde tous les documents locaux
+dans `data/location_address_backup.json`, puis modifie uniquement les champs
+d’adresse. Ne pas exécuter ces commandes contre la production sans validation
+humaine du rapport.
