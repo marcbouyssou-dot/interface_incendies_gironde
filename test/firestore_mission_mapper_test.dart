@@ -45,4 +45,52 @@ void main() {
     expect(mission.requiredPhysiotherapists, 2);
     expect(mission.requiredPodiatrists, 1);
   });
+
+  test('old and cancelled missions parse optional cancellation fields', () {
+    final oldMission = FirestoreMissionMapper.fromFirestore(
+      id: 'old',
+      data: const {
+        'locationName': 'Ancien lieu',
+        'requiredMk': 1,
+        'registeredMk': 0,
+        'requiredPp': 0,
+        'registeredPp': 0,
+      },
+    );
+    expect(oldMission.isCancelled, isFalse);
+    expect(oldMission.cancelledAt, isNull);
+
+    final cancelledAt = DateTime(2026, 7, 29, 10);
+    final cancelled = FirestoreMissionMapper.fromFirestore(
+      id: 'cancelled',
+      data: {
+        'locationName': 'Lieu',
+        'requiredMk': 1,
+        'registeredMk': 1,
+        'requiredPp': 0,
+        'registeredPp': 0,
+        'status': 'cancelled',
+        'isActive': false,
+        'cancelledAt': Timestamp.fromDate(cancelledAt),
+        'cancelledBy': 'manager',
+        'cancellationReason': 'Vent violent',
+      },
+    );
+    expect(cancelled.isCancelled, isTrue);
+    expect(cancelled.isActive, isFalse);
+    expect(cancelled.cancelledAt, cancelledAt);
+    expect(cancelled.cancelledBy, 'manager');
+    expect(cancelled.cancellationReason, 'Vent violent');
+
+    final update = FirestoreMissionMapper.cancellationUpdate(
+      cancelledBy: 'manager',
+      reason: ' Vent violent ',
+      serverTimestamp: Timestamp.fromDate(cancelledAt),
+    );
+    expect(update['status'], 'cancelled');
+    expect(update['isActive'], isFalse);
+    expect(update['cancelledBy'], 'manager');
+    expect(update['cancellationReason'], 'Vent violent');
+    expect(update['cancelledAt'], Timestamp.fromDate(cancelledAt));
+  });
 }

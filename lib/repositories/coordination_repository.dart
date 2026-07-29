@@ -5,6 +5,8 @@ abstract interface class CoordinationRepository {
 
   Stream<List<ResponsePlace>> watchLocations();
 
+  Stream<EngagementInfo?> watchMyEngagement(String missionId);
+
   Future<String> createMission(MissionDraft draft);
 
   Stream<ResponsibleAccess?> watchResponsibleAccess();
@@ -24,6 +26,22 @@ abstract interface class CoordinationRepository {
     String? email,
     required VolunteerProfession profession,
   });
+
+  Future<void> cancelEngagement(String missionId);
+
+  Future<void> cancelMission(String missionId, String? reason);
+}
+
+class EngagementInfo {
+  const EngagementInfo({
+    required this.missionId,
+    required this.volunteerId,
+    required this.profession,
+  });
+
+  final String missionId;
+  final String volunteerId;
+  final VolunteerProfession profession;
 }
 
 class ResponsibleAccess {

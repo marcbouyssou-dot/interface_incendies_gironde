@@ -13,6 +13,7 @@ import {
   deleteDoc,
   writeBatch,
   Timestamp,
+  serverTimestamp,
 } from 'firebase/firestore';
 import {readFileSync} from 'node:fs';
 
@@ -103,6 +104,31 @@ async function engage(uid, profession = 'mk', missionChanges = {}) {
   return batch.commit();
 }
 
+async function disengage(uid, profession = 'mk', missionChanges = {}) {
+  const userDb = db(uid);
+  const batch = writeBatch(userDb);
+  batch.delete(doc(userDb, `engagements/mission-a_${uid}`));
+  const counters = profession === 'mk'
+    ? {registeredMk: 0, registeredPp: 0, status: 'critical'}
+    : {registeredMk: 0, registeredPp: 0, status: 'critical'};
+  batch.update(doc(userDb, 'missions/mission-a'), {
+    ...counters, updatedAt: Timestamp.now(), ...missionChanges,
+  });
+  return batch.commit();
+}
+
+async function cancelMission(uid, changes = {}) {
+  return updateDoc(doc(db(uid), 'missions/mission-a'), {
+    status: 'cancelled',
+    isActive: false,
+    cancelledAt: serverTimestamp(),
+    cancelledBy: uid,
+    cancellationReason: 'Vent violent',
+    updatedAt: serverTimestamp(),
+    ...changes,
+  });
+}
+
 test('locations: public read allowed, all writes denied', async () => {
   await seed();
   assert.equal((await assertSucceeds(getDoc(doc(db(), 'locations/site-a')))).exists(), true);
@@ -190,6 +216,69 @@ test('engagements: duplicate, update and delete denied', async () => {
   await assertFails(engage('alice'));
   await assertFails(updateDoc(doc(db('alice'), 'engagements/mission-a_alice'), {status: 'cancelled'}));
   await assertFails(deleteDoc(doc(db('alice'), 'engagements/mission-a_alice')));
+});
+
+test('disengagement: owner with exact MK decrement allowed', async () => {
+  await seed();
+  await engage('alice');
+  await assertSucceeds(disengage('alice'));
+  await env.withSecurityRulesDisabled(async (context) => {
+    assert.equal(
+      (await getDoc(doc(context.firestore(), 'engagements/mission-a_alice'))).exists(),
+      false,
+    );
+  });
+});
+
+test('disengagement: other owner, missing/wrong/excess decrement denied', async () => {
+  await seed();
+  await engage('alice');
+  await assertFails(deleteDoc(doc(db('bob'), 'engagements/mission-a_alice')));
+  await assertFails(deleteDoc(doc(db('alice'), 'engagements/mission-a_alice')));
+  await assertFails(disengage('alice', 'mk', {registeredMk: 1}));
+  await assertFails(disengage('alice', 'mk', {registeredPp: -1}));
+  await assertFails(disengage('alice', 'mk', {registeredMk: -1}));
+});
+
+test('disengagement: exact PP decrement allowed', async () => {
+  await seed();
+  await engage('alice', 'pp');
+  await assertSucceeds(disengage('alice', 'pp'));
+});
+
+test('mission cancellation: coordinator and authorized manager allowed', async () => {
+  await seed();
+  await assertSucceeds(cancelMission('coord'));
+  await seed();
+  await assertSucceeds(cancelMission('manager'));
+});
+
+test('mission cancellation: unauthorized, quota mutation and reactivation denied', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'roles/other'), {
+      role: 'site_manager', locationIds: ['other-site'], active: true,
+    });
+  });
+  await assertFails(cancelMission('other'));
+  await assertFails(cancelMission('coord', {requiredMk: 9}));
+  await assertSucceeds(cancelMission('coord'));
+  await assertFails(updateDoc(doc(db('coord'), 'missions/mission-a'), {
+    status: 'critical', isActive: true, updatedAt: serverTimestamp(),
+  }));
+});
+
+test('engagement on a cancelled mission is denied and existing engagement stays', async () => {
+  await seed();
+  await engage('alice');
+  await cancelMission('coord');
+  await assertFails(engage('bob'));
+  await env.withSecurityRulesDisabled(async (context) => {
+    assert.equal(
+      (await getDoc(doc(context.firestore(), 'engagements/mission-a_alice'))).exists(),
+      true,
+    );
+  });
 });
 
 test('counters: mismatched, +2, both, over quota, other field, and direct update denied', async () => {

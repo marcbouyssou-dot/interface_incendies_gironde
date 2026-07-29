@@ -4,6 +4,21 @@ import '../models/need.dart';
 import 'coordination_repository.dart';
 
 abstract final class FirestoreMissionMapper {
+  static Map<String, dynamic> cancellationUpdate({
+    required String cancelledBy,
+    required String reason,
+    required Object serverTimestamp,
+  }) {
+    return {
+      'status': 'cancelled',
+      'isActive': false,
+      'cancelledAt': serverTimestamp,
+      'cancelledBy': cancelledBy,
+      'cancellationReason': reason.trim(),
+      'updatedAt': serverTimestamp,
+    };
+  }
+
   static Map<String, dynamic> toFirestore({
     required String id,
     required MissionDraft draft,
@@ -76,6 +91,10 @@ abstract final class FirestoreMissionMapper {
       ),
       details: data['details'] as String?,
       isActive: data['isActive'] as bool? ?? true,
+      isCancelled: data['status'] == 'cancelled',
+      cancelledAt: _dateTime(data['cancelledAt']),
+      cancelledBy: data['cancelledBy'] as String?,
+      cancellationReason: data['cancellationReason'] as String?,
     );
   }
 

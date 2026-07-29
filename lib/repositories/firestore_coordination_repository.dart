@@ -145,6 +145,32 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   }
 
   @override
+  Stream<EngagementInfo?> watchMyEngagement(String missionId) {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous) {
+      return Stream<EngagementInfo?>.value(null);
+    }
+    return _firestore
+        .collection('engagements')
+        .doc('${missionId}_${user.uid}')
+        .snapshots()
+        .map((snapshot) {
+          final data = snapshot.data();
+          if (!snapshot.exists || data == null) return null;
+          final profession = data['profession'] as String?;
+          if (profession != VolunteerProfession.mk.name &&
+              profession != VolunteerProfession.pp.name) {
+            return null;
+          }
+          return EngagementInfo(
+            missionId: missionId,
+            volunteerId: user.uid,
+            profession: VolunteerProfession.values.byName(profession!),
+          );
+        });
+  }
+
+  @override
   Future<String> createMission(MissionDraft draft) async {
     final user = _auth.currentUser;
     if (user == null || user.isAnonymous) {
@@ -226,96 +252,265 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         .collection('engagements')
         .doc('${missionId}_$uid');
 
-    await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(missionRef);
-      if (!snapshot.exists) {
-        throw const RepositoryException('Mission introuvable');
-      }
-      final existingEngagement = await transaction.get(engagementRef);
-      if (existingEngagement.exists) {
+    try {
+      await _firestore
+          .runTransaction((transaction) async {
+            final snapshot = await transaction.get(missionRef);
+            if (!snapshot.exists) {
+              throw const RepositoryException('Mission introuvable');
+            }
+            final existingEngagement = await transaction.get(engagementRef);
+            if (existingEngagement.exists) {
+              throw const RepositoryException(
+                'Vous êtes déjà engagé sur cette mission.',
+              );
+            }
+            final existingVolunteer = await transaction.get(volunteerRef);
+            final data = snapshot.data()!;
+            if (data['status'] == 'cancelled') {
+              throw const RepositoryException('Cette mission a été annulée.');
+            }
+            if (data['isActive'] == false) {
+              throw const RepositoryException(
+                'Cette mission est désormais complète.',
+              );
+            }
+            final usesCurrentSchema = data.containsKey('requiredMk');
+            final requiredMk = _int(
+              data['requiredMk'] ?? data['requiredPhysiotherapists'],
+            );
+            final requiredPp = _int(
+              data['requiredPp'] ?? data['requiredPodiatrists'],
+            );
+            var registeredMk = _int(
+              data['registeredMk'] ?? data['registeredPhysiotherapists'],
+            );
+            var registeredPp = _int(
+              data['registeredPp'] ?? data['registeredPodiatrists'],
+            );
+
+            switch (profession) {
+              case VolunteerProfession.mk:
+                if (registeredMk >= requiredMk) {
+                  throw const RepositoryException(
+                    'Cette mission est désormais complète.',
+                  );
+                }
+                registeredMk++;
+              case VolunteerProfession.pp:
+                if (registeredPp >= requiredPp) {
+                  throw const RepositoryException(
+                    'Cette mission est désormais complète.',
+                  );
+                }
+                registeredPp++;
+            }
+
+            final status = _statusFor(
+              requiredMk: requiredMk,
+              registeredMk: registeredMk,
+              requiredPp: requiredPp,
+              registeredPp: registeredPp,
+            );
+            final now = FieldValue.serverTimestamp();
+
+            final volunteerData = <String, dynamic>{
+              'uid': uid,
+              'firstName': firstName.trim(),
+              'lastName': lastName.trim(),
+              'phone': phone.trim(),
+              'profession': profession.name,
+              'updatedAt': now,
+            };
+            final normalizedEmail = email?.trim();
+            if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
+              volunteerData['email'] = normalizedEmail;
+            }
+            transaction.set(volunteerRef, {
+              ...volunteerData,
+              'createdAt': existingVolunteer.data()?['createdAt'] ?? now,
+              'equipment': <String>[],
+            }, SetOptions(merge: true));
+            transaction.set(engagementRef, {
+              'missionId': missionId,
+              'volunteerId': uid,
+              'profession': profession.name,
+              'createdAt': now,
+              'status': 'confirmed',
+            });
+            transaction.update(missionRef, {
+              usesCurrentSchema ? 'registeredMk' : 'registeredPhysiotherapists':
+                  registeredMk,
+              usesCurrentSchema ? 'registeredPp' : 'registeredPodiatrists':
+                  registeredPp,
+              'status': status.name,
+              'updatedAt': now,
+            });
+          })
+          .timeout(const Duration(seconds: 15));
+    } on RepositoryException {
+      rethrow;
+    } on FirebaseException catch (error, stackTrace) {
+      debugPrint('Échec createEngagement (${error.code})');
+      debugPrintStack(stackTrace: stackTrace);
+      if (error.code == 'permission-denied') {
         throw const RepositoryException(
-          'Vous êtes déjà engagé sur cette mission.',
+          'Cette mission a été annulée ou n’est plus disponible.',
         );
       }
-      final existingVolunteer = await transaction.get(volunteerRef);
-      final data = snapshot.data()!;
-      if (data['isActive'] == false) {
-        throw const RepositoryException(
-          'Cette mission est désormais complète.',
-        );
-      }
-      final usesCurrentSchema = data.containsKey('requiredMk');
-      final requiredMk = _int(
-        data['requiredMk'] ?? data['requiredPhysiotherapists'],
+      throw const RepositoryException(
+        'L’opération n’a pas pu être enregistrée. Réessayez.',
       );
-      final requiredPp = _int(
-        data['requiredPp'] ?? data['requiredPodiatrists'],
-      );
-      var registeredMk = _int(
-        data['registeredMk'] ?? data['registeredPhysiotherapists'],
-      );
-      var registeredPp = _int(
-        data['registeredPp'] ?? data['registeredPodiatrists'],
-      );
+    }
+  }
 
-      switch (profession) {
-        case VolunteerProfession.mk:
-          if (registeredMk >= requiredMk) {
-            throw const RepositoryException(
-              'Cette mission est désormais complète.',
+  @override
+  Future<void> cancelEngagement(String missionId) async {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous) {
+      throw const RepositoryException(
+        'Vous n’êtes plus engagé sur cette mission.',
+      );
+    }
+    final missionRef = _firestore.collection('missions').doc(missionId);
+    final engagementRef = _firestore
+        .collection('engagements')
+        .doc('${missionId}_${user.uid}');
+    try {
+      await _firestore
+          .runTransaction((transaction) async {
+            final missionSnapshot = await transaction.get(missionRef);
+            final engagementSnapshot = await transaction.get(engagementRef);
+            if (!missionSnapshot.exists) {
+              throw const RepositoryException('Mission introuvable.');
+            }
+            final mission = missionSnapshot.data()!;
+            if (mission['isActive'] == false ||
+                mission['status'] == 'cancelled') {
+              throw const RepositoryException('Cette mission a été annulée.');
+            }
+            final endAt = mission['endAt'];
+            if (endAt is Timestamp &&
+                !DateTime.now().isBefore(endAt.toDate())) {
+              throw const RepositoryException(
+                'Le créneau de cette mission est terminé.',
+              );
+            }
+            if (!engagementSnapshot.exists ||
+                engagementSnapshot.data()?['volunteerId'] != user.uid) {
+              throw const RepositoryException(
+                'Vous n’êtes plus engagé sur cette mission.',
+              );
+            }
+            final engagement = engagementSnapshot.data()!;
+            final profession = engagement['profession'];
+            final requiredMk = _int(mission['requiredMk']);
+            final requiredPp = _int(mission['requiredPp']);
+            var registeredMk = _int(mission['registeredMk']);
+            var registeredPp = _int(mission['registeredPp']);
+            if (profession == VolunteerProfession.mk.name) {
+              if (registeredMk <= 0) {
+                throw const RepositoryException(
+                  'Le désengagement n’a pas pu être enregistré. Réessayez.',
+                );
+              }
+              registeredMk--;
+            } else if (profession == VolunteerProfession.pp.name) {
+              if (registeredPp <= 0) {
+                throw const RepositoryException(
+                  'Le désengagement n’a pas pu être enregistré. Réessayez.',
+                );
+              }
+              registeredPp--;
+            } else {
+              throw const RepositoryException(
+                'Le désengagement n’a pas pu être enregistré. Réessayez.',
+              );
+            }
+            transaction.delete(engagementRef);
+            transaction.update(missionRef, {
+              'registeredMk': registeredMk,
+              'registeredPp': registeredPp,
+              'status': _statusFor(
+                requiredMk: requiredMk,
+                registeredMk: registeredMk,
+                requiredPp: requiredPp,
+                registeredPp: registeredPp,
+              ).name,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          })
+          .timeout(const Duration(seconds: 15));
+    } on RepositoryException {
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('Échec cancelEngagement : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      throw const RepositoryException(
+        'Le désengagement n’a pas pu être enregistré. Réessayez.',
+      );
+    }
+  }
+
+  @override
+  Future<void> cancelMission(String missionId, String? reason) async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw const RepositoryException(
+        'Vous devez vous connecter pour déclarer un besoin.',
+      );
+    }
+    final missionRef = _firestore.collection('missions').doc(missionId);
+    final roleRef = _firestore.collection('roles').doc(user.uid);
+    try {
+      await _firestore
+          .runTransaction((transaction) async {
+            final missionSnapshot = await transaction.get(missionRef);
+            final roleSnapshot = await transaction.get(roleRef);
+            if (!missionSnapshot.exists) {
+              throw const RepositoryException('Mission introuvable.');
+            }
+            final mission = missionSnapshot.data()!;
+            if (mission['status'] == 'cancelled' ||
+                mission['isActive'] == false) {
+              throw const RepositoryException(
+                'Cette mission a déjà été annulée.',
+              );
+            }
+            final role = roleSnapshot.data();
+            final access = ResponsibleAccess(
+              uid: user.uid,
+              role: role?['role'] as String? ?? '',
+              locationIds: Set<String>.from(
+                role?['locationIds'] as List? ?? const [],
+              ),
+              active: role?['active'] as bool? ?? false,
             );
-          }
-          registeredMk++;
-        case VolunteerProfession.pp:
-          if (registeredPp >= requiredPp) {
-            throw const RepositoryException(
-              'Cette mission est désormais complète.',
+            if (!access.canManage(mission['locationId'] as String? ?? '')) {
+              throw const RepositoryException(
+                'Votre compte n’est pas autorisé à publier pour ce lieu.',
+              );
+            }
+            final now = FieldValue.serverTimestamp();
+            transaction.update(
+              missionRef,
+              FirestoreMissionMapper.cancellationUpdate(
+                cancelledBy: user.uid,
+                reason: reason ?? '',
+                serverTimestamp: now,
+              ),
             );
-          }
-          registeredPp++;
-      }
-
-      final status = _statusFor(
-        requiredMk: requiredMk,
-        registeredMk: registeredMk,
-        requiredPp: requiredPp,
-        registeredPp: registeredPp,
+          })
+          .timeout(const Duration(seconds: 15));
+    } on RepositoryException {
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('Échec cancelMission : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      throw const RepositoryException(
+        'L’annulation n’a pas pu être enregistrée. Réessayez.',
       );
-      final now = FieldValue.serverTimestamp();
-
-      final volunteerData = <String, dynamic>{
-        'uid': uid,
-        'firstName': firstName.trim(),
-        'lastName': lastName.trim(),
-        'phone': phone.trim(),
-        'profession': profession.name,
-        'updatedAt': now,
-      };
-      final normalizedEmail = email?.trim();
-      if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
-        volunteerData['email'] = normalizedEmail;
-      }
-      transaction.set(volunteerRef, {
-        ...volunteerData,
-        'createdAt': existingVolunteer.data()?['createdAt'] ?? now,
-        'equipment': <String>[],
-      }, SetOptions(merge: true));
-      transaction.set(engagementRef, {
-        'missionId': missionId,
-        'volunteerId': uid,
-        'profession': profession.name,
-        'createdAt': now,
-        'status': 'confirmed',
-      });
-      transaction.update(missionRef, {
-        usesCurrentSchema ? 'registeredMk' : 'registeredPhysiotherapists':
-            registeredMk,
-        usesCurrentSchema ? 'registeredPp' : 'registeredPodiatrists':
-            registeredPp,
-        'status': status.name,
-        'updatedAt': now,
-      });
-    });
+    }
   }
 
   static int _int(Object? value) => value is num ? value.toInt() : 0;

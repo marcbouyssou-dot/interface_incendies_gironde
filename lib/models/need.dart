@@ -75,6 +75,10 @@ class CoordinationNeed {
     this.endAt,
     this.details,
     this.isActive = true,
+    this.isCancelled = false,
+    this.cancelledAt,
+    this.cancelledBy,
+    this.cancellationReason,
   });
 
   final String id;
@@ -92,6 +96,10 @@ class CoordinationNeed {
   final DateTime? endAt;
   final String? details;
   final bool isActive;
+  final bool isCancelled;
+  final DateTime? cancelledAt;
+  final String? cancelledBy;
+  final String? cancellationReason;
 
   String get area => group.label;
 
@@ -136,6 +144,10 @@ class CoordinationNeed {
       endAt: endAt,
       details: details,
       isActive: isActive,
+      isCancelled: isCancelled,
+      cancelledAt: cancelledAt,
+      cancelledBy: cancelledBy,
+      cancellationReason: cancellationReason,
     );
   }
 }

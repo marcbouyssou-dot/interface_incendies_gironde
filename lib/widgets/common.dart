@@ -393,9 +393,87 @@ class NeedCard extends StatelessWidget {
               const SizedBox(height: 20),
               const Divider(height: 1),
               const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
+              _NeedActions(need: need),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _operationalTime(String time) {
+    return time
+        .replaceAll(':00', 'h')
+        .replaceAll(' — ', ' → ')
+        .replaceAll(':', 'h');
+  }
+
+  static IconData _equipmentIcon(String item) {
+    final normalized = item.toLowerCase();
+    if (normalized.contains('table') || normalized.contains('fauteuil')) {
+      return Icons.bed_rounded;
+    }
+    if (normalized.contains('froid') || normalized.contains('glace')) {
+      return Icons.ac_unit_rounded;
+    }
+    if (normalized.contains('huile') ||
+        normalized.contains('gel') ||
+        normalized.contains('serviette')) {
+      return Icons.water_drop_rounded;
+    }
+    return Icons.medical_services_rounded;
+  }
+}
+
+class _NeedActions extends StatelessWidget {
+  const _NeedActions({required this.need});
+
+  final CoordinationNeed need;
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = RepositoryScope.of(context);
+    return StreamBuilder<ResponsibleAccess?>(
+      stream: repository.watchResponsibleAccess(),
+      builder: (context, roleSnapshot) {
+        final access = roleSnapshot.data;
+        return StreamBuilder<EngagementInfo?>(
+          stream: repository.watchMyEngagement(need.id),
+          builder: (context, engagementSnapshot) {
+            final engagement = engagementSnapshot.data;
+            if (engagement != null) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton.icon(
+                    onPressed: null,
+                    style: FilledButton.styleFrom(
+                      disabledBackgroundColor: AppColors.greenSoft,
+                      disabledForegroundColor: AppColors.green,
+                      minimumSize: const Size.fromHeight(56),
+                    ),
+                    icon: const Icon(Icons.check_circle_rounded),
+                    label: const Text('✓ JE SUIS ENGAGÉ'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    key: Key('cancel-engagement-${need.id}'),
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _CancelEngagementDialog(
+                        need: need,
+                        engagement: engagement,
+                      ),
+                    ),
+                    child: const Text('Me désengager'),
+                  ),
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton.icon(
                   onPressed: need.status == NeedStatus.complete
                       ? null
                       : () => showModalBottomSheet<void>(
@@ -425,35 +503,226 @@ class NeedCard extends StatelessWidget {
                         : '❤️ JE M’ENGAGE',
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
+                if (access?.canManage(need.locationId ?? '') == true) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    key: Key('cancel-mission-${need.id}'),
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _CancelMissionDialog(need: need),
+                    ),
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: const Text('Annuler ce besoin'),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
     );
   }
+}
 
-  static String _operationalTime(String time) {
-    return time
-        .replaceAll(':00', 'h')
-        .replaceAll(' — ', ' → ')
-        .replaceAll(':', 'h');
+class _CancelEngagementDialog extends StatefulWidget {
+  const _CancelEngagementDialog({required this.need, required this.engagement});
+
+  final CoordinationNeed need;
+  final EngagementInfo engagement;
+
+  @override
+  State<_CancelEngagementDialog> createState() =>
+      _CancelEngagementDialogState();
+}
+
+class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
+  bool _submitting = false;
+  String? _error;
+
+  Future<void> _confirm() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await RepositoryScope.of(
+        context,
+      ).cancelEngagement(widget.need.id).timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Votre désengagement a bien été enregistré.'),
+        ),
+      );
+    } on RepositoryException catch (error) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = 'Le désengagement n’a pas pu être enregistré. Réessayez.';
+        });
+      }
+    }
   }
 
-  static IconData _equipmentIcon(String item) {
-    final normalized = item.toLowerCase();
-    if (normalized.contains('table') || normalized.contains('fauteuil')) {
-      return Icons.bed_rounded;
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Se désengager de cette mission ?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.need.place),
+          Text(widget.need.date),
+          Text(widget.need.time),
+          Text(
+            widget.engagement.profession == VolunteerProfession.mk
+                ? 'Masseur-kinésithérapeute'
+                : 'Pédicure-podologue',
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: const TextStyle(color: AppColors.red)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          key: const Key('confirm-cancel-engagement'),
+          onPressed: _submitting ? null : _confirm,
+          style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+          child: _submitting
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Confirmer mon désengagement'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CancelMissionDialog extends StatefulWidget {
+  const _CancelMissionDialog({required this.need});
+  final CoordinationNeed need;
+
+  @override
+  State<_CancelMissionDialog> createState() => _CancelMissionDialogState();
+}
+
+class _CancelMissionDialogState extends State<_CancelMissionDialog> {
+  final _reason = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await RepositoryScope.of(context)
+          .cancelMission(widget.need.id, _reason.text)
+          .timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Le besoin a été annulé.')));
+    } on RepositoryException catch (error) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = 'L’annulation n’a pas pu être enregistrée. Réessayez.';
+        });
+      }
     }
-    if (normalized.contains('froid') || normalized.contains('glace')) {
-      return Icons.ac_unit_rounded;
-    }
-    if (normalized.contains('huile') ||
-        normalized.contains('gel') ||
-        normalized.contains('serviette')) {
-      return Icons.water_drop_rounded;
-    }
-    return Icons.medical_services_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Annuler ce besoin ?'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Cette mission ne sera plus proposée aux professionnels. '
+              'Les engagements existants resteront conservés dans '
+              'l’historique.',
+            ),
+            const SizedBox(height: 14),
+            Text(widget.need.place),
+            Text('${widget.need.date} • ${widget.need.time}'),
+            Text('MK engagés : ${widget.need.registeredPhysiotherapists}'),
+            Text('PP engagés : ${widget.need.registeredPodiatrists}'),
+            const SizedBox(height: 14),
+            TextField(
+              key: const Key('cancellation-reason'),
+              controller: _reason,
+              maxLength: 300,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Motif de l’annulation',
+              ),
+            ),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: AppColors.red)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('Retour'),
+        ),
+        FilledButton(
+          key: const Key('confirm-cancel-mission'),
+          onPressed: _submitting ? null : _confirm,
+          style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+          child: _submitting
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Confirmer l’annulation'),
+        ),
+      ],
+    );
   }
 }
 

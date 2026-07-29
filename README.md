@@ -143,3 +143,66 @@ Le dry-run est obligatoire et lié par empreinte au CSV et au projet. Le mode
 dans `data/location_address_backup.json`, puis modifie uniquement les champs
 d’adresse. Ne pas exécuter ces commandes contre la production sans validation
 humaine du rapport.
+
+# Désengagement et annulation RC1.3
+
+Un volontaire authentifié anonymement voit `✓ JE SUIS ENGAGÉ` lorsque le
+document déterministe `engagements/{missionId}_{uid}` existe. L’action
+secondaire `Me désengager` demande une confirmation, puis une transaction
+supprime cet engagement et décrémente exactement le compteur correspondant à
+la profession enregistrée. Le désengagement est refusé après la fin du créneau
+ou lorsque la mission est annulée.
+
+Un coordinateur actif, ou un responsable de site autorisé pour le
+`locationId`, peut annuler un besoin sans le supprimer. La mission reçoit :
+
+```text
+status=cancelled
+isActive=false
+cancelledAt=<server timestamp>
+cancelledBy=<responsible uid>
+cancellationReason=<optional reason>
+updatedAt=<server timestamp>
+```
+
+Les quotas et compteurs ne changent pas. Les engagements existants sont
+conservés pour l’historique, tandis que la requête opérationnelle
+`isActive == true` retire immédiatement la mission des autres appareils.
+
+## Recette multi-appareils
+
+### Désengagement
+
+1. Créer une mission nécessitant 2 MK.
+2. Sur l’iPhone A, s’engager comme MK.
+3. Vérifier sur le Mac le passage à 1/2.
+4. Sur l’iPhone A, choisir `Me désengager`, puis confirmer.
+5. Vérifier sur le Mac le retour à 0/2 sans rechargement.
+6. Vérifier la disparition de `engagements/{missionId}_{uid}`.
+
+### Annulation
+
+1. Créer une mission et enregistrer un engagement MK.
+2. Se connecter comme responsable autorisé.
+3. Choisir `Annuler ce besoin`, saisir éventuellement un motif et confirmer.
+4. Vérifier la disparition immédiate de la liste opérationnelle sur l’iPhone.
+5. Vérifier que le document mission existe encore avec `status=cancelled` et
+   `isActive=false`.
+6. Vérifier que l’engagement existant est conservé et qu’un nouvel engagement
+   est refusé.
+
+## Déploiement des règles
+
+Les nouvelles règles lient atomiquement suppression d’engagement et décrément
+de mission, et limitent l’annulation aux rôles autorisés. Avant publication :
+
+1. exécuter `npm test` dans `firebase_tests` ;
+2. déployer d’abord l’application compatible en conservant les règles
+   temporaires ;
+3. effectuer la recette sur un projet de test ;
+4. sauvegarder les règles publiées ;
+5. publier manuellement avec
+   `firebase deploy --only firestore:rules` ;
+6. rejouer immédiatement les deux scénarios sur Mac et iPhone.
+
+Aucune règle n’est déployée automatiquement par le projet.

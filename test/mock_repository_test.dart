@@ -98,4 +98,71 @@ void main() {
     expect(emissions.last.single.time, '22:00 — 02:00');
     await subscription.cancel();
   });
+
+  test(
+    'mock MK and PP disengagement decrements only its own counter',
+    () async {
+      for (final profession in VolunteerProfession.values) {
+        final mission = CoordinationNeed(
+          id: 'cancel-${profession.name}',
+          place: 'Mission',
+          group: TerritorialGroup.medoc,
+          date: 'Aujourd’hui',
+          time: '08:00 — 12:00',
+          requiredPhysiotherapists: 1,
+          registeredPhysiotherapists: 0,
+          requiredPodiatrists: 1,
+          registeredPodiatrists: 0,
+          equipment: const [],
+        );
+        final repository = MockCoordinationRepository(
+          initialMissions: [mission],
+          initialLocations: const [],
+        );
+        await repository.createEngagement(
+          missionId: mission.id,
+          firstName: 'A',
+          lastName: 'B',
+          phone: '0600000000',
+          profession: profession,
+        );
+        await repository.cancelEngagement(mission.id);
+        final updated = (await repository.watchMissions().first).single;
+        expect(updated.registeredPhysiotherapists, 0);
+        expect(updated.registeredPodiatrists, 0);
+        expect(updated.status, NeedStatus.critical);
+        expect(repository.engagements, isEmpty);
+        await expectLater(
+          repository.cancelEngagement(mission.id),
+          throwsA(isA<RepositoryException>()),
+        );
+      }
+    },
+  );
+
+  test('mock cancellation preserves counters and hides the mission', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: [needs.first],
+      initialLocations: const [],
+    );
+    final before = needs.first.registeredPeople;
+    await repository.cancelMission(needs.first.id, ' Vent violent ');
+
+    expect(await repository.watchMissions().first, isEmpty);
+    final stored = repository.debugMission(needs.first.id);
+    expect(stored?.isCancelled, isTrue);
+    expect(stored?.isActive, isFalse);
+    expect(stored?.registeredPeople, before);
+    expect(stored?.cancellationReason, 'Vent violent');
+    await expectLater(
+      repository.createEngagement(
+        missionId: needs.first.id,
+        firstName: 'A',
+        lastName: 'B',
+        phone: '0600000000',
+        profession: VolunteerProfession.mk,
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+  });
 }

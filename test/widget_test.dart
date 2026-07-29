@@ -64,10 +64,7 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.drag(
-      find.byType(CustomScrollView).first,
-      const Offset(0, -100),
-    );
+    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('❤️ JE M’ENGAGE').first);
     await tester.pumpAndSettle();

@@ -194,6 +194,16 @@ class _MissionRepository implements CoordinationRepository {
   MissionDraft? lastDraft;
 
   @override
+  Stream<EngagementInfo?> watchMyEngagement(String missionId) =>
+      Stream.value(null);
+
+  @override
+  Future<void> cancelEngagement(String missionId) async {}
+
+  @override
+  Future<void> cancelMission(String missionId, String? reason) async {}
+
+  @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() => Stream.value(
     const ResponsibleAccess(
       uid: 'test-manager',
