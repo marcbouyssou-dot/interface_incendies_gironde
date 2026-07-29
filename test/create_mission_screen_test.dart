@@ -57,8 +57,11 @@ void main() {
     expect(find.text(expected), findsOneWidget);
   }
 
-  Future<void> completeRequiredFields(WidgetTester tester) async {
-    await chooseLocation(tester);
+  Future<void> completeRequiredFields(
+    WidgetTester tester, {
+    bool selectLocation = true,
+  }) async {
+    if (selectLocation) await chooseLocation(tester);
     await chooseDate(tester);
     await chooseTime(tester, const Key('mission-start-time'), '08:00');
     await chooseTime(tester, const Key('mission-end-time'), '12:00');
@@ -165,6 +168,50 @@ void main() {
     expect(repository.calls, 1);
   });
 
+  testWidgets(
+    'site manager has one injected location and no location selector',
+    (tester) async {
+      final merignac = places.singleWhere(
+        (location) => location.name == 'Mérignac',
+      );
+      final repository = _MissionRepository(
+        access: ResponsibleAccess(
+          uid: 'manager-merignac',
+          role: 'site_manager',
+          locationIds: {merignac.id},
+          active: true,
+        ),
+        locations: [merignac, places.first],
+      );
+      await pumpForm(tester, repository);
+
+      expect(find.text('Créer un besoin'), findsOneWidget);
+      expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
+      expect(find.byKey(const Key('mission-location')), findsNothing);
+      expect(find.text('Mérignac'), findsOneWidget);
+      expect(find.text(places.first.name), findsNothing);
+
+      await completeRequiredFields(tester, selectLocation: false);
+      await revealPublishButton(tester);
+      await tester.tap(find.byKey(const Key('publish-mission')));
+      await tester.pumpAndSettle();
+
+      expect(repository.calls, 1);
+      expect(repository.lastDraft?.location.id, merignac.id);
+    },
+  );
+
+  testWidgets('coordinator can select any location', (tester) async {
+    final repository = _MissionRepository(locations: places.take(2).toList());
+    await pumpForm(tester, repository);
+
+    expect(find.byKey(const Key('mission-location')), findsOneWidget);
+    expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+    await tester.tap(find.byKey(const Key('mission-location')));
+    await tester.pumpAndSettle();
+    expect(find.text(places[1].name), findsOneWidget);
+  });
+
   test('an earlier end time crosses midnight and equal times are invalid', () {
     final overnight = MissionSchedule.fromLocal(
       date: DateTime(2026, 7, 30),
@@ -185,10 +232,17 @@ void main() {
 }
 
 class _MissionRepository implements CoordinationRepository {
-  _MissionRepository({this.pending = false, this.error = false});
+  _MissionRepository({
+    this.pending = false,
+    this.error = false,
+    this.access = _coordinatorAccess,
+    List<ResponsePlace>? locations,
+  }) : locations = locations ?? [places.first];
 
   final bool pending;
   final bool error;
+  final ResponsibleAccess access;
+  final List<ResponsePlace> locations;
   final Completer<String> _completer = Completer<String>();
   int calls = 0;
   MissionDraft? lastDraft;
@@ -204,20 +258,15 @@ class _MissionRepository implements CoordinationRepository {
   Future<void> cancelMission(String missionId, String? reason) async {}
 
   @override
-  Stream<ResponsibleAccess?> watchResponsibleAccess() => Stream.value(
-    const ResponsibleAccess(
-      uid: 'test-manager',
-      role: 'coordinator',
-      locationIds: {'*'},
-      active: true,
-    ),
-  );
+  Stream<ResponsibleAccess?> watchResponsibleAccess() => Stream.value(access);
 
   @override
   Future<ResponsibleAccess> signInResponsible({
     required String email,
     required String password,
-  }) async => const ResponsibleAccess(
+  }) async => access;
+
+  static const _coordinatorAccess = ResponsibleAccess(
     uid: 'test-manager',
     role: 'coordinator',
     locationIds: {'*'},
@@ -241,7 +290,7 @@ class _MissionRepository implements CoordinationRepository {
   }
 
   @override
-  Stream<List<ResponsePlace>> watchLocations() => Stream.value([places.first]);
+  Stream<List<ResponsePlace>> watchLocations() => Stream.value(locations);
 
   @override
   Stream<List<CoordinationNeed>> watchMissions() =>

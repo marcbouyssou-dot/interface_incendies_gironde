@@ -29,6 +29,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   _PublishedMission? _publishedMission;
   CoordinationRepository? _repository;
   Stream<ResponsibleAccess?>? _responsibleAccess;
+  Stream<List<ResponsePlace>>? _locations;
 
   @override
   void didChangeDependencies() {
@@ -37,6 +38,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     if (!identical(repository, _repository)) {
       _repository = repository;
       _responsibleAccess = repository.watchResponsibleAccess();
+      _locations = repository.watchLocations();
     }
   }
 
@@ -85,9 +87,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         children: [
           const PageHeader(
             eyebrow: 'Nouvelle mission',
-            title: 'Déclarer un besoin',
-            subtitle:
-                'Les champs permettront au coordinateur de mobiliser les bons renforts.',
+            title: 'Créer un besoin',
+            subtitle: 'Publiez les renforts nécessaires.',
           ),
           const SizedBox(height: 24),
           Align(
@@ -106,40 +107,17 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _FieldLabel('Lieu d’intervention'),
-                  const SizedBox(height: 8),
-                  StreamBuilder<List<ResponsePlace>>(
-                    stream: RepositoryScope.of(context).watchLocations(),
-                    builder: (context, snapshot) {
-                      final locations =
-                          snapshot.data ?? const <ResponsePlace>[];
-                      return DropdownButtonFormField<String>(
-                        key: const Key('mission-location'),
-                        isExpanded: true,
-                        initialValue: _selectedLocation?.id,
-                        hint: const Text('Choisir un lieu'),
-                        items: locations
-                            .where((location) => access.canManage(location.id))
-                            .map(
-                              (location) => DropdownMenuItem(
-                                value: location.id,
-                                child: Text(
-                                  location.name,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _publishing
-                            ? null
-                            : (id) => setState(() {
-                                _selectedLocation = locations
-                                    .where((location) => location.id == id)
-                                    .firstOrNull;
-                                _errorMessage = null;
-                              }),
-                        icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                      );
+                  _LocationInput(
+                    access: access,
+                    locations: _locations!,
+                    selectedLocation: _selectedLocation,
+                    enabled: !_publishing,
+                    onSelected: (location) {
+                      if (!mounted) return;
+                      setState(() {
+                        _selectedLocation = location;
+                        _errorMessage = null;
+                      });
                     },
                   ),
                   const SizedBox(height: 18),
@@ -185,10 +163,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     ],
                   ),
                   const SizedBox(height: 18),
-                  const _FieldLabel('Quotas nécessaires'),
+                  const _FieldLabel('Professionnels'),
                   const SizedBox(height: 8),
                   _QuotaStepper(
-                    label: 'MK nécessaires',
+                    label: 'MK',
                     value: _physiotherapists,
                     removeKey: const Key('mk-remove'),
                     onRemove: !_publishing && _physiotherapists > 0
@@ -200,7 +178,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                   ),
                   const SizedBox(height: 8),
                   _QuotaStepper(
-                    label: 'PP nécessaires',
+                    label: 'PP',
                     value: _podiatrists,
                     removeKey: const Key('pp-remove'),
                     onRemove: !_publishing && _podiatrists > 0
@@ -211,7 +189,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                         : () => setState(() => _podiatrists++),
                   ),
                   const SizedBox(height: 18),
-                  const _FieldLabel('Matériel demandé'),
+                  const _FieldLabel('Matériel'),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -243,7 +221,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             .toList(),
                   ),
                   const SizedBox(height: 18),
-                  const _FieldLabel('Précisions'),
+                  const _FieldLabel('Commentaire'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _detailsController,
@@ -278,9 +256,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             ),
                           )
                         : const Icon(Icons.arrow_forward_rounded),
-                    label: Text(
-                      _publishing ? 'Publication…' : 'Publier le besoin',
-                    ),
+                    label: Text(_publishing ? 'Publication…' : 'Publier'),
                   ),
                 ],
               ),
@@ -632,6 +608,128 @@ class _SummaryLine extends StatelessWidget {
         const SizedBox(height: 3),
         Text(value, style: Theme.of(context).textTheme.titleMedium),
       ],
+    );
+  }
+}
+
+class _LocationInput extends StatelessWidget {
+  const _LocationInput({
+    required this.access,
+    required this.locations,
+    required this.selectedLocation,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final ResponsibleAccess access;
+  final Stream<List<ResponsePlace>> locations;
+  final ResponsePlace? selectedLocation;
+  final bool enabled;
+  final ValueChanged<ResponsePlace?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<ResponsePlace>>(
+      stream: locations,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final available = snapshot.data!;
+        if (access.isSiteManager) {
+          return _buildLockedLocation(context, available);
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _FieldLabel('Lieu d’intervention'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              key: const Key('mission-location'),
+              isExpanded: true,
+              initialValue:
+                  available.any(
+                    (location) => location.id == selectedLocation?.id,
+                  )
+                  ? selectedLocation?.id
+                  : null,
+              hint: const Text('Choisir un lieu'),
+              items: available
+                  .map(
+                    (location) => DropdownMenuItem(
+                      value: location.id,
+                      child: Text(
+                        location.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: enabled
+                  ? (id) => onSelected(
+                      available
+                          .where((location) => location.id == id)
+                          .firstOrNull,
+                    )
+                  : null,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildLockedLocation(
+    BuildContext context,
+    List<ResponsePlace> available,
+  ) {
+    final locationId = access.singleManagedLocationId;
+    final location = available
+        .where((candidate) => candidate.id == locationId)
+        .firstOrNull;
+    if (location == null) {
+      if (selectedLocation != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => onSelected(null));
+      }
+      return const Text(
+        'Aucun lieu unique n’est configuré pour ce compte.',
+        key: Key('mission-location-error'),
+        style: TextStyle(
+          color: AppColors.red,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+    if (selectedLocation?.id != location.id) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => onSelected(location));
+    }
+    return Container(
+      key: const Key('mission-location-locked'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.location_on_outlined,
+            size: 18,
+            color: AppColors.textMuted,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              location.name,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

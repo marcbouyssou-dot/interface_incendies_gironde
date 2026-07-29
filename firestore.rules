@@ -28,9 +28,15 @@ service cloud.firestore {
       return hasActiveRole() && currentRole().role == 'site_manager';
     }
 
+    function isAuthorizedSiteManagerFor(locationId) {
+      return isActiveSiteManager()
+        && currentRole().locationIds is list
+        && locationId in currentRole().locationIds;
+    }
+
     function canManageLocation(locationId) {
       return isCoordinator()
-        || (isActiveSiteManager() && locationId in currentRole().locationIds);
+        || isAuthorizedSiteManagerFor(locationId);
     }
 
     function isVolunteerOwner(uid) {

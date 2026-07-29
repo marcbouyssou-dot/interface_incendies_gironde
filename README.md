@@ -44,7 +44,8 @@ du statut de mission sont regroupées dans une transaction Firestore.
 ## Vérification manuelle d’une mission réelle
 
 1. Ouvrir la PWA sur le Mac en mode Firebase.
-2. Dans **Déclarer**, choisir une caserne réelle.
+2. Dans **Déclarer**, se connecter comme responsable de site et vérifier que
+   son lieu est affiché sans sélecteur.
 3. Choisir la date du lendemain.
 4. Choisir un créneau `22:00 → 02:00`.
 5. Régler les quotas à 2 MK et 1 PP, puis publier.
@@ -79,9 +80,13 @@ avant toute bascule.
    }
    ```
 
-   Un coordinateur utilise `role: "coordinator"` et `locationIds: ["*"]`.
-6. Tester la connexion responsable, le filtrage des lieux et la publication
-   avec les règles temporaires.
+   Un responsable de site RC1.4 reçoit exactement un identifiant de lieu. Le
+   formulaire injecte ce lieu automatiquement et ne permet aucun choix. Un
+   coordinateur utilise `role: "coordinator"` et `locationIds: ["*"]` ; lui
+   seul conserve le sélecteur donnant accès à tous les lieux.
+6. Tester la connexion responsable, l’absence de sélecteur, l’injection du
+   lieu autorisé et la publication avec les règles temporaires. Vérifier aussi
+   qu’une écriture visant un autre `locationId` est refusée.
 7. Depuis `firebase_tests`, exécuter `npm install`, puis `npm test`. Ces tests
    utilisent uniquement l’émulateur et nécessitent Java.
 8. Tester sur un projet Firebase de recette, puis seulement après validation :

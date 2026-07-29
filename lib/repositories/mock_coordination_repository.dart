@@ -75,6 +75,17 @@ class MockCoordinationRepository implements CoordinationRepository {
 
   @override
   Future<String> createMission(MissionDraft draft) async {
+    final access = _responsibleAccess;
+    if (access == null || !access.active) {
+      throw const RepositoryException(
+        'Vous devez vous connecter pour déclarer un besoin.',
+      );
+    }
+    if (!access.canManage(draft.location.id)) {
+      throw const RepositoryException(
+        'Votre compte n’est pas autorisé à publier pour ce lieu.',
+      );
+    }
     final id = 'mock-mission-${_missions.length + 1}';
     final mission = CoordinationNeed(
       id: id,

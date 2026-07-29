@@ -59,6 +59,8 @@ class ResponsibleAccess {
 
   bool get isCoordinator => active && role == 'coordinator';
   bool get isSiteManager => active && role == 'site_manager';
+  String? get singleManagedLocationId =>
+      isSiteManager && locationIds.length == 1 ? locationIds.single : null;
   bool canManage(String locationId) =>
       isCoordinator || (isSiteManager && locationIds.contains(locationId));
 }

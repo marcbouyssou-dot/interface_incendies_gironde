@@ -44,6 +44,10 @@ async function seed(extra = {}) {
       id: 'site-a', name: 'Site A', group: 'medoc', type: 'sdisStation',
       isActive: true,
     });
+    await setDoc(doc(admin, 'locations/site-b'), {
+      id: 'site-b', name: 'Site B', group: 'libournais', type: 'sdisStation',
+      isActive: true,
+    });
     await setDoc(doc(admin, 'roles/coord'), {
       role: 'coordinator', locationIds: ['*'], active: true,
     });
@@ -146,6 +150,9 @@ test('missions: public active read and anonymous create denied', async () => {
 test('missions: coordinator and authorized manager create', async () => {
   await seed({mission: false});
   await assertSucceeds(setDoc(doc(db('coord'), 'missions/c1'), mission({id: 'c1'})));
+  await assertSucceeds(setDoc(doc(db('coord'), 'missions/c2'), mission({
+    id: 'c2', locationId: 'site-b', locationName: 'Site B',
+  })));
   await assertSucceeds(setDoc(doc(db('manager'), 'missions/m1'), mission({
     id: 'm1', createdBy: 'manager',
   })));
@@ -154,7 +161,8 @@ test('missions: coordinator and authorized manager create', async () => {
 test('missions: invalid manager, quotas, counters, dates and extra fields denied', async () => {
   await seed({mission: false});
   await assertFails(setDoc(doc(db('manager'), 'missions/x1'), mission({
-    id: 'x1', createdBy: 'manager', locationId: 'other',
+    id: 'x1', createdBy: 'manager', locationId: 'site-b',
+    locationName: 'Site B',
   })));
   await assertFails(setDoc(doc(db('coord'), 'missions/x2'), mission({
     id: 'x2', requiredMk: 0, requiredPp: 0,

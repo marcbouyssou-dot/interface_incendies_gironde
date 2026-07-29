@@ -100,6 +100,46 @@ void main() {
   });
 
   test(
+    'mock site manager can publish only for the assigned location',
+    () async {
+      final assigned = places.first;
+      final forbidden = places[1];
+      final repository = MockCoordinationRepository(
+        initialMissions: const [],
+        initialLocations: [assigned, forbidden],
+        responsibleAccess: ResponsibleAccess(
+          uid: 'manager',
+          role: 'site_manager',
+          locationIds: {assigned.id},
+          active: true,
+        ),
+      );
+
+      await repository.createMission(_draftFor(assigned));
+      await expectLater(
+        repository.createMission(_draftFor(forbidden)),
+        throwsA(isA<RepositoryException>()),
+      );
+
+      final missions = await repository.watchMissions().first;
+      expect(missions, hasLength(1));
+      expect(missions.single.locationId, assigned.id);
+    },
+  );
+
+  test('mock coordinator can publish for every location', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: places.take(2).toList(),
+    );
+
+    await repository.createMission(_draftFor(places.first));
+    await repository.createMission(_draftFor(places[1]));
+
+    expect(await repository.watchMissions().first, hasLength(2));
+  });
+
+  test(
     'mock MK and PP disengagement decrements only its own counter',
     () async {
       for (final profession in VolunteerProfession.values) {
@@ -166,3 +206,13 @@ void main() {
     );
   });
 }
+
+MissionDraft _draftFor(ResponsePlace location) => MissionDraft(
+  location: location,
+  startAt: DateTime(2026, 8, 1, 8),
+  endAt: DateTime(2026, 8, 1, 12),
+  requiredPhysiotherapists: 2,
+  requiredPodiatrists: 1,
+  equipment: const ['Tables'],
+  details: '',
+);
