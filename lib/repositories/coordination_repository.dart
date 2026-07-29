@@ -46,6 +46,7 @@ class EngagementInfo {
     required this.volunteerId,
     required this.profession,
     this.status = EngagementStatus.confirmed,
+    this.createdAt,
     this.updatedAt,
   });
 
@@ -53,18 +54,24 @@ class EngagementInfo {
   final String volunteerId;
   final VolunteerProfession profession;
   final EngagementStatus status;
+  final DateTime? createdAt;
   final DateTime? updatedAt;
 
   String get documentId => '${missionId}_$volunteerId';
 
-  EngagementInfo copyWith({EngagementStatus? status, DateTime? updatedAt}) =>
-      EngagementInfo(
-        missionId: missionId,
-        volunteerId: volunteerId,
-        profession: profession,
-        status: status ?? this.status,
-        updatedAt: updatedAt ?? this.updatedAt,
-      );
+  EngagementInfo copyWith({
+    VolunteerProfession? profession,
+    EngagementStatus? status,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => EngagementInfo(
+    missionId: missionId,
+    volunteerId: volunteerId,
+    profession: profession ?? this.profession,
+    status: status ?? this.status,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
 }
 
 enum EngagementStatus { pending, confirmed, standby, cancelled }

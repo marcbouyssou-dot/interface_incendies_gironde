@@ -5,7 +5,6 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
 import '../theme/app_theme.dart';
-import '../utils/create_engagement_error.dart';
 
 class PageContainer extends StatelessWidget {
   const PageContainer({super.key, required this.child});
@@ -982,25 +981,15 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error, stackTrace) {
-      final details = unpackCreateEngagementError(error, stackTrace);
-      // ignore: avoid_print
-      print(details.summary);
-      if (details.boxedStack case final boxedStack?) {
-        // ignore: avoid_print
-        print(boxedStack);
-      }
-      for (final diagnostic in details.diagnostics) {
-        // ignore: avoid_print
-        print(diagnostic);
-      }
-      // ignore: avoid_print
-      print(stackTrace);
+      debugPrint('Erreur UI createEngagement : $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 15),
-          content: Text(details.summary),
+        const SnackBar(
+          content: Text(
+            'L’inscription n’a pas pu être enregistrée. Réessayez.',
+          ),
         ),
       );
     }

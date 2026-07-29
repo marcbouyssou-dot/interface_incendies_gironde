@@ -310,7 +310,9 @@ class MockCoordinationRepository implements CoordinationRepository {
         'Le créneau de cette mission est terminé.',
       );
     }
-    if (engagements.containsKey(missionId)) {
+    final existingEngagement = engagements[missionId];
+    if (existingEngagement != null &&
+        existingEngagement.status != EngagementStatus.cancelled) {
       throw const RepositoryException(
         'Vous êtes déjà engagé sur cette mission.',
       );
@@ -329,9 +331,20 @@ class MockCoordinationRepository implements CoordinationRepository {
       volunteerId: 'mock-volunteer',
       profession: profession,
       status: EngagementStatus.pending,
+      createdAt: existingEngagement?.createdAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
     );
     engagements[missionId] = engagement;
-    missionEngagements.add(engagement);
+    final engagementIndex = missionEngagements.indexWhere(
+      (candidate) =>
+          candidate.missionId == missionId &&
+          candidate.volunteerId == engagement.volunteerId,
+    );
+    if (engagementIndex < 0) {
+      missionEngagements.add(engagement);
+    } else {
+      missionEngagements[engagementIndex] = engagement;
+    }
     _missionUpdates.add(_activeMissions());
   }
 

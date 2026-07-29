@@ -321,6 +321,30 @@ service cloud.firestore {
         && validEngagementMissionEffect(from, 'cancelled');
     }
 
+    function validOwnerReengagement(engagementId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let mission = get(
+        /databases/$(database)/documents/missions/$(resource.data.missionId)
+      ).data;
+      return isSignedIn()
+        && engagementId == resource.data.missionId + '_' + request.auth.uid
+        && resource.data.volunteerId == request.auth.uid
+        && resource.data.status == 'cancelled'
+        && changed.hasOnly(['status', 'updatedAt', 'profession'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.updatedAt == request.time
+        && validProfession(request.resource.data.profession)
+        && existsAfter(volunteerPath(request.auth.uid))
+        && getAfter(volunteerPath(request.auth.uid)).data.uid
+          == request.auth.uid
+        && getAfter(volunteerPath(request.auth.uid)).data.profession
+          == request.resource.data.profession
+        && mission.isActive == true
+        && mission.status != 'cancelled'
+        && request.time < mission.endAt
+        && validEngagementMissionEffect('cancelled', 'pending');
+    }
+
     match /locations/{locationId} {
       allow read: if true;
       allow write: if false;
@@ -351,6 +375,7 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && (resource.data.volunteerId == request.auth.uid || isCoordinator());
       allow update: if validOwnerCancellation(engagementId)
+        || validOwnerReengagement(engagementId)
         || validEngagementStatusUpdate();
       allow delete: if false;
     }

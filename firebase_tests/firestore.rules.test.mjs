@@ -122,6 +122,19 @@ async function updateEngagement(uid, volunteerUid, status, missionChanges) {
   return batch.commit();
 }
 
+async function reengage(uid, profession = 'mk', engagementChanges = {}) {
+  const userDb = db(uid);
+  const batch = writeBatch(userDb);
+  batch.set(doc(userDb, `volunteers/${uid}`), volunteer(uid, {profession}));
+  batch.update(doc(userDb, `engagements/mission-a_${uid}`), {
+    status: 'pending',
+    profession,
+    updatedAt: serverTimestamp(),
+    ...engagementChanges,
+  });
+  return batch.commit();
+}
+
 async function seedEngagement(uid, status, profession = 'mk') {
   await env.withSecurityRulesDisabled(async (context) => {
     const data = {
@@ -278,6 +291,61 @@ test('engagements: owner cancellation is allowed and immutable fields stay prote
     profession: 'pp', status: 'cancelled', updatedAt: serverTimestamp(),
   }));
   await assertFails(updateEngagement('alice', 'alice', 'cancelled'));
+});
+
+test('engagements: cancelled owner can reengage pending without mission counters', async () => {
+  await seed();
+  await seedEngagement('alice', 'cancelled');
+  let createdAt;
+  let missionBefore;
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'volunteers/alice'), volunteer('alice'));
+    createdAt = (await getDoc(
+      doc(admin, 'engagements/mission-a_alice'),
+    )).data().createdAt;
+    missionBefore = (await getDoc(doc(admin, 'missions/mission-a'))).data();
+  });
+
+  await assertSucceeds(reengage('alice', 'pp'));
+
+  const engagement = (await getDoc(
+    doc(db('alice'), 'engagements/mission-a_alice'),
+  )).data();
+  const missionAfter = (await getDoc(
+    doc(db('alice'), 'missions/mission-a'),
+  )).data();
+  assert.equal(engagement.status, 'pending');
+  assert.equal(engagement.profession, 'pp');
+  assert.equal(engagement.createdAt.toMillis(), createdAt.toMillis());
+  assert.equal(missionAfter.registeredMk, missionBefore.registeredMk);
+  assert.equal(missionAfter.registeredPp, missionBefore.registeredPp);
+});
+
+test('engagements: only cancelled may transition back to pending', async () => {
+  for (const status of ['pending', 'confirmed', 'standby', undefined]) {
+    await seed();
+    await seedEngagement('alice', status);
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'volunteers/alice'), volunteer('alice'));
+    });
+    await assertFails(reengage('alice'));
+  }
+});
+
+test('engagements: reengagement protects identity and creation fields', async () => {
+  for (const changes of [
+    {volunteerId: 'bob'},
+    {missionId: 'mission-other'},
+    {createdAt: serverTimestamp()},
+  ]) {
+    await seed();
+    await seedEngagement('alice', 'cancelled');
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'volunteers/alice'), volunteer('alice'));
+    });
+    await assertFails(reengage('alice', 'mk', changes));
+  }
 });
 
 test('engagements: authorized coordinator transitions are allowed', async () => {

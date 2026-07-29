@@ -125,6 +125,118 @@ void main() {
     );
   });
 
+  test(
+    'mock reengages a cancelled volunteer as pending without counters',
+    () async {
+      final createdAt = DateTime(2026, 7, 20, 9);
+      final mission = CoordinationNeed(
+        id: 'reengagement',
+        place: 'Mission test',
+        group: TerritorialGroup.medoc,
+        date: 'Aujourd’hui',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 2,
+        registeredPhysiotherapists: 1,
+        requiredPodiatrists: 1,
+        registeredPodiatrists: 0,
+        equipment: const [],
+      );
+      final cancelled = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'mock-volunteer',
+        profession: VolunteerProfession.mk,
+        status: EngagementStatus.cancelled,
+        createdAt: createdAt,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [cancelled],
+      );
+      repository.engagements[mission.id] = cancelled;
+
+      await repository.createEngagement(
+        missionId: mission.id,
+        firstName: 'Jeanne',
+        lastName: 'Martin',
+        phone: '0600000000',
+        profession: VolunteerProfession.pp,
+      );
+
+      final engagement = repository.engagements[mission.id]!;
+      final storedMission = repository.debugMission(mission.id)!;
+      expect(engagement.status, EngagementStatus.pending);
+      expect(engagement.profession, VolunteerProfession.pp);
+      expect(engagement.createdAt, createdAt);
+      expect(storedMission.registeredPhysiotherapists, 1);
+      expect(storedMission.registeredPodiatrists, 0);
+      expect(
+        repository.missionEngagements
+            .where(
+              (candidate) =>
+                  candidate.missionId == mission.id &&
+                  candidate.volunteerId == 'mock-volunteer',
+            )
+            .single
+            .status,
+        EngagementStatus.pending,
+      );
+    },
+  );
+
+  test('mock refuses existing active and legacy engagements', () async {
+    for (final status in const [
+      EngagementStatus.pending,
+      EngagementStatus.confirmed,
+      EngagementStatus.standby,
+    ]) {
+      final mission = CoordinationNeed(
+        id: 'duplicate-${status.name}',
+        place: 'Mission test',
+        group: TerritorialGroup.medoc,
+        date: 'Aujourd’hui',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 1,
+        registeredPhysiotherapists: 0,
+        requiredPodiatrists: 0,
+        registeredPodiatrists: 0,
+        equipment: const [],
+      );
+      final existing = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'mock-volunteer',
+        profession: VolunteerProfession.mk,
+        status: status,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [existing],
+      );
+      repository.engagements[mission.id] = existing;
+
+      await expectLater(
+        repository.createEngagement(
+          missionId: mission.id,
+          firstName: 'A',
+          lastName: 'B',
+          phone: '0600000000',
+          profession: VolunteerProfession.mk,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+    }
+
+    const legacy = EngagementInfo(
+      missionId: 'legacy',
+      volunteerId: 'mock-volunteer',
+      profession: VolunteerProfession.mk,
+    );
+    expect(legacy.status, EngagementStatus.confirmed);
+  });
+
   test('a pending engagement does not increment mission counters', () {
     expect(EngagementStatus.pending.incrementsCountersOnCreation, isFalse);
   });
