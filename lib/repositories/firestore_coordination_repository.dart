@@ -475,16 +475,26 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     String? email,
     required VolunteerProfession profession,
   }) async {
+    // ignore: avoid_print
+    print('STEP 1 - CREATE ENGAGEMENT START');
     var user = _auth.currentUser;
     if (user == null) {
+      // ignore: avoid_print
+      print('STEP 2 - BEFORE ANONYMOUS SIGN IN');
       final credential = await _auth.signInAnonymously();
+      // ignore: avoid_print
+      print('STEP 3 - AFTER ANONYMOUS SIGN IN');
       user = credential.user;
     }
+    // ignore: avoid_print
+    print('STEP 4 - AUTH USER CHECK');
     if (user == null) {
       throw const RepositoryException(
         'Connexion sécurisée impossible. Réessayez.',
       );
     }
+    // ignore: avoid_print
+    print('STEP 5 - BUILD FIRESTORE REFERENCES');
     final uid = user.uid;
     final missionRef = _firestore.collection('missions').doc(missionId);
     final volunteerRef = _firestore.collection('volunteers').doc(uid);
@@ -493,20 +503,42 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         .doc('${missionId}_$uid');
 
     try {
+      // ignore: avoid_print
+      print('STEP 6 - BEFORE TRANSACTION');
+      // ignore: avoid_print
+      print('BEFORE TRANSACTION');
       await _firestore
           .runTransaction((transaction) async {
+            // ignore: avoid_print
+            print('STEP 7 - INSIDE TRANSACTION');
+            // ignore: avoid_print
+            print('INSIDE TRANSACTION');
+            // ignore: avoid_print
+            print('STEP 8 - BEFORE MISSION READ');
             final snapshot = await transaction.get(missionRef);
+            // ignore: avoid_print
+            print('STEP 9 - AFTER MISSION READ');
             if (!snapshot.exists) {
               throw const RepositoryException('Mission introuvable');
             }
+            // ignore: avoid_print
+            print('STEP 10 - BEFORE ENGAGEMENT READ');
             final existingEngagement = await transaction.get(engagementRef);
+            // ignore: avoid_print
+            print('STEP 11 - AFTER ENGAGEMENT READ');
             if (existingEngagement.exists) {
               throw const RepositoryException(
                 'Vous êtes déjà engagé sur cette mission.',
               );
             }
+            // ignore: avoid_print
+            print('STEP 12 - BEFORE VOLUNTEER READ');
             final existingVolunteer = await transaction.get(volunteerRef);
+            // ignore: avoid_print
+            print('STEP 13 - AFTER VOLUNTEER READ');
             final data = snapshot.data()!;
+            // ignore: avoid_print
+            print('STEP 14 - VALIDATE MISSION');
             if (data['status'] == 'cancelled') {
               throw const RepositoryException('Cette mission a été annulée.');
             }
@@ -536,11 +568,17 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
             if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
               volunteerData['email'] = normalizedEmail;
             }
+            // ignore: avoid_print
+            print('STEP 15 - BEFORE VOLUNTEER SET');
             transaction.set(volunteerRef, {
               ...volunteerData,
               'createdAt': existingVolunteer.data()?['createdAt'] ?? now,
               'equipment': <String>[],
             }, SetOptions(merge: true));
+            // ignore: avoid_print
+            print('STEP 16 - AFTER VOLUNTEER SET');
+            // ignore: avoid_print
+            print('STEP 17 - BEFORE ENGAGEMENT SET');
             transaction.set(engagementRef, {
               'missionId': missionId,
               'volunteerId': uid,
@@ -549,8 +587,18 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               'updatedAt': now,
               'status': EngagementStatus.pending.name,
             });
+            // ignore: avoid_print
+            print('STEP 18 - AFTER ENGAGEMENT SET');
+            // ignore: avoid_print
+            print('STEP 19 - BEFORE TRANSACTION COMMIT');
           })
           .timeout(const Duration(seconds: 15));
+      // ignore: avoid_print
+      print('STEP 20 - AFTER TRANSACTION');
+      // ignore: avoid_print
+      print('AFTER TRANSACTION');
+      // ignore: avoid_print
+      print('STEP 21 - CREATE ENGAGEMENT END');
     } on FirebaseException catch (error, stackTrace) {
       // ignore: avoid_print
       print(
