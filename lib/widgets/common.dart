@@ -460,18 +460,20 @@ class _NeedActions extends StatelessWidget {
                     icon: const Icon(Icons.check_circle_rounded),
                     label: const Text('✓ JE SUIS ENGAGÉ'),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    key: Key('cancel-engagement-${need.id}'),
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => _CancelEngagementDialog(
-                        need: need,
-                        engagement: engagement,
+                  if (engagement.status != EngagementStatus.cancelled) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      key: Key('cancel-engagement-${need.id}'),
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => _CancelEngagementDialog(
+                          need: need,
+                          engagement: engagement,
+                        ),
                       ),
+                      child: const Text('Annuler mon engagement'),
                     ),
-                    child: const Text('Me désengager'),
-                  ),
+                  ],
                 ],
               );
             }
