@@ -562,7 +562,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 : classifyExistingEngagement(existingEngagementData, uid);
             if (existing != null && !existing.ownerMatches) return null;
             if (existing?.result case final existingResult?) {
-              return existingResult;
+              if (existingResult != EngagementCreationResult.alreadyPending) {
+                return existingResult;
+              }
             }
             final isReengagement = existing != null;
             final existingVolunteer = await transaction.get(volunteerRef);
@@ -581,6 +583,25 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               throw const RepositoryException(
                 'Le créneau de cette mission est terminé.',
               );
+            }
+            final requiredMk = _int(data['requiredMk']);
+            final requiredPp = _int(data['requiredPp']);
+            var registeredMk = _int(data['registeredMk']);
+            var registeredPp = _int(data['registeredPp']);
+            if (profession == VolunteerProfession.mk) {
+              if (registeredMk >= requiredMk) {
+                throw const RepositoryException(
+                  'Ce besoin est désormais couvert pour votre profession.',
+                );
+              }
+              registeredMk++;
+            } else {
+              if (registeredPp >= requiredPp) {
+                throw const RepositoryException(
+                  'Ce besoin est désormais couvert pour votre profession.',
+                );
+              }
+              registeredPp++;
             }
             final now = FieldValue.serverTimestamp();
 
@@ -605,9 +626,8 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               transaction.update(engagementRef, {
                 'profession': profession.name,
                 'updatedAt': now,
-                'status': EngagementStatus.pending.name,
+                'status': EngagementStatus.confirmed.name,
               });
-              return EngagementCreationResult.reactivated;
             } else {
               transaction.set(engagementRef, {
                 'missionId': missionId,
@@ -615,10 +635,23 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 'profession': profession.name,
                 'createdAt': now,
                 'updatedAt': now,
-                'status': EngagementStatus.pending.name,
+                'status': EngagementStatus.confirmed.name,
               });
-              return EngagementCreationResult.created;
             }
+            transaction.update(missionRef, {
+              'registeredMk': registeredMk,
+              'registeredPp': registeredPp,
+              'status': _statusFor(
+                requiredMk: requiredMk,
+                registeredMk: registeredMk,
+                requiredPp: requiredPp,
+                registeredPp: registeredPp,
+              ).name,
+              'updatedAt': now,
+            });
+            return isReengagement
+                ? EngagementCreationResult.reactivated
+                : EngagementCreationResult.created;
           })
           .timeout(const Duration(seconds: 15));
       if (result == null) {

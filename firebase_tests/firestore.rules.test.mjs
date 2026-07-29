@@ -95,18 +95,28 @@ function volunteer(uid, overrides = {}) {
 
 async function engage(uid, profession = 'mk', missionChanges = {}) {
   const userDb = db(uid);
+  const missionSnapshot = await getDoc(doc(userDb, 'missions/mission-a'));
+  const missionData = missionSnapshot.data();
+  const registeredMk = missionData.registeredMk + (profession === 'mk' ? 1 : 0);
+  const registeredPp = missionData.registeredPp + (profession === 'pp' ? 1 : 0);
   const batch = writeBatch(userDb);
   batch.set(doc(userDb, `volunteers/${uid}`), volunteer(uid, {profession}));
   batch.set(doc(userDb, `engagements/mission-a_${uid}`), {
     missionId: 'mission-a', volunteerId: uid, profession,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    status: 'pending',
+    status: 'confirmed',
   });
-  if (Object.keys(missionChanges).length > 0) {
-    batch.update(doc(userDb, 'missions/mission-a'), {
-      ...missionChanges, updatedAt: serverTimestamp(),
-    });
-  }
+  batch.update(doc(userDb, 'missions/mission-a'), {
+    registeredMk,
+    registeredPp,
+    status: expectedStatus({
+      ...missionData,
+      registeredMk,
+      registeredPp,
+    }),
+    ...missionChanges,
+    updatedAt: serverTimestamp(),
+  });
   return batch.commit();
 }
 
@@ -126,15 +136,40 @@ async function updateEngagement(uid, volunteerUid, status, missionChanges) {
 
 async function reengage(uid, profession = 'mk', engagementChanges = {}) {
   const userDb = db(uid);
+  const missionSnapshot = await getDoc(doc(userDb, 'missions/mission-a'));
+  const missionData = missionSnapshot.data();
+  const registeredMk = missionData.registeredMk + (profession === 'mk' ? 1 : 0);
+  const registeredPp = missionData.registeredPp + (profession === 'pp' ? 1 : 0);
   const batch = writeBatch(userDb);
   batch.set(doc(userDb, `volunteers/${uid}`), volunteer(uid, {profession}));
   batch.update(doc(userDb, `engagements/mission-a_${uid}`), {
-    status: 'pending',
+    status: 'confirmed',
     profession,
     updatedAt: serverTimestamp(),
     ...engagementChanges,
   });
+  batch.update(doc(userDb, 'missions/mission-a'), {
+    registeredMk,
+    registeredPp,
+    status: expectedStatus({
+      ...missionData,
+      registeredMk,
+      registeredPp,
+    }),
+    updatedAt: serverTimestamp(),
+  });
   return batch.commit();
+}
+
+function expectedStatus(data) {
+  if (
+    data.registeredMk >= data.requiredMk
+    && data.registeredPp >= data.requiredPp
+  ) return 'complete';
+  return (data.registeredMk + data.registeredPp) * 2
+      < data.requiredMk + data.requiredPp
+    ? 'critical'
+    : 'toComplete';
 }
 
 async function seedEngagement(uid, status, profession = 'mk') {
@@ -220,10 +255,25 @@ test('volunteers: invalid profession and extra field denied', async () => {
   await assertFails(setDoc(doc(db('alice'), 'volunteers/alice'), volunteer('alice', {admin: true})));
 });
 
-test('engagements: owner creation in pending allowed for MK and PP', async () => {
+test('engagements: owner creation confirms and increments MK and PP', async () => {
   await seed();
   await assertSucceeds(engage('alice'));
   await assertSucceeds(engage('bob', 'pp'));
+  const adminDb = db('coord');
+  assert.equal(
+    (await getDoc(doc(adminDb, 'engagements/mission-a_alice'))).data().status,
+    'confirmed',
+  );
+  assert.equal(
+    (await getDoc(doc(adminDb, 'engagements/mission-a_bob'))).data().status,
+    'confirmed',
+  );
+  const storedMission = (await getDoc(
+    doc(adminDb, 'missions/mission-a'),
+  )).data();
+  assert.equal(storedMission.registeredMk, 1);
+  assert.equal(storedMission.registeredPp, 1);
+  assert.equal(storedMission.status, 'toComplete');
 });
 
 test('engagements: owner can get its missing deterministic document', async () => {
@@ -315,7 +365,7 @@ test('engagements: coordinator keeps get and list access', async () => {
   assert.equal(querySnapshot.size, 1);
 });
 
-test('engagements: pending creation succeeds after an allowed missing get', async () => {
+test('engagements: confirmed creation succeeds after an allowed missing get', async () => {
   await seed();
   const userDb = db('alice');
   const missionBefore = (await assertSucceeds(
@@ -334,10 +384,10 @@ test('engagements: pending creation succeeds after an allowed missing get', asyn
   const missionAfter = (await assertSucceeds(
     getDoc(doc(userDb, 'missions/mission-a')),
   )).data();
-  assert.equal(engagement.status, 'pending');
+  assert.equal(engagement.status, 'confirmed');
   assert.equal(
     missionAfter.registeredMk,
-    missionBefore.registeredMk,
+    missionBefore.registeredMk + 1,
   );
   assert.equal(
     missionAfter.registeredPp,
@@ -345,7 +395,7 @@ test('engagements: pending creation succeeds after an allowed missing get', asyn
   );
 });
 
-test('engagements: pending creation remains allowed at reached quota', async () => {
+test('engagements: creation is denied when the profession quota is reached', async () => {
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
@@ -354,8 +404,8 @@ test('engagements: pending creation remains allowed at reached quota', async () 
       status: 'complete',
     });
   });
-  await assertSucceeds(engage('alice'));
-  await assertSucceeds(engage('bob', 'pp'));
+  await assertFails(engage('alice'));
+  await assertFails(engage('bob', 'pp'));
 });
 
 test('engagements: creation on an ended mission is denied', async () => {
@@ -368,7 +418,7 @@ test('engagements: creation on an ended mission is denied', async () => {
   await assertFails(engage('alice'));
 });
 
-test('engagements: direct confirmed creation denied', async () => {
+test('engagements: confirmed creation without mission increment is denied', async () => {
   await seed();
   const userDb = db('alice');
   const batch = writeBatch(userDb);
@@ -377,6 +427,24 @@ test('engagements: direct confirmed creation denied', async () => {
     missionId: 'mission-a', volunteerId: 'alice', profession: 'mk',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     status: 'confirmed',
+  });
+  await assertFails(batch.commit());
+});
+
+test('engagements: new pending creation is denied', async () => {
+  await seed();
+  const userDb = db('alice');
+  const batch = writeBatch(userDb);
+  batch.set(doc(userDb, 'volunteers/alice'), volunteer('alice'));
+  batch.set(doc(userDb, 'engagements/mission-a_alice'), {
+    missionId: 'mission-a', volunteerId: 'alice', profession: 'mk',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    status: 'pending',
+  });
+  batch.update(doc(userDb, 'missions/mission-a'), {
+    registeredMk: 1,
+    status: 'critical',
+    updatedAt: serverTimestamp(),
   });
   await assertFails(batch.commit());
 });
@@ -407,14 +475,17 @@ test('engagements: owner cannot confirm or move itself to standby', async () => 
 test('engagements: owner cancellation is allowed and immutable fields stay protected', async () => {
   await seed();
   await engage('alice');
-  await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled'));
+  await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled', {
+    registeredMk: 0,
+    status: 'critical',
+  }));
   await assertFails(updateDoc(doc(db('alice'), 'engagements/mission-a_alice'), {
     profession: 'pp', status: 'cancelled', updatedAt: serverTimestamp(),
   }));
   await assertFails(updateEngagement('alice', 'alice', 'cancelled'));
 });
 
-test('engagements: cancelled owner can reengage pending without mission counters', async () => {
+test('engagements: cancelled owner reengages confirmed with exact counter', async () => {
   await seed();
   await seedEngagement('alice', 'cancelled');
   let createdAt;
@@ -436,15 +507,38 @@ test('engagements: cancelled owner can reengage pending without mission counters
   const missionAfter = (await getDoc(
     doc(db('alice'), 'missions/mission-a'),
   )).data();
-  assert.equal(engagement.status, 'pending');
+  assert.equal(engagement.status, 'confirmed');
   assert.equal(engagement.profession, 'pp');
   assert.equal(engagement.createdAt.toMillis(), createdAt.toMillis());
   assert.equal(missionAfter.registeredMk, missionBefore.registeredMk);
-  assert.equal(missionAfter.registeredPp, missionBefore.registeredPp);
+  assert.equal(
+    missionAfter.registeredPp,
+    missionBefore.registeredPp + 1,
+  );
 });
 
-test('engagements: only cancelled may transition back to pending', async () => {
-  for (const status of ['pending', 'confirmed', 'standby', undefined]) {
+test('engagements: historical pending can be confirmed by its owner', async () => {
+  await seed();
+  await seedEngagement('alice', 'pending');
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'volunteers/alice'), volunteer('alice'));
+  });
+
+  await assertSucceeds(reengage('alice'));
+
+  const engagement = (await getDoc(
+    doc(db('alice'), 'engagements/mission-a_alice'),
+  )).data();
+  const storedMission = (await getDoc(
+    doc(db('alice'), 'missions/mission-a'),
+  )).data();
+  assert.equal(engagement.status, 'confirmed');
+  assert.equal(storedMission.registeredMk, 1);
+  assert.equal(storedMission.registeredPp, 0);
+});
+
+test('engagements: active or legacy confirmed cannot reactivate', async () => {
+  for (const status of ['confirmed', 'standby', undefined]) {
     await seed();
     await seedEngagement('alice', status);
     await env.withSecurityRulesDisabled(async (context) => {

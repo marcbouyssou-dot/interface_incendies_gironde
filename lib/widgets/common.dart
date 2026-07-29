@@ -471,7 +471,7 @@ class _NeedActions extends StatelessWidget {
             final engagement = engagementSnapshot.data;
             if (engagement != null) {
               final actionLabel = switch (engagement.status) {
-                EngagementStatus.pending => 'DEMANDE ENVOYÉE',
+                EngagementStatus.pending => 'CONFIRMER MA PARTICIPATION',
                 EngagementStatus.confirmed => 'PARTICIPATION CONFIRMÉE',
                 EngagementStatus.standby => 'RENFORT',
                 EngagementStatus.cancelled => 'JE M’ENGAGE À NOUVEAU',
@@ -491,7 +491,9 @@ class _NeedActions extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   FilledButton.icon(
-                    onPressed: engagement.status == EngagementStatus.cancelled
+                    onPressed:
+                        engagement.status == EngagementStatus.cancelled ||
+                            engagement.status == EngagementStatus.pending
                         ? () => showModalBottomSheet<void>(
                             context: context,
                             isScrollControlled: true,
@@ -883,6 +885,21 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   final _emailController = TextEditingController();
   bool _submitting = false;
 
+  bool get _mkAvailable =>
+      widget.need.registeredPhysiotherapists <
+      widget.need.requiredPhysiotherapists;
+
+  bool get _ppAvailable =>
+      widget.need.registeredPodiatrists < widget.need.requiredPodiatrists;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_mkAvailable && _ppAvailable) {
+      _profession = VolunteerProfession.pp;
+    }
+  }
+
   @override
   void dispose() {
     _firstNameController.dispose();
@@ -925,17 +942,25 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
               RadioGroup<VolunteerProfession>(
                 groupValue: _profession,
                 onChanged: (value) => setState(() => _profession = value!),
-                child: const Column(
+                child: Column(
                   children: [
                     RadioListTile<VolunteerProfession>(
                       contentPadding: EdgeInsets.zero,
                       value: VolunteerProfession.mk,
-                      title: Text('Masseur-kinésithérapeute'),
+                      enabled: _mkAvailable,
+                      title: const Text('Masseur-kinésithérapeute'),
+                      subtitle: _mkAvailable
+                          ? null
+                          : const Text('Besoin couvert'),
                     ),
                     RadioListTile<VolunteerProfession>(
                       contentPadding: EdgeInsets.zero,
                       value: VolunteerProfession.pp,
-                      title: Text('Pédicure-podologue'),
+                      enabled: _ppAvailable,
+                      title: const Text('Pédicure-podologue'),
+                      subtitle: _ppAvailable
+                          ? null
+                          : const Text('Besoin couvert'),
                     ),
                   ],
                 ),
@@ -980,7 +1005,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
               ),
               const SizedBox(height: 8),
               FilledButton(
-                onPressed: _submitting ? null : _submit,
+                onPressed: _submitting || (!_mkAvailable && !_ppAvailable)
+                    ? null
+                    : _submit,
                 child: _submitting
                     ? const SizedBox.square(
                         dimension: 20,

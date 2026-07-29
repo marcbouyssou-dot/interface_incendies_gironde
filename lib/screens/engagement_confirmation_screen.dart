@@ -36,16 +36,13 @@ class EngagementConfirmationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    result.existingMessage ??
-                        'Votre demande de participation est enregistrée.',
+                    result.existingMessage ?? 'Votre engagement est confirmé.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  if (result == EngagementCreationResult.created ||
-                      result == EngagementCreationResult.reactivated ||
-                      result == EngagementCreationResult.alreadyPending) ...[
+                  if (result == EngagementCreationResult.alreadyPending) ...[
                     const SizedBox(height: 4),
                     Text(
-                      'Elle est en attente de validation.',
+                      'Une ancienne demande est encore en attente.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],

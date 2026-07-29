@@ -48,11 +48,8 @@ void main() {
     );
 
     expect(find.text('Merci !'), findsOneWidget);
-    expect(
-      find.text('Votre demande de participation est enregistrée.'),
-      findsOneWidget,
-    );
-    expect(find.text('Elle est en attente de validation.'), findsOneWidget);
+    expect(find.text('Votre engagement est confirmé.'), findsOneWidget);
+    expect(find.text('Elle est en attente de validation.'), findsNothing);
     expect(find.text(needs.first.place), findsOneWidget);
     expect(find.text(needs.first.time), findsOneWidget);
     expect(find.text('Retour aux interventions'), findsOneWidget);

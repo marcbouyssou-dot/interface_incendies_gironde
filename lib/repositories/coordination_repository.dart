@@ -74,6 +74,8 @@ class EngagementInfo {
   );
 }
 
+// `pending` and `standby` remain readable for historical RC1.4 records.
+// New engagements and re-engagements are created directly as `confirmed`.
 enum EngagementStatus { pending, confirmed, standby, cancelled }
 
 enum EngagementCreationResult {

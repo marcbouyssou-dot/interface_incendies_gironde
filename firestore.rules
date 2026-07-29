@@ -135,32 +135,54 @@ service cloud.firestore {
 
     function validMissionCounterUpdate(missionId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let mkDecrement = request.resource.data.registeredMk
-          == resource.data.registeredMk - 1
-        && request.resource.data.registeredPp == resource.data.registeredPp;
-      let ppDecrement = request.resource.data.registeredPp
-          == resource.data.registeredPp - 1
-        && request.resource.data.registeredMk == resource.data.registeredMk;
       let path = engagementPath(missionId, request.auth.uid);
+      let engagementBeforeExists = exists(path);
+      let engagementBefore = get(path).data;
+      let engagementAfter = getAfter(path).data;
+      let beforeStatus = !engagementBeforeExists
+        ? 'absent'
+        : ('status' in engagementBefore
+          ? engagementBefore.status
+          : 'confirmed');
+      let afterStatus = engagementAfter.status;
+      let delta = ((beforeStatus == 'absent'
+          || beforeStatus == 'pending'
+          || beforeStatus == 'cancelled')
+          && afterStatus == 'confirmed')
+        ? 1
+        : (beforeStatus == 'confirmed' && afterStatus == 'cancelled'
+          ? -1
+          : 0);
+      let profession = delta == 1
+        ? engagementAfter.profession
+        : engagementBefore.profession;
       return isSignedIn()
         && changed.hasOnly([
           'registeredMk', 'registeredPp', 'status', 'updatedAt'
         ])
         && resource.data.isActive == true
         && resource.data.status != 'cancelled'
-        && request.resource.data.registeredMk <= resource.data.requiredMk
-        && request.resource.data.registeredPp <= resource.data.requiredPp
+        && request.time < resource.data.endAt
         && request.resource.data.registeredMk >= 0
         && request.resource.data.registeredPp >= 0
+        && request.resource.data.registeredMk <= resource.data.requiredMk
+        && request.resource.data.registeredPp <= resource.data.requiredPp
         && request.resource.data.status == expectedStatus(request.resource.data)
-        && exists(path)
+        && request.resource.data.updatedAt == request.time
         && existsAfter(path)
-        && get(path).data.missionId == missionId
-        && get(path).data.volunteerId == request.auth.uid
-        && getAfter(path).data.status == 'cancelled'
-        && request.time < resource.data.endAt
-        && ((mkDecrement && get(path).data.profession == 'mk')
-          || (ppDecrement && get(path).data.profession == 'pp'));
+        && engagementAfter.missionId == missionId
+        && engagementAfter.volunteerId == request.auth.uid
+        && delta != 0
+        && ((profession == 'mk'
+            && request.resource.data.registeredMk
+              == resource.data.registeredMk + delta
+            && request.resource.data.registeredPp
+              == resource.data.registeredPp)
+          || (profession == 'pp'
+            && request.resource.data.registeredPp
+              == resource.data.registeredPp + delta
+            && request.resource.data.registeredMk
+              == resource.data.registeredMk));
     }
 
     function validManagedMissionCounterUpdate() {
@@ -230,7 +252,7 @@ service cloud.firestore {
         && engagementId == missionId + '_' + request.auth.uid
         && request.resource.data.volunteerId == request.auth.uid
         && validProfession(profession)
-        && request.resource.data.status == 'pending'
+        && request.resource.data.status == 'confirmed'
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && existsAfter(volunteerPath(request.auth.uid))
@@ -245,8 +267,16 @@ service cloud.firestore {
         && missionBefore.isActive == true
         && missionBefore.status != 'cancelled'
         && request.time < missionBefore.endAt
-        && missionAfter.registeredMk == missionBefore.registeredMk
-        && missionAfter.registeredPp == missionBefore.registeredPp;
+        && missionAfter.registeredMk <= missionBefore.requiredMk
+        && missionAfter.registeredPp <= missionBefore.requiredPp
+        && missionAfter.status == expectedStatus(missionAfter)
+        && missionAfter.updatedAt == request.time
+        && ((profession == 'mk'
+            && missionAfter.registeredMk == missionBefore.registeredMk + 1
+            && missionAfter.registeredPp == missionBefore.registeredPp)
+          || (profession == 'pp'
+            && missionAfter.registeredPp == missionBefore.registeredPp + 1
+            && missionAfter.registeredMk == missionBefore.registeredMk));
     }
 
     function currentEngagementStatus() {
@@ -271,6 +301,7 @@ service cloud.firestore {
       let profession = resource.data.profession;
       let delta = (from == 'pending' && to == 'confirmed')
           || (from == 'standby' && to == 'confirmed')
+          || (from == 'cancelled' && to == 'confirmed')
         ? 1
         : ((from == 'confirmed' && (to == 'standby' || to == 'cancelled'))
           ? -1
@@ -318,6 +349,9 @@ service cloud.firestore {
 
     function validOwnerCancellation(engagementId) {
       let from = currentEngagementStatus();
+      let missionAfter = getAfter(
+        /databases/$(database)/documents/missions/$(resource.data.missionId)
+      ).data;
       return isSignedIn()
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
@@ -326,7 +360,9 @@ service cloud.firestore {
         && request.resource.data.status == 'cancelled'
         && request.resource.data.updatedAt == request.time
         && (from == 'pending' || from == 'standby' || from == 'confirmed')
-        && validEngagementMissionEffect(from, 'cancelled');
+        && (from == 'pending'
+          || from == 'standby'
+          || missionAfter.updatedAt == request.time);
     }
 
     function validOwnerReengagement(engagementId) {
@@ -337,9 +373,10 @@ service cloud.firestore {
       return isSignedIn()
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
-        && resource.data.status == 'cancelled'
+        && (resource.data.status == 'cancelled'
+          || resource.data.status == 'pending')
         && changed.hasOnly(['status', 'updatedAt', 'profession'])
-        && request.resource.data.status == 'pending'
+        && request.resource.data.status == 'confirmed'
         && request.resource.data.updatedAt == request.time
         && validProfession(request.resource.data.profession)
         && existsAfter(volunteerPath(request.auth.uid))
@@ -350,7 +387,9 @@ service cloud.firestore {
         && mission.isActive == true
         && mission.status != 'cancelled'
         && request.time < mission.endAt
-        && validEngagementMissionEffect('cancelled', 'pending');
+        && getAfter(
+          /databases/$(database)/documents/missions/$(resource.data.missionId)
+        ).data.updatedAt == request.time;
     }
 
     match /locations/{locationId} {
@@ -365,9 +404,12 @@ service cloud.firestore {
         || canManageLocation(resource.data.locationId);
       allow list: if resource.data.isActive == true;
       allow create: if isSignedIn() && validMissionCreate(missionId);
-      allow update: if validMissionCounterUpdate(missionId)
-        || validManagedMissionCounterUpdate()
-        || validMissionCancellation();
+      allow update: if existsAfter(
+          engagementPath(missionId, request.auth.uid)
+        ) && validMissionCounterUpdate(missionId);
+      allow update: if !existsAfter(
+          engagementPath(missionId, request.auth.uid)
+        ) && (validManagedMissionCounterUpdate() || validMissionCancellation());
       allow delete: if false;
     }
 
@@ -382,9 +424,11 @@ service cloud.firestore {
       allow create: if validEngagementCreate(engagementId);
       allow get: if isCoordinator() || canGetOwnEngagement(engagementId);
       allow list: if isCoordinator();
-      allow update: if validOwnerCancellation(engagementId)
-        || validOwnerReengagement(engagementId)
-        || validEngagementStatusUpdate();
+      allow update: if resource.data.volunteerId == request.auth.uid
+        && (validOwnerCancellation(engagementId)
+          || validOwnerReengagement(engagementId));
+      allow update: if resource.data.volunteerId != request.auth.uid
+        && validEngagementStatusUpdate();
       allow delete: if false;
     }
 

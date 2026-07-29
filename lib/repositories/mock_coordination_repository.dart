@@ -312,18 +312,31 @@ class MockCoordinationRepository implements CoordinationRepository {
     }
     final existingEngagement = engagements[missionId];
     if (existingEngagement != null &&
-        existingEngagement.status != EngagementStatus.cancelled) {
-      if (existingEngagement.volunteerId != 'mock-volunteer') {
-        throw const RepositoryException(
-          'Cet engagement appartient à un autre volontaire.',
-        );
-      }
+        existingEngagement.volunteerId != 'mock-volunteer') {
+      throw const RepositoryException(
+        'Cet engagement appartient à un autre volontaire.',
+      );
+    }
+    if (existingEngagement != null &&
+        existingEngagement.status != EngagementStatus.cancelled &&
+        existingEngagement.status != EngagementStatus.pending) {
       return switch (existingEngagement.status) {
-        EngagementStatus.pending => EngagementCreationResult.alreadyPending,
+        EngagementStatus.pending => throw StateError('État inaccessible'),
         EngagementStatus.confirmed => EngagementCreationResult.alreadyConfirmed,
         EngagementStatus.standby => EngagementCreationResult.alreadyStandby,
         EngagementStatus.cancelled => throw StateError('État inaccessible'),
       };
+    }
+    final hasAvailableQuota = switch (profession) {
+      VolunteerProfession.mk =>
+        mission.registeredPhysiotherapists < mission.requiredPhysiotherapists,
+      VolunteerProfession.pp =>
+        mission.registeredPodiatrists < mission.requiredPodiatrists,
+    };
+    if (!hasAvailableQuota) {
+      throw const RepositoryException(
+        'Ce besoin est désormais couvert pour votre profession.',
+      );
     }
     volunteers.add(
       Volunteer(
@@ -338,7 +351,7 @@ class MockCoordinationRepository implements CoordinationRepository {
       missionId: missionId,
       volunteerId: 'mock-volunteer',
       profession: profession,
-      status: EngagementStatus.pending,
+      status: EngagementStatus.confirmed,
       createdAt: existingEngagement?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -353,6 +366,14 @@ class MockCoordinationRepository implements CoordinationRepository {
     } else {
       missionEngagements[engagementIndex] = engagement;
     }
+    _missions[index] = switch (profession) {
+      VolunteerProfession.mk => mission.copyWith(
+        registeredPhysiotherapists: mission.registeredPhysiotherapists + 1,
+      ),
+      VolunteerProfession.pp => mission.copyWith(
+        registeredPodiatrists: mission.registeredPodiatrists + 1,
+      ),
+    };
     _missionUpdates.add(_activeMissions());
     return existingEngagement == null
         ? EngagementCreationResult.created

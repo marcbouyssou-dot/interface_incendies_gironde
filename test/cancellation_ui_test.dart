@@ -40,7 +40,7 @@ void main() {
     }
   }
 
-  testWidgets('pending engagement shows its badge and disengagement', (
+  testWidgets('new engagement shows confirmed state and disengagement', (
     tester,
   ) async {
     final repository = MockCoordinationRepository(
@@ -68,9 +68,9 @@ void main() {
       const Offset(0, -120),
     );
     await tester.pumpAndSettle();
-    expect(find.text('DEMANDE ENVOYÉE'), findsOneWidget);
+    expect(find.text('PARTICIPATION CONFIRMÉE'), findsOneWidget);
     expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
-    expect(find.text('En attente'), findsOneWidget);
+    expect(find.text('Confirmé'), findsOneWidget);
 
     await tester.tap(find.text('Annuler mon engagement'));
     await tester.pumpAndSettle();
@@ -99,7 +99,7 @@ void main() {
   });
 
   for (final (status, label, subtitle) in [
-    (EngagementStatus.pending, 'DEMANDE ENVOYÉE', null),
+    (EngagementStatus.pending, 'CONFIRMER MA PARTICIPATION', null),
     (EngagementStatus.confirmed, 'PARTICIPATION CONFIRMÉE', null),
     (EngagementStatus.standby, 'RENFORT', 'Vous serez contacté si nécessaire.'),
     (EngagementStatus.cancelled, 'JE M’ENGAGE À NOUVEAU', null),
@@ -195,6 +195,35 @@ void main() {
 
     expect(find.text('Statut indisponible'), findsOneWidget);
     expect(find.text('❤️ JE M’ENGAGE'), findsNothing);
+  });
+
+  testWidgets('covered profession is disabled in the engagement form', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission()],
+      initialLocations: const [],
+    );
+    await pumpApp(tester, repository);
+    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
+    await tester.tap(find.text('❤️ JE M’ENGAGE'));
+    await tester.pumpAndSettle();
+
+    final mkTile = tester.widget<RadioListTile<VolunteerProfession>>(
+      find.widgetWithText(
+        RadioListTile<VolunteerProfession>,
+        'Masseur-kinésithérapeute',
+      ),
+    );
+    final ppTile = tester.widget<RadioListTile<VolunteerProfession>>(
+      find.widgetWithText(
+        RadioListTile<VolunteerProfession>,
+        'Pédicure-podologue',
+      ),
+    );
+    expect(mkTile.enabled, isTrue);
+    expect(ppTile.enabled, isFalse);
+    expect(find.text('Besoin couvert'), findsOneWidget);
   });
 
   testWidgets('double submission invokes createEngagement only once', (
