@@ -988,7 +988,6 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
-      rethrow;
     }
   }
 }
