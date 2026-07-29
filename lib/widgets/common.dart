@@ -442,6 +442,18 @@ class _NeedActions extends StatelessWidget {
           builder: (context, engagementSnapshot) {
             final engagement = engagementSnapshot.data;
             if (engagement != null) {
+              final actionLabel = switch (engagement.status) {
+                EngagementStatus.pending => 'DEMANDE ENVOYÉE',
+                EngagementStatus.confirmed => 'PARTICIPATION CONFIRMÉE',
+                EngagementStatus.standby => 'RENFORT',
+                EngagementStatus.cancelled => 'PARTICIPATION ANNULÉE',
+              };
+              final actionIcon = switch (engagement.status) {
+                EngagementStatus.pending => Icons.schedule_rounded,
+                EngagementStatus.confirmed => Icons.check_circle_rounded,
+                EngagementStatus.standby => Icons.groups_rounded,
+                EngagementStatus.cancelled => Icons.cancel_rounded,
+              };
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -457,9 +469,16 @@ class _NeedActions extends StatelessWidget {
                       disabledForegroundColor: AppColors.green,
                       minimumSize: const Size.fromHeight(56),
                     ),
-                    icon: const Icon(Icons.check_circle_rounded),
-                    label: const Text('✓ JE SUIS ENGAGÉ'),
+                    icon: Icon(actionIcon),
+                    label: Text(actionLabel),
                   ),
+                  if (engagement.status == EngagementStatus.standby) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Vous serez contacté si nécessaire.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   if (engagement.status != EngagementStatus.cancelled) ...[
                     const SizedBox(height: 8),
                     TextButton(

@@ -59,7 +59,8 @@ void main() {
       const Offset(0, -120),
     );
     await tester.pumpAndSettle();
-    expect(find.text('✓ JE SUIS ENGAGÉ'), findsOneWidget);
+    expect(find.text('DEMANDE ENVOYÉE'), findsOneWidget);
+    expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
     expect(find.text('En attente'), findsOneWidget);
 
     await tester.tap(find.text('Annuler mon engagement'));
@@ -79,16 +80,19 @@ void main() {
     );
     expect(repository.debugMission('ui-mission')?.isActive, isTrue);
     expect(repository.debugMission('ui-mission')?.isCancelled, isFalse);
+    expect(find.text('PARTICIPATION ANNULÉE'), findsOneWidget);
+    expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
+    expect(find.text('Annuler mon engagement'), findsNothing);
     expect(
       find.text('Votre désengagement a bien été enregistré.'),
       findsOneWidget,
     );
   });
 
-  for (final status in [
-    EngagementStatus.confirmed,
-    EngagementStatus.standby,
-    EngagementStatus.cancelled,
+  for (final (status, label, subtitle) in [
+    (EngagementStatus.confirmed, 'PARTICIPATION CONFIRMÉE', null),
+    (EngagementStatus.standby, 'RENFORT', 'Vous serez contacté si nécessaire.'),
+    (EngagementStatus.cancelled, 'PARTICIPATION ANNULÉE', null),
   ]) {
     testWidgets('volunteer cancellation visibility for ${status.name}', (
       tester,
@@ -107,6 +111,12 @@ void main() {
       repository.engagements['ui-mission'] = engagement;
       await pumpApp(tester, repository);
 
+      expect(find.text(label), findsOneWidget);
+      expect(find.text(status.label), findsOneWidget);
+      expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
+      if (subtitle != null) {
+        expect(find.text(subtitle), findsOneWidget);
+      }
       expect(
         find.text('Annuler mon engagement'),
         status == EngagementStatus.cancelled ? findsNothing : findsOneWidget,

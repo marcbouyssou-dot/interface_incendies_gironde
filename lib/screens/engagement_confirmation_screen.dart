@@ -30,8 +30,13 @@ class EngagementConfirmationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Votre engagement est confirmé.',
+                    'Votre demande de participation est enregistrée.',
                     style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Elle est en attente de validation.',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 32),
                   Card(
