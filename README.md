@@ -15,12 +15,12 @@ Le mode Firestore s’active avec les paramètres du projet Firebase :
 ```bash
 flutter run -d chrome \
   --dart-define=USE_FIREBASE=true \
-  --dart-define=FIREBASE_API_KEY=... \
-  --dart-define=FIREBASE_APP_ID=... \
-  --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
-  --dart-define=FIREBASE_PROJECT_ID=... \
-  --dart-define=FIREBASE_AUTH_DOMAIN=... \
-  --dart-define=FIREBASE_STORAGE_BUCKET=...
+  --dart-define=FIREBASE_API_KEY=<your-api-key> \
+  --dart-define=FIREBASE_APP_ID=<your-app-id> \
+  --dart-define=FIREBASE_MESSAGING_SENDER_ID=<your-messaging-sender-id> \
+  --dart-define=FIREBASE_PROJECT_ID=<your-project-id> \
+  --dart-define=FIREBASE_AUTH_DOMAIN=<your-auth-domain> \
+  --dart-define=FIREBASE_STORAGE_BUCKET=<your-storage-bucket>
 ```
 
 L’interface dépend uniquement de `CoordinationRepository`. Les
@@ -88,7 +88,7 @@ avant toute bascule.
 
    ```bash
    firebase login
-   firebase use mobilisation-sante
+   firebase use <your-project-id>
    firebase deploy --only firestore:rules
    ```
 
@@ -132,7 +132,7 @@ L’outil d’administration est séparé de l’application :
 ```bash
 cd scripts
 npm install
-export FIREBASE_PROJECT_ID="projet-de-recette"
+export FIREBASE_PROJECT_ID=<your-project-id>
 gcloud auth application-default login
 node update_location_addresses.mjs --dry-run
 node update_location_addresses.mjs --apply
