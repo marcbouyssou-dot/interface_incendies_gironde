@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../utils/switch_latest.dart';
 import 'coordination_repository.dart';
@@ -204,9 +206,12 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
     _validateRequiredProfileFields(
       email: profile.email,
-      rpps: profile.rpps,
+      professionalIdType: profile.effectiveProfessionalIdType,
+      professionalIdValue: profile.effectiveProfessionalIdValue,
       cptsId: profile.cptsId,
       cptsLabel: profile.cptsLabel,
+      equipment: profile.equipment,
+      otherEquipmentDetails: profile.otherEquipmentDetails,
     );
     final user = _auth.currentUser;
     if (user == null || !user.isAnonymous || user.uid != profile.uid) {
@@ -241,8 +246,15 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
             final data = snapshot.data();
             if (!snapshot.exists || data == null) return null;
             final profession = data['profession'] as String?;
-            if (profession != VolunteerProfession.mk.name &&
-                profession != VolunteerProfession.pp.name) {
+            if (profession == null) {
+              throw const RepositoryException(
+                'La profession de cet engagement est invalide.',
+              );
+            }
+            late final VolunteerProfession parsedProfession;
+            try {
+              parsedProfession = volunteerProfessionFromId(profession);
+            } on FormatException {
               throw const RepositoryException(
                 'La profession de cet engagement est invalide.',
               );
@@ -250,7 +262,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
             return EngagementInfo(
               missionId: missionId,
               volunteerId: user.uid,
-              profession: VolunteerProfession.values.byName(profession!),
+              profession: parsedProfession,
               status: _engagementStatus(data['status']),
               createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
               updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
@@ -270,14 +282,19 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               .map((document) {
                 final data = document.data();
                 final profession = data['profession'] as String?;
-                if (profession != VolunteerProfession.mk.name &&
-                    profession != VolunteerProfession.pp.name) {
+                if (profession == null) {
+                  return null;
+                }
+                final VolunteerProfession parsedProfession;
+                try {
+                  parsedProfession = volunteerProfessionFromId(profession);
+                } on FormatException {
                   return null;
                 }
                 return EngagementInfo(
                   missionId: missionId,
                   volunteerId: data['volunteerId'] as String? ?? '',
-                  profession: VolunteerProfession.values.byName(profession!),
+                  profession: parsedProfession,
                   status: _engagementStatus(data['status']),
                   createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
                   updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
@@ -345,49 +362,40 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                   'Le créneau de cette mission est terminé.',
                 );
               }
-              final requiredMk = _int(mission['requiredMk']);
-              final requiredPp = _int(mission['requiredPp']);
-              var registeredMk = _int(mission['registeredMk']);
-              var registeredPp = _int(mission['registeredPp']);
               final professionName = engagement['profession'] as String?;
-              if (professionName != VolunteerProfession.mk.name &&
-                  professionName != VolunteerProfession.pp.name) {
+              if (professionName == null) {
                 throw const RepositoryException(
                   'La profession de cet engagement est invalide.',
                 );
               }
-              final profession = VolunteerProfession.values.byName(
-                professionName!,
-              );
-              if ((profession == VolunteerProfession.mk &&
-                      registeredMk >= requiredMk) ||
-                  (profession == VolunteerProfession.pp &&
-                      registeredPp >= requiredPp)) {
+              late final String professionId;
+              try {
+                professionId = HealthProfessionId.normalize(professionName);
+              } on FormatException {
+                throw const RepositoryException(
+                  'La profession de cet engagement est invalide.',
+                );
+              }
+              var quotas = ProfessionQuotas.fromMissionData(mission);
+              final quota = quotas.quotaFor(professionId);
+              if (quota.registered >= quota.required) {
                 throw const RepositoryException(
                   'Cette mission est désormais complète.',
                 );
               }
-              final delta = EngagementCounterTransition.delta(
+              final delta = EngagementCounterTransition.amount(
                 from: currentStatus,
                 to: EngagementStatus.confirmed,
-                profession: profession,
               );
-              registeredMk += delta.mk;
-              registeredPp += delta.pp;
+              quotas = quotas.updateRegistered(professionId, delta);
               final now = FieldValue.serverTimestamp();
               transaction.update(reference, {
                 'status': EngagementStatus.confirmed.name,
                 'updatedAt': now,
               });
               transaction.update(missionReference, {
-                'registeredMk': registeredMk,
-                'registeredPp': registeredPp,
-                'status': _statusFor(
-                  requiredMk: requiredMk,
-                  registeredMk: registeredMk,
-                  requiredPp: requiredPp,
-                  registeredPp: registeredPp,
-                ).name,
+                ...quotas.toMissionUpdate(),
+                'status': _statusForQuotas(quotas).name,
                 'updatedAt': now,
               });
             })
@@ -439,47 +447,39 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 });
                 return;
               }
-              final requiredMk = _int(mission['requiredMk']);
-              final requiredPp = _int(mission['requiredPp']);
-              var registeredMk = _int(mission['registeredMk']);
-              var registeredPp = _int(mission['registeredPp']);
               final professionName = engagement['profession'] as String?;
-              if (professionName != VolunteerProfession.mk.name &&
-                  professionName != VolunteerProfession.pp.name) {
+              if (professionName == null) {
                 throw const RepositoryException(
                   'La profession de cet engagement est invalide.',
                 );
               }
-              final profession = VolunteerProfession.values.byName(
-                professionName!,
-              );
-              if ((profession == VolunteerProfession.mk && registeredMk <= 0) ||
-                  (profession == VolunteerProfession.pp && registeredPp <= 0)) {
+              late final String professionId;
+              try {
+                professionId = HealthProfessionId.normalize(professionName);
+              } on FormatException {
+                throw const RepositoryException(
+                  'La profession de cet engagement est invalide.',
+                );
+              }
+              var quotas = ProfessionQuotas.fromMissionData(mission);
+              if (quotas.quotaFor(professionId).registered <= 0) {
                 throw const RepositoryException(
                   'Le compteur correspondant est déjà à zéro.',
                 );
               }
-              final delta = EngagementCounterTransition.delta(
+              final delta = EngagementCounterTransition.amount(
                 from: currentStatus,
                 to: status,
-                profession: profession,
               );
-              registeredMk += delta.mk;
-              registeredPp += delta.pp;
+              quotas = quotas.updateRegistered(professionId, delta);
               final now = FieldValue.serverTimestamp();
               transaction.update(reference, {
                 'status': status.name,
                 'updatedAt': now,
               });
               transaction.update(missionReference, {
-                'registeredMk': registeredMk,
-                'registeredPp': registeredPp,
-                'status': _statusFor(
-                  requiredMk: requiredMk,
-                  registeredMk: registeredMk,
-                  requiredPp: requiredPp,
-                  registeredPp: registeredPp,
-                ).name,
+                ...quotas.toMissionUpdate(),
+                'status': _statusForQuotas(quotas).name,
                 'updatedAt': now,
               });
             })
@@ -568,22 +568,27 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required String phone,
     String? email,
     String? rpps,
+    ProfessionalIdType? professionalIdType,
+    String? professionalIdValue,
     String? cptsId,
     String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
+    String? otherEquipmentDetails,
   }) async {
     _validateRequiredProfileFields(
       email: email,
-      rpps: rpps,
+      professionalIdType:
+          professionalIdType ??
+          ((rpps?.trim().isNotEmpty ?? false)
+              ? ProfessionalIdType.rpps
+              : ProfessionalIdType.none),
+      professionalIdValue: professionalIdValue ?? rpps ?? '',
       cptsId: cptsId,
       cptsLabel: cptsLabel,
+      equipment: equipment,
+      otherEquipmentDetails: otherEquipmentDetails,
     );
-    if (!profession.isSupportedByCurrentMission) {
-      throw const RepositoryException(
-        'Cette profession n’est pas encore proposée pour cette mission.',
-      );
-    }
     var user = _auth.currentUser;
     if (!canStartVolunteerEngagement(
       hasUser: user != null,
@@ -645,25 +650,15 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 'Le créneau de cette mission est terminé.',
               );
             }
-            final requiredMk = _int(data['requiredMk']);
-            final requiredPp = _int(data['requiredPp']);
-            var registeredMk = _int(data['registeredMk']);
-            var registeredPp = _int(data['registeredPp']);
-            if (profession == VolunteerProfession.mk) {
-              if (registeredMk >= requiredMk) {
-                throw const RepositoryException(
-                  'Ce besoin est désormais couvert pour votre profession.',
-                );
-              }
-              registeredMk++;
-            } else {
-              if (registeredPp >= requiredPp) {
-                throw const RepositoryException(
-                  'Ce besoin est désormais couvert pour votre profession.',
-                );
-              }
-              registeredPp++;
+            var quotas = ProfessionQuotas.fromMissionData(data);
+            final professionId = profession.canonicalId!;
+            final quota = quotas.quotaFor(professionId);
+            if (quota.registered >= quota.required) {
+              throw const RepositoryException(
+                'Ce besoin est désormais couvert pour votre profession.',
+              );
             }
+            quotas = quotas.updateRegistered(professionId, 1);
             final now = FieldValue.serverTimestamp();
 
             final volunteerData = <String, dynamic>{
@@ -679,6 +674,17 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                   .toSet()
                   .toList(),
             };
+            final resolvedIdType =
+                professionalIdType ??
+                ((rpps?.trim().isNotEmpty ?? false)
+                    ? ProfessionalIdType.rpps
+                    : ProfessionalIdType.none);
+            final resolvedIdValue = _normalizeProfessionalIdValue(
+              resolvedIdType,
+              professionalIdValue ?? rpps ?? '',
+            );
+            volunteerData['professionalIdType'] = resolvedIdType.name;
+            volunteerData['professionalIdValue'] = resolvedIdValue;
             final normalizedEmail = email?.trim();
             if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
               volunteerData['email'] = normalizedEmail;
@@ -686,9 +692,12 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               volunteerData['email'] = FieldValue.delete();
             }
             for (final entry in {
-              'rpps': _normalizeRpps(rpps),
+              'rpps': resolvedIdType == ProfessionalIdType.rpps
+                  ? resolvedIdValue
+                  : null,
               'cptsId': _nullableTrim(cptsId),
               'cptsLabel': _nullableTrim(cptsLabel),
+              'otherEquipmentDetails': _nullableTrim(otherEquipmentDetails),
             }.entries) {
               if (entry.value != null) {
                 volunteerData[entry.key] = entry.value;
@@ -717,14 +726,8 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               });
             }
             transaction.update(missionRef, {
-              'registeredMk': registeredMk,
-              'registeredPp': registeredPp,
-              'status': _statusFor(
-                requiredMk: requiredMk,
-                registeredMk: registeredMk,
-                requiredPp: requiredPp,
-                registeredPp: registeredPp,
-              ).name,
+              ...quotas.toMissionUpdate(),
+              'status': _statusForQuotas(quotas).name,
               'updatedAt': now,
             });
             return isReengagement
@@ -810,47 +813,33 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               return;
             }
             final professionName = engagement['profession'] as String?;
-            if (professionName != VolunteerProfession.mk.name &&
-                professionName != VolunteerProfession.pp.name) {
+            if (professionName == null) {
               throw const RepositoryException(
                 'Le désengagement n’a pas pu être enregistré. Réessayez.',
               );
             }
-            final profession = VolunteerProfession.values.byName(
-              professionName!,
-            );
-            final requiredMk = _int(mission['requiredMk']);
-            final requiredPp = _int(mission['requiredPp']);
-            var registeredMk = _int(mission['registeredMk']);
-            var registeredPp = _int(mission['registeredPp']);
-            if (profession == VolunteerProfession.mk) {
-              if (registeredMk <= 0) {
-                throw const RepositoryException(
-                  'Le désengagement n’a pas pu être enregistré. Réessayez.',
-                );
-              }
-              registeredMk--;
-            } else {
-              if (registeredPp <= 0) {
-                throw const RepositoryException(
-                  'Le désengagement n’a pas pu être enregistré. Réessayez.',
-                );
-              }
-              registeredPp--;
+            late final String professionId;
+            try {
+              professionId = HealthProfessionId.normalize(professionName);
+            } on FormatException {
+              throw const RepositoryException(
+                'Le désengagement n’a pas pu être enregistré. Réessayez.',
+              );
             }
+            var quotas = ProfessionQuotas.fromMissionData(mission);
+            if (quotas.quotaFor(professionId).registered <= 0) {
+              throw const RepositoryException(
+                'Le désengagement n’a pas pu être enregistré. Réessayez.',
+              );
+            }
+            quotas = quotas.updateRegistered(professionId, -1);
             transaction.update(engagementRef, {
               'status': EngagementStatus.cancelled.name,
               'updatedAt': now,
             });
             transaction.update(missionRef, {
-              'registeredMk': registeredMk,
-              'registeredPp': registeredPp,
-              'status': _statusFor(
-                requiredMk: requiredMk,
-                registeredMk: registeredMk,
-                requiredPp: requiredPp,
-                registeredPp: registeredPp,
-              ).name,
+              ...quotas.toMissionUpdate(),
+              'status': _statusForQuotas(quotas).name,
               'updatedAt': now,
             });
           })
@@ -922,8 +911,6 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     }
   }
 
-  static int _int(Object? value) => value is num ? value.toInt() : 0;
-
   static VolunteerProfile _profileFromFirestore(
     String uid,
     Map<String, dynamic> data,
@@ -944,10 +931,15 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       phone: (data['phone'] as String? ?? '').trim(),
       email: _nullableTrim(data['email'] as String?),
       rpps: _nullableTrim(data['rpps'] as String?),
+      professionalIdType: _professionalIdTypeFromData(data),
+      professionalIdValue: _professionalIdValueFromData(data),
       cptsId: _nullableTrim(data['cptsId'] as String?),
       cptsLabel: _nullableTrim(data['cptsLabel'] as String?),
       profession: profession,
       equipment: List<String>.from(data['equipment'] as List? ?? const []),
+      otherEquipmentDetails: _nullableTrim(
+        data['otherEquipmentDetails'] as String?,
+      ),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -958,7 +950,11 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     Object serverTimestamp,
   ) {
     final email = _nullableTrim(profile.email);
-    final rpps = _normalizeRpps(profile.rpps);
+    final professionalIdType = profile.effectiveProfessionalIdType;
+    final professionalIdValue = _normalizeProfessionalIdValue(
+      professionalIdType,
+      profile.effectiveProfessionalIdValue,
+    );
     final cptsId = _nullableTrim(profile.cptsId);
     final cptsLabel = _nullableTrim(profile.cptsLabel);
     return {
@@ -967,7 +963,11 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       'lastName': profile.lastName.trim(),
       'phone': profile.phone.trim(),
       'email': ?email,
-      'rpps': ?rpps,
+      'professionalIdType': professionalIdType.name,
+      'professionalIdValue': professionalIdValue,
+      'rpps': ?(professionalIdType == ProfessionalIdType.rpps
+          ? professionalIdValue
+          : null),
       'cptsId': ?cptsId,
       'cptsLabel': ?cptsLabel,
       'profession': profile.profession.name,
@@ -976,6 +976,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
           .where((item) => item.isNotEmpty)
           .toSet()
           .toList(),
+      'otherEquipmentDetails': ?_nullableTrim(profile.otherEquipmentDetails),
       'updatedAt': serverTimestamp,
     };
   }
@@ -990,24 +991,87 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
+  static ProfessionalIdType _professionalIdTypeFromData(
+    Map<String, dynamic> data,
+  ) {
+    final stored = data['professionalIdType'];
+    if (stored is String) {
+      return ProfessionalIdType.values
+              .where((type) => type.name == stored)
+              .firstOrNull ??
+          ProfessionalIdType.none;
+    }
+    return _nullableTrim(data['rpps'] as String?) == null
+        ? ProfessionalIdType.none
+        : ProfessionalIdType.rpps;
+  }
+
+  static String _professionalIdValueFromData(Map<String, dynamic> data) {
+    final type = _professionalIdTypeFromData(data);
+    final stored = _nullableTrim(data['professionalIdValue'] as String?);
+    if (stored != null) return stored;
+    return type == ProfessionalIdType.rpps
+        ? _normalizeRpps(data['rpps'] as String?) ?? ''
+        : '';
+  }
+
+  static String _normalizeProfessionalIdValue(
+    ProfessionalIdType type,
+    String value,
+  ) {
+    return switch (type) {
+      ProfessionalIdType.rpps => value.replaceAll(RegExp(r'\s+'), ''),
+      ProfessionalIdType.ordinal => value.trim(),
+      ProfessionalIdType.none => '',
+    };
+  }
+
   static void _validateRequiredProfileFields({
     required String? email,
-    required String? rpps,
+    required ProfessionalIdType professionalIdType,
+    required String professionalIdValue,
     required String? cptsId,
     required String? cptsLabel,
+    List<String> equipment = const [],
+    String? otherEquipmentDetails,
   }) {
     final normalizedEmail = _nullableTrim(email);
     if (normalizedEmail == null ||
         !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
       throw const RepositoryException('Saisissez une adresse email valide.');
     }
-    if (!RegExp(r'^\d{11}$').hasMatch(_normalizeRpps(rpps) ?? '')) {
+    final normalizedId = _normalizeProfessionalIdValue(
+      professionalIdType,
+      professionalIdValue,
+    );
+    if (professionalIdType == ProfessionalIdType.rpps &&
+        !RegExp(r'^\d{11}$').hasMatch(normalizedId)) {
       throw const RepositoryException(
         'Saisissez un numéro RPPS valide à 11 chiffres.',
       );
     }
-    if (_nullableTrim(cptsId) == null || _nullableTrim(cptsLabel) == null) {
-      throw const RepositoryException('Renseignez votre CPTS.');
+    if (professionalIdType == ProfessionalIdType.ordinal &&
+        normalizedId.isEmpty) {
+      throw const RepositoryException('Saisissez votre numéro ordinal.');
+    }
+    if (professionalIdType == ProfessionalIdType.none &&
+        professionalIdValue.trim().isNotEmpty) {
+      throw const RepositoryException(
+        'Aucun identifiant professionnel ne doit être renseigné.',
+      );
+    }
+    final normalizedCptsId = _nullableTrim(cptsId);
+    final normalizedCptsLabel = _nullableTrim(cptsLabel);
+    if ((normalizedCptsId == null) != (normalizedCptsLabel == null)) {
+      throw const RepositoryException(
+        'Renseignez complètement votre CPTS ou choisissez Aucune.',
+      );
+    }
+    if (equipment.contains('Autre matériel') &&
+        _nullableTrim(otherEquipmentDetails) == null) {
+      throw const RepositoryException(
+        'Précisez le matériel que vous pouvez apporter.',
+      );
     }
   }
 
@@ -1021,18 +1085,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     return EngagementStatus.confirmed;
   }
 
-  static NeedStatus _statusFor({
-    required int requiredMk,
-    required int registeredMk,
-    required int requiredPp,
-    required int registeredPp,
-  }) {
-    if (registeredMk >= requiredMk && registeredPp >= requiredPp) {
-      return NeedStatus.complete;
-    }
-    final required = requiredMk + requiredPp;
-    final registered = registeredMk + registeredPp;
-    if (required > 0 && registered / required < .5) {
+  static NeedStatus _statusForQuotas(ProfessionQuotas quotas) {
+    if (quotas.isCovered) return NeedStatus.complete;
+    if (quotas.requiredTotal > 0 && quotas.coverage < .5) {
       return NeedStatus.critical;
     }
     return NeedStatus.toComplete;

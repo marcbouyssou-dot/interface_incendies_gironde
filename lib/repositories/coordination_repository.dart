@@ -1,4 +1,5 @@
 import '../models/need.dart';
+import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 
 abstract interface class CoordinationRepository {
@@ -38,10 +39,13 @@ abstract interface class CoordinationRepository {
     required String phone,
     String? email,
     String? rpps,
+    ProfessionalIdType? professionalIdType,
+    String? professionalIdValue,
     String? cptsId,
     String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
+    String? otherEquipmentDetails,
   });
 
   Future<void> cancelEngagement(String missionId);
@@ -120,18 +124,23 @@ extension EngagementStatusLabel on EngagementStatus {
 }
 
 abstract final class EngagementCounterTransition {
+  static int amount({
+    required EngagementStatus from,
+    required EngagementStatus to,
+  }) => switch ((from, to)) {
+    (EngagementStatus.pending, EngagementStatus.confirmed) => 1,
+    (EngagementStatus.confirmed, EngagementStatus.standby) => -1,
+    (EngagementStatus.confirmed, EngagementStatus.cancelled) => -1,
+    (EngagementStatus.standby, EngagementStatus.confirmed) => 1,
+    _ => 0,
+  };
+
   static ({int mk, int pp}) delta({
     required EngagementStatus from,
     required EngagementStatus to,
     required VolunteerProfession profession,
   }) {
-    final amount = switch ((from, to)) {
-      (EngagementStatus.pending, EngagementStatus.confirmed) => 1,
-      (EngagementStatus.confirmed, EngagementStatus.standby) => -1,
-      (EngagementStatus.confirmed, EngagementStatus.cancelled) => -1,
-      (EngagementStatus.standby, EngagementStatus.confirmed) => 1,
-      _ => 0,
-    };
+    final amount = EngagementCounterTransition.amount(from: from, to: to);
     return switch (profession) {
       VolunteerProfession.mk => (mk: amount, pp: 0),
       VolunteerProfession.pp => (mk: 0, pp: amount),
@@ -164,23 +173,40 @@ class ResponsibleAccess {
 }
 
 class MissionDraft {
-  const MissionDraft({
+  MissionDraft({
     required this.location,
     required this.startAt,
     required this.endAt,
-    required this.requiredPhysiotherapists,
-    required this.requiredPodiatrists,
+    int requiredPhysiotherapists = 0,
+    int requiredPodiatrists = 0,
+    Map<String, int>? requiredByProfession,
     required this.equipment,
     required this.details,
-  });
+  }) : professionQuotas = requiredByProfession == null
+           ? ProfessionQuotas.fromLegacyMkPp(
+               requiredMk: requiredPhysiotherapists,
+               registeredMk: 0,
+               requiredPp: requiredPodiatrists,
+               registeredPp: 0,
+             )
+           : ProfessionQuotas.fromMaps(
+               requiredByProfession: requiredByProfession,
+               registeredByProfession: const {},
+             );
 
   final ResponsePlace location;
   final DateTime startAt;
   final DateTime endAt;
-  final int requiredPhysiotherapists;
-  final int requiredPodiatrists;
+  final ProfessionQuotas professionQuotas;
   final List<String> equipment;
   final String details;
+
+  Map<String, int> get requiredByProfession =>
+      professionQuotas.requiredByProfession;
+  int get requiredPhysiotherapists =>
+      professionQuotas.quotaFor('physiotherapist').required;
+  int get requiredPodiatrists =>
+      professionQuotas.quotaFor('podiatrist').required;
 }
 
 class MissionSchedule {

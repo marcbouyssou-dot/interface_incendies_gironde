@@ -79,63 +79,45 @@ void main() {
     },
   );
 
-  test(
-    'engagement persists its profile and rejects unsupported professions',
-    () async {
-      final mission = CoordinationNeed(
-        id: 'mission',
-        place: 'Site',
-        group: TerritorialGroup.medoc,
-        date: 'Aujourd’hui',
-        time: '08:00 — 12:00',
-        endAt: DateTime.now().add(const Duration(hours: 2)),
-        requiredPhysiotherapists: 1,
-        registeredPhysiotherapists: 0,
-        requiredPodiatrists: 1,
-        registeredPodiatrists: 0,
-        equipment: const [],
-      );
-      final repository = MockCoordinationRepository(
-        initialMissions: [mission],
-        initialLocations: const [],
-      );
+  test('engagement persists its professional profile', () async {
+    final mission = CoordinationNeed(
+      id: 'mission',
+      place: 'Site',
+      group: TerritorialGroup.medoc,
+      date: 'Aujourd’hui',
+      time: '08:00 — 12:00',
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 1,
+      registeredPodiatrists: 0,
+      equipment: const [],
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+    );
 
-      await repository.createEngagement(
-        missionId: mission.id,
-        firstName: ' Alice ',
-        lastName: ' Martin ',
-        phone: ' 0600000000 ',
-        email: ' alice@example.fr ',
-        rpps: ' 10123456789 ',
-        cptsId: ' cpts-medoc ',
-        cptsLabel: ' CPTS Médoc ',
-        profession: VolunteerProfession.mk,
-        equipment: const [' Table ', 'Table'],
-      );
-      final profile = await repository.getVolunteerProfile();
-      expect(profile?.firstName, 'Alice');
-      expect(profile?.email, 'alice@example.fr');
-      expect(profile?.rpps, '10123456789');
-      expect(profile?.cptsId, 'cpts-medoc');
-      expect(profile?.cptsLabel, 'CPTS Médoc');
-      expect(profile?.equipment, ['Table']);
-
-      await expectLater(
-        repository.createEngagement(
-          missionId: mission.id,
-          firstName: 'Alice',
-          lastName: 'Martin',
-          phone: '0600000000',
-          email: 'alice@example.fr',
-          rpps: '10123456789',
-          cptsId: 'cpts-medoc',
-          cptsLabel: 'CPTS Médoc',
-          profession: VolunteerProfession.doctor,
-        ),
-        throwsA(isA<RepositoryException>()),
-      );
-    },
-  );
+    await repository.createEngagement(
+      missionId: mission.id,
+      firstName: ' Alice ',
+      lastName: ' Martin ',
+      phone: ' 0600000000 ',
+      email: ' alice@example.fr ',
+      rpps: ' 10123456789 ',
+      cptsId: ' cpts-medoc ',
+      cptsLabel: ' CPTS Médoc ',
+      profession: VolunteerProfession.mk,
+      equipment: const [' Table ', 'Table'],
+    );
+    final profile = await repository.getVolunteerProfile();
+    expect(profile?.firstName, 'Alice');
+    expect(profile?.email, 'alice@example.fr');
+    expect(profile?.rpps, '10123456789');
+    expect(profile?.cptsId, 'cpts-medoc');
+    expect(profile?.cptsLabel, 'CPTS Médoc');
+    expect(profile?.equipment, ['Table']);
+  });
 
   test('legacy profiles without RPPS or CPTS remain compatible', () async {
     final repository = MockCoordinationRepository(
@@ -158,7 +140,7 @@ void main() {
     expect(profile?.cptsLabel, isNull);
   });
 
-  test('new profile writes require email, an 11-digit RPPS and CPTS', () async {
+  test('profile validates modular identifiers and optional CPTS', () async {
     final repository = MockCoordinationRepository(
       initialMissions: const [],
       initialLocations: const [],
@@ -176,7 +158,44 @@ void main() {
     );
 
     await repository.saveVolunteerProfile(base);
-    expect((await repository.getVolunteerProfile())?.rpps, '10123456789');
+    final legacySaved = await repository.getVolunteerProfile();
+    expect(legacySaved?.rpps, '10123456789');
+    expect(legacySaved?.effectiveProfessionalIdType, ProfessionalIdType.rpps);
+
+    await repository.saveVolunteerProfile(
+      const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.ordinal,
+        professionalIdValue: '  ORD-123  ',
+        profession: VolunteerProfession.mk,
+      ),
+    );
+    final ordinal = await repository.getVolunteerProfile();
+    expect(ordinal?.professionalIdType, ProfessionalIdType.ordinal);
+    expect(ordinal?.professionalIdValue, 'ORD-123');
+    expect(ordinal?.cptsId, isNull);
+    expect(ordinal?.cptsLabel, isNull);
+
+    await repository.saveVolunteerProfile(
+      const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.none,
+        professionalIdValue: '',
+        profession: VolunteerProfession.mk,
+      ),
+    );
+    expect(
+      (await repository.getVolunteerProfile())?.effectiveProfessionalIdType,
+      ProfessionalIdType.none,
+    );
 
     for (final invalid in [
       const VolunteerProfile(
@@ -196,7 +215,28 @@ void main() {
         lastName: 'Martin',
         phone: '0600000000',
         email: 'alice@example.fr',
-        rpps: '10123456789',
+        professionalIdType: ProfessionalIdType.ordinal,
+        professionalIdValue: '',
+        profession: VolunteerProfession.mk,
+      ),
+      const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.none,
+        professionalIdValue: 'unexpected',
+        profession: VolunteerProfession.mk,
+      ),
+      const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.none,
+        cptsId: 'cpts-medoc',
         profession: VolunteerProfession.mk,
       ),
     ]) {
@@ -206,4 +246,37 @@ void main() {
       );
     }
   });
+
+  test(
+    'other equipment details are required and persisted separately',
+    () async {
+      final repository = MockCoordinationRepository(
+        initialMissions: const [],
+        initialLocations: const [],
+      );
+      const base = VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.none,
+        professionalIdValue: '',
+        profession: VolunteerProfession.mk,
+        equipment: ['Autre matériel'],
+      );
+
+      await expectLater(
+        repository.saveVolunteerProfile(base),
+        throwsA(isA<RepositoryException>()),
+      );
+
+      await repository.saveVolunteerProfile(
+        base.copyWith(otherEquipmentDetails: '  Coussin ergonomique  '),
+      );
+      final saved = await repository.getVolunteerProfile();
+      expect(saved?.equipment, ['Autre matériel']);
+      expect(saved?.otherEquipmentDetails, 'Coussin ergonomique');
+    },
+  );
 }

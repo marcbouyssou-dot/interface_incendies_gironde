@@ -47,10 +47,18 @@ void main() {
       find.widgetWithText(TextFormField, 'Email'),
       'a@example.fr',
     );
+    await tester.tap(find.byKey(const Key('professional-id-type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('RPPS').last);
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Numéro RPPS'),
       '10123456789',
     );
+    await tester.tap(find.byKey(const Key('cpts-choice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Renseigner une CPTS').last);
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Identifiant CPTS'),
       'cpts-medoc',
@@ -278,7 +286,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Alice Martin'), findsOneWidget);
-    expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
+    expect(find.text('Masseur-kinésithérapeute'), findsAtLeastNWidgets(1));
     expect(find.text('0600000000'), findsOneWidget);
     expect(find.text('Modifier mes informations'), findsOneWidget);
     expect(find.byType(TextFormField), findsNothing);
@@ -286,7 +294,7 @@ void main() {
 
     await tester.tap(find.text('Modifier mes informations'));
     await tester.pumpAndSettle();
-    expect(find.byType(TextFormField), findsNWidgets(8));
+    expect(find.byType(TextFormField), findsNWidgets(7));
     expect(
       tester
           .widget<TextFormField>(find.widgetWithText(TextFormField, 'Prénom'))
@@ -319,6 +327,42 @@ void main() {
           ?.text,
       'CPTS Médoc',
     );
+  });
+
+  testWidgets('professional id, optional CPTS and equipment are modular', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission()],
+      initialLocations: const [],
+    );
+    await pumpApp(tester, repository);
+    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
+    await tester.tap(find.text('❤️ JE M’ENGAGE'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Aucun identifiant'), findsOneWidget);
+    expect(find.text('Aucune'), findsOneWidget);
+    for (final equipment in [
+      'Table de massage',
+      'Crèmes / huiles de massage',
+      'Pistolet de massage',
+      'Bottes de pressothérapie',
+      'Autre matériel',
+    ]) {
+      expect(find.text(equipment), findsOneWidget);
+    }
+    expect(find.byKey(const Key('professional-id-value')), findsNothing);
+    expect(find.byKey(const Key('other-equipment-details')), findsNothing);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('equipment-Autre matériel')),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.byKey(const Key('equipment-Autre matériel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('other-equipment-details')), findsOneWidget);
   });
 
   testWidgets('double submission invokes createEngagement only once', (
@@ -517,10 +561,13 @@ class _EngagementUiRepository extends MockCoordinationRepository {
     required String phone,
     String? email,
     String? rpps,
+    ProfessionalIdType? professionalIdType,
+    String? professionalIdValue,
     String? cptsId,
     String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
+    String? otherEquipmentDetails,
   }) async {
     createCalls++;
     return completion == null ? result : completion!.future;

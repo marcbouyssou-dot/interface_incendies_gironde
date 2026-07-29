@@ -35,6 +35,20 @@ void main() {
     expect(data['requiredPp'], 1);
     expect(data['registeredMk'], 0);
     expect(data['registeredPp'], 0);
+    expect(data['requiredByProfession'], {
+      'physiotherapist': 2,
+      'podiatrist': 1,
+      'physician': 0,
+      'nurse': 0,
+      'other_health_professional': 0,
+    });
+    expect(data['registeredByProfession'], {
+      'physiotherapist': 0,
+      'podiatrist': 0,
+      'physician': 0,
+      'nurse': 0,
+      'other_health_professional': 0,
+    });
     expect(data['isActive'], isTrue);
     expect(data['createdBy'], 'manager-uid');
     expect(mission.locationId, places.first.id);
@@ -44,6 +58,87 @@ void main() {
     expect(mission.time, '22:00 — 02:00');
     expect(mission.requiredPhysiotherapists, 2);
     expect(mission.requiredPodiatrists, 1);
+  });
+
+  test('generic maps take priority without merging legacy fields', () {
+    final mission = FirestoreMissionMapper.fromFirestore(
+      id: 'generic',
+      data: const {
+        'locationName': 'Lieu',
+        'requiredByProfession': {'physician': 2},
+        'registeredByProfession': {'physician': 1},
+        'requiredMk': 50,
+        'registeredMk': 50,
+        'requiredPp': 50,
+        'registeredPp': 50,
+      },
+    );
+
+    expect(mission.professionQuotas.requiredTotal, 2);
+    expect(mission.professionQuotas.registeredTotal, 1);
+    expect(mission.requiredPhysiotherapists, 0);
+    expect(mission.requiredPodiatrists, 0);
+  });
+
+  test('a generic mission draft writes all quotas and legacy MK/PP fields', () {
+    final draft = MissionDraft(
+      location: places.first,
+      startAt: DateTime(2026, 8, 1, 8),
+      endAt: DateTime(2026, 8, 1, 12),
+      requiredByProfession: const {
+        'physiotherapist': 2,
+        'podiatrist': 1,
+        'physician': 3,
+        'nurse': 4,
+        'other_health_professional': 5,
+      },
+      equipment: const [],
+      details: '',
+    );
+
+    final data = FirestoreMissionMapper.toFirestore(
+      id: 'generic-draft',
+      draft: draft,
+      serverTimestamp: Timestamp.fromDate(DateTime(2026, 7, 29)),
+      createdBy: 'manager-uid',
+    );
+
+    expect(data['requiredByProfession'], draft.requiredByProfession);
+    expect(data['registeredByProfession'], {
+      'physiotherapist': 0,
+      'podiatrist': 0,
+      'physician': 0,
+      'nurse': 0,
+      'other_health_professional': 0,
+    });
+    expect(data['requiredMk'], 2);
+    expect(data['requiredPp'], 1);
+  });
+
+  test('a partial generic map treats absent keys as zero', () {
+    final mission = FirestoreMissionMapper.fromFirestore(
+      id: 'partial',
+      data: const {
+        'requiredByProfession': {'nurse': 1},
+      },
+    );
+
+    expect(mission.professionQuotas.quotaFor('nurse').required, 1);
+    expect(mission.professionQuotas.quotaFor('nurse').registered, 0);
+    expect(mission.professionQuotas.quotaFor('physiotherapist').required, 0);
+  });
+
+  test('invalid generic map values fail explicitly', () {
+    expect(
+      () => FirestoreMissionMapper.fromFirestore(
+        id: 'invalid',
+        data: const {
+          'requiredByProfession': {'nurse': -1},
+          'registeredByProfession': <String, int>{},
+        },
+      ),
+      throwsFormatException,
+    );
   });
 
   test('old and cancelled missions parse optional cancellation fields', () {

@@ -1,19 +1,36 @@
+import 'health_profession.dart';
+import 'profession_quotas.dart';
+
 enum NeedStatus { critical, toComplete, complete }
 
 enum VolunteerProfession { mk, pp, doctor, nurse, otherHealthProfessional }
 
 extension VolunteerProfessionLabel on VolunteerProfession {
-  String get label => switch (this) {
-    VolunteerProfession.mk => 'Masseur-kinésithérapeute',
-    VolunteerProfession.pp => 'Pédicure-podologue',
-    VolunteerProfession.doctor => 'Médecin',
-    VolunteerProfession.nurse => 'Infirmier / Infirmière',
+  String? get canonicalId => switch (this) {
+    VolunteerProfession.mk => HealthProfessionId.physiotherapist,
+    VolunteerProfession.pp => HealthProfessionId.podiatrist,
+    VolunteerProfession.doctor => HealthProfessionId.physician,
+    VolunteerProfession.nurse => HealthProfessionId.nurse,
     VolunteerProfession.otherHealthProfessional =>
-      'Autre professionnel de santé',
+      HealthProfessionId.otherHealthProfessional,
   };
+
+  String get label => HealthProfessionRegistry.byId(canonicalId!)!.label;
 
   bool get isSupportedByCurrentMission =>
       this == VolunteerProfession.mk || this == VolunteerProfession.pp;
+}
+
+VolunteerProfession volunteerProfessionFromId(String value) {
+  return switch (HealthProfessionId.normalize(value)) {
+    HealthProfessionId.physiotherapist => VolunteerProfession.mk,
+    HealthProfessionId.podiatrist => VolunteerProfession.pp,
+    HealthProfessionId.physician => VolunteerProfession.doctor,
+    HealthProfessionId.nurse => VolunteerProfession.nurse,
+    HealthProfessionId.otherHealthProfessional =>
+      VolunteerProfession.otherHealthProfessional,
+    _ => throw FormatException('Profession inconnue : $value'),
+  };
 }
 
 enum TerritorialGroup {
@@ -96,7 +113,8 @@ class CoordinationNeed {
     this.cancelledBy,
     this.cancellationReason,
     this.createdBy,
-  });
+    ProfessionQuotas? professionQuotas,
+  }) : _professionQuotas = professionQuotas;
 
   final String id;
   final String place;
@@ -118,22 +136,26 @@ class CoordinationNeed {
   final String? cancelledBy;
   final String? cancellationReason;
   final String? createdBy;
+  final ProfessionQuotas? _professionQuotas;
 
   String get area => group.label;
 
-  int get requiredPeople => requiredPhysiotherapists + requiredPodiatrists;
-  int get registeredPeople =>
-      registeredPhysiotherapists + registeredPodiatrists;
+  ProfessionQuotas get professionQuotas =>
+      _professionQuotas ??
+      ProfessionQuotas.fromLegacyMkPp(
+        requiredMk: requiredPhysiotherapists,
+        registeredMk: registeredPhysiotherapists,
+        requiredPp: requiredPodiatrists,
+        registeredPp: registeredPodiatrists,
+      );
 
-  double get coverage => requiredPeople == 0
-      ? 1
-      : (registeredPeople / requiredPeople).clamp(0, 1).toDouble();
+  int get requiredPeople => professionQuotas.requiredTotal;
+  int get registeredPeople => professionQuotas.registeredTotal;
+
+  double get coverage => professionQuotas.coverage;
 
   NeedStatus get status {
-    final physiotherapistsCovered =
-        registeredPhysiotherapists >= requiredPhysiotherapists;
-    final podiatristsCovered = registeredPodiatrists >= requiredPodiatrists;
-    if (physiotherapistsCovered && podiatristsCovered) {
+    if (professionQuotas.isCovered) {
       return NeedStatus.complete;
     }
     if (coverage < .5) return NeedStatus.critical;
@@ -144,7 +166,9 @@ class CoordinationNeed {
     int? registeredPhysiotherapists,
     int? registeredPodiatrists,
     String? createdBy,
+    ProfessionQuotas? professionQuotas,
   }) {
+    final quotas = professionQuotas ?? _professionQuotas;
     return CoordinationNeed(
       id: id,
       place: place,
@@ -168,6 +192,17 @@ class CoordinationNeed {
       cancelledBy: cancelledBy,
       cancellationReason: cancellationReason,
       createdBy: createdBy ?? this.createdBy,
+      professionQuotas: quotas,
+    );
+  }
+
+  CoordinationNeed withProfessionQuotas(ProfessionQuotas quotas) {
+    final mk = quotas.quotaFor(HealthProfessionId.physiotherapist);
+    final pp = quotas.quotaFor(HealthProfessionId.podiatrist);
+    return copyWith(
+      registeredPhysiotherapists: mk.registered,
+      registeredPodiatrists: pp.registered,
+      professionQuotas: quotas,
     );
   }
 }

@@ -76,9 +76,15 @@ void main() {
     expect(find.text('Téléphone'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Email (facultatif)'), findsNothing);
-    expect(find.text('Numéro RPPS'), findsOneWidget);
-    expect(find.text('Identifiant CPTS'), findsOneWidget);
+    expect(find.text('Identifiant professionnel'), findsOneWidget);
+    expect(find.text('Aucun identifiant'), findsOneWidget);
+    expect(find.text('Numéro RPPS'), findsNothing);
     expect(find.text('CPTS'), findsOneWidget);
+    expect(find.text('Aucune'), findsOneWidget);
+    expect(find.text('Identifiant CPTS'), findsNothing);
+    expect(find.text('Matériel que je peux apporter'), findsOneWidget);
+    expect(find.text('Table de massage'), findsOneWidget);
+    expect(find.text('Autre matériel'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

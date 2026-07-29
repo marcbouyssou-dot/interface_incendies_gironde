@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/need.dart';
+import '../models/profession_quotas.dart';
 import 'coordination_repository.dart';
 
 abstract final class FirestoreMissionMapper {
@@ -25,6 +26,7 @@ abstract final class FirestoreMissionMapper {
     required Object serverTimestamp,
     required String createdBy,
   }) {
+    final quotas = draft.professionQuotas;
     return {
       'id': id,
       'locationId': draft.location.id,
@@ -32,10 +34,7 @@ abstract final class FirestoreMissionMapper {
       'territorialGroup': draft.location.group.name,
       'startAt': Timestamp.fromDate(draft.startAt),
       'endAt': Timestamp.fromDate(draft.endAt),
-      'requiredMk': draft.requiredPhysiotherapists,
-      'requiredPp': draft.requiredPodiatrists,
-      'registeredMk': 0,
-      'registeredPp': 0,
+      ...quotas.toMissionUpdate(),
       'requestedEquipment': List<String>.of(draft.equipment),
       'details': draft.details.trim(),
       'status': NeedStatus.critical.name,
@@ -52,6 +51,9 @@ abstract final class FirestoreMissionMapper {
   }) {
     final startAt = _dateTime(data['startAt']);
     final endAt = _dateTime(data['endAt']);
+    final quotas = ProfessionQuotas.fromMissionData(data);
+    final mk = quotas.quotaFor('physiotherapist');
+    final pp = quotas.quotaFor('podiatrist');
     return CoordinationNeed(
       id: id,
       locationId: data['locationId'] as String?,
@@ -72,18 +74,11 @@ abstract final class FirestoreMissionMapper {
           : '${_timeLabel(startAt)} — ${_timeLabel(endAt)}',
       startAt: startAt,
       endAt: endAt,
-      requiredPhysiotherapists: _int(
-        data['requiredMk'] ?? data['requiredPhysiotherapists'],
-      ),
-      registeredPhysiotherapists: _int(
-        data['registeredMk'] ?? data['registeredPhysiotherapists'],
-      ),
-      requiredPodiatrists: _int(
-        data['requiredPp'] ?? data['requiredPodiatrists'],
-      ),
-      registeredPodiatrists: _int(
-        data['registeredPp'] ?? data['registeredPodiatrists'],
-      ),
+      requiredPhysiotherapists: mk.required,
+      registeredPhysiotherapists: mk.registered,
+      requiredPodiatrists: pp.required,
+      registeredPodiatrists: pp.registered,
+      professionQuotas: quotas,
       equipment: List<String>.from(
         data['requestedEquipment'] as List? ??
             data['equipment'] as List? ??
@@ -114,8 +109,6 @@ abstract final class FirestoreMissionMapper {
   }
 
   static String _two(int value) => value.toString().padLeft(2, '0');
-
-  static int _int(Object? value) => value is num ? value.toInt() : 0;
 
   static T _enumByName<T extends Enum>(
     List<T> values,

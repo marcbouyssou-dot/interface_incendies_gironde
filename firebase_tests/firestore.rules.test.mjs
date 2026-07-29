@@ -85,24 +85,81 @@ function mission(overrides = {}) {
   };
 }
 
+const emptyQuotas = () => ({
+  physiotherapist: 0,
+  podiatrist: 0,
+  physician: 0,
+  nurse: 0,
+  other_health_professional: 0,
+});
+
+function genericMission(overrides = {}) {
+  return mission({
+    requiredMk: 0,
+    requiredPp: 0,
+    registeredMk: 0,
+    registeredPp: 0,
+    requiredByProfession: {
+      ...emptyQuotas(),
+      physician: 1,
+    },
+    registeredByProfession: emptyQuotas(),
+    ...overrides,
+  });
+}
+
+function canonicalProfession(value) {
+  if (value === 'mk' || value === 'physiotherapist') return 'physiotherapist';
+  if (value === 'pp' || value === 'podiatrist') return 'podiatrist';
+  if (value === 'doctor' || value === 'physician') return 'physician';
+  if (value === 'nurse') return 'nurse';
+  if (
+    value === 'otherHealthProfessional'
+    || value === 'other_health_professional'
+  ) return 'other_health_professional';
+  return value;
+}
+
 function volunteer(uid, overrides = {}) {
   return {
     uid, profession: 'mk', firstName: 'A', lastName: 'B', phone: '0600000000',
     email: 'a@example.fr', rpps: '10123456789',
+    professionalIdType: 'rpps', professionalIdValue: '10123456789',
     cptsId: 'cpts-medoc', cptsLabel: 'CPTS Médoc',
     equipment: [], createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     ...overrides,
   };
 }
 
-async function engage(uid, profession = 'mk', missionChanges = {}) {
+async function engage(
+  uid,
+  profession = 'mk',
+  missionChanges = {},
+  writeVolunteer = true,
+) {
   const userDb = db(uid);
   const missionSnapshot = await getDoc(doc(userDb, 'missions/mission-a'));
   const missionData = missionSnapshot.data();
+  const volunteerSnapshot = await getDoc(doc(userDb, `volunteers/${uid}`));
   const registeredMk = missionData.registeredMk + (profession === 'mk' ? 1 : 0);
   const registeredPp = missionData.registeredPp + (profession === 'pp' ? 1 : 0);
+  const canonical = canonicalProfession(profession);
+  const registeredByProfession = missionData.registeredByProfession
+    ? {
+        ...missionData.registeredByProfession,
+        [canonical]: (missionData.registeredByProfession[canonical] ?? 0) + 1,
+      }
+    : undefined;
   const batch = writeBatch(userDb);
-  batch.set(doc(userDb, `volunteers/${uid}`), volunteer(uid, {profession}));
+  if (writeVolunteer) {
+    batch.set(doc(userDb, `volunteers/${uid}`), {
+      ...volunteer(uid, {profession}),
+      ...(volunteerSnapshot.exists()
+        ? {createdAt: volunteerSnapshot.data().createdAt}
+        : {}),
+      updatedAt: serverTimestamp(),
+    });
+  }
   batch.set(doc(userDb, `engagements/mission-a_${uid}`), {
     missionId: 'mission-a', volunteerId: uid, profession,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
@@ -111,10 +168,12 @@ async function engage(uid, profession = 'mk', missionChanges = {}) {
   batch.update(doc(userDb, 'missions/mission-a'), {
     registeredMk,
     registeredPp,
+    ...(registeredByProfession ? {registeredByProfession} : {}),
     status: expectedStatus({
       ...missionData,
       registeredMk,
       registeredPp,
+      ...(registeredByProfession ? {registeredByProfession} : {}),
     }),
     ...missionChanges,
     updatedAt: serverTimestamp(),
@@ -170,12 +229,25 @@ async function reengage(uid, profession = 'mk', engagementChanges = {}) {
 }
 
 function expectedStatus(data) {
-  if (
-    data.registeredMk >= data.requiredMk
-    && data.registeredPp >= data.requiredPp
-  ) return 'complete';
-  return (data.registeredMk + data.registeredPp) * 2
-      < data.requiredMk + data.requiredPp
+  const required = data.requiredByProfession
+    ? Object.values(data.requiredByProfession).reduce((sum, value) => sum + value, 0)
+    : data.requiredMk + data.requiredPp;
+  const registered = data.registeredByProfession
+    ? Object.values(data.registeredByProfession).reduce(
+        (sum, value) => sum + value,
+        0,
+      )
+    : data.registeredMk + data.registeredPp;
+  const covered = data.requiredByProfession
+    ? Object.keys(data.requiredByProfession).every(
+        (profession) =>
+          (data.registeredByProfession?.[profession] ?? 0)
+            >= data.requiredByProfession[profession],
+      )
+    : data.registeredMk >= data.requiredMk
+      && data.registeredPp >= data.requiredPp;
+  if (covered) return 'complete';
+  return registered * 2 < required
     ? 'critical'
     : 'toComplete';
 }
@@ -248,6 +320,99 @@ test('missions: invalid manager, quotas, counters, dates and extra fields denied
   })));
 });
 
+test('missions: legacy and valid generic quota documents are allowed', async () => {
+  await seed({mission: false});
+  await assertSucceeds(setDoc(
+    doc(db('coord'), 'missions/legacy'),
+    mission({id: 'legacy'}),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('coord'), 'missions/generic'),
+    genericMission({id: 'generic'}),
+  ));
+});
+
+test('missions: generic maps reject unknown, negative and decimal values', async () => {
+  await seed({mission: false});
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/unknown'),
+    genericMission({
+      id: 'unknown',
+      requiredByProfession: {
+        ...emptyQuotas(),
+        unknown: 1,
+      },
+    }),
+  ));
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/negative'),
+    genericMission({
+      id: 'negative',
+      requiredByProfession: {
+        ...emptyQuotas(),
+        physician: -1,
+      },
+    }),
+  ));
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/decimal'),
+    genericMission({
+      id: 'decimal',
+      requiredByProfession: {
+        ...emptyQuotas(),
+        physician: 1.5,
+      },
+    }),
+  ));
+});
+
+test('missions: generic registered quota cannot exceed required quota', async () => {
+  await seed({mission: false});
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/over-quota'),
+    genericMission({
+      id: 'over-quota',
+      registeredByProfession: {
+        ...emptyQuotas(),
+        physician: 2,
+      },
+    }),
+  ));
+});
+
+test('missions: generic maps must remain synchronized with legacy MK PP', async () => {
+  await seed({mission: false});
+  for (const [id, changes] of [
+    ['required-mk', {requiredMk: 1}],
+    ['required-pp', {requiredPp: 1}],
+    ['registered-mk', {
+      requiredMk: 1,
+      registeredMk: 1,
+    }],
+    ['registered-pp', {
+      requiredPp: 1,
+      registeredPp: 1,
+    }],
+  ]) {
+    await assertFails(setDoc(
+      doc(db('coord'), `missions/${id}`),
+      genericMission({id, ...changes}),
+    ));
+  }
+});
+
+test('missions: volunteer cannot modify required or registered generic quotas', async () => {
+  await seed();
+  await assertFails(updateDoc(doc(db('alice'), 'missions/mission-a'), {
+    requiredByProfession: {
+      ...emptyQuotas(),
+      physiotherapist: 2,
+    },
+    registeredByProfession: emptyQuotas(),
+    updatedAt: serverTimestamp(),
+  }));
+});
+
 test('volunteers: owner create/update/read; other access denied', async () => {
   await seed();
   await assertSucceeds(setDoc(doc(db('alice'), 'volunteers/alice'), volunteer('alice')));
@@ -259,7 +424,7 @@ test('volunteers: owner create/update/read; other access denied', async () => {
   await assertFails(updateDoc(doc(db('bob'), 'volunteers/alice'), {phone: 'x'}));
 });
 
-test('volunteers: RPPS and CPTS are required on writes while legacy profiles remain readable', async () => {
+test('volunteers: modular professional IDs and legacy RPPS are accepted', async () => {
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'volunteers/legacy'), {
@@ -274,28 +439,121 @@ test('volunteers: RPPS and CPTS are required on writes while legacy profiles rem
     });
   });
   await assertSucceeds(getDoc(doc(db('legacy'), 'volunteers/legacy')));
+
   await assertSucceeds(setDoc(
     doc(db('alice'), 'volunteers/alice'),
-    volunteer('alice', {
-      email: 'alice@example.fr',
-      rpps: '10123456789',
-      cptsId: 'cpts-medoc',
-      cptsLabel: 'CPTS Médoc',
-    }),
+    volunteer('alice'),
+  ));
+  const ordinal = volunteer('bob', {
+    professionalIdType: 'ordinal',
+    professionalIdValue: 'ORD-123',
+  });
+  delete ordinal.rpps;
+  delete ordinal.cptsId;
+  delete ordinal.cptsLabel;
+  await assertSucceeds(setDoc(
+    doc(db('bob'), 'volunteers/bob'),
+    ordinal,
+  ));
+  const noId = volunteer('charlie', {
+    professionalIdType: 'none',
+    professionalIdValue: '',
+    cptsId: '',
+    cptsLabel: '',
+    otherEquipmentDetails: 'Sac de soin',
+  });
+  delete noId.rpps;
+  await assertSucceeds(setDoc(
+    doc(db('charlie'), 'volunteers/charlie'),
+    noId,
+  ));
+  const legacyWrite = volunteer('legacy-write');
+  delete legacyWrite.professionalIdType;
+  delete legacyWrite.professionalIdValue;
+  delete legacyWrite.cptsId;
+  delete legacyWrite.cptsLabel;
+  await assertSucceeds(setDoc(
+    doc(db('legacy-write'), 'volunteers/legacy-write'),
+    legacyWrite,
+  ));
+});
+
+test('volunteers: invalid professional identifiers are denied', async () => {
+  await seed();
+  await assertFails(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice', {professionalIdType: 'unknown'}),
   ));
   await assertFails(setDoc(
     doc(db('bob'), 'volunteers/bob'),
-    volunteer('bob', {rpps: 10123456789}),
+    volunteer('bob', {
+      rpps: '123',
+      professionalIdValue: '123',
+    }),
   ));
+  const emptyOrdinal = volunteer('charlie', {
+    professionalIdType: 'ordinal',
+    professionalIdValue: '',
+  });
+  delete emptyOrdinal.rpps;
   await assertFails(setDoc(
     doc(db('charlie'), 'volunteers/charlie'),
-    volunteer('charlie', {rpps: '123'}),
+    emptyOrdinal,
   ));
-  const missingCpts = volunteer('diane');
-  delete missingCpts.cptsId;
+  const nonEmptyNone = volunteer('diane', {
+    professionalIdType: 'none',
+    professionalIdValue: 'unexpected',
+  });
+  delete nonEmptyNone.rpps;
   await assertFails(setDoc(
     doc(db('diane'), 'volunteers/diane'),
-    missingCpts,
+    nonEmptyNone,
+  ));
+  await assertFails(setDoc(
+    doc(db('eve'), 'volunteers/eve'),
+    volunteer('eve', {professionalIdValue: '10987654321'}),
+  ));
+  await assertFails(setDoc(
+    doc(db('frank'), 'volunteers/frank'),
+    volunteer('frank', {otherEquipmentDetails: 42}),
+  ));
+});
+
+test('volunteers: other equipment requires non-empty details', async () => {
+  await seed();
+  await assertFails(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice', {equipment: ['Autre matériel']}),
+  ));
+  await assertFails(setDoc(
+    doc(db('bob'), 'volunteers/bob'),
+    volunteer('bob', {
+      equipment: ['Autre matériel'],
+      otherEquipmentDetails: '',
+    }),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('charlie'), 'volunteers/charlie'),
+    volunteer('charlie', {
+      equipment: ['Autre matériel'],
+      otherEquipmentDetails: 'Coussin ergonomique',
+    }),
+  ));
+});
+
+test('volunteers: CPTS identifiers and labels remain paired', async () => {
+  await seed();
+  const missingLabel = volunteer('alice', {cptsId: 'cpts-medoc'});
+  delete missingLabel.cptsLabel;
+  await assertFails(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    missingLabel,
+  ));
+  const missingId = volunteer('bob', {cptsLabel: 'CPTS Médoc'});
+  delete missingId.cptsId;
+  await assertFails(setDoc(
+    doc(db('bob'), 'volunteers/bob'),
+    missingId,
   ));
 });
 
@@ -347,6 +605,48 @@ test('engagements: owner creation confirms and increments MK and PP', async () =
   assert.equal(storedMission.registeredMk, 1);
   assert.equal(storedMission.registeredPp, 1);
   assert.equal(storedMission.status, 'toComplete');
+});
+
+test('engagements: canonical physician, nurse and other professions are allowed', async () => {
+  for (const profession of [
+    'physician',
+    'nurse',
+    'other_health_professional',
+  ]) {
+    await seed({mission: false});
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'missions/mission-a'),
+        genericMission({
+          requiredByProfession: {
+            ...emptyQuotas(),
+            [profession]: 1,
+          },
+        }),
+      );
+    });
+    await assertSucceeds(setDoc(
+      doc(db(`user-${profession}`), `volunteers/user-${profession}`),
+      volunteer(`user-${profession}`, {profession}),
+    ));
+    await assertSucceeds(engage(`user-${profession}`, profession, {}, false));
+  }
+});
+
+test('engagements: unknown profession is denied', async () => {
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'missions/mission-a'),
+      genericMission({
+        requiredByProfession: {
+          ...emptyQuotas(),
+          physician: 1,
+        },
+      }),
+    );
+  });
+  await assertFails(engage('unknown-user', 'unknown'));
 });
 
 test('engagements: owner can get its missing deterministic document', async () => {

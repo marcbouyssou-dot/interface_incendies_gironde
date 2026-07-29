@@ -61,11 +61,19 @@ void main() {
   Future<void> completeRequiredFields(
     WidgetTester tester, {
     bool selectLocation = true,
+    bool addQuota = true,
   }) async {
     if (selectLocation) await chooseLocation(tester);
     await chooseDate(tester);
     await chooseTime(tester, const Key('mission-start-time'), '08:00');
     await chooseTime(tester, const Key('mission-end-time'), '12:00');
+    if (addQuota) {
+      await tester.tap(
+        find.byKey(const Key('physiotherapist-add')),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+    }
   }
 
   Future<void> revealPublishButton(WidgetTester tester) async {
@@ -75,6 +83,17 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
+  }
+
+  Future<void> addQuota(WidgetTester tester, String professionId) async {
+    final button = find.byKey(Key('$professionId-add'));
+    await tester.scrollUntilVisible(
+      button,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(button);
+    await tester.pump();
   }
 
   testWidgets('date and both time pickers open and retain their choices', (
@@ -107,13 +126,7 @@ void main() {
   testWidgets('publication refuses two zero quotas', (tester) async {
     final repository = _MissionRepository();
     await pumpForm(tester, repository);
-    await completeRequiredFields(tester);
-
-    for (var index = 0; index < 4; index++) {
-      await tester.tap(find.byKey(const Key('mk-remove')));
-      await tester.pump();
-    }
-    await tester.tap(find.byKey(const Key('pp-remove')));
+    await completeRequiredFields(tester, addQuota: false);
     await revealPublishButton(tester);
     await tester.tap(find.byKey(const Key('publish-mission')));
     await tester.pump();
@@ -147,9 +160,42 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Mission publiée'), findsOneWidget);
       expect(find.text(places.first.name), findsOneWidget);
-      expect(find.text('MK 4 • PP 1'), findsOneWidget);
+      expect(find.text('MK 1'), findsOneWidget);
     },
   );
+
+  testWidgets('all profession quotas start at zero and are persisted', (
+    tester,
+  ) async {
+    final repository = _MissionRepository();
+    await pumpForm(tester, repository);
+
+    expect(find.text('Professionnels recherchés'), findsOneWidget);
+    expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
+    expect(find.text('Pédicure-podologue'), findsOneWidget);
+    expect(find.text('Médecin'), findsOneWidget);
+    expect(find.text('Infirmier'), findsOneWidget);
+    expect(find.text('Autre professionnel de santé'), findsOneWidget);
+    expect(find.text('0'), findsNWidgets(5));
+
+    await completeRequiredFields(tester, addQuota: false);
+    await addQuota(tester, 'physician');
+    await addQuota(tester, 'nurse');
+    await addQuota(tester, 'nurse');
+    await addQuota(tester, 'other_health_professional');
+    await revealPublishButton(tester);
+    await tester.tap(find.byKey(const Key('publish-mission')));
+    await tester.pumpAndSettle();
+
+    expect(repository.calls, 1);
+    expect(repository.lastDraft?.requiredByProfession, {
+      'physiotherapist': 0,
+      'podiatrist': 0,
+      'physician': 1,
+      'nurse': 2,
+      'other_health_professional': 1,
+    });
+  });
 
   testWidgets('repository errors remain on the form and are explicit', (
     tester,
@@ -328,9 +374,12 @@ class _MissionRepository implements CoordinationRepository {
     required String phone,
     String? email,
     String? rpps,
+    ProfessionalIdType? professionalIdType,
+    String? professionalIdValue,
     String? cptsId,
     String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
+    String? otherEquipmentDetails,
   }) async => EngagementCreationResult.created;
 }

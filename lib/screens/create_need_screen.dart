@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/repository_scope.dart';
@@ -16,8 +17,9 @@ class CreateNeedScreen extends StatefulWidget {
 }
 
 class _CreateNeedScreenState extends State<CreateNeedScreen> {
-  int _physiotherapists = 4;
-  int _podiatrists = 1;
+  final Map<String, int> _requiredByProfession = {
+    for (final profession in HealthProfessionRegistry.values) profession.id: 0,
+  };
   ResponsePlace? _selectedLocation;
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
@@ -163,31 +165,26 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     ],
                   ),
                   const SizedBox(height: 18),
-                  const _FieldLabel('Professionnels'),
+                  const _FieldLabel('Professionnels recherchés'),
                   const SizedBox(height: 8),
-                  _QuotaStepper(
-                    label: 'MK',
-                    value: _physiotherapists,
-                    removeKey: const Key('mk-remove'),
-                    onRemove: !_publishing && _physiotherapists > 0
-                        ? () => setState(() => _physiotherapists--)
-                        : null,
-                    onAdd: _publishing
-                        ? null
-                        : () => setState(() => _physiotherapists++),
-                  ),
-                  const SizedBox(height: 8),
-                  _QuotaStepper(
-                    label: 'PP',
-                    value: _podiatrists,
-                    removeKey: const Key('pp-remove'),
-                    onRemove: !_publishing && _podiatrists > 0
-                        ? () => setState(() => _podiatrists--)
-                        : null,
-                    onAdd: _publishing
-                        ? null
-                        : () => setState(() => _podiatrists++),
-                  ),
+                  for (final profession in HealthProfessionRegistry.values) ...[
+                    _QuotaStepper(
+                      label: profession.missionLabel,
+                      value: _requiredByProfession[profession.id]!,
+                      removeKey: Key('${profession.id}-remove'),
+                      addKey: Key('${profession.id}-add'),
+                      onRemove:
+                          !_publishing &&
+                              _requiredByProfession[profession.id]! > 0
+                          ? () => _changeQuota(profession.id, -1)
+                          : null,
+                      onAdd: _publishing
+                          ? null
+                          : () => _changeQuota(profession.id, 1),
+                    ),
+                    if (profession != HealthProfessionRegistry.values.last)
+                      const SizedBox(height: 8),
+                  ],
                   const SizedBox(height: 18),
                   const _FieldLabel('Matériel'),
                   const SizedBox(height: 10),
@@ -346,7 +343,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     if (_minutes(_startTime!) == _minutes(_endTime!)) {
       return 'L’heure de fin doit être postérieure à l’heure de début';
     }
-    if (_physiotherapists == 0 && _podiatrists == 0) {
+    if (_requiredByProfession.values.every((quota) => quota == 0)) {
       return 'Indiquez au moins un professionnel nécessaire';
     }
     return null;
@@ -362,8 +359,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       location: _selectedLocation!,
       startAt: schedule.startAt,
       endAt: schedule.endAt,
-      requiredPhysiotherapists: _physiotherapists,
-      requiredPodiatrists: _podiatrists,
+      requiredByProfession: Map.of(_requiredByProfession),
       equipment: _equipment.toList(growable: false),
       details: _detailsController.text,
     );
@@ -375,14 +371,23 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       _selectedDate = null;
       _startTime = null;
       _endTime = null;
-      _physiotherapists = 4;
-      _podiatrists = 1;
+      for (final profession in _requiredByProfession.keys) {
+        _requiredByProfession[profession] = 0;
+      }
       _equipment
         ..clear()
         ..addAll(['Tables', 'Serviettes']);
       _detailsController.clear();
       _errorMessage = null;
       _publishedMission = null;
+    });
+  }
+
+  void _changeQuota(String professionId, int delta) {
+    setState(() {
+      final current = _requiredByProfession[professionId]!;
+      _requiredByProfession[professionId] = current + delta;
+      _errorMessage = null;
     });
   }
 
@@ -566,9 +571,17 @@ class _MissionPublishedView extends StatelessWidget {
                   const SizedBox(height: 14),
                   _SummaryLine(
                     label: 'Quotas',
-                    value:
-                        'MK ${draft.requiredPhysiotherapists} • '
-                        'PP ${draft.requiredPodiatrists}',
+                    value: HealthProfessionRegistry.values
+                        .where(
+                          (profession) =>
+                              draft.requiredByProfession[profession.id]! > 0,
+                        )
+                        .map(
+                          (profession) =>
+                              '${profession.shortLabel} '
+                              '${draft.requiredByProfession[profession.id]}',
+                        )
+                        .join(' • '),
                   ),
                 ],
               ),
@@ -743,6 +756,7 @@ class _QuotaStepper extends StatelessWidget {
     required this.onRemove,
     required this.onAdd,
     required this.removeKey,
+    required this.addKey,
   });
 
   final String label;
@@ -750,6 +764,7 @@ class _QuotaStepper extends StatelessWidget {
   final VoidCallback? onRemove;
   final VoidCallback? onAdd;
   final Key removeKey;
+  final Key addKey;
 
   @override
   Widget build(BuildContext context) {
@@ -777,7 +792,11 @@ class _QuotaStepper extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
-          IconButton(onPressed: onAdd, icon: const Icon(Icons.add_rounded)),
+          IconButton(
+            key: addKey,
+            onPressed: onAdd,
+            icon: const Icon(Icons.add_rounded),
+          ),
         ],
       ),
     );

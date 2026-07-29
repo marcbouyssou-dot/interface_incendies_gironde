@@ -98,9 +98,12 @@ class MockCoordinationRepository implements CoordinationRepository {
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
     _validateRequiredProfileFields(
       email: profile.email,
-      rpps: profile.rpps,
+      professionalIdType: profile.effectiveProfessionalIdType,
+      professionalIdValue: profile.effectiveProfessionalIdValue,
       cptsId: profile.cptsId,
       cptsLabel: profile.cptsLabel,
+      equipment: profile.equipment,
+      otherEquipmentDetails: profile.otherEquipmentDetails,
     );
     if (profile.uid != volunteerUid) {
       throw const RepositoryException(
@@ -115,7 +118,14 @@ class MockCoordinationRepository implements CoordinationRepository {
       lastName: profile.lastName.trim(),
       phone: profile.phone.trim(),
       email: _nullableTrim(profile.email),
-      rpps: _normalizeRpps(profile.rpps),
+      rpps: profile.effectiveProfessionalIdType == ProfessionalIdType.rpps
+          ? _normalizeRpps(profile.effectiveProfessionalIdValue)
+          : null,
+      professionalIdType: profile.effectiveProfessionalIdType,
+      professionalIdValue: _normalizeProfessionalIdValue(
+        profile.effectiveProfessionalIdType,
+        profile.effectiveProfessionalIdValue,
+      ),
       cptsId: _nullableTrim(profile.cptsId),
       cptsLabel: _nullableTrim(profile.cptsLabel),
       profession: profile.profession,
@@ -124,6 +134,7 @@ class MockCoordinationRepository implements CoordinationRepository {
           .where((item) => item.isNotEmpty)
           .toSet()
           .toList(),
+      otherEquipmentDetails: _nullableTrim(profile.otherEquipmentDetails),
       createdAt: existing?.createdAt ?? profile.createdAt ?? now,
       updatedAt: now,
     );
@@ -197,24 +208,19 @@ class MockCoordinationRepository implements CoordinationRepository {
           'Le créneau de cette mission est terminé.',
         );
       }
-      final delta = EngagementCounterTransition.delta(
+      final delta = EngagementCounterTransition.amount(
         from: engagement.status,
         to: status,
-        profession: engagement.profession,
       );
-      if ((delta.mk > 0 &&
-              mission.registeredPhysiotherapists >=
-                  mission.requiredPhysiotherapists) ||
-          (delta.pp > 0 &&
-              mission.registeredPodiatrists >= mission.requiredPodiatrists)) {
+      final professionId = engagement.profession.canonicalId!;
+      final quota = mission.professionQuotas.quotaFor(professionId);
+      if (delta > 0 && quota.registered >= quota.required) {
         throw const RepositoryException(
           'Le quota de cette profession est déjà atteint.',
         );
       }
-      _missions[missionIndex] = mission.copyWith(
-        registeredPhysiotherapists:
-            mission.registeredPhysiotherapists + delta.mk,
-        registeredPodiatrists: mission.registeredPodiatrists + delta.pp,
+      _missions[missionIndex] = mission.withProfessionQuotas(
+        mission.professionQuotas.updateRegistered(professionId, delta),
       );
     } else if (status == EngagementStatus.confirmed &&
         engagement.status != EngagementStatus.pending) {
@@ -265,21 +271,19 @@ class MockCoordinationRepository implements CoordinationRepository {
           'Le créneau de cette mission est terminé.',
         );
       }
-      final delta = EngagementCounterTransition.delta(
+      final delta = EngagementCounterTransition.amount(
         from: engagement.status,
         to: status,
-        profession: engagement.profession,
       );
-      if ((delta.mk < 0 && mission.registeredPhysiotherapists <= 0) ||
-          (delta.pp < 0 && mission.registeredPodiatrists <= 0)) {
+      final professionId = engagement.profession.canonicalId!;
+      if (delta < 0 &&
+          mission.professionQuotas.quotaFor(professionId).registered <= 0) {
         throw const RepositoryException(
           'Le compteur correspondant est déjà à zéro.',
         );
       }
-      _missions[missionIndex] = mission.copyWith(
-        registeredPhysiotherapists:
-            mission.registeredPhysiotherapists + delta.mk,
-        registeredPodiatrists: mission.registeredPodiatrists + delta.pp,
+      _missions[missionIndex] = mission.withProfessionQuotas(
+        mission.professionQuotas.updateRegistered(professionId, delta),
       );
     }
     final updated = engagement.copyWith(
@@ -325,6 +329,7 @@ class MockCoordinationRepository implements CoordinationRepository {
       registeredPhysiotherapists: 0,
       requiredPodiatrists: draft.requiredPodiatrists,
       registeredPodiatrists: 0,
+      professionQuotas: draft.professionQuotas,
       equipment: List.of(draft.equipment),
       details: draft.details,
       createdBy: _responsibleAccess?.uid,
@@ -342,22 +347,27 @@ class MockCoordinationRepository implements CoordinationRepository {
     required String phone,
     String? email,
     String? rpps,
+    ProfessionalIdType? professionalIdType,
+    String? professionalIdValue,
     String? cptsId,
     String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
+    String? otherEquipmentDetails,
   }) async {
     _validateRequiredProfileFields(
       email: email,
-      rpps: rpps,
+      professionalIdType:
+          professionalIdType ??
+          ((rpps?.trim().isNotEmpty ?? false)
+              ? ProfessionalIdType.rpps
+              : ProfessionalIdType.none),
+      professionalIdValue: professionalIdValue ?? rpps ?? '',
       cptsId: cptsId,
       cptsLabel: cptsLabel,
+      equipment: equipment,
+      otherEquipmentDetails: otherEquipmentDetails,
     );
-    if (!profession.isSupportedByCurrentMission) {
-      throw const RepositoryException(
-        'Cette profession n’est pas encore proposée pour cette mission.',
-      );
-    }
     final index = _missions.indexWhere((mission) => mission.id == missionId);
     if (index < 0) {
       throw const RepositoryException('Mission introuvable');
@@ -388,15 +398,9 @@ class MockCoordinationRepository implements CoordinationRepository {
         EngagementStatus.cancelled => throw StateError('État inaccessible'),
       };
     }
-    final hasAvailableQuota = switch (profession) {
-      VolunteerProfession.mk =>
-        mission.registeredPhysiotherapists < mission.requiredPhysiotherapists,
-      VolunteerProfession.pp =>
-        mission.registeredPodiatrists < mission.requiredPodiatrists,
-      VolunteerProfession.doctor ||
-      VolunteerProfession.nurse ||
-      VolunteerProfession.otherHealthProfessional => false,
-    };
+    final professionId = profession.canonicalId!;
+    final quota = mission.professionQuotas.quotaFor(professionId);
+    final hasAvailableQuota = quota.registered < quota.required;
     if (!hasAvailableQuota) {
       throw const RepositoryException(
         'Ce besoin est désormais couvert pour votre profession.',
@@ -419,7 +423,26 @@ class MockCoordinationRepository implements CoordinationRepository {
       lastName: lastName.trim(),
       phone: phone.trim(),
       email: _nullableTrim(email),
-      rpps: _normalizeRpps(rpps),
+      rpps:
+          (professionalIdType ??
+                  ((rpps?.trim().isNotEmpty ?? false)
+                      ? ProfessionalIdType.rpps
+                      : ProfessionalIdType.none)) ==
+              ProfessionalIdType.rpps
+          ? _normalizeRpps(professionalIdValue ?? rpps)
+          : null,
+      professionalIdType:
+          professionalIdType ??
+          ((rpps?.trim().isNotEmpty ?? false)
+              ? ProfessionalIdType.rpps
+              : ProfessionalIdType.none),
+      professionalIdValue: _normalizeProfessionalIdValue(
+        professionalIdType ??
+            ((rpps?.trim().isNotEmpty ?? false)
+                ? ProfessionalIdType.rpps
+                : ProfessionalIdType.none),
+        professionalIdValue ?? rpps ?? '',
+      ),
       cptsId: _nullableTrim(cptsId),
       cptsLabel: _nullableTrim(cptsLabel),
       profession: profession,
@@ -428,6 +451,7 @@ class MockCoordinationRepository implements CoordinationRepository {
           .where((item) => item.isNotEmpty)
           .toSet()
           .toList(),
+      otherEquipmentDetails: _nullableTrim(otherEquipmentDetails),
       createdAt: existingProfile?.createdAt ?? now,
       updatedAt: now,
     );
@@ -450,17 +474,9 @@ class MockCoordinationRepository implements CoordinationRepository {
     } else {
       missionEngagements[engagementIndex] = engagement;
     }
-    _missions[index] = switch (profession) {
-      VolunteerProfession.mk => mission.copyWith(
-        registeredPhysiotherapists: mission.registeredPhysiotherapists + 1,
-      ),
-      VolunteerProfession.pp => mission.copyWith(
-        registeredPodiatrists: mission.registeredPodiatrists + 1,
-      ),
-      VolunteerProfession.doctor ||
-      VolunteerProfession.nurse ||
-      VolunteerProfession.otherHealthProfessional => mission,
-    };
+    _missions[index] = mission.withProfessionQuotas(
+      mission.professionQuotas.updateRegistered(professionId, 1),
+    );
     _missionUpdates.add(_activeMissions());
     return existingEngagement == null
         ? EngagementCreationResult.created
@@ -491,25 +507,15 @@ class MockCoordinationRepository implements CoordinationRepository {
       );
     }
     if (engagement.status == EngagementStatus.confirmed) {
-      _missions[index] = switch (engagement.profession) {
-        VolunteerProfession.mk when mission.registeredPhysiotherapists > 0 =>
-          mission.copyWith(
-            registeredPhysiotherapists: mission.registeredPhysiotherapists - 1,
-          ),
-        VolunteerProfession.pp when mission.registeredPodiatrists > 0 =>
-          mission.copyWith(
-            registeredPodiatrists: mission.registeredPodiatrists - 1,
-          ),
-        VolunteerProfession.doctor ||
-        VolunteerProfession.nurse ||
-        VolunteerProfession.otherHealthProfessional =>
-          throw const RepositoryException(
-            'Le désengagement n’a pas pu être enregistré. Réessayez.',
-          ),
-        _ => throw const RepositoryException(
+      final professionId = engagement.profession.canonicalId!;
+      if (mission.professionQuotas.quotaFor(professionId).registered <= 0) {
+        throw const RepositoryException(
           'Le désengagement n’a pas pu être enregistré. Réessayez.',
-        ),
-      };
+        );
+      }
+      _missions[index] = mission.withProfessionQuotas(
+        mission.professionQuotas.updateRegistered(professionId, -1),
+      );
     }
     final cancelled = engagement.copyWith(
       status: EngagementStatus.cancelled,
@@ -576,24 +582,63 @@ class MockCoordinationRepository implements CoordinationRepository {
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
+  static String _normalizeProfessionalIdValue(
+    ProfessionalIdType type,
+    String value,
+  ) {
+    return switch (type) {
+      ProfessionalIdType.rpps => value.replaceAll(RegExp(r'\s+'), ''),
+      ProfessionalIdType.ordinal => value.trim(),
+      ProfessionalIdType.none => '',
+    };
+  }
+
   static void _validateRequiredProfileFields({
     required String? email,
-    required String? rpps,
+    required ProfessionalIdType professionalIdType,
+    required String professionalIdValue,
     required String? cptsId,
     required String? cptsLabel,
+    List<String> equipment = const [],
+    String? otherEquipmentDetails,
   }) {
     final normalizedEmail = _nullableTrim(email);
     if (normalizedEmail == null ||
         !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
       throw const RepositoryException('Saisissez une adresse email valide.');
     }
-    if (!RegExp(r'^\d{11}$').hasMatch(_normalizeRpps(rpps) ?? '')) {
+    final normalizedId = _normalizeProfessionalIdValue(
+      professionalIdType,
+      professionalIdValue,
+    );
+    if (professionalIdType == ProfessionalIdType.rpps &&
+        !RegExp(r'^\d{11}$').hasMatch(normalizedId)) {
       throw const RepositoryException(
         'Saisissez un numéro RPPS valide à 11 chiffres.',
       );
     }
-    if (_nullableTrim(cptsId) == null || _nullableTrim(cptsLabel) == null) {
-      throw const RepositoryException('Renseignez votre CPTS.');
+    if (professionalIdType == ProfessionalIdType.ordinal &&
+        normalizedId.isEmpty) {
+      throw const RepositoryException('Saisissez votre numéro ordinal.');
+    }
+    if (professionalIdType == ProfessionalIdType.none &&
+        professionalIdValue.trim().isNotEmpty) {
+      throw const RepositoryException(
+        'Aucun identifiant professionnel ne doit être renseigné.',
+      );
+    }
+    final normalizedCptsId = _nullableTrim(cptsId);
+    final normalizedCptsLabel = _nullableTrim(cptsLabel);
+    if ((normalizedCptsId == null) != (normalizedCptsLabel == null)) {
+      throw const RepositoryException(
+        'Renseignez complètement votre CPTS ou choisissez Aucune.',
+      );
+    }
+    if (equipment.contains('Autre matériel') &&
+        _nullableTrim(otherEquipmentDetails) == null) {
+      throw const RepositoryException(
+        'Précisez le matériel que vous pouvez apporter.',
+      );
     }
   }
 

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/profession_quotas.dart';
+import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 
@@ -110,6 +112,35 @@ void main() {
     expect(emissions.last.single.place, places.first.name);
     expect(emissions.last.single.time, '22:00 — 02:00');
     await subscription.cancel();
+  });
+
+  test('a created mock mission preserves generic profession quotas', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: [places.first],
+    );
+
+    await repository.createMission(
+      MissionDraft(
+        location: places.first,
+        startAt: DateTime(2026, 8, 1, 8),
+        endAt: DateTime(2026, 8, 1, 12),
+        requiredByProfession: const {'physician': 2, 'nurse': 1},
+        equipment: const [],
+        details: '',
+      ),
+    );
+
+    final created = (await repository.watchMissions().first).single;
+    expect(created.professionQuotas.requiredByProfession, {
+      'physiotherapist': 0,
+      'podiatrist': 0,
+      'physician': 2,
+      'nurse': 1,
+      'other_health_professional': 0,
+    });
+    expect(created.requiredPhysiotherapists, 0);
+    expect(created.requiredPodiatrists, 0);
   });
 
   test('a new mock engagement starts confirmed', () async {
@@ -1176,6 +1207,95 @@ void main() {
         profession: VolunteerProfession.mk,
       ),
       throwsA(isA<RepositoryException>()),
+    );
+  });
+
+  test('mock transition updates a generic physician quota', () async {
+    final mission = CoordinationNeed(
+      id: 'generic-physician',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      requiredPhysiotherapists: 0,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      professionQuotas: ProfessionQuotas.fromMaps(
+        requiredByProfession: const {'physician': 2},
+        registeredByProfession: const {'physician': 1},
+      ),
+      equipment: const [],
+    );
+    const engagement = EngagementInfo(
+      missionId: 'generic-physician',
+      volunteerId: 'doctor',
+      profession: VolunteerProfession.doctor,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+      initialEngagements: const [engagement],
+    );
+
+    await repository.updateEngagementStatus(
+      missionId: mission.id,
+      volunteerId: engagement.volunteerId,
+      status: EngagementStatus.cancelled,
+    );
+
+    expect(
+      repository
+          .debugMission(mission.id)!
+          .professionQuotas
+          .quotaFor('physician')
+          .registered,
+      0,
+    );
+  });
+
+  test('mock creates an engagement for a generic physician quota', () async {
+    final mission = CoordinationNeed(
+      id: 'generic-physician-creation',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      requiredPhysiotherapists: 0,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      professionQuotas: ProfessionQuotas.fromMaps(
+        requiredByProfession: const {'physician': 1},
+        registeredByProfession: const {},
+      ),
+      equipment: const [],
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+    );
+
+    await repository.createEngagement(
+      missionId: mission.id,
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      email: 'alice@example.fr',
+      professionalIdType: ProfessionalIdType.none,
+      professionalIdValue: '',
+      profession: VolunteerProfession.doctor,
+    );
+
+    expect(
+      repository
+          .debugMission(mission.id)!
+          .professionQuotas
+          .quotaFor('physician')
+          .registered,
+      1,
     );
   });
 }

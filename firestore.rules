@@ -52,14 +52,216 @@ service cloud.firestore {
     }
 
     function validProfession(value) {
-      return value == 'mk' || value == 'pp';
+      return value in [
+        'physiotherapist', 'podiatrist', 'physician', 'nurse',
+        'other_health_professional', 'mk', 'pp', 'doctor',
+        'otherHealthProfessional'
+      ];
     }
 
     function validProfileProfession(value) {
-      return validProfession(value)
-        || value == 'doctor'
-        || value == 'nurse'
-        || value == 'otherHealthProfessional';
+      return validProfession(value);
+    }
+
+    function canonicalProfession(value) {
+      return value == 'mk' || value == 'physiotherapist'
+        ? 'physiotherapist'
+        : (value == 'pp' || value == 'podiatrist'
+          ? 'podiatrist'
+          : (value == 'doctor' || value == 'physician'
+            ? 'physician'
+            : (value == 'nurse'
+              ? 'nurse'
+              : (value == 'otherHealthProfessional'
+                    || value == 'other_health_professional'
+                ? 'other_health_professional'
+                : 'invalid'))));
+    }
+
+    function validQuotaMap(value) {
+      return value is map
+        && value.keys().hasOnly([
+          'physiotherapist', 'podiatrist', 'physician', 'nurse',
+          'other_health_professional'
+        ])
+        && value.get('physiotherapist', 0) is int
+        && value.get('podiatrist', 0) is int
+        && value.get('physician', 0) is int
+        && value.get('nurse', 0) is int
+        && value.get('other_health_professional', 0) is int
+        && value.get('physiotherapist', 0) >= 0
+        && value.get('podiatrist', 0) >= 0
+        && value.get('physician', 0) >= 0
+        && value.get('nurse', 0) >= 0
+        && value.get('other_health_professional', 0) >= 0;
+    }
+
+    function hasGenericQuotas(data) {
+      return 'requiredByProfession' in data
+        || 'registeredByProfession' in data;
+    }
+
+    function requiredQuota(data, profession) {
+      return 'requiredByProfession' in data
+        ? data.requiredByProfession.get(profession, 0)
+        : (profession == 'physiotherapist'
+          ? data.requiredMk
+          : (profession == 'podiatrist' ? data.requiredPp : 0));
+    }
+
+    function registeredQuota(data, profession) {
+      return 'registeredByProfession' in data
+        ? data.registeredByProfession.get(profession, 0)
+        : (profession == 'physiotherapist'
+          ? data.registeredMk
+          : (profession == 'podiatrist' ? data.registeredPp : 0));
+    }
+
+    function validGenericQuotaData(data) {
+      return !hasGenericQuotas(data)
+        ? (data.registeredMk is int
+          && data.registeredPp is int
+          && data.registeredMk >= 0
+          && data.registeredPp >= 0
+          && data.registeredMk <= data.requiredMk
+          && data.registeredPp <= data.requiredPp)
+        : ('requiredByProfession' in data
+          && 'registeredByProfession' in data
+          && validQuotaMap(data.requiredByProfession)
+          && validQuotaMap(data.registeredByProfession)
+          && validGenericQuotaValues(data));
+    }
+
+    function validGenericQuotaValues(data) {
+      return data.registeredByProfession.get('physiotherapist', 0)
+          <= data.requiredByProfession.get('physiotherapist', 0)
+        && data.registeredByProfession.get('podiatrist', 0)
+          <= data.requiredByProfession.get('podiatrist', 0)
+        && data.registeredByProfession.get('physician', 0)
+          <= data.requiredByProfession.get('physician', 0)
+        && data.registeredByProfession.get('nurse', 0)
+          <= data.requiredByProfession.get('nurse', 0)
+        && data.registeredByProfession.get('other_health_professional', 0)
+          <= data.requiredByProfession.get('other_health_professional', 0)
+        && data.requiredMk
+          == data.requiredByProfession.get('physiotherapist', 0)
+        && data.requiredPp
+          == data.requiredByProfession.get('podiatrist', 0)
+        && data.registeredMk
+          == data.registeredByProfession.get('physiotherapist', 0)
+        && data.registeredPp
+          == data.registeredByProfession.get('podiatrist', 0);
+    }
+
+    function validCounterQuotaData(before, after) {
+      return !hasGenericQuotas(after)
+        ? (sameRequiredQuotas(before, after)
+          && validGenericQuotaData(after))
+        : ('requiredByProfession' in after
+          && 'registeredByProfession' in after
+          && sameRequiredQuotas(before, after)
+          && validQuotaMap(after.registeredByProfession)
+          && validGenericQuotaValues(after));
+    }
+
+    function validEngagementCounterData(before, after, professionValue) {
+      let profession = canonicalProfession(professionValue);
+      return 'requiredByProfession' in before
+        ? ('requiredByProfession' in after
+          && 'registeredByProfession' in after
+          && after.requiredByProfession
+            .diff(before.requiredByProfession)
+            .affectedKeys()
+            .size() == 0
+          && after.requiredMk == before.requiredMk
+          && after.requiredPp == before.requiredPp
+          && after.registeredByProfession.get(profession, -1) is int
+          && after.registeredByProfession.get(profession, -1) >= 0
+          && after.registeredByProfession.get(profession, -1)
+            <= after.requiredByProfession.get(profession, 0)
+          && (profession == 'physiotherapist'
+            ? (after.registeredMk
+                == after.registeredByProfession.get('physiotherapist', 0)
+              && after.registeredPp == before.registeredPp)
+            : (profession == 'podiatrist'
+              ? (after.registeredPp
+                  == after.registeredByProfession.get('podiatrist', 0)
+                && after.registeredMk == before.registeredMk)
+              : (after.registeredMk == before.registeredMk
+                && after.registeredPp == before.registeredPp))))
+        : validCounterQuotaData(before, after);
+    }
+
+    function totalRequired(data) {
+      return 'requiredByProfession' in data
+        ? data.requiredByProfession.get('physiotherapist', 0)
+          + data.requiredByProfession.get('podiatrist', 0)
+          + data.requiredByProfession.get('physician', 0)
+          + data.requiredByProfession.get('nurse', 0)
+          + data.requiredByProfession.get('other_health_professional', 0)
+        : data.requiredMk + data.requiredPp;
+    }
+
+    function totalRegistered(data) {
+      return 'registeredByProfession' in data
+        ? data.registeredByProfession.get('physiotherapist', 0)
+          + data.registeredByProfession.get('podiatrist', 0)
+          + data.registeredByProfession.get('physician', 0)
+          + data.registeredByProfession.get('nurse', 0)
+          + data.registeredByProfession.get('other_health_professional', 0)
+        : data.registeredMk + data.registeredPp;
+    }
+
+    function validRegisteredDelta(before, after, professionValue, delta) {
+      let profession = canonicalProfession(professionValue);
+      return profession != 'invalid'
+        && registeredQuota(after, profession)
+          == registeredQuota(before, profession) + delta
+        && (!('registeredByProfession' in before)
+          ? ((profession == 'physiotherapist'
+              && after.registeredPp == before.registeredPp)
+            || (profession == 'podiatrist'
+              && after.registeredMk == before.registeredMk)
+            || (profession != 'physiotherapist'
+              && profession != 'podiatrist'))
+          : (('registeredByProfession' in after)
+            && after.registeredByProfession
+              .diff(before.registeredByProfession)
+              .affectedKeys()
+              .hasOnly([profession])));
+    }
+
+    function sameRequiredQuotas(before, after) {
+      return after.requiredMk == before.requiredMk
+        && after.requiredPp == before.requiredPp
+        && (!('requiredByProfession' in before)
+          ? (!('requiredByProfession' in after)
+            || (after.requiredByProfession.get('physician', 0) == 0
+              && after.requiredByProfession.get('nurse', 0) == 0
+              && after.requiredByProfession
+                .get('other_health_professional', 0) == 0))
+          : ('requiredByProfession' in after
+            && after.requiredByProfession == before.requiredByProfession));
+    }
+
+    function exactlyOneRegisteredDelta(before, after) {
+      let delta = totalRegistered(after) - totalRegistered(before);
+      return (delta == 1 || delta == -1)
+        && (
+          ('registeredByProfession' in before
+            && 'registeredByProfession' in after
+            && after.registeredByProfession
+              .diff(before.registeredByProfession)
+              .affectedKeys()
+              .size() == 1)
+          || (!('registeredByProfession' in before)
+            && ((after.registeredMk
+                == before.registeredMk + delta
+                && after.registeredPp == before.registeredPp)
+              || (after.registeredPp
+                == before.registeredPp + delta
+                && after.registeredMk == before.registeredMk)))
+        );
     }
 
     function validEngagementStatus(value) {
@@ -69,14 +271,54 @@ service cloud.firestore {
         || value == 'cancelled';
     }
 
+    function validProfessionalIdentity(data) {
+      let hasType = 'professionalIdType' in data;
+      let hasValue = 'professionalIdValue' in data;
+      return !hasType && !hasValue
+        ? ('rpps' in data
+          && data.rpps is string
+          && data.rpps.matches('^[0-9]{11}$'))
+        : (hasType
+          && hasValue
+          && data.professionalIdType in ['rpps', 'ordinal', 'none']
+          && data.professionalIdValue is string
+          && (data.professionalIdType == 'rpps'
+            ? (data.professionalIdValue.matches('^[0-9]{11}$')
+              && 'rpps' in data
+              && data.rpps == data.professionalIdValue)
+            : (data.professionalIdType == 'ordinal'
+              ? (data.professionalIdValue.size() > 0
+                && !('rpps' in data))
+              : (data.professionalIdValue == ''
+                && !('rpps' in data)))));
+    }
+
+    function validOptionalCpts(data) {
+      let cptsId = data.get('cptsId', '');
+      let cptsLabel = data.get('cptsLabel', '');
+      return cptsId is string
+        && cptsLabel is string
+        && ((cptsId == '' && cptsLabel == '')
+          || (cptsId.size() > 0 && cptsLabel.size() > 0));
+    }
+
+    function validOptionalEquipmentDetails(data) {
+      let details = data.get('otherEquipmentDetails', '');
+      return details is string
+        && (!data.equipment.hasAny(['Autre matériel'])
+          || details.size() > 0);
+    }
+
     function validVolunteerData(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
-          'rpps', 'cptsId', 'cptsLabel', 'equipment', 'createdAt', 'updatedAt'
+          'rpps', 'professionalIdType', 'professionalIdValue',
+          'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
+          'createdAt', 'updatedAt'
         ])
         && request.resource.data.keys().hasAll([
           'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
-          'rpps', 'cptsId', 'cptsLabel', 'equipment', 'createdAt', 'updatedAt'
+          'equipment', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.uid == uid
         && validProfileProfession(request.resource.data.profession)
@@ -86,18 +328,16 @@ service cloud.firestore {
         && request.resource.data.equipment is list
         && request.resource.data.email is string
         && request.resource.data.email.size() > 0
-        && request.resource.data.rpps is string
-        && request.resource.data.rpps.matches('^[0-9]{11}$')
-        && request.resource.data.cptsId is string
-        && request.resource.data.cptsId.size() > 0
-        && request.resource.data.cptsLabel is string
-        && request.resource.data.cptsLabel.size() > 0;
+        && validProfessionalIdentity(request.resource.data)
+        && validOptionalCpts(request.resource.data)
+        && validOptionalEquipmentDetails(request.resource.data);
     }
 
     function validMissionCreate(missionId) {
       return request.resource.data.keys().hasOnly([
           'id', 'locationId', 'locationName', 'territorialGroup', 'startAt',
           'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
+          'requiredByProfession', 'registeredByProfession',
           'requestedEquipment', 'details', 'status', 'createdAt', 'updatedAt',
           'isActive', 'createdBy'
         ])
@@ -111,14 +351,15 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.registeredMk == 0
         && request.resource.data.registeredPp == 0
+        && validGenericQuotaData(request.resource.data)
+        && totalRegistered(request.resource.data) == 0
         && request.resource.data.requiredMk is int
         && request.resource.data.requiredPp is int
         && request.resource.data.requiredMk >= 0
         && request.resource.data.requiredMk <= 50
         && request.resource.data.requiredPp >= 0
         && request.resource.data.requiredPp <= 50
-        && (request.resource.data.requiredMk > 0
-          || request.resource.data.requiredPp > 0)
+        && totalRequired(request.resource.data) > 0
         && request.resource.data.startAt is timestamp
         && request.resource.data.endAt is timestamp
         && request.resource.data.endAt > request.resource.data.startAt
@@ -137,11 +378,11 @@ service cloud.firestore {
     }
 
     function expectedStatus(data) {
-      return data.registeredMk >= data.requiredMk
-          && data.registeredPp >= data.requiredPp
+      let required = totalRequired(data);
+      let registered = totalRegistered(data);
+      return registered == required
         ? 'complete'
-        : ((data.registeredMk + data.registeredPp) * 2
-            < (data.requiredMk + data.requiredPp)
+        : (registered * 2 < required
           ? 'critical'
           : 'toComplete');
     }
@@ -171,58 +412,41 @@ service cloud.firestore {
         : engagementBefore.profession;
       return isSignedIn()
         && changed.hasOnly([
-          'registeredMk', 'registeredPp', 'status', 'updatedAt'
+          'registeredMk', 'registeredPp', 'registeredByProfession',
+          'requiredByProfession', 'status', 'updatedAt'
         ])
         && resource.data.isActive == true
         && resource.data.status != 'cancelled'
         && request.time < resource.data.endAt
-        && request.resource.data.registeredMk >= 0
-        && request.resource.data.registeredPp >= 0
-        && request.resource.data.registeredMk <= resource.data.requiredMk
-        && request.resource.data.registeredPp <= resource.data.requiredPp
+        && validEngagementCounterData(
+          resource.data, request.resource.data, profession
+        )
         && request.resource.data.status == expectedStatus(request.resource.data)
         && request.resource.data.updatedAt == request.time
         && existsAfter(path)
         && engagementAfter.missionId == missionId
         && engagementAfter.volunteerId == request.auth.uid
         && delta != 0
-        && ((profession == 'mk'
-            && request.resource.data.registeredMk
-              == resource.data.registeredMk + delta
-            && request.resource.data.registeredPp
-              == resource.data.registeredPp)
-          || (profession == 'pp'
-            && request.resource.data.registeredPp
-              == resource.data.registeredPp + delta
-            && request.resource.data.registeredMk
-              == resource.data.registeredMk));
+        && validRegisteredDelta(
+          resource.data, request.resource.data, profession, delta
+        );
     }
 
     function validManagedMissionCounterUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let mkChangedOnce = (
-          request.resource.data.registeredMk == resource.data.registeredMk + 1
-          || request.resource.data.registeredMk == resource.data.registeredMk - 1
-        ) && request.resource.data.registeredPp == resource.data.registeredPp;
-      let ppChangedOnce = (
-          request.resource.data.registeredPp == resource.data.registeredPp + 1
-          || request.resource.data.registeredPp == resource.data.registeredPp - 1
-        ) && request.resource.data.registeredMk == resource.data.registeredMk;
       return isCoordinator()
         && canManageLocation(resource.data.locationId)
         && changed.hasOnly([
-          'registeredMk', 'registeredPp', 'status', 'updatedAt'
+          'registeredMk', 'registeredPp', 'registeredByProfession',
+          'requiredByProfession', 'status', 'updatedAt'
         ])
         && resource.data.isActive == true
         && resource.data.status != 'cancelled'
         && request.time < resource.data.endAt
-        && request.resource.data.registeredMk >= 0
-        && request.resource.data.registeredPp >= 0
-        && request.resource.data.registeredMk <= resource.data.requiredMk
-        && request.resource.data.registeredPp <= resource.data.requiredPp
+        && validCounterQuotaData(resource.data, request.resource.data)
         && request.resource.data.status == expectedStatus(request.resource.data)
         && request.resource.data.updatedAt == request.time
-        && (mkChangedOnce || ppChangedOnce);
+        && exactlyOneRegisteredDelta(resource.data, request.resource.data);
     }
 
     function validMissionCancellation() {
@@ -280,16 +504,7 @@ service cloud.firestore {
         && missionBefore.isActive == true
         && missionBefore.status != 'cancelled'
         && request.time < missionBefore.endAt
-        && missionAfter.registeredMk <= missionBefore.requiredMk
-        && missionAfter.registeredPp <= missionBefore.requiredPp
-        && missionAfter.status == expectedStatus(missionAfter)
-        && missionAfter.updatedAt == request.time
-        && ((profession == 'mk'
-            && missionAfter.registeredMk == missionBefore.registeredMk + 1
-            && missionAfter.registeredPp == missionBefore.registeredPp)
-          || (profession == 'pp'
-            && missionAfter.registeredPp == missionBefore.registeredPp + 1
-            && missionAfter.registeredMk == missionBefore.registeredMk));
+        && missionAfter.updatedAt == request.time;
     }
 
     function currentEngagementStatus() {
@@ -326,21 +541,9 @@ service cloud.firestore {
         && request.time < before.endAt
         && (
           (delta == 0
-            && after.registeredMk == before.registeredMk
-            && after.registeredPp == before.registeredPp)
+            && validRegisteredDelta(before, after, profession, 0))
           || (delta != 0
-            && after.registeredMk >= 0
-            && after.registeredPp >= 0
-            && after.registeredMk <= before.requiredMk
-            && after.registeredPp <= before.requiredPp
-            && after.status == expectedStatus(after)
-            && after.updatedAt == request.time
-            && ((profession == 'mk'
-                && after.registeredMk == before.registeredMk + delta
-                && after.registeredPp == before.registeredPp)
-              || (profession == 'pp'
-                && after.registeredPp == before.registeredPp + delta
-                && after.registeredMk == before.registeredMk)))
+            && validRegisteredDelta(before, after, profession, delta))
         );
     }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/volunteer_profile.dart';
 import '../repositories/coordination_repository.dart';
@@ -180,33 +181,20 @@ class CoverageBar extends StatelessWidget {
       NeedStatus.complete => AppColors.green,
     };
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _QuotaLabel(
-                profession: 'MK',
-                registered: need.registeredPhysiotherapists,
-                required: need.requiredPhysiotherapists,
-              ),
+        _ProfessionQuotaRows(need: need),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            '${(need.coverage * 100).round()}%',
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _QuotaLabel(
-                profession: 'PP',
-                registered: need.registeredPodiatrists,
-                required: need.requiredPodiatrists,
-              ),
-            ),
-            Text(
-              '${(need.coverage * 100).round()}%',
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 8),
         AnimatedCoverageIndicator(
@@ -250,26 +238,73 @@ class AnimatedCoverageIndicator extends StatelessWidget {
   }
 }
 
-class _QuotaLabel extends StatelessWidget {
-  const _QuotaLabel({
-    required this.profession,
-    required this.registered,
-    required this.required,
-  });
+class _ProfessionQuotaRows extends StatelessWidget {
+  const _ProfessionQuotaRows({required this.need, this.emphasized = false});
 
-  final String profession;
-  final int registered;
-  final int required;
+  final CoordinationNeed need;
+  final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      '$profession $registered / $required',
-      style: const TextStyle(
-        color: AppColors.navy,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
+    final visibleProfessions = HealthProfessionRegistry.values
+        .where(
+          (profession) =>
+              need.professionQuotas.quotaFor(profession.id).required > 0,
+        )
+        .toList(growable: false);
+    return Column(
+      children: [
+        for (var index = 0; index < visibleProfessions.length; index++) ...[
+          _ProfessionQuotaRow(
+            need: need,
+            profession: visibleProfessions[index],
+            emphasized: emphasized,
+          ),
+          if (index < visibleProfessions.length - 1)
+            SizedBox(height: emphasized ? 10 : 6),
+        ],
+      ],
+    );
+  }
+}
+
+class _ProfessionQuotaRow extends StatelessWidget {
+  const _ProfessionQuotaRow({
+    required this.need,
+    required this.profession,
+    required this.emphasized,
+  });
+
+  final CoordinationNeed need;
+  final HealthProfessionDefinition profession;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final quota = need.professionQuotas.quotaFor(profession.id);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            profession.missionLabel,
+            style: TextStyle(
+              color: AppColors.navy,
+              fontSize: emphasized ? 15 : 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          '${quota.registered} / ${quota.required}',
+          key: Key('mission-quota-${profession.id}'),
+          style: TextStyle(
+            color: AppColors.navy,
+            fontSize: emphasized ? 17 : 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -281,13 +316,6 @@ class NeedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final missingMk =
-        (need.requiredPhysiotherapists - need.registeredPhysiotherapists).clamp(
-          0,
-          need.requiredPhysiotherapists,
-        );
-    final missingPp = (need.requiredPodiatrists - need.registeredPodiatrists)
-        .clamp(0, need.requiredPodiatrists);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 380),
@@ -353,7 +381,7 @@ class NeedCard extends StatelessWidget {
               const Divider(height: 1),
               const SizedBox(height: 20),
               const Text(
-                'IL MANQUE',
+                'PROFESSIONNELS RECHERCHÉS',
                 style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 11,
@@ -362,17 +390,7 @@ class NeedCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  if (need.requiredPhysiotherapists > 0)
-                    _MissingQuota(value: missingMk, profession: 'MK'),
-                  if (need.requiredPhysiotherapists > 0 &&
-                      need.requiredPodiatrists > 0)
-                    const SizedBox(width: 30),
-                  if (need.requiredPodiatrists > 0)
-                    _MissingQuota(value: missingPp, profession: 'PP'),
-                ],
-              ),
+              _ProfessionQuotaRows(need: need, emphasized: true),
               const SizedBox(height: 20),
               const Divider(height: 1),
               const SizedBox(height: 18),
@@ -808,42 +826,6 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
   }
 }
 
-class _MissingQuota extends StatelessWidget {
-  const _MissingQuota({required this.value, required this.profession});
-  final int value;
-  final String profession;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(
-          '$value',
-          style: const TextStyle(
-            color: AppColors.navy,
-            fontSize: 34,
-            height: 1,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(width: 7),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 3),
-          child: Text(
-            profession,
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _RegistrationSheet extends StatefulWidget {
   const _RegistrationSheet({required this.need});
   final CoordinationNeed need;
@@ -853,16 +835,27 @@ class _RegistrationSheet extends StatefulWidget {
 }
 
 class _RegistrationSheetState extends State<_RegistrationSheet> {
+  static const _equipmentOptions = [
+    'Table de massage',
+    'Crèmes / huiles de massage',
+    'Pistolet de massage',
+    'Bottes de pressothérapie',
+    'Autre matériel',
+  ];
+
   VolunteerProfession _profession = VolunteerProfession.mk;
+  ProfessionalIdType _professionalIdType = ProfessionalIdType.none;
+  bool _hasCpts = false;
+  final Set<String> _selectedEquipment = {};
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
-  final _rppsController = TextEditingController();
+  final _professionalIdController = TextEditingController();
   final _cptsIdController = TextEditingController();
   final _cptsController = TextEditingController();
-  final _equipmentController = TextEditingController();
+  final _otherEquipmentController = TextEditingController();
   bool _submitting = false;
   bool _loadingProfile = true;
   bool _editingProfile = true;
@@ -899,10 +892,10 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     _lastNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
-    _rppsController.dispose();
+    _professionalIdController.dispose();
     _cptsIdController.dispose();
     _cptsController.dispose();
-    _equipmentController.dispose();
+    _otherEquipmentController.dispose();
     super.dispose();
   }
 
@@ -915,10 +908,35 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         _lastNameController.text = profile.lastName;
         _phoneController.text = profile.phone;
         _emailController.text = profile.email ?? '';
-        _rppsController.text = profile.rpps ?? '';
+        _professionalIdType = profile.effectiveProfessionalIdType;
+        _professionalIdController.text = profile.effectiveProfessionalIdValue;
         _cptsIdController.text = profile.cptsId ?? '';
         _cptsController.text = profile.cptsLabel ?? '';
-        _equipmentController.text = profile.equipment.join(', ');
+        _hasCpts =
+            (profile.cptsId?.trim().isNotEmpty ?? false) ||
+            (profile.cptsLabel?.trim().isNotEmpty ?? false);
+        _selectedEquipment
+          ..clear()
+          ..addAll(
+            profile.equipment.map(_canonicalEquipment).whereType<String>(),
+          );
+        final legacyOtherEquipment = profile.equipment
+            .where((item) => _canonicalEquipment(item) == null)
+            .map(
+              (item) => item.startsWith('Autre matériel :')
+                  ? item.substring('Autre matériel :'.length).trim()
+                  : item,
+            )
+            .where((item) => item.isNotEmpty)
+            .toList();
+        final otherEquipment =
+            profile.otherEquipmentDetails?.trim().isNotEmpty == true
+            ? [profile.otherEquipmentDetails!.trim()]
+            : legacyOtherEquipment;
+        if (otherEquipment.isNotEmpty) {
+          _selectedEquipment.add('Autre matériel');
+          _otherEquipmentController.text = otherEquipment.join(', ');
+        }
         final profileProfessionAvailable =
             (profile.profession == VolunteerProfession.mk && _mkAvailable) ||
             (profile.profession == VolunteerProfession.pp && _ppAvailable);
@@ -1081,35 +1099,120 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   validator: _email,
                 ),
                 const SizedBox(height: 10),
-                TextFormField(
-                  controller: _rppsController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Numéro RPPS'),
-                  validator: _rpps,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _cptsIdController,
+                DropdownButtonFormField<ProfessionalIdType>(
+                  key: const Key('professional-id-type'),
+                  initialValue: _professionalIdType,
                   decoration: const InputDecoration(
-                    labelText: 'Identifiant CPTS',
+                    labelText: 'Identifiant professionnel',
                   ),
-                  validator: _required,
+                  items: ProfessionalIdType.values
+                      .map(
+                        (type) => DropdownMenuItem(
+                          value: type,
+                          child: Text(type.label),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (type) {
+                    if (type == null) return;
+                    setState(() {
+                      _professionalIdType = type;
+                      if (type == ProfessionalIdType.none) {
+                        _professionalIdController.clear();
+                      }
+                    });
+                  },
                 ),
+                if (_professionalIdType != ProfessionalIdType.none) ...[
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    key: const Key('professional-id-value'),
+                    controller: _professionalIdController,
+                    keyboardType: _professionalIdType == ProfessionalIdType.rpps
+                        ? TextInputType.number
+                        : TextInputType.text,
+                    decoration: InputDecoration(
+                      labelText: _professionalIdType == ProfessionalIdType.rpps
+                          ? 'Numéro RPPS'
+                          : 'Numéro ordinal',
+                    ),
+                    validator: _professionalId,
+                  ),
+                ],
                 const SizedBox(height: 10),
-                TextFormField(
-                  controller: _cptsController,
-                  textCapitalization: TextCapitalization.words,
+                DropdownButtonFormField<bool>(
+                  key: const Key('cpts-choice'),
+                  initialValue: _hasCpts,
                   decoration: const InputDecoration(labelText: 'CPTS'),
-                  validator: _required,
+                  items: const [
+                    DropdownMenuItem(value: false, child: Text('Aucune')),
+                    DropdownMenuItem(
+                      value: true,
+                      child: Text('Renseigner une CPTS'),
+                    ),
+                  ],
+                  onChanged: (hasCpts) {
+                    if (hasCpts == null) return;
+                    setState(() {
+                      _hasCpts = hasCpts;
+                      if (!hasCpts) {
+                        _cptsIdController.clear();
+                        _cptsController.clear();
+                      }
+                    });
+                  },
                 ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _equipmentController,
-                  decoration: const InputDecoration(
-                    labelText: 'Matériel disponible (facultatif)',
-                    hintText: 'Table, huiles, serviettes…',
+                if (_hasCpts) ...[
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _cptsIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Identifiant CPTS',
+                    ),
+                    validator: _required,
                   ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _cptsController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'CPTS'),
+                    validator: _required,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Text(
+                  'Matériel que je peux apporter',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
+                const SizedBox(height: 4),
+                for (final equipment in _equipmentOptions)
+                  CheckboxListTile(
+                    key: Key('equipment-$equipment'),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(equipment),
+                    value: _selectedEquipment.contains(equipment),
+                    onChanged: (selected) => setState(() {
+                      if (selected ?? false) {
+                        _selectedEquipment.add(equipment);
+                      } else {
+                        _selectedEquipment.remove(equipment);
+                        if (equipment == 'Autre matériel') {
+                          _otherEquipmentController.clear();
+                        }
+                      }
+                    }),
+                  ),
+                if (_selectedEquipment.contains('Autre matériel'))
+                  TextFormField(
+                    key: const Key('other-equipment-details'),
+                    controller: _otherEquipmentController,
+                    decoration: const InputDecoration(
+                      labelText: 'Précisez le matériel',
+                    ),
+                    validator: _required,
+                  ),
                 const SizedBox(height: 8),
               ],
               FilledButton(
@@ -1137,6 +1240,21 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     return value == null || value.trim().isEmpty ? 'Champ requis' : null;
   }
 
+  static String? _canonicalEquipment(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'table' ||
+        normalized == 'tables' ||
+        normalized == 'table de massage') {
+      return 'Table de massage';
+    }
+    if (normalized == 'huile' ||
+        normalized == 'huiles' ||
+        normalized == 'crèmes / huiles de massage') {
+      return 'Crèmes / huiles de massage';
+    }
+    return _equipmentOptions.contains(value) ? value : null;
+  }
+
   static String? _phone(String? value) {
     final normalized = value?.trim() ?? '';
     if (normalized.isEmpty) return 'Champ requis';
@@ -1155,10 +1273,17 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     return null;
   }
 
-  static String? _rpps(String? value) {
-    final normalized = value?.replaceAll(RegExp(r'\s+'), '') ?? '';
-    if (!RegExp(r'^\d{11}$').hasMatch(normalized)) {
+  String? _professionalId(String? value) {
+    final normalized = value?.trim() ?? '';
+    if (_professionalIdType == ProfessionalIdType.rpps &&
+        !RegExp(
+          r'^\d{11}$',
+        ).hasMatch(normalized.replaceAll(RegExp(r'\s+'), ''))) {
       return 'Saisissez un numéro RPPS valide à 11 chiffres.';
+    }
+    if (_professionalIdType == ProfessionalIdType.ordinal &&
+        normalized.isEmpty) {
+      return 'Champ requis';
     }
     return null;
   }
@@ -1175,15 +1300,18 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         lastName: _lastNameController.text,
         phone: _phoneController.text,
         email: _emailController.text,
-        rpps: _rppsController.text.replaceAll(RegExp(r'\s+'), ''),
-        cptsId: _cptsIdController.text,
-        cptsLabel: _cptsController.text,
+        professionalIdType: _professionalIdType,
+        professionalIdValue: _professionalIdController.text,
+        cptsId: _hasCpts ? _cptsIdController.text : null,
+        cptsLabel: _hasCpts ? _cptsController.text : null,
         profession: _profession,
-        equipment: _equipmentController.text
-            .split(',')
-            .map((item) => item.trim())
-            .where((item) => item.isNotEmpty)
-            .toList(),
+        equipment: [
+          ..._selectedEquipment.where((item) => item != 'Autre matériel'),
+          if (_selectedEquipment.contains('Autre matériel')) 'Autre matériel',
+        ],
+        otherEquipmentDetails: _selectedEquipment.contains('Autre matériel')
+            ? _otherEquipmentController.text
+            : null,
       );
     } on RepositoryException catch (error) {
       if (!mounted) return;
@@ -1240,8 +1368,16 @@ class _ProfileSummary extends StatelessWidget {
           const SizedBox(height: 4),
           Text(profile.profession.label),
           Text(profile.phone),
-          if (profile.rpps != null) Text('RPPS ${profile.rpps}'),
-          if (profile.cptsLabel != null) Text(profile.cptsLabel!),
+          if (profile.effectiveProfessionalIdType != ProfessionalIdType.none)
+            Text(
+              '${profile.effectiveProfessionalIdType.label} '
+              '${profile.effectiveProfessionalIdValue}',
+            ),
+          Text(
+            profile.cptsLabel?.trim().isNotEmpty ?? false
+                ? profile.cptsLabel!
+                : 'Aucune CPTS',
+          ),
         ],
       ),
     );
