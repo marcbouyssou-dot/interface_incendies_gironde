@@ -981,15 +981,14 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error, stackTrace) {
-      debugPrint('Échec engagement : $error');
-      debugPrintStack(stackTrace: stackTrace);
+      debugPrint(error.toString());
+      debugPrint(stackTrace.toString());
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('L’opération n’a pas pu être enregistrée. Réessayez.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      rethrow;
     }
   }
 }

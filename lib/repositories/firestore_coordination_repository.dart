@@ -556,14 +556,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     } on FirebaseException catch (error, stackTrace) {
       debugPrint('Échec createEngagement (${error.code})');
       debugPrintStack(stackTrace: stackTrace);
-      if (error.code == 'permission-denied') {
-        throw const RepositoryException(
-          'Cette mission a été annulée ou n’est plus disponible.',
-        );
-      }
-      throw const RepositoryException(
-        'L’opération n’a pas pu être enregistrée. Réessayez.',
-      );
+      rethrow;
     }
   }
 
