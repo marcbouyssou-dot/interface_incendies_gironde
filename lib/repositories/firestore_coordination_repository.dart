@@ -551,11 +551,26 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
             });
           })
           .timeout(const Duration(seconds: 15));
-    } on RepositoryException {
-      rethrow;
     } on FirebaseException catch (error, stackTrace) {
-      debugPrint('Échec createEngagement (${error.code})');
-      debugPrintStack(stackTrace: stackTrace);
+      // ignore: avoid_print
+      print(
+        'CREATE_ENGAGEMENT_FIREBASE '
+        'code=${error.code} '
+        'message=${error.message} '
+        'plugin=${error.plugin}',
+      );
+      // ignore: avoid_print
+      print(stackTrace);
+      rethrow;
+    } catch (error, stackTrace) {
+      // ignore: avoid_print
+      print(
+        'CREATE_ENGAGEMENT_UNKNOWN '
+        'type=${error.runtimeType} '
+        'error=$error',
+      );
+      // ignore: avoid_print
+      print(stackTrace);
       rethrow;
     }
   }

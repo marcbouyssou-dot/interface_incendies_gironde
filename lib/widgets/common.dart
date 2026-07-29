@@ -989,6 +989,10 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         // ignore: avoid_print
         print(boxedStack);
       }
+      for (final diagnostic in details.diagnostics) {
+        // ignore: avoid_print
+        print(diagnostic);
+      }
       // ignore: avoid_print
       print(stackTrace);
       if (!mounted) return;
