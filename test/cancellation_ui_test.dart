@@ -42,6 +42,25 @@ void main() {
     }
   }
 
+  Future<void> fillRequiredProfessionalFields(WidgetTester tester) async {
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email'),
+      'a@example.fr',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Numéro RPPS'),
+      '10123456789',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Identifiant CPTS'),
+      'cpts-medoc',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'CPTS'),
+      'CPTS Médoc',
+    );
+  }
+
   testWidgets('new engagement shows confirmed state and disengagement', (
     tester,
   ) async {
@@ -57,6 +76,10 @@ void main() {
       firstName: 'A',
       lastName: 'B',
       phone: '0600000000',
+      email: 'a@example.fr',
+      rpps: '10123456789',
+      cptsId: 'cpts-medoc',
+      cptsLabel: 'CPTS Médoc',
       profession: VolunteerProfession.mk,
     );
     await tester.pumpAndSettle();
@@ -241,6 +264,9 @@ void main() {
           lastName: 'Martin',
           phone: '0600000000',
           email: 'alice@example.fr',
+          rpps: '10123456789',
+          cptsId: 'cpts-medoc',
+          cptsLabel: 'CPTS Médoc',
           profession: VolunteerProfession.mk,
           equipment: ['Table'],
         ),
@@ -260,13 +286,38 @@ void main() {
 
     await tester.tap(find.text('Modifier mes informations'));
     await tester.pumpAndSettle();
-    expect(find.byType(TextFormField), findsNWidgets(5));
+    expect(find.byType(TextFormField), findsNWidgets(8));
     expect(
       tester
           .widget<TextFormField>(find.widgetWithText(TextFormField, 'Prénom'))
           .controller
           ?.text,
       'Alice',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'Numéro RPPS'),
+          )
+          .controller
+          ?.text,
+      '10123456789',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, 'Identifiant CPTS'),
+          )
+          .controller
+          ?.text,
+      'cpts-medoc',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, 'CPTS'))
+          .controller
+          ?.text,
+      'CPTS Médoc',
     );
   });
 
@@ -289,6 +340,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Téléphone'),
       '0600000000',
     );
+    await fillRequiredProfessionalFields(tester);
     final submit = find.text('CONFIRMER MA PARTICIPATION');
     await tester.ensureVisible(submit);
 
@@ -321,6 +373,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Téléphone'),
       '0600000000',
     );
+    await fillRequiredProfessionalFields(tester);
     final submit = find.text('CONFIRMER MA PARTICIPATION');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
@@ -463,6 +516,9 @@ class _EngagementUiRepository extends MockCoordinationRepository {
     required String lastName,
     required String phone,
     String? email,
+    String? rpps,
+    String? cptsId,
+    String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
   }) async {

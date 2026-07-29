@@ -859,6 +859,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
+  final _rppsController = TextEditingController();
+  final _cptsIdController = TextEditingController();
+  final _cptsController = TextEditingController();
   final _equipmentController = TextEditingController();
   bool _submitting = false;
   bool _loadingProfile = true;
@@ -896,6 +899,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     _lastNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _rppsController.dispose();
+    _cptsIdController.dispose();
+    _cptsController.dispose();
     _equipmentController.dispose();
     super.dispose();
   }
@@ -909,6 +915,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         _lastNameController.text = profile.lastName;
         _phoneController.text = profile.phone;
         _emailController.text = profile.email ?? '';
+        _rppsController.text = profile.rpps ?? '';
+        _cptsIdController.text = profile.cptsId ?? '';
+        _cptsController.text = profile.cptsLabel ?? '';
         _equipmentController.text = profile.equipment.join(', ');
         final profileProfessionAvailable =
             (profile.profession == VolunteerProfession.mk && _mkAvailable) ||
@@ -1068,10 +1077,30 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
-                  decoration: const InputDecoration(
-                    labelText: 'Email (facultatif)',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Email'),
                   validator: _email,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _rppsController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Numéro RPPS'),
+                  validator: _rpps,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _cptsIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Identifiant CPTS',
+                  ),
+                  validator: _required,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _cptsController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'CPTS'),
+                  validator: _required,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
@@ -1119,9 +1148,17 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   static String? _email(String? value) {
     final normalized = value?.trim() ?? '';
-    if (normalized.isEmpty) return null;
+    if (normalized.isEmpty) return 'Champ requis';
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized)) {
       return 'Email invalide';
+    }
+    return null;
+  }
+
+  static String? _rpps(String? value) {
+    final normalized = value?.replaceAll(RegExp(r'\s+'), '') ?? '';
+    if (!RegExp(r'^\d{11}$').hasMatch(normalized)) {
+      return 'Saisissez un numéro RPPS valide à 11 chiffres.';
     }
     return null;
   }
@@ -1138,6 +1175,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         lastName: _lastNameController.text,
         phone: _phoneController.text,
         email: _emailController.text,
+        rpps: _rppsController.text.replaceAll(RegExp(r'\s+'), ''),
+        cptsId: _cptsIdController.text,
+        cptsLabel: _cptsController.text,
         profession: _profession,
         equipment: _equipmentController.text
             .split(',')
@@ -1200,6 +1240,8 @@ class _ProfileSummary extends StatelessWidget {
           const SizedBox(height: 4),
           Text(profile.profession.label),
           Text(profile.phone),
+          if (profile.rpps != null) Text('RPPS ${profile.rpps}'),
+          if (profile.cptsLabel != null) Text(profile.cptsLabel!),
         ],
       ),
     );

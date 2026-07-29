@@ -8,6 +8,9 @@ class VolunteerProfile {
     required this.phone,
     required this.profession,
     this.email,
+    this.rpps,
+    this.cptsId,
+    this.cptsLabel,
     this.equipment = const [],
     this.createdAt,
     this.updatedAt,
@@ -18,6 +21,9 @@ class VolunteerProfile {
   final String lastName;
   final String phone;
   final String? email;
+  final String? rpps;
+  final String? cptsId;
+  final String? cptsLabel;
   final VolunteerProfession profession;
   final List<String> equipment;
   final DateTime? createdAt;
@@ -30,6 +36,9 @@ class VolunteerProfile {
     String? lastName,
     String? phone,
     String? email,
+    String? rpps,
+    String? cptsId,
+    String? cptsLabel,
     VolunteerProfession? profession,
     List<String>? equipment,
     DateTime? createdAt,
@@ -41,6 +50,9 @@ class VolunteerProfile {
       lastName: lastName ?? this.lastName,
       phone: phone ?? this.phone,
       email: email ?? this.email,
+      rpps: rpps ?? this.rpps,
+      cptsId: cptsId ?? this.cptsId,
+      cptsLabel: cptsLabel ?? this.cptsLabel,
       profession: profession ?? this.profession,
       equipment: equipment ?? this.equipment,
       createdAt: createdAt ?? this.createdAt,

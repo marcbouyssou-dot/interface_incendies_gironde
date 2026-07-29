@@ -28,6 +28,9 @@ void main() {
       lastName: 'Martin',
       phone: '0600000000',
       email: ' jeanne@example.fr ',
+      rpps: '10123456789',
+      cptsId: 'cpts-medoc',
+      cptsLabel: 'CPTS Médoc',
       profession: VolunteerProfession.mk,
     );
     await updatedEmission.future;
@@ -67,13 +70,17 @@ void main() {
       firstName: 'Sam',
       lastName: 'Dupont',
       phone: '0611111111',
+      email: 'sam@example.fr',
+      rpps: '10123456789',
+      cptsId: 'cpts-medoc',
+      cptsLabel: 'CPTS Médoc',
       profession: VolunteerProfession.pp,
     );
     final updated = await repository.watchMissions().first;
 
     expect(updated.single.status, NeedStatus.complete);
     expect(updated.single.registeredPodiatrists, 1);
-    expect(repository.volunteers.single.email, isNull);
+    expect(repository.volunteers.single.email, 'sam@example.fr');
     expect(result, EngagementCreationResult.created);
   });
 
@@ -118,6 +125,10 @@ void main() {
       firstName: 'A',
       lastName: 'B',
       phone: '0600000000',
+      email: 'a@example.fr',
+      rpps: '10123456789',
+      cptsId: 'cpts-medoc',
+      cptsLabel: 'CPTS Médoc',
       profession: VolunteerProfession.mk,
     );
 
@@ -164,6 +175,10 @@ void main() {
         firstName: 'Jeanne',
         lastName: 'Martin',
         phone: '0600000000',
+        email: 'jeanne@example.fr',
+        rpps: '10123456789',
+        cptsId: 'cpts-medoc',
+        cptsLabel: 'CPTS Médoc',
         profession: VolunteerProfession.pp,
       );
 
@@ -225,6 +240,10 @@ void main() {
         firstName: 'A',
         lastName: 'B',
         phone: '0600000000',
+        email: 'a@example.fr',
+        rpps: '10123456789',
+        cptsId: 'cpts-medoc',
+        cptsLabel: 'CPTS Médoc',
         profession: VolunteerProfession.mk,
       );
       expect(result, expected);
@@ -275,6 +294,10 @@ void main() {
         firstName: 'A',
         lastName: 'B',
         phone: '0600000000',
+        email: 'a@example.fr',
+        rpps: '10123456789',
+        cptsId: 'cpts-medoc',
+        cptsLabel: 'CPTS Médoc',
         profession: VolunteerProfession.mk,
       );
 
@@ -322,6 +345,10 @@ void main() {
         firstName: 'A',
         lastName: 'B',
         phone: '0600000000',
+        email: 'a@example.fr',
+        rpps: '10123456789',
+        cptsId: 'cpts-medoc',
+        cptsLabel: 'CPTS Médoc',
         profession: VolunteerProfession.mk,
       ),
       throwsA(isA<RepositoryException>()),
@@ -363,6 +390,10 @@ void main() {
             firstName: 'A',
             lastName: 'B',
             phone: '0600000000',
+            email: 'a@example.fr',
+            rpps: '10123456789',
+            cptsId: 'cpts-medoc',
+            cptsLabel: 'CPTS Médoc',
             profession: profession,
           ),
           throwsA(
@@ -1138,6 +1169,10 @@ void main() {
         firstName: 'A',
         lastName: 'B',
         phone: '0600000000',
+        email: 'a@example.fr',
+        rpps: '10123456789',
+        cptsId: 'cpts-medoc',
+        cptsLabel: 'CPTS Médoc',
         profession: VolunteerProfession.mk,
       ),
       throwsA(isA<RepositoryException>()),

@@ -37,6 +37,9 @@ abstract interface class CoordinationRepository {
     required String lastName,
     required String phone,
     String? email,
+    String? rpps,
+    String? cptsId,
+    String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
   });

@@ -34,8 +34,8 @@ implémentations disponibles sont :
 - `locations` : `name`, `type`, `group`, `activeNeeds`, `address`
 - `missions` : `place`, `group`, `date`, `time`, quotas et compteurs MK/PP,
   `equipment`, `status`
-- `volunteers` : `firstName`, `lastName`, `phone`, `email` facultatif,
-  `profession`, `createdAt`
+- `volunteers` : `firstName`, `lastName`, `phone`, `email`, `rpps`, `cptsId`,
+  `cptsLabel`, `profession`, `equipment`, `createdAt`, `updatedAt`
 - `engagements` : `missionId`, `volunteerId`, `profession`, `createdAt`
 
 La création d’un engagement, du volontaire et la mise à jour des compteurs et

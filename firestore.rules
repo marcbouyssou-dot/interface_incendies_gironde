@@ -72,11 +72,11 @@ service cloud.firestore {
     function validVolunteerData(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
-          'equipment', 'createdAt', 'updatedAt'
+          'rpps', 'cptsId', 'cptsLabel', 'equipment', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.keys().hasAll([
-          'uid', 'profession', 'firstName', 'lastName', 'phone', 'equipment',
-          'createdAt', 'updatedAt'
+          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+          'rpps', 'cptsId', 'cptsLabel', 'equipment', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.uid == uid
         && validProfileProfession(request.resource.data.profession)
@@ -84,8 +84,14 @@ service cloud.firestore {
         && request.resource.data.lastName is string
         && request.resource.data.phone is string
         && request.resource.data.equipment is list
-        && (!('email' in request.resource.data)
-          || request.resource.data.email is string);
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.rpps is string
+        && request.resource.data.rpps.matches('^[0-9]{11}$')
+        && request.resource.data.cptsId is string
+        && request.resource.data.cptsId.size() > 0
+        && request.resource.data.cptsLabel is string
+        && request.resource.data.cptsLabel.size() > 0;
     }
 
     function validMissionCreate(missionId) {

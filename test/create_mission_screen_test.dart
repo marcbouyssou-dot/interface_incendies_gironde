@@ -327,6 +327,9 @@ class _MissionRepository implements CoordinationRepository {
     required String lastName,
     required String phone,
     String? email,
+    String? rpps,
+    String? cptsId,
+    String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
   }) async => EngagementCreationResult.created;

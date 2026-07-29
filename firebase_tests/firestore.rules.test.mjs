@@ -88,6 +88,8 @@ function mission(overrides = {}) {
 function volunteer(uid, overrides = {}) {
   return {
     uid, profession: 'mk', firstName: 'A', lastName: 'B', phone: '0600000000',
+    email: 'a@example.fr', rpps: '10123456789',
+    cptsId: 'cpts-medoc', cptsLabel: 'CPTS Médoc',
     equipment: [], createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     ...overrides,
   };
@@ -255,6 +257,46 @@ test('volunteers: owner create/update/read; other access denied', async () => {
   await assertSucceeds(getDoc(doc(db('alice'), 'volunteers/alice')));
   await assertFails(getDoc(doc(db('bob'), 'volunteers/alice')));
   await assertFails(updateDoc(doc(db('bob'), 'volunteers/alice'), {phone: 'x'}));
+});
+
+test('volunteers: RPPS and CPTS are required on writes while legacy profiles remain readable', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'volunteers/legacy'), {
+      uid: 'legacy',
+      profession: 'mk',
+      firstName: 'Legacy',
+      lastName: 'Profile',
+      phone: '0600000000',
+      equipment: [],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+  });
+  await assertSucceeds(getDoc(doc(db('legacy'), 'volunteers/legacy')));
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice', {
+      email: 'alice@example.fr',
+      rpps: '10123456789',
+      cptsId: 'cpts-medoc',
+      cptsLabel: 'CPTS Médoc',
+    }),
+  ));
+  await assertFails(setDoc(
+    doc(db('bob'), 'volunteers/bob'),
+    volunteer('bob', {rpps: 10123456789}),
+  ));
+  await assertFails(setDoc(
+    doc(db('charlie'), 'volunteers/charlie'),
+    volunteer('charlie', {rpps: '123'}),
+  ));
+  const missingCpts = volunteer('diane');
+  delete missingCpts.cptsId;
+  await assertFails(setDoc(
+    doc(db('diane'), 'volunteers/diane'),
+    missingCpts,
+  ));
 });
 
 test('volunteers: createdAt is immutable and updatedAt must be server time', async () => {

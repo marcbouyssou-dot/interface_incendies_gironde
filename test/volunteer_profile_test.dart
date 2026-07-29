@@ -44,12 +44,18 @@ void main() {
           lastName: ' Martin ',
           phone: ' 0600000000 ',
           email: 'alice@example.fr',
+          rpps: ' 10123456789 ',
+          cptsId: 'cpts-medoc',
+          cptsLabel: ' CPTS Médoc ',
           profession: VolunteerProfession.nurse,
           equipment: [' Stéthoscope '],
         ),
       );
       final created = await first.getVolunteerProfile();
       expect(created?.profession, VolunteerProfession.nurse);
+      expect(created?.rpps, '10123456789');
+      expect(created?.cptsId, 'cpts-medoc');
+      expect(created?.cptsLabel, 'CPTS Médoc');
       expect(created?.createdAt, isNotNull);
 
       await first.saveVolunteerProfile(
@@ -100,12 +106,18 @@ void main() {
         lastName: ' Martin ',
         phone: ' 0600000000 ',
         email: ' alice@example.fr ',
+        rpps: ' 10123456789 ',
+        cptsId: ' cpts-medoc ',
+        cptsLabel: ' CPTS Médoc ',
         profession: VolunteerProfession.mk,
         equipment: const [' Table ', 'Table'],
       );
       final profile = await repository.getVolunteerProfile();
       expect(profile?.firstName, 'Alice');
       expect(profile?.email, 'alice@example.fr');
+      expect(profile?.rpps, '10123456789');
+      expect(profile?.cptsId, 'cpts-medoc');
+      expect(profile?.cptsLabel, 'CPTS Médoc');
       expect(profile?.equipment, ['Table']);
 
       await expectLater(
@@ -114,10 +126,84 @@ void main() {
           firstName: 'Alice',
           lastName: 'Martin',
           phone: '0600000000',
+          email: 'alice@example.fr',
+          rpps: '10123456789',
+          cptsId: 'cpts-medoc',
+          cptsLabel: 'CPTS Médoc',
           profession: VolunteerProfession.doctor,
         ),
         throwsA(isA<RepositoryException>()),
       );
     },
   );
+
+  test('legacy profiles without RPPS or CPTS remain compatible', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+      initialProfiles: const {
+        'mock-volunteer': VolunteerProfile(
+          uid: 'mock-volunteer',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          profession: VolunteerProfession.mk,
+        ),
+      },
+    );
+
+    final profile = await repository.getVolunteerProfile();
+    expect(profile?.rpps, isNull);
+    expect(profile?.cptsId, isNull);
+    expect(profile?.cptsLabel, isNull);
+  });
+
+  test('new profile writes require email, an 11-digit RPPS and CPTS', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+    );
+    const base = VolunteerProfile(
+      uid: 'mock-volunteer',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      email: 'alice@example.fr',
+      rpps: '10 123 456 789',
+      cptsId: 'cpts-medoc',
+      cptsLabel: 'CPTS Médoc',
+      profession: VolunteerProfession.mk,
+    );
+
+    await repository.saveVolunteerProfile(base);
+    expect((await repository.getVolunteerProfile())?.rpps, '10123456789');
+
+    for (final invalid in [
+      const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        rpps: '10123456789',
+        cptsId: 'cpts-medoc',
+        cptsLabel: 'CPTS Médoc',
+        profession: VolunteerProfession.mk,
+      ),
+      base.copyWith(rpps: '123'),
+      const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        rpps: '10123456789',
+        profession: VolunteerProfession.mk,
+      ),
+    ]) {
+      await expectLater(
+        repository.saveVolunteerProfile(invalid),
+        throwsA(isA<RepositoryException>()),
+      );
+    }
+  });
 }

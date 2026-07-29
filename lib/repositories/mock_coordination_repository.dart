@@ -96,6 +96,12 @@ class MockCoordinationRepository implements CoordinationRepository {
 
   @override
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
+    _validateRequiredProfileFields(
+      email: profile.email,
+      rpps: profile.rpps,
+      cptsId: profile.cptsId,
+      cptsLabel: profile.cptsLabel,
+    );
     if (profile.uid != volunteerUid) {
       throw const RepositoryException(
         'Ce profil n’appartient pas à la session volontaire active.',
@@ -109,6 +115,9 @@ class MockCoordinationRepository implements CoordinationRepository {
       lastName: profile.lastName.trim(),
       phone: profile.phone.trim(),
       email: _nullableTrim(profile.email),
+      rpps: _normalizeRpps(profile.rpps),
+      cptsId: _nullableTrim(profile.cptsId),
+      cptsLabel: _nullableTrim(profile.cptsLabel),
       profession: profile.profession,
       equipment: profile.equipment
           .map((item) => item.trim())
@@ -332,9 +341,18 @@ class MockCoordinationRepository implements CoordinationRepository {
     required String lastName,
     required String phone,
     String? email,
+    String? rpps,
+    String? cptsId,
+    String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
   }) async {
+    _validateRequiredProfileFields(
+      email: email,
+      rpps: rpps,
+      cptsId: cptsId,
+      cptsLabel: cptsLabel,
+    );
     if (!profession.isSupportedByCurrentMission) {
       throw const RepositoryException(
         'Cette profession n’est pas encore proposée pour cette mission.',
@@ -401,6 +419,9 @@ class MockCoordinationRepository implements CoordinationRepository {
       lastName: lastName.trim(),
       phone: phone.trim(),
       email: _nullableTrim(email),
+      rpps: _normalizeRpps(rpps),
+      cptsId: _nullableTrim(cptsId),
+      cptsLabel: _nullableTrim(cptsLabel),
       profession: profession,
       equipment: equipment
           .map((item) => item.trim())
@@ -548,6 +569,32 @@ class MockCoordinationRepository implements CoordinationRepository {
   static String? _nullableTrim(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  static String? _normalizeRpps(String? value) {
+    final normalized = value?.replaceAll(RegExp(r'\s+'), '');
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  static void _validateRequiredProfileFields({
+    required String? email,
+    required String? rpps,
+    required String? cptsId,
+    required String? cptsLabel,
+  }) {
+    final normalizedEmail = _nullableTrim(email);
+    if (normalizedEmail == null ||
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
+      throw const RepositoryException('Saisissez une adresse email valide.');
+    }
+    if (!RegExp(r'^\d{11}$').hasMatch(_normalizeRpps(rpps) ?? '')) {
+      throw const RepositoryException(
+        'Saisissez un numéro RPPS valide à 11 chiffres.',
+      );
+    }
+    if (_nullableTrim(cptsId) == null || _nullableTrim(cptsLabel) == null) {
+      throw const RepositoryException('Renseignez votre CPTS.');
+    }
   }
 
   static String _dateLabel(DateTime value) {

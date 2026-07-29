@@ -202,6 +202,12 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
 
   @override
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
+    _validateRequiredProfileFields(
+      email: profile.email,
+      rpps: profile.rpps,
+      cptsId: profile.cptsId,
+      cptsLabel: profile.cptsLabel,
+    );
     final user = _auth.currentUser;
     if (user == null || !user.isAnonymous || user.uid != profile.uid) {
       throw const RepositoryException(
@@ -561,9 +567,18 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required String lastName,
     required String phone,
     String? email,
+    String? rpps,
+    String? cptsId,
+    String? cptsLabel,
     required VolunteerProfession profession,
     List<String> equipment = const [],
   }) async {
+    _validateRequiredProfileFields(
+      email: email,
+      rpps: rpps,
+      cptsId: cptsId,
+      cptsLabel: cptsLabel,
+    );
     if (!profession.isSupportedByCurrentMission) {
       throw const RepositoryException(
         'Cette profession n’est pas encore proposée pour cette mission.',
@@ -669,6 +684,17 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               volunteerData['email'] = normalizedEmail;
             } else if (existingVolunteer.exists) {
               volunteerData['email'] = FieldValue.delete();
+            }
+            for (final entry in {
+              'rpps': _normalizeRpps(rpps),
+              'cptsId': _nullableTrim(cptsId),
+              'cptsLabel': _nullableTrim(cptsLabel),
+            }.entries) {
+              if (entry.value != null) {
+                volunteerData[entry.key] = entry.value;
+              } else if (existingVolunteer.exists) {
+                volunteerData[entry.key] = FieldValue.delete();
+              }
             }
             transaction.set(volunteerRef, {
               ...volunteerData,
@@ -917,6 +943,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       lastName: (data['lastName'] as String? ?? '').trim(),
       phone: (data['phone'] as String? ?? '').trim(),
       email: _nullableTrim(data['email'] as String?),
+      rpps: _nullableTrim(data['rpps'] as String?),
+      cptsId: _nullableTrim(data['cptsId'] as String?),
+      cptsLabel: _nullableTrim(data['cptsLabel'] as String?),
       profession: profession,
       equipment: List<String>.from(data['equipment'] as List? ?? const []),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
@@ -929,12 +958,18 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     Object serverTimestamp,
   ) {
     final email = _nullableTrim(profile.email);
+    final rpps = _normalizeRpps(profile.rpps);
+    final cptsId = _nullableTrim(profile.cptsId);
+    final cptsLabel = _nullableTrim(profile.cptsLabel);
     return {
       'uid': profile.uid,
       'firstName': profile.firstName.trim(),
       'lastName': profile.lastName.trim(),
       'phone': profile.phone.trim(),
       'email': ?email,
+      'rpps': ?rpps,
+      'cptsId': ?cptsId,
+      'cptsLabel': ?cptsLabel,
       'profession': profile.profession.name,
       'equipment': profile.equipment
           .map((item) => item.trim())
@@ -948,6 +983,32 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   static String? _nullableTrim(String? value) {
     final trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  static String? _normalizeRpps(String? value) {
+    final normalized = value?.replaceAll(RegExp(r'\s+'), '');
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  static void _validateRequiredProfileFields({
+    required String? email,
+    required String? rpps,
+    required String? cptsId,
+    required String? cptsLabel,
+  }) {
+    final normalizedEmail = _nullableTrim(email);
+    if (normalizedEmail == null ||
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
+      throw const RepositoryException('Saisissez une adresse email valide.');
+    }
+    if (!RegExp(r'^\d{11}$').hasMatch(_normalizeRpps(rpps) ?? '')) {
+      throw const RepositoryException(
+        'Saisissez un numéro RPPS valide à 11 chiffres.',
+      );
+    }
+    if (_nullableTrim(cptsId) == null || _nullableTrim(cptsLabel) == null) {
+      throw const RepositoryException('Renseignez votre CPTS.');
+    }
   }
 
   static EngagementStatus _engagementStatus(Object? value) {

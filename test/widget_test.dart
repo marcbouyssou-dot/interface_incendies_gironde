@@ -56,7 +56,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('engagement form includes an optional email after profession', (
+  testWidgets('engagement form includes enriched professional fields', (
     tester,
   ) async {
     await pumpIPhone(tester);
@@ -74,7 +74,11 @@ void main() {
     expect(find.text('Prénom'), findsOneWidget);
     expect(find.text('Nom'), findsOneWidget);
     expect(find.text('Téléphone'), findsOneWidget);
-    expect(find.text('Email (facultatif)'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Email (facultatif)'), findsNothing);
+    expect(find.text('Numéro RPPS'), findsOneWidget);
+    expect(find.text('Identifiant CPTS'), findsOneWidget);
+    expect(find.text('CPTS'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
