@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
@@ -202,14 +203,20 @@ void main() {
   );
 
   testWidgets('coordinator can select any location', (tester) async {
-    final repository = _MissionRepository(locations: places.take(2).toList());
+    final repository = _MissionRepository(
+      locations: [
+        places.singleWhere((place) => place.name == 'Bordeaux Benauge'),
+        places.singleWhere((place) => place.name == 'Bordeaux Bastide'),
+      ],
+    );
     await pumpForm(tester, repository);
 
     expect(find.byKey(const Key('mission-location')), findsOneWidget);
     expect(find.byKey(const Key('mission-location-locked')), findsNothing);
     await tester.tap(find.byKey(const Key('mission-location')));
     await tester.pumpAndSettle();
-    expect(find.text(places[1].name), findsOneWidget);
+    expect(find.text('Bordeaux Bastide'), findsOneWidget);
+    expect(find.text('Bordeaux Benauge'), findsNothing);
   });
 
   test('an earlier end time crosses midnight and equal times are invalid', () {
@@ -269,6 +276,12 @@ class _MissionRepository implements CoordinationRepository {
   Future<void> cancelMission(String missionId, String? reason) async {}
 
   @override
+  Future<VolunteerProfile?> getVolunteerProfile() async => null;
+
+  @override
+  Future<void> saveVolunteerProfile(VolunteerProfile profile) async {}
+
+  @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() => Stream.value(access);
 
   @override
@@ -315,5 +328,6 @@ class _MissionRepository implements CoordinationRepository {
     required String phone,
     String? email,
     required VolunteerProfession profession,
+    List<String> equipment = const [],
   }) async => EngagementCreationResult.created;
 }

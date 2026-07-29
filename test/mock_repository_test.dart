@@ -9,7 +9,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 void main() {
   test('mock confirmed engagement increments its mission counter', () async {
     final repository = MockCoordinationRepository(
-      initialMissions: [needs.first],
+      initialMissions: [needs.first.copyWith(createdBy: 'mock-coordinator')],
       initialLocations: const [],
     );
     final emissions = <List<CoordinationNeed>>[];
@@ -335,7 +335,9 @@ void main() {
   test(
     'mock refuses a new engagement when its profession quota is reached',
     () async {
-      for (final profession in VolunteerProfession.values) {
+      for (final profession in VolunteerProfession.values.where(
+        (value) => value.isSupportedByCurrentMission,
+      )) {
         final mission = CoordinationNeed(
           id: 'pending-full-${profession.name}',
           place: 'Mission complète',
@@ -429,7 +431,9 @@ void main() {
   });
 
   test('mock confirmed MK and PP move to standby exactly once', () async {
-    for (final profession in VolunteerProfession.values) {
+    for (final profession in VolunteerProfession.values.where(
+      (value) => value.isSupportedByCurrentMission,
+    )) {
       final mission = CoordinationNeed(
         id: 'standby-${profession.name}',
         place: 'Mission',
@@ -524,7 +528,9 @@ void main() {
   });
 
   test('mock confirmed MK and PP are cancelled exactly once', () async {
-    for (final profession in VolunteerProfession.values) {
+    for (final profession in VolunteerProfession.values.where(
+      (value) => value.isSupportedByCurrentMission,
+    )) {
       final mission = CoordinationNeed(
         id: 'cancel-status-${profession.name}',
         place: 'Mission',
@@ -616,7 +622,9 @@ void main() {
   });
 
   test('mock standby MK and PP return to confirmed exactly once', () async {
-    for (final profession in VolunteerProfession.values) {
+    for (final profession in VolunteerProfession.values.where(
+      (value) => value.isSupportedByCurrentMission,
+    )) {
       final mission = CoordinationNeed(
         id: 'confirm-standby-${profession.name}',
         place: 'Mission',
@@ -710,7 +718,9 @@ void main() {
   });
 
   test('mock pending MK and PP move to standby without counters', () async {
-    for (final profession in VolunteerProfession.values) {
+    for (final profession in VolunteerProfession.values.where(
+      (value) => value.isSupportedByCurrentMission,
+    )) {
       final mission = CoordinationNeed(
         id: 'pending-standby-${profession.name}',
         place: 'Mission',
@@ -762,7 +772,9 @@ void main() {
   });
 
   test('mock pending MK and PP are cancelled without counters', () async {
-    for (final profession in VolunteerProfession.values) {
+    for (final profession in VolunteerProfession.values.where(
+      (value) => value.isSupportedByCurrentMission,
+    )) {
       final mission = CoordinationNeed(
         id: 'pending-cancelled-${profession.name}',
         place: 'Mission',
@@ -814,7 +826,9 @@ void main() {
   });
 
   test('mock standby MK and PP are cancelled without counters', () async {
-    for (final profession in VolunteerProfession.values) {
+    for (final profession in VolunteerProfession.values.where(
+      (value) => value.isSupportedByCurrentMission,
+    )) {
       final mission = CoordinationNeed(
         id: 'standby-cancelled-${profession.name}',
         place: 'Mission',
@@ -998,7 +1012,9 @@ void main() {
       EngagementStatus.confirmed,
     ]) {
       test('$initialStatus follows its counter rule for MK and PP', () async {
-        for (final profession in VolunteerProfession.values) {
+        for (final profession in VolunteerProfession.values.where(
+          (value) => value.isSupportedByCurrentMission,
+        )) {
           final counts = initialStatus == EngagementStatus.confirmed ? 1 : 0;
           final mission = CoordinationNeed(
             id: 'cancel-${initialStatus.name}-${profession.name}',
@@ -1055,7 +1071,9 @@ void main() {
     test(
       'legacy status-less engagement is confirmed and decremented once',
       () async {
-        for (final profession in VolunteerProfession.values) {
+        for (final profession in VolunteerProfession.values.where(
+          (value) => value.isSupportedByCurrentMission,
+        )) {
           final mission = CoordinationNeed(
             id: 'legacy-cancel-${profession.name}',
             place: 'Mission',
@@ -1102,7 +1120,7 @@ void main() {
 
   test('mock cancellation preserves counters and hides the mission', () async {
     final repository = MockCoordinationRepository(
-      initialMissions: [needs.first],
+      initialMissions: [needs.first.copyWith(createdBy: 'mock-coordinator')],
       initialLocations: const [],
     );
     final before = needs.first.registeredPeople;

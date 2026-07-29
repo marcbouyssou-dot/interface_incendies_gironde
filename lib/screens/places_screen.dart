@@ -105,6 +105,7 @@ class _PlaceCard extends StatelessWidget {
       ResponsePlaceType.redCross => Icons.medical_services_outlined,
       ResponsePlaceType.otherPartnerSite => Icons.handshake_outlined,
       ResponsePlaceType.sdisStation => Icons.local_fire_department_outlined,
+      ResponsePlaceType.interventionSector => Icons.location_city_outlined,
     };
     return Card(
       child: Padding(
@@ -152,7 +153,10 @@ class _PlaceCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 7),
-                  _ActivityStatus(active: place.isActive),
+                  _ActivityStatus(
+                    active: place.isActive,
+                    operational: place.isOperational,
+                  ),
                 ],
               ),
             ),
@@ -164,12 +168,17 @@ class _PlaceCard extends StatelessWidget {
 }
 
 class _ActivityStatus extends StatelessWidget {
-  const _ActivityStatus({required this.active});
+  const _ActivityStatus({required this.active, required this.operational});
   final bool active;
+  final bool operational;
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.green : AppColors.textMuted;
+    final color = !operational
+        ? AppColors.orange
+        : active
+        ? AppColors.green
+        : AppColors.textMuted;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -180,7 +189,11 @@ class _ActivityStatus extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Text(
-          active ? 'Actif' : 'Inactif',
+          !operational
+              ? 'Non opérationnel'
+              : active
+              ? 'Actif'
+              : 'Inactif',
           style: TextStyle(
             color: color,
             fontSize: 11,

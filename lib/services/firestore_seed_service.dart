@@ -60,6 +60,7 @@ class FirestoreSeedService {
 
   LocationSeedDocument toSeedDocument(ResponsePlace location) {
     final id = stableLocationId(location);
+    final address = location.structuredAddress;
     return LocationSeedDocument(
       id: id,
       data: {
@@ -69,11 +70,32 @@ class FirestoreSeedService {
         'type': location.type.name,
         'address': location.address,
         'activeNeeds': location.activeNeeds,
+        'isOperational': location.isOperational,
+        if (address != null) ...{
+          'addressLine1': address.addressLine1,
+          'addressLine2': address.addressLine2,
+          'postalCode': address.postalCode,
+          'city': address.city,
+          'country': address.country,
+          'fullAddress': address.storedFullAddress,
+          'latitude': address.latitude,
+          'longitude': address.longitude,
+          'addressStatus': address.status.firestoreValue,
+          'addressSourceLabel': address.sourceLabel,
+          'addressSourceUrl': address.sourceUrl,
+          'addressSecondSourceLabel': address.secondSourceLabel,
+          'addressSecondSourceUrl': address.secondSourceUrl,
+          'addressVerifiedAt': address.verifiedAt,
+          'addressNotes': address.notes,
+        },
       },
     );
   }
 
   String stableLocationId(ResponsePlace location) {
+    if (location.type == ResponsePlaceType.redCross) {
+      return 'partnersites-croix-rouge-bordeaux';
+    }
     var normalized = '${location.group.name}-${location.name}'.toLowerCase();
     const replacements = {
       'à': 'a',

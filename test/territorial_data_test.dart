@@ -56,7 +56,9 @@ void main() {
       (place) => place.name == 'Parc des Expositions de Bordeaux',
     );
     final redCross = places.singleWhere(
-      (place) => place.name == 'Croix-Rouge Bordeaux',
+      (place) =>
+          place.name ==
+          'Croix-Rouge française - Délégation territoriale de la Gironde',
     );
 
     expect(exhibition.group, TerritorialGroup.partnerSites);
@@ -65,7 +67,13 @@ void main() {
     expect(redCross.type, ResponsePlaceType.redCross);
   });
 
-  test('unknown addresses remain explicitly unknown', () {
-    expect(places.every((place) => place.address == null), isTrue);
+  test('uncertain addresses remain explicitly identified', () {
+    final cauderan = places.singleWhere(
+      (place) => place.name == 'Bordeaux Caudéran',
+    );
+    final podensac = places.singleWhere((place) => place.name == 'Podensac');
+
+    expect(cauderan.publicAddressLabel, 'Adresse à confirmer');
+    expect(podensac.publicAddressLabel, 'Adresse à renseigner');
   });
 }

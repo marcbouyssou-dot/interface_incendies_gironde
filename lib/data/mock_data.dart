@@ -1,4 +1,5 @@
 import '../models/need.dart';
+import 'location_address_registry.dart';
 
 const needs = <CoordinationNeed>[
   CoordinationNeed(
@@ -80,12 +81,15 @@ ResponsePlace _station(
   TerritorialGroup group, {
   int activeNeeds = 0,
 }) {
+  final reference = verifiedLocationRegistry[name]!;
   return ResponsePlace(
     id: '${group.name}-${name.toLowerCase().replaceAll(' ', '-')}',
-    name: name,
-    type: ResponsePlaceType.sdisStation,
+    name: reference.displayName,
+    type: reference.type,
     group: group,
     activeNeeds: activeNeeds,
+    structuredAddress: reference.address,
+    isOperational: reference.isOperational,
   );
 }
 
@@ -190,18 +194,24 @@ final places = <ResponsePlace>[
     'Saint-Savin',
   ])
     _station(name, TerritorialGroup.hauteGironde),
-  const ResponsePlace(
+  ResponsePlace(
     id: 'parc-expositions-bordeaux',
     name: 'Parc des Expositions de Bordeaux',
     type: ResponsePlaceType.civilianReceptionSite,
     group: TerritorialGroup.partnerSites,
     activeNeeds: 1,
+    structuredAddress:
+        verifiedLocationRegistry['Parc des Expositions de Bordeaux']!.address,
+    isOperational: true,
   ),
-  const ResponsePlace(
+  ResponsePlace(
     id: 'croix-rouge-bordeaux',
-    name: 'Croix-Rouge Bordeaux',
+    name: verifiedLocationRegistry['Croix-Rouge Bordeaux']!.displayName,
     type: ResponsePlaceType.redCross,
     group: TerritorialGroup.partnerSites,
     activeNeeds: 1,
+    structuredAddress:
+        verifiedLocationRegistry['Croix-Rouge Bordeaux']!.address,
+    isOperational: true,
   ),
 ];

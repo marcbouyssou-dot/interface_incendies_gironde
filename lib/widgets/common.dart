@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
+import '../models/volunteer_profile.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
@@ -433,168 +434,124 @@ class _NeedActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final repository = RepositoryScope.of(context);
-    return StreamBuilder<ResponsibleAccess?>(
-      stream: repository.watchResponsibleAccess(),
-      builder: (context, roleSnapshot) {
-        final access = roleSnapshot.data;
-        return StreamBuilder<EngagementInfo?>(
-          stream: repository.watchMyEngagement(need.id),
-          builder: (context, engagementSnapshot) {
-            if (engagementSnapshot.hasError) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const FilledButton(
-                    onPressed: null,
-                    child: Text('Statut indisponible'),
-                  ),
-                  ..._administrativeActions(context, access),
-                ],
-              );
-            }
-            if (engagementSnapshot.connectionState == ConnectionState.waiting &&
-                !engagementSnapshot.hasData) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const FilledButton(
-                    onPressed: null,
-                    child: SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                  ..._administrativeActions(context, access),
-                ],
-              );
-            }
-            final engagement = engagementSnapshot.data;
-            if (engagement != null) {
-              final actionLabel = switch (engagement.status) {
-                EngagementStatus.pending => 'CONFIRMER MA PARTICIPATION',
-                EngagementStatus.confirmed => 'PARTICIPATION CONFIRMÉE',
-                EngagementStatus.standby => 'RENFORT',
-                EngagementStatus.cancelled => 'JE M’ENGAGE À NOUVEAU',
-              };
-              final actionIcon = switch (engagement.status) {
-                EngagementStatus.pending => Icons.schedule_rounded,
-                EngagementStatus.confirmed => Icons.check_circle_rounded,
-                EngagementStatus.standby => Icons.groups_rounded,
-                EngagementStatus.cancelled => Icons.cancel_rounded,
-              };
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _EngagementStatusBadge(status: engagement.status),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed:
-                        engagement.status == EngagementStatus.cancelled ||
-                            engagement.status == EngagementStatus.pending
-                        ? () => showModalBottomSheet<void>(
-                            context: context,
-                            isScrollControlled: true,
-                            showDragHandle: true,
-                            builder: (_) => _RegistrationSheet(need: need),
-                          )
-                        : null,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.orange,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: AppColors.greenSoft,
-                      disabledForegroundColor: AppColors.green,
-                      minimumSize: const Size.fromHeight(56),
-                    ),
-                    icon: Icon(actionIcon),
-                    label: Text(actionLabel),
-                  ),
-                  if (engagement.status == EngagementStatus.standby) ...[
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Vous serez contacté si nécessaire.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                  if (engagement.status != EngagementStatus.cancelled) ...[
-                    const SizedBox(height: 8),
-                    TextButton(
-                      key: Key('cancel-engagement-${need.id}'),
-                      onPressed: () => showDialog<void>(
+    return StreamBuilder<EngagementInfo?>(
+      stream: repository.watchMyEngagement(need.id),
+      builder: (context, engagementSnapshot) {
+        if (engagementSnapshot.hasError) {
+          return const FilledButton(
+            onPressed: null,
+            child: Text('Statut indisponible'),
+          );
+        }
+        if (engagementSnapshot.connectionState == ConnectionState.waiting &&
+            !engagementSnapshot.hasData) {
+          return const FilledButton(
+            onPressed: null,
+            child: SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        final engagement = engagementSnapshot.data;
+        if (engagement != null) {
+          final actionLabel = switch (engagement.status) {
+            EngagementStatus.pending => 'CONFIRMER MA PARTICIPATION',
+            EngagementStatus.confirmed => 'PARTICIPATION CONFIRMÉE',
+            EngagementStatus.standby => 'RENFORT',
+            EngagementStatus.cancelled => 'JE M’ENGAGE À NOUVEAU',
+          };
+          final actionIcon = switch (engagement.status) {
+            EngagementStatus.pending => Icons.schedule_rounded,
+            EngagementStatus.confirmed => Icons.check_circle_rounded,
+            EngagementStatus.standby => Icons.groups_rounded,
+            EngagementStatus.cancelled => Icons.cancel_rounded,
+          };
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _EngagementStatusBadge(status: engagement.status),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed:
+                    engagement.status == EngagementStatus.cancelled ||
+                        engagement.status == EngagementStatus.pending
+                    ? () => showModalBottomSheet<void>(
                         context: context,
-                        builder: (_) => _CancelEngagementDialog(
-                          need: need,
-                          engagement: engagement,
-                        ),
-                      ),
-                      child: const Text('Annuler mon engagement'),
-                    ),
-                  ],
-                  ..._administrativeActions(context, access),
-                ],
-              );
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                FilledButton.icon(
-                  onPressed: need.status == NeedStatus.complete
-                      ? null
-                      : () => showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          showDragHandle: true,
-                          builder: (_) => _RegistrationSheet(need: need),
-                        ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.orange,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppColors.greenSoft,
-                    disabledForegroundColor: AppColors.green,
-                    minimumSize: const Size.fromHeight(56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                  icon: Icon(
-                    need.status == NeedStatus.complete
-                        ? Icons.check_circle_rounded
-                        : Icons.bolt_rounded,
-                  ),
-                  label: Text(
-                    need.status == NeedStatus.complete
-                        ? 'MISSION COMPLÈTE'
-                        : '❤️ JE M’ENGAGE',
-                  ),
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => _RegistrationSheet(need: need),
+                      )
+                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.orange,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppColors.greenSoft,
+                  disabledForegroundColor: AppColors.green,
+                  minimumSize: const Size.fromHeight(56),
                 ),
-                ..._administrativeActions(context, access),
+                icon: Icon(actionIcon),
+                label: Text(actionLabel),
+              ),
+              if (engagement.status == EngagementStatus.standby) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Vous serez contacté si nécessaire.',
+                  textAlign: TextAlign.center,
+                ),
               ],
-            );
-          },
+              if (engagement.status != EngagementStatus.cancelled) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  key: Key('cancel-engagement-${need.id}'),
+                  onPressed: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _CancelEngagementDialog(
+                      need: need,
+                      engagement: engagement,
+                    ),
+                  ),
+                  child: const Text('Annuler mon engagement'),
+                ),
+              ],
+            ],
+          );
+        }
+        return FilledButton.icon(
+          onPressed: need.status == NeedStatus.complete
+              ? null
+              : () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  showDragHandle: true,
+                  builder: (_) => _RegistrationSheet(need: need),
+                ),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.orange,
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: AppColors.greenSoft,
+            disabledForegroundColor: AppColors.green,
+            minimumSize: const Size.fromHeight(56),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+          ),
+          icon: Icon(
+            need.status == NeedStatus.complete
+                ? Icons.check_circle_rounded
+                : Icons.bolt_rounded,
+          ),
+          label: Text(
+            need.status == NeedStatus.complete
+                ? 'MISSION COMPLÈTE'
+                : '❤️ JE M’ENGAGE',
+          ),
         );
       },
     );
-  }
-
-  List<Widget> _administrativeActions(
-    BuildContext context,
-    ResponsibleAccess? access,
-  ) {
-    if (access?.canManage(need.locationId ?? '') != true) return const [];
-    return [
-      const SizedBox(height: 8),
-      OutlinedButton.icon(
-        key: Key('cancel-mission-${need.id}'),
-        onPressed: () => showDialog<void>(
-          context: context,
-          builder: (_) => _CancelMissionDialog(need: need),
-        ),
-        icon: const Icon(Icons.cancel_outlined),
-        label: const Text('Annuler ce besoin'),
-      ),
-    ];
   }
 }
 
@@ -720,6 +677,25 @@ class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
               : const Text('Confirmer mon désengagement'),
         ),
       ],
+    );
+  }
+}
+
+class MissionCancellationButton extends StatelessWidget {
+  const MissionCancellationButton({super.key, required this.need});
+
+  final CoordinationNeed need;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      key: Key('cancel-mission-${need.id}'),
+      onPressed: () => showDialog<void>(
+        context: context,
+        builder: (_) => _CancelMissionDialog(need: need),
+      ),
+      icon: const Icon(Icons.cancel_outlined),
+      label: const Text('Annuler ce besoin'),
     );
   }
 }
@@ -883,7 +859,13 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
+  final _equipmentController = TextEditingController();
   bool _submitting = false;
+  bool _loadingProfile = true;
+  bool _editingProfile = true;
+  String? _profileError;
+  VolunteerProfile? _profile;
+  bool _profileLoadStarted = false;
 
   bool get _mkAvailable =>
       widget.need.registeredPhysiotherapists <
@@ -901,16 +883,93 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_profileLoadStarted) return;
+    _profileLoadStarted = true;
+    _loadProfile();
+  }
+
+  @override
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _equipmentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final profile = await RepositoryScope.of(context).getVolunteerProfile();
+      if (!mounted) return;
+      if (profile != null) {
+        _firstNameController.text = profile.firstName;
+        _lastNameController.text = profile.lastName;
+        _phoneController.text = profile.phone;
+        _emailController.text = profile.email ?? '';
+        _equipmentController.text = profile.equipment.join(', ');
+        final profileProfessionAvailable =
+            (profile.profession == VolunteerProfession.mk && _mkAvailable) ||
+            (profile.profession == VolunteerProfession.pp && _ppAvailable);
+        if (profileProfessionAvailable) {
+          _profession = profile.profession;
+        }
+      }
+      setState(() {
+        _profile = profile;
+        _editingProfile =
+            profile == null ||
+            !profile.profession.isSupportedByCurrentMission ||
+            !((profile.profession == VolunteerProfession.mk && _mkAvailable) ||
+                (profile.profession == VolunteerProfession.pp && _ppAvailable));
+        _loadingProfile = false;
+        _profileError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingProfile = false;
+        _profileError = 'Votre profil n’a pas pu être chargé.';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingProfile) {
+      return const SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+    if (_profileError != null) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_profileError!),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _loadingProfile = true;
+                    _profileError = null;
+                  });
+                  _loadProfile();
+                },
+                child: const Text('Réessayer'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return SafeArea(
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -935,75 +994,95 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 18),
-              Text(
-                'Profession',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              RadioGroup<VolunteerProfession>(
-                groupValue: _profession,
-                onChanged: (value) => setState(() => _profession = value!),
-                child: Column(
+              if (_profile != null && !_editingProfile) ...[
+                _ProfileSummary(profile: _profile!),
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: () => setState(() => _editingProfile = true),
+                  child: const Text('Modifier mes informations'),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (_editingProfile) ...[
+                Text(
+                  'Profession',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                RadioGroup<VolunteerProfession>(
+                  groupValue: _profession,
+                  onChanged: (value) => setState(() => _profession = value!),
+                  child: Column(
+                    children: [
+                      RadioListTile<VolunteerProfession>(
+                        contentPadding: EdgeInsets.zero,
+                        value: VolunteerProfession.mk,
+                        enabled: _mkAvailable,
+                        title: const Text('Masseur-kinésithérapeute'),
+                        subtitle: _mkAvailable
+                            ? null
+                            : const Text('Besoin couvert'),
+                      ),
+                      RadioListTile<VolunteerProfession>(
+                        contentPadding: EdgeInsets.zero,
+                        value: VolunteerProfession.pp,
+                        enabled: _ppAvailable,
+                        title: const Text('Pédicure-podologue'),
+                        subtitle: _ppAvailable
+                            ? null
+                            : const Text('Besoin couvert'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
                   children: [
-                    RadioListTile<VolunteerProfession>(
-                      contentPadding: EdgeInsets.zero,
-                      value: VolunteerProfession.mk,
-                      enabled: _mkAvailable,
-                      title: const Text('Masseur-kinésithérapeute'),
-                      subtitle: _mkAvailable
-                          ? null
-                          : const Text('Besoin couvert'),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _firstNameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(labelText: 'Prénom'),
+                        validator: _required,
+                      ),
                     ),
-                    RadioListTile<VolunteerProfession>(
-                      contentPadding: EdgeInsets.zero,
-                      value: VolunteerProfession.pp,
-                      enabled: _ppAvailable,
-                      title: const Text('Pédicure-podologue'),
-                      subtitle: _ppAvailable
-                          ? null
-                          : const Text('Besoin couvert'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _lastNameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(labelText: 'Nom'),
+                        validator: _required,
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _firstNameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Prénom'),
-                      validator: _required,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _lastNameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Nom'),
-                      validator: _required,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Téléphone'),
-                validator: _required,
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(
-                  labelText: 'Email (facultatif)',
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Téléphone'),
+                  validator: _phone,
                 ),
-              ),
-              const SizedBox(height: 8),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  decoration: const InputDecoration(
+                    labelText: 'Email (facultatif)',
+                  ),
+                  validator: _email,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _equipmentController,
+                  decoration: const InputDecoration(
+                    labelText: 'Matériel disponible (facultatif)',
+                    hintText: 'Table, huiles, serviettes…',
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               FilledButton(
                 onPressed: _submitting || (!_mkAvailable && !_ppAvailable)
                     ? null
@@ -1016,7 +1095,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text('Confirmer mon inscription'),
+                    : const Text('CONFIRMER MA PARTICIPATION'),
               ),
             ],
           ),
@@ -1027,6 +1106,24 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   static String? _required(String? value) {
     return value == null || value.trim().isEmpty ? 'Champ requis' : null;
+  }
+
+  static String? _phone(String? value) {
+    final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) return 'Champ requis';
+    if (normalized.replaceAll(RegExp(r'\D'), '').length < 6) {
+      return 'Téléphone trop court';
+    }
+    return null;
+  }
+
+  static String? _email(String? value) {
+    final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) return null;
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized)) {
+      return 'Email invalide';
+    }
+    return null;
   }
 
   Future<void> _submit() async {
@@ -1042,6 +1139,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         phone: _phoneController.text,
         email: _emailController.text,
         profession: _profession,
+        equipment: _equipmentController.text
+            .split(',')
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toList(),
       );
     } on RepositoryException catch (error) {
       if (!mounted) return;
@@ -1069,6 +1171,36 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
       MaterialPageRoute<void>(
         builder: (_) =>
             EngagementConfirmationScreen(need: widget.need, result: result),
+      ),
+    );
+  }
+}
+
+class _ProfileSummary extends StatelessWidget {
+  const _ProfileSummary({required this.profile});
+
+  final VolunteerProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            profile.displayName,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(profile.profession.label),
+          Text(profile.phone),
+        ],
       ),
     );
   }

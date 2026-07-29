@@ -243,9 +243,37 @@ class _SituationRow extends StatelessWidget {
             CoverageBar(need: need),
             const SizedBox(height: 14),
             _MissionEngagements(need: need),
+            _ResponsibleMissionActions(need: need),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ResponsibleMissionActions extends StatelessWidget {
+  const _ResponsibleMissionActions({required this.need});
+
+  final CoordinationNeed need;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<ResponsibleAccess?>(
+      stream: RepositoryScope.of(context).watchResponsibleAccess(),
+      builder: (context, snapshot) {
+        final access = snapshot.data;
+        if (access == null ||
+            need.createdBy == null ||
+            need.createdBy != access.uid ||
+            !need.isActive ||
+            need.isCancelled) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: MissionCancellationButton(need: need),
+        );
+      },
     );
   }
 }

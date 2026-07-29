@@ -23,6 +23,7 @@ abstract final class FirestoreLocationMapper {
       activeNeeds: _int(data['activeNeeds']),
       address: data['address'] as String?,
       structuredAddress: _structuredAddress(data),
+      isOperational: data['isOperational'] as bool? ?? true,
     );
   }
 
@@ -45,6 +46,8 @@ abstract final class FirestoreLocationMapper {
       status: AddressStatus.fromFirestore(statusValue),
       sourceUrl: data['addressSourceUrl'] as String?,
       sourceLabel: data['addressSourceLabel'] as String?,
+      secondSourceUrl: data['addressSecondSourceUrl'] as String?,
+      secondSourceLabel: data['addressSecondSourceLabel'] as String?,
       verifiedAt: (data['addressVerifiedAt'] as Timestamp?)?.toDate(),
       notes: data['addressNotes'] as String?,
     );

@@ -60,8 +60,16 @@ void main() {
       hasLength(1),
     );
     expect(
-      documents.where((data) => data['name'] == 'Croix-Rouge Bordeaux'),
+      documents.where(
+        (data) =>
+            data['name'] ==
+            'Croix-Rouge française - Délégation territoriale de la Gironde',
+      ),
       hasLength(1),
+    );
+    expect(
+      store.documents['partnersites-croix-rouge-bordeaux']?['addressLine1'],
+      '5 Avenue Gay-Lussac',
     );
     final pauillac = documents
         .where((data) => data['name'] == 'Pauillac')

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
@@ -21,6 +22,7 @@ void main() {
     requiredPodiatrists: 0,
     registeredPodiatrists: 0,
     equipment: [],
+    createdBy: 'mock-coordinator',
   );
 
   Future<void> pumpApp(
@@ -137,12 +139,12 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('JE M’ENGAGE À NOUVEAU'));
         await tester.pumpAndSettle();
-        expect(find.text('Confirmer mon inscription'), findsOneWidget);
+        expect(find.text('CONFIRMER MA PARTICIPATION'), findsOneWidget);
       }
     });
   }
 
-  testWidgets('volunteer and administrative cancellation stay distinct', (
+  testWidgets('public mission card only exposes volunteer cancellation', (
     tester,
   ) async {
     const engagement = EngagementInfo(
@@ -161,7 +163,7 @@ void main() {
     await pumpApp(tester, repository);
 
     expect(find.text('Annuler mon engagement'), findsOneWidget);
-    expect(find.text('Annuler ce besoin'), findsOneWidget);
+    expect(find.text('Annuler ce besoin'), findsNothing);
   });
 
   testWidgets(
@@ -226,6 +228,48 @@ void main() {
     expect(find.text('Besoin couvert'), findsOneWidget);
   });
 
+  testWidgets('existing profile is summarized then can be edited prefilled', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission()],
+      initialLocations: const [],
+      initialProfiles: const {
+        'mock-volunteer': VolunteerProfile(
+          uid: 'mock-volunteer',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          profession: VolunteerProfession.mk,
+          equipment: ['Table'],
+        ),
+      },
+    );
+    await pumpApp(tester, repository);
+    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
+    await tester.tap(find.text('❤️ JE M’ENGAGE'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alice Martin'), findsOneWidget);
+    expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
+    expect(find.text('0600000000'), findsOneWidget);
+    expect(find.text('Modifier mes informations'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNothing);
+    expect(find.text('CONFIRMER MA PARTICIPATION'), findsOneWidget);
+
+    await tester.tap(find.text('Modifier mes informations'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextFormField), findsNWidgets(5));
+    expect(
+      tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, 'Prénom'))
+          .controller
+          ?.text,
+      'Alice',
+    );
+  });
+
   testWidgets('double submission invokes createEngagement only once', (
     tester,
   ) async {
@@ -245,7 +289,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Téléphone'),
       '0600000000',
     );
-    final submit = find.text('Confirmer mon inscription');
+    final submit = find.text('CONFIRMER MA PARTICIPATION');
     await tester.ensureVisible(submit);
 
     await tester.tap(submit);
@@ -277,7 +321,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Téléphone'),
       '0600000000',
     );
-    final submit = find.text('Confirmer mon inscription');
+    final submit = find.text('CONFIRMER MA PARTICIPATION');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pumpAndSettle();
@@ -296,6 +340,9 @@ void main() {
       initialLocations: const [],
     );
     await pumpApp(tester, repository);
+    expect(find.text('Annuler ce besoin'), findsNothing);
+    await tester.tap(find.text('Situation').last);
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Annuler ce besoin').first,
       200,
@@ -353,33 +400,40 @@ void main() {
     expect(find.text('MK • Confirmé'), findsOneWidget);
   });
 
-  testWidgets('cancellation action follows site manager location rights', (
+  testWidgets('cancellation action is reserved to the mission creator', (
     tester,
   ) async {
     final unauthorized = MockCoordinationRepository(
       initialMissions: [mission()],
       initialLocations: const [],
       responsibleAccess: const ResponsibleAccess(
-        uid: 'manager',
+        uid: 'other-manager',
         role: 'site_manager',
         locationIds: {'other-site'},
         active: true,
       ),
     );
     await pumpApp(tester, unauthorized);
+    await tester.tap(find.text('Situation').last);
+    await tester.pumpAndSettle();
     expect(find.text('Annuler ce besoin'), findsNothing);
 
     final authorized = MockCoordinationRepository(
       initialMissions: [mission()],
       initialLocations: const [],
       responsibleAccess: const ResponsibleAccess(
-        uid: 'manager',
+        uid: 'mock-coordinator',
         role: 'site_manager',
         locationIds: {'site-a'},
         active: true,
       ),
     );
     await tester.pumpWidget(FireCoordinationApp(repository: authorized));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Missions').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Annuler ce besoin'), findsNothing);
+    await tester.tap(find.text('Situation').last);
     await tester.pumpAndSettle();
     expect(find.text('Annuler ce besoin'), findsWidgets);
   });
@@ -410,6 +464,7 @@ class _EngagementUiRepository extends MockCoordinationRepository {
     required String phone,
     String? email,
     required VolunteerProfession profession,
+    List<String> equipment = const [],
   }) async {
     createCalls++;
     return completion == null ? result : completion!.future;

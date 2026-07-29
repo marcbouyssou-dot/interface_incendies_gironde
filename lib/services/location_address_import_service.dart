@@ -15,8 +15,12 @@ class LocationImportRow {
   final String status;
   final Map<String, Object?> addressFields;
 
-  bool get isValidated =>
-      status == 'verified_official' || status == 'verified_cross_source';
+  bool get hasKnownStatus => const {
+    'verified_official',
+    'verified_cross_source',
+    'needs_confirmation',
+    'not_found',
+  }.contains(status);
 }
 
 class LocationImportDocument {
@@ -62,8 +66,14 @@ class LocationAddressImportService {
         'Identifiants inconnus : ${unknown.map((row) => row.id).join(', ')}',
       );
     }
+    final invalidStatuses = rows
+        .where((row) => !row.hasKnownStatus)
+        .map((row) => '${row.id}:${row.status}')
+        .toList();
+    if (invalidStatuses.isNotEmpty) {
+      throw StateError('Statuts inconnus : ${invalidStatuses.join(', ')}');
+    }
     final patches = rows
-        .where((row) => row.isValidated)
         .map((row) {
           final document = byId[row.id]!;
           if (row.name != document.name ||

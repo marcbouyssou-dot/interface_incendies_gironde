@@ -1,63 +1,61 @@
 # Audit des adresses des lieux
 
-Date de consultation : 29 juillet 2026.
+Source intégrée : `Base vérifiée des 66 lieux — tableau complet.md`.
+
+Date de vérification des données : 29 juillet 2026.
 
 ## Synthèse
 
-- Lieux du catalogue : 65
-- `verified_official` : 1
-- `verified_cross_source` : 0
-- `needs_confirmation` : 1
-- `not_found` : 63
-- Doublons détectés : 0
-- Incohérences de commune ou code postal confirmées : 0
+- Lignes source analysées : 66
+- Lieux applicatifs conservés : 65
+- `verified_official` : 32
+- `verified_cross_source` : 11
+- `needs_confirmation` : 16
+- `not_found` : 6
+- Secteurs sans CIS autonome ou entrées obsolètes requalifiées : 18
+- Doublon exclu : Pauillac dans Haute Gironde
 
-La recherche n’a pas permis d’identifier un annuaire officiel SDIS 33
-consolidé associant sans ambiguïté chacun des centres du catalogue à une
-adresse. Ces 63 lignes restent volontairement sans adresse.
+Les identifiants Firestore existants sont conservés. Aucun lieu n’est supprimé :
+les communes sans CIS autonome restent consultables comme secteurs, mais ne
+sont plus proposées lors de la création d’une mission.
 
-## Cas contrôlés
+## Anomalies structurantes conservées
 
-### Pauillac
+- **Bordeaux Benauge** : caserne historique fermée le 2 avril 2024, activité
+  transférée à Bordeaux Bastide. Le lieu reste référencé comme secteur non
+  opérationnel avec le statut `needs_confirmation`.
+- **Bordeaux Caudéran, Bordeaux Nord, Bègles, Carbon-Blanc, Cenon, Eysines,
+  Floirac, Le Haillan, Lormont, Pessac et Talence** : aucun CIS autonome
+  confirmé. Ces entrées sont des secteurs et non des casernes.
+- **Podensac, Pujols, Saint-Denis-de-Pile, Saint-Émilion,
+  Saint-Seurin-sur-l'Isle et Cavignac** : aucun CIS trouvé dans les sources
+  officielles contrôlées. Ces entrées `not_found` sont conservées sans adresse
+  et rendues non opérationnelles.
+- **Pauillac** : une seule entrée, rattachée au Médoc. La ligne dupliquée dans
+  Haute Gironde n’est jamais importée.
+- **Castillon-la-Bataille** : le CIS est implanté à
+  Saint-Magne-de-Castillon.
+- **Cadillac** : le CIS Cadillac-Béguey est implanté à Béguey.
+- **Arès / Lège-Cap-Ferret** : l’implantation retenue est à
+  Lège-Cap-Ferret.
+- **Parc des Expositions** : adresse générale cours Charles Bricaud ; entrée
+  opérationnelle Porte M/cours Jules Ladoumègue explicitement à confirmer.
+- **Croix-Rouge** : le lieu correspond désormais sans ambiguïté à la
+  Délégation territoriale de la Gironde, 5 avenue Gay-Lussac,
+  Artigues-près-Bordeaux. Les autres implantations citées dans les notes ne
+  sont pas utilisées.
 
-Une seule occurrence, identifiant `medoc-pauillac`, groupe `medoc`. L’adresse
-du centre reste `not_found` : aucune adresse officielle suffisamment probante
-n’a été retenue.
+## Réversibilité
 
-### Parc des Expositions de Bordeaux
+`data/locations_verified.csv` est la source structurée suivie dans Git.
+`lib/data/location_address_registry.dart` est généré depuis ce CSV.
 
-Adresse publique officielle publiée par la Ville de Bordeaux :
-`Cours Jules Ladoumègue, 33300 Bordeaux`. Statut `verified_official`.
-L’entrée opérationnelle/logistique du dispositif reste à confirmer avant tout
-déploiement terrain.
+La mise à jour d’une collection Firestore existante passe exclusivement par :
 
-Source :
-https://www.bordeaux.fr/agenda/le-triathlon-de-bordeaux
+1. `node scripts/update_location_addresses.mjs --dry-run`
+2. contrôle du rapport et de son checksum ;
+3. `node scripts/update_location_addresses.mjs --apply`
 
-### Croix-Rouge Bordeaux
-
-Le site officiel indique l’Unité locale de Bordeaux au `50 rue Ferrère,
-33000 Bordeaux`, mais précise que certaines activités, notamment de secours,
-se déroulent aussi quartier Bastide. La délégation territoriale se trouve à
-Artigues-près-Bordeaux. Le libellé applicatif ne permet donc pas de choisir
-l’implantation opérationnelle : statut `needs_confirmation`, sans adresse
-publiable.
-
-Sources :
-
-- https://www.croix-rouge.fr/unite-locale-de-bordeaux
-- https://as.croix-rouge.fr/fichesynthese/38
-
-## Vérifications humaines nécessaires
-
-- Demander au SDIS 33 la liste officielle des adresses des 63 centres et
-  vérifier les centres multi-communes.
-- Confirmer avec l’URPS/coordinateur l’entrée opérationnelle du Parc des
-  Expositions.
-- Confirmer si « Croix-Rouge Bordeaux » désigne l’unité locale rue Ferrère,
-  le site Bastide, la délégation territoriale ou une base temporaire.
-- Recontrôler en priorité les cinq centres bordelais afin d’éviter d’utiliser
-  l’adresse administrative générale du SDIS.
-
-Les URL de source et coordonnées restent des données d’audit ; l’interface
-publique ne les affiche pas.
+Le script refuse les identifiants inconnus et les métadonnées divergentes,
+produit une sauvegarde avant toute écriture et ne touche ni aux missions ni aux
+engagements.

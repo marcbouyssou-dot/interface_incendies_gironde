@@ -188,8 +188,10 @@ conservés pour l’historique, tandis que la requête opérationnelle
 ### Annulation
 
 1. Créer une mission et enregistrer un engagement MK.
-2. Se connecter comme responsable autorisé.
-3. Choisir `Annuler ce besoin`, saisir éventuellement un motif et confirmer.
+2. Se connecter avec le compte responsable ayant créé ce besoin.
+3. Ouvrir `Situation`, choisir `Annuler ce besoin`, saisir éventuellement un
+   motif et confirmer. Cette action n’est jamais affichée sur les cartes
+   publiques `Missions`.
 4. Vérifier la disparition immédiate de la liste opérationnelle sur l’iPhone.
 5. Vérifier que le document mission existe encore avec `status=cancelled` et
    `isActive=false`.
@@ -208,6 +210,33 @@ de mission, et limitent l’annulation aux rôles autorisés. Avant publication 
 4. sauvegarder les règles publiées ;
 5. publier manuellement avec
    `firebase deploy --only firestore:rules` ;
+
+## Cible future des quotas par profession
+
+RC1.5 conserve les compteurs historiques `requiredMk`, `requiredPp`,
+`registeredMk` et `registeredPp`. Aucune migration n’est exécutée. Le futur
+modèle généralisé devra utiliser :
+
+```text
+requiredByProfession: {
+  mk: 4,
+  pp: 1,
+  doctor: 0,
+  nurse: 0,
+  otherHealthProfessional: 0
+}
+
+registeredByProfession: {
+  mk: 1,
+  pp: 0,
+  doctor: 0,
+  nurse: 0,
+  otherHealthProfessional: 0
+}
+```
+
+Tant que cette migration n’existe pas, seules les professions MK et PP sont
+proposées pour un engagement sur une mission.
 6. rejouer immédiatement les deux scénarios sur Mac et iPhone.
 
 Aucune règle n’est déployée automatiquement par le projet.

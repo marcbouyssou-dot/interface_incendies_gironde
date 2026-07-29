@@ -1,9 +1,14 @@
 import '../models/need.dart';
+import '../models/volunteer_profile.dart';
 
 abstract interface class CoordinationRepository {
   Stream<List<CoordinationNeed>> watchMissions();
 
   Stream<List<ResponsePlace>> watchLocations();
+
+  Future<VolunteerProfile?> getVolunteerProfile();
+
+  Future<void> saveVolunteerProfile(VolunteerProfile profile);
 
   Stream<EngagementInfo?> watchMyEngagement(String missionId);
 
@@ -33,6 +38,7 @@ abstract interface class CoordinationRepository {
     required String phone,
     String? email,
     required VolunteerProfession profession,
+    List<String> equipment = const [],
   });
 
   Future<void> cancelEngagement(String missionId);
@@ -126,6 +132,9 @@ abstract final class EngagementCounterTransition {
     return switch (profession) {
       VolunteerProfession.mk => (mk: amount, pp: 0),
       VolunteerProfession.pp => (mk: 0, pp: amount),
+      VolunteerProfession.doctor ||
+      VolunteerProfession.nurse ||
+      VolunteerProfession.otherHealthProfessional => (mk: 0, pp: 0),
     };
   }
 }

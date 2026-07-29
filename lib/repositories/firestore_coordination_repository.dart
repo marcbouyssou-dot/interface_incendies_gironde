@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/need.dart';
+import '../models/volunteer_profile.dart';
 import '../utils/switch_latest.dart';
 import 'coordination_repository.dart';
 import 'firestore_location_mapper.dart';
@@ -179,6 +180,45 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               )
               .toList(),
         );
+  }
+
+  @override
+  Future<VolunteerProfile?> getVolunteerProfile() async {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous) {
+      throw const RepositoryException(
+        'Une session volontaire est nécessaire pour accéder au profil.',
+      );
+    }
+    final snapshot = await _firestore
+        .collection('volunteers')
+        .doc(user.uid)
+        .get()
+        .timeout(const Duration(seconds: 15));
+    final data = snapshot.data();
+    if (!snapshot.exists || data == null) return null;
+    return _profileFromFirestore(user.uid, data);
+  }
+
+  @override
+  Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous || user.uid != profile.uid) {
+      throw const RepositoryException(
+        'Ce profil n’appartient pas à la session volontaire active.',
+      );
+    }
+    final reference = _firestore.collection('volunteers').doc(user.uid);
+    await _firestore
+        .runTransaction((transaction) async {
+          final existing = await transaction.get(reference);
+          final now = FieldValue.serverTimestamp();
+          transaction.set(reference, {
+            ..._profileData(profile, now),
+            'createdAt': existing.data()?['createdAt'] ?? now,
+          });
+        })
+        .timeout(const Duration(seconds: 15));
   }
 
   @override
@@ -522,7 +562,13 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required String phone,
     String? email,
     required VolunteerProfession profession,
+    List<String> equipment = const [],
   }) async {
+    if (!profession.isSupportedByCurrentMission) {
+      throw const RepositoryException(
+        'Cette profession n’est pas encore proposée pour cette mission.',
+      );
+    }
     var user = _auth.currentUser;
     if (!canStartVolunteerEngagement(
       hasUser: user != null,
@@ -612,15 +658,21 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               'phone': phone.trim(),
               'profession': profession.name,
               'updatedAt': now,
+              'equipment': equipment
+                  .map((item) => item.trim())
+                  .where((item) => item.isNotEmpty)
+                  .toSet()
+                  .toList(),
             };
             final normalizedEmail = email?.trim();
             if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
               volunteerData['email'] = normalizedEmail;
+            } else if (existingVolunteer.exists) {
+              volunteerData['email'] = FieldValue.delete();
             }
             transaction.set(volunteerRef, {
               ...volunteerData,
               'createdAt': existingVolunteer.data()?['createdAt'] ?? now,
-              'equipment': <String>[],
             }, SetOptions(merge: true));
             if (isReengagement) {
               transaction.update(engagementRef, {
@@ -815,18 +867,11 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 'Cette mission a déjà été annulée.',
               );
             }
-            final role = roleSnapshot.data();
-            final access = ResponsibleAccess(
-              uid: user.uid,
-              role: role?['role'] as String? ?? '',
-              locationIds: Set<String>.from(
-                role?['locationIds'] as List? ?? const [],
-              ),
-              active: role?['active'] as bool? ?? false,
-            );
-            if (!access.canManage(mission['locationId'] as String? ?? '')) {
+            if (!roleSnapshot.exists ||
+                roleSnapshot.data()?['active'] != true ||
+                mission['createdBy'] != user.uid) {
               throw const RepositoryException(
-                'Votre compte n’est pas autorisé à publier pour ce lieu.',
+                'Seul le responsable ayant créé ce besoin peut l’annuler.',
               );
             }
             final now = FieldValue.serverTimestamp();
@@ -852,6 +897,58 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   }
 
   static int _int(Object? value) => value is num ? value.toInt() : 0;
+
+  static VolunteerProfile _profileFromFirestore(
+    String uid,
+    Map<String, dynamic> data,
+  ) {
+    final professionName = data['profession'] as String?;
+    final profession = VolunteerProfession.values
+        .where((value) => value.name == professionName)
+        .firstOrNull;
+    if (profession == null) {
+      throw const RepositoryException(
+        'La profession enregistrée dans ce profil est invalide.',
+      );
+    }
+    return VolunteerProfile(
+      uid: uid,
+      firstName: (data['firstName'] as String? ?? '').trim(),
+      lastName: (data['lastName'] as String? ?? '').trim(),
+      phone: (data['phone'] as String? ?? '').trim(),
+      email: _nullableTrim(data['email'] as String?),
+      profession: profession,
+      equipment: List<String>.from(data['equipment'] as List? ?? const []),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+    );
+  }
+
+  static Map<String, dynamic> _profileData(
+    VolunteerProfile profile,
+    Object serverTimestamp,
+  ) {
+    final email = _nullableTrim(profile.email);
+    return {
+      'uid': profile.uid,
+      'firstName': profile.firstName.trim(),
+      'lastName': profile.lastName.trim(),
+      'phone': profile.phone.trim(),
+      'email': ?email,
+      'profession': profile.profession.name,
+      'equipment': profile.equipment
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toSet()
+          .toList(),
+      'updatedAt': serverTimestamp,
+    };
+  }
+
+  static String? _nullableTrim(String? value) {
+    final trimmed = value?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
 
   static EngagementStatus _engagementStatus(Object? value) {
     if (value is String) {

@@ -635,7 +635,9 @@ class _LocationInput extends StatelessWidget {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final available = snapshot.data!;
+        final available = snapshot.data!
+            .where((location) => location.isOperational)
+            .toList(growable: false);
         if (access.isSiteManager) {
           return _buildLockedLocation(context, available);
         }

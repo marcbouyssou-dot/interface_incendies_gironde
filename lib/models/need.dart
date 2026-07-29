@@ -1,6 +1,20 @@
 enum NeedStatus { critical, toComplete, complete }
 
-enum VolunteerProfession { mk, pp }
+enum VolunteerProfession { mk, pp, doctor, nurse, otherHealthProfessional }
+
+extension VolunteerProfessionLabel on VolunteerProfession {
+  String get label => switch (this) {
+    VolunteerProfession.mk => 'Masseur-kinésithérapeute',
+    VolunteerProfession.pp => 'Pédicure-podologue',
+    VolunteerProfession.doctor => 'Médecin',
+    VolunteerProfession.nurse => 'Infirmier / Infirmière',
+    VolunteerProfession.otherHealthProfessional =>
+      'Autre professionnel de santé',
+  };
+
+  bool get isSupportedByCurrentMission =>
+      this == VolunteerProfession.mk || this == VolunteerProfession.pp;
+}
 
 enum TerritorialGroup {
   bordeauxMetropole,
@@ -28,6 +42,7 @@ extension TerritorialGroupLabel on TerritorialGroup {
 
 enum ResponsePlaceType {
   sdisStation,
+  interventionSector,
   civilianReceptionSite,
   redCross,
   otherPartnerSite,
@@ -36,6 +51,7 @@ enum ResponsePlaceType {
 extension ResponsePlaceTypeLabel on ResponsePlaceType {
   String get label => switch (this) {
     ResponsePlaceType.sdisStation => 'Caserne SDIS',
+    ResponsePlaceType.interventionSector => 'Secteur sans CIS autonome',
     ResponsePlaceType.civilianReceptionSite => 'Site d’accueil des civils',
     ResponsePlaceType.redCross => 'Croix-Rouge',
     ResponsePlaceType.otherPartnerSite => 'Autre site partenaire',
@@ -79,6 +95,7 @@ class CoordinationNeed {
     this.cancelledAt,
     this.cancelledBy,
     this.cancellationReason,
+    this.createdBy,
   });
 
   final String id;
@@ -100,6 +117,7 @@ class CoordinationNeed {
   final DateTime? cancelledAt;
   final String? cancelledBy;
   final String? cancellationReason;
+  final String? createdBy;
 
   String get area => group.label;
 
@@ -125,6 +143,7 @@ class CoordinationNeed {
   CoordinationNeed copyWith({
     int? registeredPhysiotherapists,
     int? registeredPodiatrists,
+    String? createdBy,
   }) {
     return CoordinationNeed(
       id: id,
@@ -148,6 +167,7 @@ class CoordinationNeed {
       cancelledAt: cancelledAt,
       cancelledBy: cancelledBy,
       cancellationReason: cancellationReason,
+      createdBy: createdBy ?? this.createdBy,
     );
   }
 }
@@ -161,6 +181,7 @@ class ResponsePlace {
     required this.activeNeeds,
     this.address,
     this.structuredAddress,
+    this.isOperational = true,
   });
 
   final String id;
@@ -169,6 +190,7 @@ class ResponsePlace {
   final TerritorialGroup group;
   final String? address;
   final LocationAddress? structuredAddress;
+  final bool isOperational;
   final int activeNeeds;
 
   bool get isActive => activeNeeds > 0;
@@ -221,6 +243,8 @@ class LocationAddress {
     this.status = AddressStatus.notFound,
     this.sourceUrl,
     this.sourceLabel,
+    this.secondSourceUrl,
+    this.secondSourceLabel,
     this.verifiedAt,
     this.notes,
   });
@@ -236,6 +260,8 @@ class LocationAddress {
   final AddressStatus status;
   final String? sourceUrl;
   final String? sourceLabel;
+  final String? secondSourceUrl;
+  final String? secondSourceLabel;
   final DateTime? verifiedAt;
   final String? notes;
 

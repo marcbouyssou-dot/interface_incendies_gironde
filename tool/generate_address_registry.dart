@@ -1,89 +1,120 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:interface_incendies_gironde/data/mock_data.dart';
-
-String csv(String value) => '"${value.replaceAll('"', '""')}"';
-
 void main() {
-  final output = StringBuffer(
-    'location_id,name,territorial_group,location_type,address_line_1,'
-    'address_line_2,postal_code,city,country,full_address,latitude,longitude,'
-    'address_status,source_label,source_url,second_source_url,verified_at,notes\n',
+  final rows = _parseCsv(
+    File('data/locations_verified.csv').readAsStringSync(),
   );
-  for (final place in places) {
-    final isPark = place.id == 'parc-expositions-bordeaux';
-    final isRedCross = place.id == 'croix-rouge-bordeaux';
-    final values = <String>[
-      stableId(place.group.name, place.name),
-      place.name,
-      place.group.name,
-      place.type.name,
-      if (isPark) 'Cours Jules Ladoumègue' else '',
-      '',
-      if (isPark) '33300' else '',
-      if (isPark) 'Bordeaux' else '',
-      'France',
-      if (isPark) 'Cours Jules Ladoumègue, 33300 Bordeaux, France' else '',
-      '',
-      '',
-      if (isPark)
-        'verified_official'
-      else if (isRedCross)
-        'needs_confirmation'
-      else
-        'not_found',
-      if (isPark)
-        'Ville de Bordeaux'
-      else if (isRedCross)
-        'Croix-Rouge française'
-      else
-        '',
-      if (isPark)
-        'https://www.bordeaux.fr/agenda/le-triathlon-de-bordeaux'
-      else if (isRedCross)
-        'https://www.croix-rouge.fr/unite-locale-de-bordeaux'
-      else
-        '',
-      '',
-      if (isPark) '2026-07-29' else '',
-      if (isPark)
-        'Adresse publique officielle. Entrée opérationnelle à confirmer.'
-      else if (isRedCross)
-        'Plusieurs implantations sont mentionnées; le site opérationnel attendu doit être confirmé.'
-      else
-        'Recherche officielle à poursuivre avec le SDIS 33 ou la commune.',
-    ];
-    output.writeln(values.map(csv).join(','));
+  final header = rows.removeAt(0);
+  final records = rows
+      .map(
+        (values) => {
+          for (var index = 0; index < header.length; index++)
+            header[index]: values[index],
+        },
+      )
+      .toList();
+  final output = StringBuffer()
+    ..writeln('// GENERATED FILE — DO NOT EDIT BY HAND.')
+    ..writeln('// Source: data/locations_verified.csv')
+    ..writeln()
+    ..writeln("import '../models/need.dart';")
+    ..writeln()
+    ..writeln('class VerifiedLocationRecord {')
+    ..writeln('  const VerifiedLocationRecord({')
+    ..writeln('    required this.currentName,')
+    ..writeln('    required this.displayName,')
+    ..writeln('    required this.type,')
+    ..writeln('    required this.isOperational,')
+    ..writeln('    required this.address,')
+    ..writeln('  });')
+    ..writeln('  final String currentName;')
+    ..writeln('  final String displayName;')
+    ..writeln('  final ResponsePlaceType type;')
+    ..writeln('  final bool isOperational;')
+    ..writeln('  final LocationAddress address;')
+    ..writeln('}')
+    ..writeln()
+    ..writeln(
+      'final verifiedLocationRegistry = <String, VerifiedLocationRecord>{',
+    );
+  for (final row in records) {
+    output
+      ..writeln("  ${_dart(row['name']!)}: VerifiedLocationRecord(")
+      ..writeln('    currentName: ${_dart(row['name']!)},')
+      ..writeln('    displayName: ${_dart(row['display_name']!)},')
+      ..writeln('    type: ResponsePlaceType.${row['location_type']},')
+      ..writeln("    isOperational: ${row['is_operational']},")
+      ..writeln('    address: LocationAddress(')
+      ..writeln('      addressLine1: ${_nullable(row['address_line_1']!)},')
+      ..writeln('      addressLine2: ${_nullable(row['address_line_2']!)},')
+      ..writeln('      postalCode: ${_nullable(row['postal_code']!)},')
+      ..writeln('      city: ${_nullable(row['city']!)},')
+      ..writeln("      country: ${_dart(row['country']!)},")
+      ..writeln('      storedFullAddress: ${_nullable(row['full_address']!)},')
+      ..writeln('      latitude: ${_number(row['latitude']!)},')
+      ..writeln('      longitude: ${_number(row['longitude']!)},')
+      ..writeln(
+        '      status: AddressStatus.${_status(row['address_status']!)},',
+      )
+      ..writeln('      sourceLabel: ${_nullable(row['source_label']!)},')
+      ..writeln('      sourceUrl: ${_nullable(row['source_url']!)},')
+      ..writeln(
+        '      secondSourceLabel: ${_nullable(row['second_source_label']!)},',
+      )
+      ..writeln(
+        '      secondSourceUrl: ${_nullable(row['second_source_url']!)},',
+      )
+      ..writeln('      verifiedAt: ${_date(row['verified_at']!)},')
+      ..writeln('      notes: ${_nullable(row['notes']!)},')
+      ..writeln('    ),')
+      ..writeln('  ),');
   }
-  Directory('data').createSync(recursive: true);
-  File('data/locations_verified.csv').writeAsStringSync(output.toString());
+  output.writeln('};');
+  File(
+    'lib/data/location_address_registry.dart',
+  ).writeAsStringSync(output.toString());
+  stdout.writeln('${records.length} adresses générées.');
 }
 
-String stableId(String group, String name) {
-  var normalized = '$group-$name'.toLowerCase();
-  const replacements = {
-    'à': 'a',
-    'â': 'a',
-    'ä': 'a',
-    'ç': 'c',
-    'é': 'e',
-    'è': 'e',
-    'ê': 'e',
-    'ë': 'e',
-    'î': 'i',
-    'ï': 'i',
-    'ô': 'o',
-    'ö': 'o',
-    'ù': 'u',
-    'û': 'u',
-    'ü': 'u',
-    'ÿ': 'y',
-    'œ': 'oe',
-  };
-  for (final entry in replacements.entries) {
-    normalized = normalized.replaceAll(entry.key, entry.value);
+String _status(String value) => switch (value) {
+  'verified_official' => 'verifiedOfficial',
+  'verified_cross_source' => 'verifiedCrossSource',
+  'needs_confirmation' => 'needsConfirmation',
+  'not_found' => 'notFound',
+  _ => throw FormatException('Statut inconnu : $value'),
+};
+
+String _nullable(String value) => value.isEmpty ? 'null' : _dart(value);
+String _number(String value) => value.isEmpty ? 'null' : value;
+String _date(String value) =>
+    value.isEmpty ? 'null' : "DateTime.utc(${value.split('-').join(', ')})";
+String _dart(String value) => jsonEncode(value);
+
+List<List<String>> _parseCsv(String input) {
+  final result = <List<String>>[];
+  var row = <String>[];
+  var field = '';
+  var quoted = false;
+  for (var index = 0; index < input.length; index++) {
+    final char = input[index];
+    if (quoted && char == '"' && input[index + 1] == '"') {
+      field += '"';
+      index++;
+    } else if (char == '"') {
+      quoted = !quoted;
+    } else if (!quoted && char == ',') {
+      row.add(field);
+      field = '';
+    } else if (!quoted && (char == '\n' || char == '\r')) {
+      if (char == '\r' && input[index + 1] == '\n') index++;
+      row.add(field);
+      if (row.any((value) => value.isNotEmpty)) result.add(row);
+      row = <String>[];
+      field = '';
+    } else {
+      field += char;
+    }
   }
-  return normalized
-      .replaceAll(RegExp('[^a-z0-9]+'), '-')
-      .replaceAll(RegExp(r'^-|-$'), '');
+  return result;
 }

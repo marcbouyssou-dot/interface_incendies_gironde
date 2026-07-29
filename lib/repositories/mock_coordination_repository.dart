@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../data/mock_data.dart';
 import '../models/need.dart';
+import '../models/volunteer_profile.dart';
 import 'coordination_repository.dart';
 
 class MockCoordinationRepository implements CoordinationRepository {
@@ -9,12 +10,15 @@ class MockCoordinationRepository implements CoordinationRepository {
     List<CoordinationNeed>? initialMissions,
     List<ResponsePlace>? initialLocations,
     List<EngagementInfo>? initialEngagements,
+    Map<String, VolunteerProfile>? initialProfiles,
+    this.volunteerUid = 'mock-volunteer',
     ResponsibleAccess? responsibleAccess = _mockAccess,
   }) : _missions = List.of(initialMissions ?? needs),
        _locations = List.of(initialLocations ?? places),
        missionEngagements = List.of(
          initialEngagements ?? _mockMissionEngagements,
        ),
+       volunteerProfiles = Map.of(initialProfiles ?? const {}),
        _responsibleAccess = responsibleAccess;
 
   static final instance = MockCoordinationRepository();
@@ -22,7 +26,9 @@ class MockCoordinationRepository implements CoordinationRepository {
   final List<CoordinationNeed> _missions;
   final List<ResponsePlace> _locations;
   final ResponsibleAccess? _responsibleAccess;
+  final String volunteerUid;
   final List<Volunteer> volunteers = [];
+  final Map<String, VolunteerProfile> volunteerProfiles;
   final Map<String, EngagementInfo> engagements = {};
   final List<EngagementInfo> missionEngagements;
 
@@ -82,6 +88,36 @@ class MockCoordinationRepository implements CoordinationRepository {
       final subscription = _missionUpdates.stream.listen(controller.add);
       controller.onCancel = subscription.cancel;
     });
+  }
+
+  @override
+  Future<VolunteerProfile?> getVolunteerProfile() async =>
+      volunteerProfiles[volunteerUid];
+
+  @override
+  Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
+    if (profile.uid != volunteerUid) {
+      throw const RepositoryException(
+        'Ce profil n’appartient pas à la session volontaire active.',
+      );
+    }
+    final existing = volunteerProfiles[volunteerUid];
+    final now = DateTime.now();
+    volunteerProfiles[volunteerUid] = VolunteerProfile(
+      uid: volunteerUid,
+      firstName: profile.firstName.trim(),
+      lastName: profile.lastName.trim(),
+      phone: profile.phone.trim(),
+      email: _nullableTrim(profile.email),
+      profession: profile.profession,
+      equipment: profile.equipment
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toSet()
+          .toList(),
+      createdAt: existing?.createdAt ?? profile.createdAt ?? now,
+      updatedAt: now,
+    );
   }
 
   List<CoordinationNeed> _activeMissions() => List.unmodifiable(
@@ -282,6 +318,7 @@ class MockCoordinationRepository implements CoordinationRepository {
       registeredPodiatrists: 0,
       equipment: List.of(draft.equipment),
       details: draft.details,
+      createdBy: _responsibleAccess?.uid,
     );
     _missions.add(mission);
     _missionUpdates.add(_activeMissions());
@@ -296,7 +333,13 @@ class MockCoordinationRepository implements CoordinationRepository {
     required String phone,
     String? email,
     required VolunteerProfession profession,
+    List<String> equipment = const [],
   }) async {
+    if (!profession.isSupportedByCurrentMission) {
+      throw const RepositoryException(
+        'Cette profession n’est pas encore proposée pour cette mission.',
+      );
+    }
     final index = _missions.indexWhere((mission) => mission.id == missionId);
     if (index < 0) {
       throw const RepositoryException('Mission introuvable');
@@ -312,7 +355,7 @@ class MockCoordinationRepository implements CoordinationRepository {
     }
     final existingEngagement = engagements[missionId];
     if (existingEngagement != null &&
-        existingEngagement.volunteerId != 'mock-volunteer') {
+        existingEngagement.volunteerId != volunteerUid) {
       throw const RepositoryException(
         'Cet engagement appartient à un autre volontaire.',
       );
@@ -332,6 +375,9 @@ class MockCoordinationRepository implements CoordinationRepository {
         mission.registeredPhysiotherapists < mission.requiredPhysiotherapists,
       VolunteerProfession.pp =>
         mission.registeredPodiatrists < mission.requiredPodiatrists,
+      VolunteerProfession.doctor ||
+      VolunteerProfession.nurse ||
+      VolunteerProfession.otherHealthProfessional => false,
     };
     if (!hasAvailableQuota) {
       throw const RepositoryException(
@@ -347,9 +393,26 @@ class MockCoordinationRepository implements CoordinationRepository {
         profession: profession,
       ),
     );
+    final existingProfile = volunteerProfiles[volunteerUid];
+    final now = DateTime.now();
+    volunteerProfiles[volunteerUid] = VolunteerProfile(
+      uid: volunteerUid,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phone: phone.trim(),
+      email: _nullableTrim(email),
+      profession: profession,
+      equipment: equipment
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toSet()
+          .toList(),
+      createdAt: existingProfile?.createdAt ?? now,
+      updatedAt: now,
+    );
     final engagement = EngagementInfo(
       missionId: missionId,
-      volunteerId: 'mock-volunteer',
+      volunteerId: volunteerUid,
       profession: profession,
       status: EngagementStatus.confirmed,
       createdAt: existingEngagement?.createdAt ?? DateTime.now(),
@@ -373,6 +436,9 @@ class MockCoordinationRepository implements CoordinationRepository {
       VolunteerProfession.pp => mission.copyWith(
         registeredPodiatrists: mission.registeredPodiatrists + 1,
       ),
+      VolunteerProfession.doctor ||
+      VolunteerProfession.nurse ||
+      VolunteerProfession.otherHealthProfessional => mission,
     };
     _missionUpdates.add(_activeMissions());
     return existingEngagement == null
@@ -413,6 +479,12 @@ class MockCoordinationRepository implements CoordinationRepository {
           mission.copyWith(
             registeredPodiatrists: mission.registeredPodiatrists - 1,
           ),
+        VolunteerProfession.doctor ||
+        VolunteerProfession.nurse ||
+        VolunteerProfession.otherHealthProfessional =>
+          throw const RepositoryException(
+            'Le désengagement n’a pas pu être enregistré. Réessayez.',
+          ),
         _ => throw const RepositoryException(
           'Le désengagement n’a pas pu être enregistré. Réessayez.',
         ),
@@ -442,9 +514,10 @@ class MockCoordinationRepository implements CoordinationRepository {
     if (mission.isCancelled || !mission.isActive) {
       throw const RepositoryException('Cette mission a déjà été annulée.');
     }
-    if (_responsibleAccess?.canManage(mission.locationId ?? '') != true) {
+    if (_responsibleAccess == null ||
+        mission.createdBy != _responsibleAccess.uid) {
       throw const RepositoryException(
-        'Votre compte n’est pas autorisé à publier pour ce lieu.',
+        'Seul le responsable ayant créé ce besoin peut l’annuler.',
       );
     }
     _missions[index] = CoordinationNeed(
@@ -465,8 +538,9 @@ class MockCoordinationRepository implements CoordinationRepository {
       isActive: false,
       isCancelled: true,
       cancelledAt: DateTime.now(),
-      cancelledBy: _responsibleAccess!.uid,
+      cancelledBy: _responsibleAccess.uid,
       cancellationReason: reason?.trim(),
+      createdBy: mission.createdBy,
     );
     _missionUpdates.add(_activeMissions());
   }

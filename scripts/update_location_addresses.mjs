@@ -37,9 +37,12 @@ if (unknown.length > 0) {
 }
 const divergent = rows.filter((row) => {
   const data = remote.get(row.location_id).data();
-  return data.name !== row.name
-    || (data.group ?? data.territorialGroup) !== row.territorial_group
-    || data.type !== row.location_type;
+  const sourceState = data.name === row.name
+    && data.type === row.previous_location_type;
+  const targetState = data.name === row.display_name
+    && data.type === row.location_type;
+  return (data.group ?? data.territorialGroup) !== row.territorial_group
+    || (!sourceState && !targetState);
 });
 if (divergent.length > 0) {
   throw new Error(
@@ -47,10 +50,19 @@ if (divergent.length > 0) {
   );
 }
 
-const validated = rows.filter((row) =>
-  ['verified_official', 'verified_cross_source'].includes(row.address_status),
+const knownStatuses = new Set([
+  'verified_official', 'verified_cross_source',
+  'needs_confirmation', 'not_found',
+]);
+const invalidStatuses = rows.filter((row) =>
+  !knownStatuses.has(row.address_status),
 );
-const changes = validated.map((row) => ({
+if (invalidStatuses.length > 0) {
+  throw new Error(
+    `Statuts inconnus: ${invalidStatuses.map((row) => row.location_id).join(', ')}`,
+  );
+}
+const changes = rows.map((row) => ({
   id: row.location_id,
   before: addressFields(remote.get(row.location_id).data()),
   after: addressFieldsFromRow(row),
@@ -65,8 +77,8 @@ if (dryRun) {
         projectId,
         csvChecksum: checksum,
         totalRows: rows.length,
-        validatedRows: validated.length,
-        ignoredRows: rows.length - validated.length,
+        importedRows: changes.length,
+        ignoredRows: 0,
         changes,
       },
       null,
@@ -110,6 +122,9 @@ console.log(`Sauvegarde: ${backupPath.pathname}`);
 
 function addressFieldsFromRow(row) {
   return {
+    name: row.display_name,
+    type: row.location_type,
+    isOperational: row.is_operational === 'true',
     addressLine1: row.address_line_1,
     addressLine2: row.address_line_2 || null,
     postalCode: row.postal_code,
@@ -122,6 +137,7 @@ function addressFieldsFromRow(row) {
     addressSourceLabel: row.source_label,
     addressSourceUrl: row.source_url,
     addressSecondSourceUrl: row.second_source_url || null,
+    addressSecondSourceLabel: row.second_source_label || null,
     addressVerifiedAt: row.verified_at
       ? Timestamp.fromDate(new Date(`${row.verified_at}T00:00:00Z`))
       : null,
@@ -136,7 +152,8 @@ function addressFields(data) {
         'addressLine1', 'addressLine2', 'postalCode', 'city', 'country',
         'fullAddress', 'latitude', 'longitude', 'addressStatus',
         'addressSourceLabel', 'addressSourceUrl', 'addressSecondSourceUrl',
-        'addressVerifiedAt', 'addressNotes',
+        'addressSecondSourceLabel', 'addressVerifiedAt', 'addressNotes',
+        'name', 'type', 'isOperational',
       ].includes(key),
     ),
   );

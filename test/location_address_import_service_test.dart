@@ -27,7 +27,7 @@ void main() {
     expect(store.writes, 0);
   });
 
-  test('a non-validated row is ignored', () async {
+  test('an uncertain row is imported without changing its status', () async {
     final store = _MemoryStore([existing]);
     final patches = await LocationAddressImportService(store).run(
       rows: [
@@ -37,12 +37,33 @@ void main() {
           group: 'medoc',
           type: 'sdisStation',
           status: 'needs_confirmation',
-          addressFields: {},
+          addressFields: {'addressStatus': 'needs_confirmation'},
         ),
       ],
       dryRun: true,
     );
-    expect(patches, isEmpty);
+    expect(patches, hasLength(1));
+    expect(patches.single.fields['addressStatus'], 'needs_confirmation');
+  });
+
+  test('an unknown verification status blocks the import', () async {
+    final store = _MemoryStore([existing]);
+    expect(
+      () => LocationAddressImportService(store).run(
+        rows: [
+          const LocationImportRow(
+            id: 'site-a',
+            name: 'Site A',
+            group: 'medoc',
+            type: 'sdisStation',
+            status: 'guessed',
+            addressFields: {},
+          ),
+        ],
+        dryRun: true,
+      ),
+      throwsStateError,
+    );
   });
 
   test('an unknown identifier blocks the complete import', () async {

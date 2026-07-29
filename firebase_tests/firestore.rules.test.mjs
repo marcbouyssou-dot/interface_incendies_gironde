@@ -88,7 +88,7 @@ function mission(overrides = {}) {
 function volunteer(uid, overrides = {}) {
   return {
     uid, profession: 'mk', firstName: 'A', lastName: 'B', phone: '0600000000',
-    equipment: [], createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    equipment: [], createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     ...overrides,
   };
 }
@@ -138,10 +138,16 @@ async function reengage(uid, profession = 'mk', engagementChanges = {}) {
   const userDb = db(uid);
   const missionSnapshot = await getDoc(doc(userDb, 'missions/mission-a'));
   const missionData = missionSnapshot.data();
+  const volunteerSnapshot = await getDoc(doc(userDb, `volunteers/${uid}`));
+  const volunteerData = volunteerSnapshot.data();
   const registeredMk = missionData.registeredMk + (profession === 'mk' ? 1 : 0);
   const registeredPp = missionData.registeredPp + (profession === 'pp' ? 1 : 0);
   const batch = writeBatch(userDb);
-  batch.set(doc(userDb, `volunteers/${uid}`), volunteer(uid, {profession}));
+  batch.set(doc(userDb, `volunteers/${uid}`), {
+    ...volunteer(uid, {profession}),
+    createdAt: volunteerData.createdAt,
+    updatedAt: serverTimestamp(),
+  });
   batch.update(doc(userDb, `engagements/mission-a_${uid}`), {
     status: 'confirmed',
     profession,
@@ -243,15 +249,40 @@ test('missions: invalid manager, quotas, counters, dates and extra fields denied
 test('volunteers: owner create/update/read; other access denied', async () => {
   await seed();
   await assertSucceeds(setDoc(doc(db('alice'), 'volunteers/alice'), volunteer('alice')));
-  await assertSucceeds(updateDoc(doc(db('alice'), 'volunteers/alice'), {phone: '0611111111'}));
+  await assertSucceeds(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    phone: '0611111111', updatedAt: serverTimestamp(),
+  }));
   await assertSucceeds(getDoc(doc(db('alice'), 'volunteers/alice')));
   await assertFails(getDoc(doc(db('bob'), 'volunteers/alice')));
   await assertFails(updateDoc(doc(db('bob'), 'volunteers/alice'), {phone: 'x'}));
 });
 
-test('volunteers: invalid profession and extra field denied', async () => {
+test('volunteers: createdAt is immutable and updatedAt must be server time', async () => {
   await seed();
-  await assertFails(setDoc(doc(db('alice'), 'volunteers/alice'), volunteer('alice', {profession: 'doctor'})));
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice'),
+  ));
+  await assertFails(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    phone: '0611111111', updatedAt: Timestamp.now(),
+  }));
+});
+
+test('volunteers: all profile professions allowed and unknown/extra denied', async () => {
+  await seed();
+  for (const profession of [
+    'mk', 'pp', 'doctor', 'nurse', 'otherHealthProfessional',
+  ]) {
+    const uid = `profile-${profession}`;
+    await assertSucceeds(setDoc(
+      doc(db(uid), `volunteers/${uid}`),
+      volunteer(uid, {profession}),
+    ));
+  }
+  await assertFails(setDoc(doc(db('alice'), 'volunteers/alice'), volunteer('alice', {profession: 'unknown'})));
   await assertFails(setDoc(doc(db('alice'), 'volunteers/alice'), volunteer('alice', {admin: true})));
 });
 
@@ -676,10 +707,16 @@ test('disengagement: confirmed owner has exact PP decrement', async () => {
   }));
 });
 
-test('mission cancellation: coordinator and authorized manager allowed', async () => {
+test('mission cancellation: only the mission creator is allowed', async () => {
   await seed();
   await assertSucceeds(cancelMission('coord'));
   await seed();
+  await assertFails(cancelMission('manager'));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
+      createdBy: 'manager',
+    });
+  });
   await assertSucceeds(cancelMission('manager'));
 });
 

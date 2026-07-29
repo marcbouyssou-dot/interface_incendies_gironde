@@ -55,6 +55,13 @@ service cloud.firestore {
       return value == 'mk' || value == 'pp';
     }
 
+    function validProfileProfession(value) {
+      return validProfession(value)
+        || value == 'doctor'
+        || value == 'nurse'
+        || value == 'otherHealthProfessional';
+    }
+
     function validEngagementStatus(value) {
       return value == 'pending'
         || value == 'confirmed'
@@ -72,7 +79,7 @@ service cloud.firestore {
           'createdAt', 'updatedAt'
         ])
         && request.resource.data.uid == uid
-        && validProfession(request.resource.data.profession)
+        && validProfileProfession(request.resource.data.profession)
         && request.resource.data.firstName is string
         && request.resource.data.lastName is string
         && request.resource.data.phone is string
@@ -228,7 +235,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && request.resource.data.cancellationReason is string
         && request.resource.data.cancellationReason.size() <= 300
-        && canManageLocation(resource.data.locationId);
+        && resource.data.createdBy == request.auth.uid;
     }
 
     function validEngagementCreate(engagementId) {
@@ -414,8 +421,14 @@ service cloud.firestore {
     }
 
     match /volunteers/{uid} {
-      allow create, update: if isVolunteerOwner(uid)
-        && validVolunteerData(uid);
+      allow create: if isVolunteerOwner(uid)
+        && validVolunteerData(uid)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isVolunteerOwner(uid)
+        && validVolunteerData(uid)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
       allow read: if isVolunteerOwner(uid);
       allow delete: if false;
     }
