@@ -43,6 +43,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function canGetOwnEngagement(engagementId) {
+      let path = /databases/$(database)/documents/engagements/$(engagementId);
+      return isSignedIn()
+        && engagementId.matches('^.+_' + request.auth.uid + '$')
+        && (!exists(path)
+          || resource.data.volunteerId == request.auth.uid);
+    }
+
     function validProfession(value) {
       return value == 'mk' || value == 'pp';
     }
@@ -372,8 +380,8 @@ service cloud.firestore {
 
     match /engagements/{engagementId} {
       allow create: if validEngagementCreate(engagementId);
-      allow read: if isSignedIn()
-        && (resource.data.volunteerId == request.auth.uid || isCoordinator());
+      allow get: if isCoordinator() || canGetOwnEngagement(engagementId);
+      allow list: if isCoordinator();
       allow update: if validOwnerCancellation(engagementId)
         || validOwnerReengagement(engagementId)
         || validEngagementStatusUpdate();

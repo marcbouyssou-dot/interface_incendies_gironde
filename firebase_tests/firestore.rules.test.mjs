@@ -7,7 +7,9 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   doc,
+  collection,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -222,6 +224,125 @@ test('engagements: owner creation in pending allowed for MK and PP', async () =>
   await seed();
   await assertSucceeds(engage('alice'));
   await assertSucceeds(engage('bob', 'pp'));
+});
+
+test('engagements: owner can get its missing deterministic document', async () => {
+  await seed();
+  const snapshot = await assertSucceeds(
+    getDoc(doc(db('alice'), 'engagements/mission-a_alice')),
+  );
+  assert.equal(snapshot.exists(), false);
+});
+
+test('engagements: owner can get its existing deterministic document', async () => {
+  await seed();
+  await assertSucceeds(engage('alice'));
+  const snapshot = await assertSucceeds(
+    getDoc(doc(db('alice'), 'engagements/mission-a_alice')),
+  );
+  assert.equal(snapshot.exists(), true);
+});
+
+test('engagements: other users cannot get existing or missing documents', async () => {
+  await seed();
+  await assertSucceeds(engage('bob'));
+  await assertFails(
+    getDoc(doc(db('alice'), 'engagements/mission-a_bob')),
+  );
+  await assertFails(
+    getDoc(doc(db('alice'), 'engagements/mission-b_bob')),
+  );
+});
+
+test('engagements: owner cannot get a non-deterministic legacy document', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'engagements/legacy-document'), {
+      missionId: 'mission-a',
+      volunteerId: 'alice',
+      profession: 'mk',
+      createdAt: Timestamp.now(),
+    });
+  });
+  await assertFails(
+    getDoc(doc(db('alice'), 'engagements/legacy-document')),
+  );
+});
+
+test('engagements: deterministic id cannot bypass an inconsistent owner field', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'engagements/mission-a_alice'),
+      {
+        missionId: 'mission-a',
+        volunteerId: 'bob',
+        profession: 'mk',
+        status: 'pending',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      },
+    );
+  });
+  await assertFails(
+    getDoc(doc(db('alice'), 'engagements/mission-a_alice')),
+  );
+});
+
+test('engagements: volunteers cannot list engagements', async () => {
+  await seed();
+  await assertSucceeds(engage('alice'));
+  await assertFails(getDocs(collection(db('alice'), 'engagements')));
+});
+
+test('engagements: unauthenticated users cannot get missing documents', async () => {
+  await seed();
+  await assertFails(
+    getDoc(doc(db(), 'engagements/mission-a_alice')),
+  );
+});
+
+test('engagements: coordinator keeps get and list access', async () => {
+  await seed();
+  await assertSucceeds(engage('alice'));
+  const snapshot = await assertSucceeds(
+    getDoc(doc(db('coord'), 'engagements/mission-a_alice')),
+  );
+  assert.equal(snapshot.exists(), true);
+  const querySnapshot = await assertSucceeds(
+    getDocs(collection(db('coord'), 'engagements')),
+  );
+  assert.equal(querySnapshot.size, 1);
+});
+
+test('engagements: pending creation succeeds after an allowed missing get', async () => {
+  await seed();
+  const userDb = db('alice');
+  const missionBefore = (await assertSucceeds(
+    getDoc(doc(userDb, 'missions/mission-a')),
+  )).data();
+  const missing = await assertSucceeds(
+    getDoc(doc(userDb, 'engagements/mission-a_alice')),
+  );
+  assert.equal(missing.exists(), false);
+
+  await assertSucceeds(engage('alice'));
+
+  const engagement = (await assertSucceeds(
+    getDoc(doc(userDb, 'engagements/mission-a_alice')),
+  )).data();
+  const missionAfter = (await assertSucceeds(
+    getDoc(doc(userDb, 'missions/mission-a')),
+  )).data();
+  assert.equal(engagement.status, 'pending');
+  assert.equal(
+    missionAfter.registeredMk,
+    missionBefore.registeredMk,
+  );
+  assert.equal(
+    missionAfter.registeredPp,
+    missionBefore.registeredPp,
+  );
 });
 
 test('engagements: pending creation remains allowed at reached quota', async () => {
