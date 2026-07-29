@@ -80,7 +80,7 @@ void main() {
     );
     expect(repository.debugMission('ui-mission')?.isActive, isTrue);
     expect(repository.debugMission('ui-mission')?.isCancelled, isFalse);
-    expect(find.text('PARTICIPATION ANNULÉE'), findsOneWidget);
+    expect(find.text('JE M’ENGAGE À NOUVEAU'), findsOneWidget);
     expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
     expect(find.text('Annuler mon engagement'), findsNothing);
     expect(
@@ -90,9 +90,10 @@ void main() {
   });
 
   for (final (status, label, subtitle) in [
+    (EngagementStatus.pending, 'DEMANDE ENVOYÉE', null),
     (EngagementStatus.confirmed, 'PARTICIPATION CONFIRMÉE', null),
     (EngagementStatus.standby, 'RENFORT', 'Vous serez contacté si nécessaire.'),
-    (EngagementStatus.cancelled, 'PARTICIPATION ANNULÉE', null),
+    (EngagementStatus.cancelled, 'JE M’ENGAGE À NOUVEAU', null),
   ]) {
     testWidgets('volunteer cancellation visibility for ${status.name}', (
       tester,
@@ -114,6 +115,7 @@ void main() {
       expect(find.text(label), findsOneWidget);
       expect(find.text(status.label), findsOneWidget);
       expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
+      expect(find.text('❤️ JE M’ENGAGE'), findsNothing);
       if (subtitle != null) {
         expect(find.text(subtitle), findsOneWidget);
       }
@@ -121,8 +123,37 @@ void main() {
         find.text('Annuler mon engagement'),
         status == EngagementStatus.cancelled ? findsNothing : findsOneWidget,
       );
+      if (status == EngagementStatus.cancelled) {
+        await tester.ensureVisible(find.text('JE M’ENGAGE À NOUVEAU'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('JE M’ENGAGE À NOUVEAU'));
+        await tester.pumpAndSettle();
+        expect(find.text('Confirmer mon inscription'), findsOneWidget);
+      }
     });
   }
+
+  testWidgets('volunteer and administrative cancellation stay distinct', (
+    tester,
+  ) async {
+    const engagement = EngagementInfo(
+      missionId: 'ui-mission',
+      volunteerId: 'mock-volunteer',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.pending,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission()],
+      initialLocations: const [],
+      initialEngagements: const [engagement],
+    );
+    repository.engagements['ui-mission'] = engagement;
+
+    await pumpApp(tester, repository);
+
+    expect(find.text('Annuler mon engagement'), findsOneWidget);
+    expect(find.text('Annuler ce besoin'), findsOneWidget);
+  });
 
   testWidgets('authorized manager cancellation requires confirmation', (
     tester,

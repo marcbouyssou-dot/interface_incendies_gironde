@@ -446,7 +446,7 @@ class _NeedActions extends StatelessWidget {
                 EngagementStatus.pending => 'DEMANDE ENVOYÉE',
                 EngagementStatus.confirmed => 'PARTICIPATION CONFIRMÉE',
                 EngagementStatus.standby => 'RENFORT',
-                EngagementStatus.cancelled => 'PARTICIPATION ANNULÉE',
+                EngagementStatus.cancelled => 'JE M’ENGAGE À NOUVEAU',
               };
               final actionIcon = switch (engagement.status) {
                 EngagementStatus.pending => Icons.schedule_rounded,
@@ -463,8 +463,17 @@ class _NeedActions extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   FilledButton.icon(
-                    onPressed: null,
+                    onPressed: engagement.status == EngagementStatus.cancelled
+                        ? () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            showDragHandle: true,
+                            builder: (_) => _RegistrationSheet(need: need),
+                          )
+                        : null,
                     style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.orange,
+                      foregroundColor: Colors.white,
                       disabledBackgroundColor: AppColors.greenSoft,
                       disabledForegroundColor: AppColors.green,
                       minimumSize: const Size.fromHeight(56),
@@ -491,6 +500,18 @@ class _NeedActions extends StatelessWidget {
                         ),
                       ),
                       child: const Text('Annuler mon engagement'),
+                    ),
+                  ],
+                  if (access?.canManage(need.locationId ?? '') == true) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      key: Key('cancel-mission-${need.id}'),
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => _CancelMissionDialog(need: need),
+                      ),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Annuler ce besoin'),
                     ),
                   ],
                 ],

@@ -3,36 +3,53 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/need.dart';
+import '../utils/switch_latest.dart';
 import 'coordination_repository.dart';
 import 'firestore_location_mapper.dart';
 import 'firestore_mission_mapper.dart';
 
+@visibleForTesting
+bool canStartVolunteerEngagement({
+  required bool hasUser,
+  required bool isAnonymous,
+}) => !hasUser || isAnonymous;
+
 class FirestoreCoordinationRepository implements CoordinationRepository {
-  FirestoreCoordinationRepository(this._firestore, this._auth);
+  FirestoreCoordinationRepository(
+    this._firestore,
+    this._auth, {
+    FirebaseFirestore? responsibleFirestore,
+    FirebaseAuth? responsibleAuth,
+  }) : _responsibleFirestore = responsibleFirestore ?? _firestore,
+       _responsibleAuth = responsibleAuth ?? _auth;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFirestore _responsibleFirestore;
+  final FirebaseAuth _responsibleAuth;
 
   @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() {
-    return _auth.authStateChanges().asyncExpand((user) {
+    return switchLatest(_responsibleAuth.authStateChanges(), (user) {
       if (user == null || user.isAnonymous) {
         return Stream<ResponsibleAccess?>.value(null);
       }
-      return _firestore.collection('roles').doc(user.uid).snapshots().map((
-        snapshot,
-      ) {
-        if (!snapshot.exists) return null;
-        final data = snapshot.data()!;
-        return ResponsibleAccess(
-          uid: user.uid,
-          role: data['role'] as String? ?? '',
-          locationIds: Set<String>.from(
-            data['locationIds'] as List? ?? const [],
-          ),
-          active: data['active'] as bool? ?? false,
-        );
-      });
+      return _responsibleFirestore
+          .collection('roles')
+          .doc(user.uid)
+          .snapshots()
+          .map((snapshot) {
+            if (!snapshot.exists) return null;
+            final data = snapshot.data()!;
+            return ResponsibleAccess(
+              uid: user.uid,
+              role: data['role'] as String? ?? '',
+              locationIds: Set<String>.from(
+                data['locationIds'] as List? ?? const [],
+              ),
+              active: data['active'] as bool? ?? false,
+            );
+          });
     });
   }
 
@@ -42,7 +59,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required String password,
   }) async {
     try {
-      final credential = await _auth.signInWithEmailAndPassword(
+      final credential = await _responsibleAuth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
@@ -50,7 +67,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       if (user == null) {
         throw const RepositoryException('Identifiants incorrects.');
       }
-      final roleSnapshot = await _firestore
+      final roleSnapshot = await _responsibleFirestore
           .collection('roles')
           .doc(user.uid)
           .get();
@@ -93,8 +110,10 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   Future<void> signOutResponsible() => _restoreAnonymousSession();
 
   Future<void> _restoreAnonymousSession() async {
-    await _auth.signOut();
-    await _auth.signInAnonymously();
+    await _responsibleAuth.signOut();
+    if (_auth.currentUser == null) {
+      await _auth.signInAnonymously();
+    }
   }
 
   @override
@@ -146,35 +165,37 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
 
   @override
   Stream<EngagementInfo?> watchMyEngagement(String missionId) {
-    final user = _auth.currentUser;
-    if (user == null || !user.isAnonymous) {
-      return Stream<EngagementInfo?>.value(null);
-    }
-    return _firestore
-        .collection('engagements')
-        .doc('${missionId}_${user.uid}')
-        .snapshots()
-        .map((snapshot) {
-          final data = snapshot.data();
-          if (!snapshot.exists || data == null) return null;
-          final profession = data['profession'] as String?;
-          if (profession != VolunteerProfession.mk.name &&
-              profession != VolunteerProfession.pp.name) {
-            return null;
-          }
-          return EngagementInfo(
-            missionId: missionId,
-            volunteerId: user.uid,
-            profession: VolunteerProfession.values.byName(profession!),
-            status: _engagementStatus(data['status']),
-            updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
-          );
-        });
+    return switchLatest(_auth.authStateChanges(), (user) {
+      if (user == null || !user.isAnonymous) {
+        return Stream<EngagementInfo?>.value(null);
+      }
+      return _firestore
+          .collection('engagements')
+          .doc('${missionId}_${user.uid}')
+          .snapshots()
+          .map((snapshot) {
+            final data = snapshot.data();
+            if (!snapshot.exists || data == null) return null;
+            final profession = data['profession'] as String?;
+            if (profession != VolunteerProfession.mk.name &&
+                profession != VolunteerProfession.pp.name) {
+              return null;
+            }
+            return EngagementInfo(
+              missionId: missionId,
+              volunteerId: user.uid,
+              profession: VolunteerProfession.values.byName(profession!),
+              status: _engagementStatus(data['status']),
+              createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+              updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+            );
+          });
+    });
   }
 
   @override
   Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
-    return _firestore
+    return _responsibleFirestore
         .collection('engagements')
         .where('missionId', isEqualTo: missionId)
         .snapshots()
@@ -207,28 +228,31 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required String volunteerId,
     required EngagementStatus status,
   }) async {
-    final user = _auth.currentUser;
+    final user = _responsibleAuth.currentUser;
     if (user == null || user.isAnonymous) {
       throw const RepositoryException(
         'Vous devez vous connecter comme coordinateur.',
       );
     }
-    final role = await _firestore.collection('roles').doc(user.uid).get();
+    final role = await _responsibleFirestore
+        .collection('roles')
+        .doc(user.uid)
+        .get();
     final data = role.data();
     if (data?['active'] != true || data?['role'] != 'coordinator') {
       throw const RepositoryException(
         'Seul un coordinateur peut modifier ce statut.',
       );
     }
-    final reference = _firestore
+    final reference = _responsibleFirestore
         .collection('engagements')
         .doc('${missionId}_$volunteerId');
     try {
       if (status == EngagementStatus.confirmed) {
-        final missionReference = _firestore
+        final missionReference = _responsibleFirestore
             .collection('missions')
             .doc(missionId);
-        await _firestore
+        await _responsibleFirestore
             .runTransaction((transaction) async {
               final missionSnapshot = await transaction.get(missionReference);
               final engagementSnapshot = await transaction.get(reference);
@@ -306,10 +330,10 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       }
       if (status == EngagementStatus.standby ||
           status == EngagementStatus.cancelled) {
-        final missionReference = _firestore
+        final missionReference = _responsibleFirestore
             .collection('missions')
             .doc(missionId);
-        await _firestore
+        await _responsibleFirestore
             .runTransaction((transaction) async {
               final missionSnapshot = await transaction.get(missionReference);
               final engagementSnapshot = await transaction.get(reference);
@@ -413,13 +437,16 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
 
   @override
   Future<String> createMission(MissionDraft draft) async {
-    final user = _auth.currentUser;
+    final user = _responsibleAuth.currentUser;
     if (user == null || user.isAnonymous) {
       throw const RepositoryException(
         'Vous devez vous connecter pour déclarer un besoin.',
       );
     }
-    final role = await _firestore.collection('roles').doc(user.uid).get();
+    final role = await _responsibleFirestore
+        .collection('roles')
+        .doc(user.uid)
+        .get();
     if (!role.exists || role.data()?['active'] != true) {
       throw const RepositoryException('Votre compte responsable est inactif.');
     }
@@ -436,7 +463,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         'Votre compte n’est pas autorisé à publier pour ce lieu.',
       );
     }
-    final reference = _firestore.collection('missions').doc();
+    final reference = _responsibleFirestore.collection('missions').doc();
     debugPrint('Publication Firestore mission : début');
     debugPrint('Identifiant mission généré : ${reference.id}');
     try {
@@ -477,6 +504,14 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required VolunteerProfession profession,
   }) async {
     var user = _auth.currentUser;
+    if (!canStartVolunteerEngagement(
+      hasUser: user != null,
+      isAnonymous: user?.isAnonymous ?? false,
+    )) {
+      throw const RepositoryException(
+        'Une session volontaire est nécessaire pour s’engager.',
+      );
+    }
     if (user == null) {
       final credential = await _auth.signInAnonymously();
       user = credential.user;
@@ -508,7 +543,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                     EngagementStatus.cancelled.name;
             if (existingEngagement.exists && !isReengagement) {
               throw const RepositoryException(
-                'Vous êtes déjà engagé sur cette mission.',
+                'Une demande existe déjà pour cette mission.',
               );
             }
             final existingVolunteer = await transaction.get(volunteerRef);
@@ -692,16 +727,18 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
 
   @override
   Future<void> cancelMission(String missionId, String? reason) async {
-    final user = _auth.currentUser;
+    final user = _responsibleAuth.currentUser;
     if (user == null || user.isAnonymous) {
       throw const RepositoryException(
         'Vous devez vous connecter pour déclarer un besoin.',
       );
     }
-    final missionRef = _firestore.collection('missions').doc(missionId);
-    final roleRef = _firestore.collection('roles').doc(user.uid);
+    final missionRef = _responsibleFirestore
+        .collection('missions')
+        .doc(missionId);
+    final roleRef = _responsibleFirestore.collection('roles').doc(user.uid);
     try {
-      await _firestore
+      await _responsibleFirestore
           .runTransaction((transaction) async {
             final missionSnapshot = await transaction.get(missionRef);
             final roleSnapshot = await transaction.get(roleRef);

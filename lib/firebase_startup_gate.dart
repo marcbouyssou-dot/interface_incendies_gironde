@@ -49,11 +49,22 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
 
   Future<CoordinationRepository> _initializeFirebaseWork() async {
     if (Firebase.apps.isEmpty) await FirebaseBootstrap.initialize();
-    final auth = FirebaseAuth.instance;
-    if (auth.currentUser == null) {
-      await auth.signInAnonymously();
+    final volunteerAuth = FirebaseAuth.instance;
+    if (volunteerAuth.currentUser == null) {
+      await volunteerAuth.signInAnonymously();
     }
     final firestore = FirebaseFirestore.instance;
+    final responsibleApp = Firebase.apps
+        .where((app) => app.name == 'responsible')
+        .firstOrNull;
+    final managerApp =
+        responsibleApp ??
+        await Firebase.initializeApp(
+          name: 'responsible',
+          options: Firebase.app().options,
+        );
+    final responsibleAuth = FirebaseAuth.instanceFor(app: managerApp);
+    final responsibleFirestore = FirebaseFirestore.instanceFor(app: managerApp);
     const enableLocationSeed = bool.fromEnvironment(
       'ENABLE_LOCATION_SEED',
       defaultValue: false,
@@ -63,7 +74,12 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
         store: FirestoreLocationSeedStore(firestore),
       ).seedLocationsIfEmpty();
     }
-    return FirestoreCoordinationRepository(firestore, auth);
+    return FirestoreCoordinationRepository(
+      firestore,
+      volunteerAuth,
+      responsibleFirestore: responsibleFirestore,
+      responsibleAuth: responsibleAuth,
+    );
   }
 
   void _retry() {

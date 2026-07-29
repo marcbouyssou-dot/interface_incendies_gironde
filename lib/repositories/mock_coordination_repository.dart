@@ -314,7 +314,7 @@ class MockCoordinationRepository implements CoordinationRepository {
     if (existingEngagement != null &&
         existingEngagement.status != EngagementStatus.cancelled) {
       throw const RepositoryException(
-        'Vous êtes déjà engagé sur cette mission.',
+        'Une demande existe déjà pour cette mission.',
       );
     }
     volunteers.add(
