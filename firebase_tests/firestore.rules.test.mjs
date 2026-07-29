@@ -97,28 +97,40 @@ async function engage(uid, profession = 'mk', missionChanges = {}) {
   batch.set(doc(userDb, `volunteers/${uid}`), volunteer(uid, {profession}));
   batch.set(doc(userDb, `engagements/mission-a_${uid}`), {
     missionId: 'mission-a', volunteerId: uid, profession,
-    createdAt: Timestamp.now(), status: 'confirmed',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    status: 'pending',
   });
-  const counters = profession === 'mk'
-    ? {registeredMk: 1, registeredPp: 0, status: 'critical'}
-    : {registeredMk: 0, registeredPp: 1, status: 'critical'};
-  batch.update(doc(userDb, 'missions/mission-a'), {
-    ...counters, updatedAt: Timestamp.now(), ...missionChanges,
-  });
+  if (Object.keys(missionChanges).length > 0) {
+    batch.update(doc(userDb, 'missions/mission-a'), {
+      ...missionChanges, updatedAt: serverTimestamp(),
+    });
+  }
   return batch.commit();
 }
 
-async function disengage(uid, profession = 'mk', missionChanges = {}) {
+async function updateEngagement(uid, volunteerUid, status, missionChanges) {
   const userDb = db(uid);
   const batch = writeBatch(userDb);
-  batch.delete(doc(userDb, `engagements/mission-a_${uid}`));
-  const counters = profession === 'mk'
-    ? {registeredMk: 0, registeredPp: 0, status: 'critical'}
-    : {registeredMk: 0, registeredPp: 0, status: 'critical'};
-  batch.update(doc(userDb, 'missions/mission-a'), {
-    ...counters, updatedAt: Timestamp.now(), ...missionChanges,
+  batch.update(doc(userDb, `engagements/mission-a_${volunteerUid}`), {
+    status, updatedAt: serverTimestamp(),
   });
+  if (missionChanges) {
+    batch.update(doc(userDb, 'missions/mission-a'), {
+      ...missionChanges, updatedAt: serverTimestamp(),
+    });
+  }
   return batch.commit();
+}
+
+async function seedEngagement(uid, status, profession = 'mk') {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const data = {
+      missionId: 'mission-a', volunteerId: uid, profession,
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    };
+    if (status !== undefined) data.status = status;
+    await setDoc(doc(context.firestore(), `engagements/mission-a_${uid}`), data);
+  });
 }
 
 async function cancelMission(uid, changes = {}) {
@@ -193,15 +205,128 @@ test('volunteers: invalid profession and extra field denied', async () => {
   await assertFails(setDoc(doc(db('alice'), 'volunteers/alice'), volunteer('alice', {admin: true})));
 });
 
-test('engagements: atomic MK and PP increments allowed', async () => {
+test('engagements: owner creation in pending allowed for MK and PP', async () => {
   await seed();
   await assertSucceeds(engage('alice'));
+  await assertSucceeds(engage('bob', 'pp'));
+});
+
+test('engagements: pending creation remains allowed at reached quota', async () => {
+  await seed();
   await env.withSecurityRulesDisabled(async (context) => {
     await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
-      registeredMk: 0, registeredPp: 0, status: 'critical',
+      registeredMk: 2,
+      registeredPp: 1,
+      status: 'complete',
     });
   });
+  await assertSucceeds(engage('alice'));
   await assertSucceeds(engage('bob', 'pp'));
+});
+
+test('engagements: creation on an ended mission is denied', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
+      endAt: Timestamp.fromMillis(Date.now() - 1000),
+    });
+  });
+  await assertFails(engage('alice'));
+});
+
+test('engagements: direct confirmed creation denied', async () => {
+  await seed();
+  const userDb = db('alice');
+  const batch = writeBatch(userDb);
+  batch.set(doc(userDb, 'volunteers/alice'), volunteer('alice'));
+  batch.set(doc(userDb, 'engagements/mission-a_alice'), {
+    missionId: 'mission-a', volunteerId: 'alice', profession: 'mk',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    status: 'confirmed',
+  });
+  await assertFails(batch.commit());
+});
+
+test('engagements: old status-less document remains readable by owner', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'engagements/mission-a_alice'), {
+      missionId: 'mission-a', volunteerId: 'alice', profession: 'mk',
+      createdAt: Timestamp.now(),
+    });
+  });
+  const snapshot = await assertSucceeds(
+    getDoc(doc(db('alice'), 'engagements/mission-a_alice')),
+  );
+  assert.equal(snapshot.data().status, undefined);
+});
+
+test('engagements: owner cannot confirm or move itself to standby', async () => {
+  await seed();
+  await engage('alice');
+  await assertFails(updateEngagement('alice', 'alice', 'confirmed', {
+    registeredMk: 1, status: 'critical',
+  }));
+  await assertFails(updateEngagement('alice', 'alice', 'standby'));
+});
+
+test('engagements: owner cancellation is allowed and immutable fields stay protected', async () => {
+  await seed();
+  await engage('alice');
+  await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled'));
+  await assertFails(updateDoc(doc(db('alice'), 'engagements/mission-a_alice'), {
+    profession: 'pp', status: 'cancelled', updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateEngagement('alice', 'alice', 'cancelled'));
+});
+
+test('engagements: authorized coordinator transitions are allowed', async () => {
+  await seed();
+  await seedEngagement('alice', 'pending');
+  await assertSucceeds(updateEngagement('coord', 'alice', 'confirmed', {
+    registeredMk: 1, status: 'critical',
+  }));
+  await assertSucceeds(updateEngagement('coord', 'alice', 'standby', {
+    registeredMk: 0, status: 'critical',
+  }));
+  await assertSucceeds(updateEngagement('coord', 'alice', 'cancelled'));
+});
+
+test('engagements: manager outside mission perimeter is denied', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'roles/outside'), {
+      role: 'site_manager', locationIds: ['site-b'], active: true,
+    });
+  });
+  await seedEngagement('alice', 'pending');
+  await assertFails(updateEngagement('outside', 'alice', 'standby'));
+});
+
+test('engagements: coordinator cannot change identity or profession', async () => {
+  await seed();
+  await seedEngagement('alice', 'pending');
+  await assertFails(updateDoc(doc(db('coord'), 'engagements/mission-a_alice'), {
+    status: 'standby', profession: 'pp', updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(db('coord'), 'engagements/mission-a_alice'), {
+    status: 'standby', volunteerId: 'coord', updatedAt: serverTimestamp(),
+  }));
+});
+
+test('engagements: legacy status-less document can move to standby and cancelled', async () => {
+  for (const target of ['standby', 'cancelled']) {
+    await seed();
+    await seedEngagement('alice', undefined);
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
+        registeredMk: 1, status: 'critical',
+      });
+    });
+    await assertSucceeds(updateEngagement('coord', 'alice', target, {
+      registeredMk: 0, status: 'critical',
+    }));
+  }
 });
 
 test('engagements: wrong owner/profession/id denied', async () => {
@@ -218,40 +343,54 @@ test('engagements: wrong owner/profession/id denied', async () => {
   await assertFails(batch.commit());
 });
 
-test('engagements: duplicate, update and delete denied', async () => {
+test('engagements: duplicate and delete denied', async () => {
   await seed();
   await assertSucceeds(engage('alice'));
   await assertFails(engage('alice'));
-  await assertFails(updateDoc(doc(db('alice'), 'engagements/mission-a_alice'), {status: 'cancelled'}));
   await assertFails(deleteDoc(doc(db('alice'), 'engagements/mission-a_alice')));
 });
 
-test('disengagement: owner with exact MK decrement allowed', async () => {
+test('disengagement: confirmed owner has exact MK decrement', async () => {
   await seed();
-  await engage('alice');
-  await assertSucceeds(disengage('alice'));
+  await seedEngagement('alice', 'confirmed');
   await env.withSecurityRulesDisabled(async (context) => {
-    assert.equal(
-      (await getDoc(doc(context.firestore(), 'engagements/mission-a_alice'))).exists(),
-      false,
-    );
+    await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
+      registeredMk: 1, status: 'critical',
+    });
   });
+  await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled', {
+    registeredMk: 0, status: 'critical',
+  }));
 });
 
-test('disengagement: other owner, missing/wrong/excess decrement denied', async () => {
+test('disengagement: other owner and wrong counter effects denied', async () => {
   await seed();
-  await engage('alice');
-  await assertFails(deleteDoc(doc(db('bob'), 'engagements/mission-a_alice')));
-  await assertFails(deleteDoc(doc(db('alice'), 'engagements/mission-a_alice')));
-  await assertFails(disengage('alice', 'mk', {registeredMk: 1}));
-  await assertFails(disengage('alice', 'mk', {registeredPp: -1}));
-  await assertFails(disengage('alice', 'mk', {registeredMk: -1}));
+  await seedEngagement('alice', 'confirmed');
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
+      registeredMk: 1, status: 'critical',
+    });
+  });
+  await assertFails(updateEngagement('bob', 'alice', 'cancelled', {
+    registeredMk: 0, status: 'critical',
+  }));
+  await assertFails(updateEngagement('alice', 'alice', 'cancelled'));
+  await assertFails(updateEngagement('alice', 'alice', 'cancelled', {
+    registeredMk: 1, status: 'critical',
+  }));
 });
 
-test('disengagement: exact PP decrement allowed', async () => {
+test('disengagement: confirmed owner has exact PP decrement', async () => {
   await seed();
-  await engage('alice', 'pp');
-  await assertSucceeds(disengage('alice', 'pp'));
+  await seedEngagement('alice', 'confirmed', 'pp');
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'missions/mission-a'), {
+      registeredPp: 1, status: 'critical',
+    });
+  });
+  await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled', {
+    registeredPp: 0, status: 'critical',
+  }));
 });
 
 test('mission cancellation: coordinator and authorized manager allowed', async () => {

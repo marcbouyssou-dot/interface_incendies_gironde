@@ -166,8 +166,248 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
             missionId: missionId,
             volunteerId: user.uid,
             profession: VolunteerProfession.values.byName(profession!),
+            status: _engagementStatus(data['status']),
+            updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
           );
         });
+  }
+
+  @override
+  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
+    return _firestore
+        .collection('engagements')
+        .where('missionId', isEqualTo: missionId)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map((document) {
+                final data = document.data();
+                final profession = data['profession'] as String?;
+                if (profession != VolunteerProfession.mk.name &&
+                    profession != VolunteerProfession.pp.name) {
+                  return null;
+                }
+                return EngagementInfo(
+                  missionId: missionId,
+                  volunteerId: data['volunteerId'] as String? ?? '',
+                  profession: VolunteerProfession.values.byName(profession!),
+                  status: _engagementStatus(data['status']),
+                  updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+                );
+              })
+              .whereType<EngagementInfo>()
+              .toList(growable: false),
+        );
+  }
+
+  @override
+  Future<void> updateEngagementStatus({
+    required String missionId,
+    required String volunteerId,
+    required EngagementStatus status,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw const RepositoryException(
+        'Vous devez vous connecter comme coordinateur.',
+      );
+    }
+    final role = await _firestore.collection('roles').doc(user.uid).get();
+    final data = role.data();
+    if (data?['active'] != true || data?['role'] != 'coordinator') {
+      throw const RepositoryException(
+        'Seul un coordinateur peut modifier ce statut.',
+      );
+    }
+    final reference = _firestore
+        .collection('engagements')
+        .doc('${missionId}_$volunteerId');
+    try {
+      if (status == EngagementStatus.confirmed) {
+        final missionReference = _firestore
+            .collection('missions')
+            .doc(missionId);
+        await _firestore
+            .runTransaction((transaction) async {
+              final missionSnapshot = await transaction.get(missionReference);
+              final engagementSnapshot = await transaction.get(reference);
+              if (!missionSnapshot.exists || !engagementSnapshot.exists) {
+                throw const RepositoryException('Engagement introuvable.');
+              }
+              final mission = missionSnapshot.data()!;
+              final engagement = engagementSnapshot.data()!;
+              final currentStatus = _engagementStatus(engagement['status']);
+              if (currentStatus != EngagementStatus.pending &&
+                  currentStatus != EngagementStatus.standby) {
+                throw const RepositoryException(
+                  'Cet engagement ne peut pas être confirmé.',
+                );
+              }
+              if (mission['isActive'] != true ||
+                  mission['status'] == 'cancelled') {
+                throw const RepositoryException('Cette mission a été annulée.');
+              }
+              final endAt = mission['endAt'];
+              if (endAt is Timestamp &&
+                  !DateTime.now().isBefore(endAt.toDate())) {
+                throw const RepositoryException(
+                  'Le créneau de cette mission est terminé.',
+                );
+              }
+              final requiredMk = _int(mission['requiredMk']);
+              final requiredPp = _int(mission['requiredPp']);
+              var registeredMk = _int(mission['registeredMk']);
+              var registeredPp = _int(mission['registeredPp']);
+              final professionName = engagement['profession'] as String?;
+              if (professionName != VolunteerProfession.mk.name &&
+                  professionName != VolunteerProfession.pp.name) {
+                throw const RepositoryException(
+                  'La profession de cet engagement est invalide.',
+                );
+              }
+              final profession = VolunteerProfession.values.byName(
+                professionName!,
+              );
+              if ((profession == VolunteerProfession.mk &&
+                      registeredMk >= requiredMk) ||
+                  (profession == VolunteerProfession.pp &&
+                      registeredPp >= requiredPp)) {
+                throw const RepositoryException(
+                  'Cette mission est désormais complète.',
+                );
+              }
+              final delta = EngagementCounterTransition.delta(
+                from: currentStatus,
+                to: EngagementStatus.confirmed,
+                profession: profession,
+              );
+              registeredMk += delta.mk;
+              registeredPp += delta.pp;
+              final now = FieldValue.serverTimestamp();
+              transaction.update(reference, {
+                'status': EngagementStatus.confirmed.name,
+                'updatedAt': now,
+              });
+              transaction.update(missionReference, {
+                'registeredMk': registeredMk,
+                'registeredPp': registeredPp,
+                'status': _statusFor(
+                  requiredMk: requiredMk,
+                  registeredMk: registeredMk,
+                  requiredPp: requiredPp,
+                  registeredPp: registeredPp,
+                ).name,
+                'updatedAt': now,
+              });
+            })
+            .timeout(const Duration(seconds: 15));
+        return;
+      }
+      if (status == EngagementStatus.standby ||
+          status == EngagementStatus.cancelled) {
+        final missionReference = _firestore
+            .collection('missions')
+            .doc(missionId);
+        await _firestore
+            .runTransaction((transaction) async {
+              final missionSnapshot = await transaction.get(missionReference);
+              final engagementSnapshot = await transaction.get(reference);
+              if (!missionSnapshot.exists || !engagementSnapshot.exists) {
+                throw const RepositoryException('Engagement introuvable.');
+              }
+              final mission = missionSnapshot.data()!;
+              final engagement = engagementSnapshot.data()!;
+              final currentStatus = _engagementStatus(engagement['status']);
+              final isWithoutCounter =
+                  (currentStatus == EngagementStatus.pending &&
+                      (status == EngagementStatus.standby ||
+                          status == EngagementStatus.cancelled)) ||
+                  (currentStatus == EngagementStatus.standby &&
+                      status == EngagementStatus.cancelled);
+              if (currentStatus != EngagementStatus.confirmed &&
+                  !isWithoutCounter) {
+                throw const RepositoryException(
+                  'Seul un engagement confirmé peut changer de statut.',
+                );
+              }
+              if (mission['isActive'] != true ||
+                  mission['status'] == 'cancelled') {
+                throw const RepositoryException('Cette mission a été annulée.');
+              }
+              final endAt = mission['endAt'];
+              if (endAt is Timestamp &&
+                  !DateTime.now().isBefore(endAt.toDate())) {
+                throw const RepositoryException(
+                  'Le créneau de cette mission est terminé.',
+                );
+              }
+              if (isWithoutCounter) {
+                transaction.update(reference, {
+                  'status': status.name,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+                return;
+              }
+              final requiredMk = _int(mission['requiredMk']);
+              final requiredPp = _int(mission['requiredPp']);
+              var registeredMk = _int(mission['registeredMk']);
+              var registeredPp = _int(mission['registeredPp']);
+              final professionName = engagement['profession'] as String?;
+              if (professionName != VolunteerProfession.mk.name &&
+                  professionName != VolunteerProfession.pp.name) {
+                throw const RepositoryException(
+                  'La profession de cet engagement est invalide.',
+                );
+              }
+              final profession = VolunteerProfession.values.byName(
+                professionName!,
+              );
+              if ((profession == VolunteerProfession.mk && registeredMk <= 0) ||
+                  (profession == VolunteerProfession.pp && registeredPp <= 0)) {
+                throw const RepositoryException(
+                  'Le compteur correspondant est déjà à zéro.',
+                );
+              }
+              final delta = EngagementCounterTransition.delta(
+                from: currentStatus,
+                to: status,
+                profession: profession,
+              );
+              registeredMk += delta.mk;
+              registeredPp += delta.pp;
+              final now = FieldValue.serverTimestamp();
+              transaction.update(reference, {
+                'status': status.name,
+                'updatedAt': now,
+              });
+              transaction.update(missionReference, {
+                'registeredMk': registeredMk,
+                'registeredPp': registeredPp,
+                'status': _statusFor(
+                  requiredMk: requiredMk,
+                  registeredMk: registeredMk,
+                  requiredPp: requiredPp,
+                  registeredPp: registeredPp,
+                ).name,
+                'updatedAt': now,
+              });
+            })
+            .timeout(const Duration(seconds: 15));
+        return;
+      }
+      await reference
+          .update({
+            'status': status.name,
+            'updatedAt': FieldValue.serverTimestamp(),
+          })
+          .timeout(const Duration(seconds: 15));
+    } on FirebaseException catch (error, stackTrace) {
+      debugPrint('Échec updateEngagementStatus (${error.code})');
+      debugPrintStack(stackTrace: stackTrace);
+      throw const RepositoryException(
+        'Le statut n’a pas pu être mis à jour. Réessayez.',
+      );
+    }
   }
 
   @override
@@ -275,43 +515,13 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 'Cette mission est désormais complète.',
               );
             }
-            final usesCurrentSchema = data.containsKey('requiredMk');
-            final requiredMk = _int(
-              data['requiredMk'] ?? data['requiredPhysiotherapists'],
-            );
-            final requiredPp = _int(
-              data['requiredPp'] ?? data['requiredPodiatrists'],
-            );
-            var registeredMk = _int(
-              data['registeredMk'] ?? data['registeredPhysiotherapists'],
-            );
-            var registeredPp = _int(
-              data['registeredPp'] ?? data['registeredPodiatrists'],
-            );
-
-            switch (profession) {
-              case VolunteerProfession.mk:
-                if (registeredMk >= requiredMk) {
-                  throw const RepositoryException(
-                    'Cette mission est désormais complète.',
-                  );
-                }
-                registeredMk++;
-              case VolunteerProfession.pp:
-                if (registeredPp >= requiredPp) {
-                  throw const RepositoryException(
-                    'Cette mission est désormais complète.',
-                  );
-                }
-                registeredPp++;
+            final endAt = data['endAt'];
+            if (endAt is Timestamp &&
+                !DateTime.now().isBefore(endAt.toDate())) {
+              throw const RepositoryException(
+                'Le créneau de cette mission est terminé.',
+              );
             }
-
-            final status = _statusFor(
-              requiredMk: requiredMk,
-              registeredMk: registeredMk,
-              requiredPp: requiredPp,
-              registeredPp: registeredPp,
-            );
             final now = FieldValue.serverTimestamp();
 
             final volunteerData = <String, dynamic>{
@@ -336,15 +546,8 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               'volunteerId': uid,
               'profession': profession.name,
               'createdAt': now,
-              'status': 'confirmed',
-            });
-            transaction.update(missionRef, {
-              usesCurrentSchema ? 'registeredMk' : 'registeredPhysiotherapists':
-                  registeredMk,
-              usesCurrentSchema ? 'registeredPp' : 'registeredPodiatrists':
-                  registeredPp,
-              'status': status.name,
               'updatedAt': now,
+              'status': EngagementStatus.pending.name,
             });
           })
           .timeout(const Duration(seconds: 15));
@@ -403,31 +606,54 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               );
             }
             final engagement = engagementSnapshot.data()!;
-            final profession = engagement['profession'];
+            final currentStatus = _engagementStatus(engagement['status']);
+            if (currentStatus == EngagementStatus.cancelled) {
+              throw const RepositoryException(
+                'Vous n’êtes plus engagé sur cette mission.',
+              );
+            }
+            final now = FieldValue.serverTimestamp();
+            if (currentStatus == EngagementStatus.pending ||
+                currentStatus == EngagementStatus.standby) {
+              transaction.update(engagementRef, {
+                'status': EngagementStatus.cancelled.name,
+                'updatedAt': now,
+              });
+              return;
+            }
+            final professionName = engagement['profession'] as String?;
+            if (professionName != VolunteerProfession.mk.name &&
+                professionName != VolunteerProfession.pp.name) {
+              throw const RepositoryException(
+                'Le désengagement n’a pas pu être enregistré. Réessayez.',
+              );
+            }
+            final profession = VolunteerProfession.values.byName(
+              professionName!,
+            );
             final requiredMk = _int(mission['requiredMk']);
             final requiredPp = _int(mission['requiredPp']);
             var registeredMk = _int(mission['registeredMk']);
             var registeredPp = _int(mission['registeredPp']);
-            if (profession == VolunteerProfession.mk.name) {
+            if (profession == VolunteerProfession.mk) {
               if (registeredMk <= 0) {
                 throw const RepositoryException(
                   'Le désengagement n’a pas pu être enregistré. Réessayez.',
                 );
               }
               registeredMk--;
-            } else if (profession == VolunteerProfession.pp.name) {
+            } else {
               if (registeredPp <= 0) {
                 throw const RepositoryException(
                   'Le désengagement n’a pas pu être enregistré. Réessayez.',
                 );
               }
               registeredPp--;
-            } else {
-              throw const RepositoryException(
-                'Le désengagement n’a pas pu être enregistré. Réessayez.',
-              );
             }
-            transaction.delete(engagementRef);
+            transaction.update(engagementRef, {
+              'status': EngagementStatus.cancelled.name,
+              'updatedAt': now,
+            });
             transaction.update(missionRef, {
               'registeredMk': registeredMk,
               'registeredPp': registeredPp,
@@ -437,7 +663,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 requiredPp: requiredPp,
                 registeredPp: registeredPp,
               ).name,
-              'updatedAt': FieldValue.serverTimestamp(),
+              'updatedAt': now,
             });
           })
           .timeout(const Duration(seconds: 15));
@@ -514,6 +740,16 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   }
 
   static int _int(Object? value) => value is num ? value.toInt() : 0;
+
+  static EngagementStatus _engagementStatus(Object? value) {
+    if (value is String) {
+      return EngagementStatus.values
+              .where((status) => status.name == value)
+              .firstOrNull ??
+          EngagementStatus.confirmed;
+    }
+    return EngagementStatus.confirmed;
+  }
 
   static NeedStatus _statusFor({
     required int requiredMk,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
+import '../repositories/coordination_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -240,8 +241,145 @@ class _SituationRow extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             CoverageBar(need: need),
+            const SizedBox(height: 14),
+            _MissionEngagements(need: need),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MissionEngagements extends StatelessWidget {
+  const _MissionEngagements({required this.need});
+
+  final CoordinationNeed need;
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = RepositoryScope.of(context);
+    return StreamBuilder<ResponsibleAccess?>(
+      stream: repository.watchResponsibleAccess(),
+      builder: (context, accessSnapshot) {
+        if (accessSnapshot.data?.isCoordinator != true) {
+          return const SizedBox.shrink();
+        }
+        return StreamBuilder<List<EngagementInfo>>(
+          stream: repository.watchMissionEngagements(need.id),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const Text(
+                'Engagements indisponibles',
+                style: TextStyle(
+                  color: AppColors.red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+            }
+            final engagements = snapshot.data;
+            if (engagements == null) {
+              return const LinearProgressIndicator();
+            }
+            if (engagements.isEmpty) {
+              return const Text(
+                'Aucun engagé',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+            }
+            return Column(
+              children: engagements
+                  .map((engagement) => _EngagementRow(engagement: engagement))
+                  .toList(growable: false),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _EngagementRow extends StatefulWidget {
+  const _EngagementRow({required this.engagement});
+
+  final EngagementInfo engagement;
+
+  @override
+  State<_EngagementRow> createState() => _EngagementRowState();
+}
+
+class _EngagementRowState extends State<_EngagementRow> {
+  bool _updating = false;
+
+  Future<void> _update(EngagementStatus status) async {
+    setState(() => _updating = true);
+    try {
+      await RepositoryScope.of(context).updateEngagementStatus(
+        missionId: widget.engagement.missionId,
+        volunteerId: widget.engagement.volunteerId,
+        status: status,
+      );
+    } on RepositoryException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final engagement = widget.engagement;
+    final profession = engagement.profession == VolunteerProfession.mk
+        ? 'MK'
+        : 'PP';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$profession • ${engagement.status.label}',
+              style: const TextStyle(
+                color: AppColors.navy,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (_updating)
+            const SizedBox.square(
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            PopupMenuButton<EngagementStatus>(
+              key: Key('engagement-menu-${engagement.documentId}'),
+              tooltip: 'Modifier le statut',
+              onSelected: _update,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: EngagementStatus.confirmed,
+                  child: Text('Confirmer'),
+                ),
+                PopupMenuItem(
+                  value: EngagementStatus.standby,
+                  child: Text('Renfort'),
+                ),
+                PopupMenuItem(
+                  value: EngagementStatus.cancelled,
+                  child: Text('Annuler'),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }

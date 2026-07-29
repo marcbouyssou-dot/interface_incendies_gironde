@@ -7,6 +7,14 @@ abstract interface class CoordinationRepository {
 
   Stream<EngagementInfo?> watchMyEngagement(String missionId);
 
+  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId);
+
+  Future<void> updateEngagementStatus({
+    required String missionId,
+    required String volunteerId,
+    required EngagementStatus status,
+  });
+
   Future<String> createMission(MissionDraft draft);
 
   Stream<ResponsibleAccess?> watchResponsibleAccess();
@@ -37,11 +45,59 @@ class EngagementInfo {
     required this.missionId,
     required this.volunteerId,
     required this.profession,
+    this.status = EngagementStatus.confirmed,
+    this.updatedAt,
   });
 
   final String missionId;
   final String volunteerId;
   final VolunteerProfession profession;
+  final EngagementStatus status;
+  final DateTime? updatedAt;
+
+  String get documentId => '${missionId}_$volunteerId';
+
+  EngagementInfo copyWith({EngagementStatus? status, DateTime? updatedAt}) =>
+      EngagementInfo(
+        missionId: missionId,
+        volunteerId: volunteerId,
+        profession: profession,
+        status: status ?? this.status,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+}
+
+enum EngagementStatus { pending, confirmed, standby, cancelled }
+
+extension EngagementStatusLabel on EngagementStatus {
+  String get label => switch (this) {
+    EngagementStatus.pending => 'En attente',
+    EngagementStatus.confirmed => 'Confirmé',
+    EngagementStatus.standby => 'Renfort',
+    EngagementStatus.cancelled => 'Annulé',
+  };
+
+  bool get incrementsCountersOnCreation => this != EngagementStatus.pending;
+}
+
+abstract final class EngagementCounterTransition {
+  static ({int mk, int pp}) delta({
+    required EngagementStatus from,
+    required EngagementStatus to,
+    required VolunteerProfession profession,
+  }) {
+    final amount = switch ((from, to)) {
+      (EngagementStatus.pending, EngagementStatus.confirmed) => 1,
+      (EngagementStatus.confirmed, EngagementStatus.standby) => -1,
+      (EngagementStatus.confirmed, EngagementStatus.cancelled) => -1,
+      (EngagementStatus.standby, EngagementStatus.confirmed) => 1,
+      _ => 0,
+    };
+    return switch (profession) {
+      VolunteerProfession.mk => (mk: amount, pp: 0),
+      VolunteerProfession.pp => (mk: 0, pp: amount),
+    };
+  }
 }
 
 class ResponsibleAccess {

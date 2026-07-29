@@ -8,9 +8,13 @@ class MockCoordinationRepository implements CoordinationRepository {
   MockCoordinationRepository({
     List<CoordinationNeed>? initialMissions,
     List<ResponsePlace>? initialLocations,
+    List<EngagementInfo>? initialEngagements,
     ResponsibleAccess? responsibleAccess = _mockAccess,
   }) : _missions = List.of(initialMissions ?? needs),
        _locations = List.of(initialLocations ?? places),
+       missionEngagements = List.of(
+         initialEngagements ?? _mockMissionEngagements,
+       ),
        _responsibleAccess = responsibleAccess;
 
   static final instance = MockCoordinationRepository();
@@ -20,6 +24,7 @@ class MockCoordinationRepository implements CoordinationRepository {
   final ResponsibleAccess? _responsibleAccess;
   final List<Volunteer> volunteers = [];
   final Map<String, EngagementInfo> engagements = {};
+  final List<EngagementInfo> missionEngagements;
 
   final _missionUpdates = StreamController<List<CoordinationNeed>>.broadcast();
   static const _mockAccess = ResponsibleAccess(
@@ -28,6 +33,31 @@ class MockCoordinationRepository implements CoordinationRepository {
     locationIds: {'*'},
     active: true,
   );
+  static const _mockMissionEngagements = [
+    EngagementInfo(
+      missionId: 'mission-merignac',
+      volunteerId: 'mock-pending',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.pending,
+    ),
+    EngagementInfo(
+      missionId: 'mission-merignac',
+      volunteerId: 'mock-confirmed',
+      profession: VolunteerProfession.pp,
+    ),
+    EngagementInfo(
+      missionId: 'mission-langon',
+      volunteerId: 'mock-standby',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.standby,
+    ),
+    EngagementInfo(
+      missionId: 'mission-libourne',
+      volunteerId: 'mock-cancelled',
+      profession: VolunteerProfession.pp,
+      status: EngagementStatus.cancelled,
+    ),
+  ];
 
   CoordinationNeed? debugMission(String id) =>
       _missions.where((mission) => mission.id == id).firstOrNull;
@@ -66,6 +96,156 @@ class MockCoordinationRepository implements CoordinationRepository {
       final subscription = _missionUpdates.stream.listen(emit);
       controller.onCancel = subscription.cancel;
     });
+  }
+
+  @override
+  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
+    return Stream.multi((controller) {
+      void emit(_) => controller.add(
+        List.unmodifiable(
+          missionEngagements.where(
+            (engagement) => engagement.missionId == missionId,
+          ),
+        ),
+      );
+      emit(null);
+      final subscription = _missionUpdates.stream.listen(emit);
+      controller.onCancel = subscription.cancel;
+    });
+  }
+
+  @override
+  Future<void> updateEngagementStatus({
+    required String missionId,
+    required String volunteerId,
+    required EngagementStatus status,
+  }) async {
+    if (_responsibleAccess?.isCoordinator != true) {
+      throw const RepositoryException(
+        'Seul un coordinateur peut modifier ce statut.',
+      );
+    }
+    final index = missionEngagements.indexWhere(
+      (engagement) =>
+          engagement.missionId == missionId &&
+          engagement.volunteerId == volunteerId,
+    );
+    if (index < 0) {
+      throw const RepositoryException('Engagement introuvable.');
+    }
+    final engagement = missionEngagements[index];
+    if (status == EngagementStatus.confirmed &&
+        (engagement.status == EngagementStatus.pending ||
+            engagement.status == EngagementStatus.standby)) {
+      final missionIndex = _missions.indexWhere(
+        (mission) => mission.id == missionId,
+      );
+      if (missionIndex < 0) {
+        throw const RepositoryException('Mission introuvable.');
+      }
+      final mission = _missions[missionIndex];
+      if (!mission.isActive || mission.isCancelled) {
+        throw const RepositoryException('Cette mission a été annulée.');
+      }
+      if (mission.endAt != null && !DateTime.now().isBefore(mission.endAt!)) {
+        throw const RepositoryException(
+          'Le créneau de cette mission est terminé.',
+        );
+      }
+      final delta = EngagementCounterTransition.delta(
+        from: engagement.status,
+        to: status,
+        profession: engagement.profession,
+      );
+      if ((delta.mk > 0 &&
+              mission.registeredPhysiotherapists >=
+                  mission.requiredPhysiotherapists) ||
+          (delta.pp > 0 &&
+              mission.registeredPodiatrists >= mission.requiredPodiatrists)) {
+        throw const RepositoryException(
+          'Le quota de cette profession est déjà atteint.',
+        );
+      }
+      _missions[missionIndex] = mission.copyWith(
+        registeredPhysiotherapists:
+            mission.registeredPhysiotherapists + delta.mk,
+        registeredPodiatrists: mission.registeredPodiatrists + delta.pp,
+      );
+    } else if (status == EngagementStatus.confirmed &&
+        engagement.status != EngagementStatus.pending) {
+      throw const RepositoryException(
+        'Cet engagement ne peut pas être confirmé.',
+      );
+    }
+    final isWithoutCounter =
+        (engagement.status == EngagementStatus.pending &&
+            (status == EngagementStatus.standby ||
+                status == EngagementStatus.cancelled)) ||
+        (engagement.status == EngagementStatus.standby &&
+            status == EngagementStatus.cancelled);
+    if (isWithoutCounter) {
+      final mission = _missions
+          .where((candidate) => candidate.id == missionId)
+          .firstOrNull;
+      if (mission == null) {
+        throw const RepositoryException('Mission introuvable.');
+      }
+      if (!mission.isActive || mission.isCancelled) {
+        throw const RepositoryException('Cette mission a été annulée.');
+      }
+      if (mission.endAt != null && !DateTime.now().isBefore(mission.endAt!)) {
+        throw const RepositoryException(
+          'Le créneau de cette mission est terminé.',
+        );
+      }
+    } else if (status == EngagementStatus.standby ||
+        status == EngagementStatus.cancelled) {
+      if (engagement.status != EngagementStatus.confirmed) {
+        throw const RepositoryException(
+          'Seul un engagement confirmé peut changer de statut.',
+        );
+      }
+      final missionIndex = _missions.indexWhere(
+        (mission) => mission.id == missionId,
+      );
+      if (missionIndex < 0) {
+        throw const RepositoryException('Mission introuvable.');
+      }
+      final mission = _missions[missionIndex];
+      if (!mission.isActive || mission.isCancelled) {
+        throw const RepositoryException('Cette mission a été annulée.');
+      }
+      if (mission.endAt != null && !DateTime.now().isBefore(mission.endAt!)) {
+        throw const RepositoryException(
+          'Le créneau de cette mission est terminé.',
+        );
+      }
+      final delta = EngagementCounterTransition.delta(
+        from: engagement.status,
+        to: status,
+        profession: engagement.profession,
+      );
+      if ((delta.mk < 0 && mission.registeredPhysiotherapists <= 0) ||
+          (delta.pp < 0 && mission.registeredPodiatrists <= 0)) {
+        throw const RepositoryException(
+          'Le compteur correspondant est déjà à zéro.',
+        );
+      }
+      _missions[missionIndex] = mission.copyWith(
+        registeredPhysiotherapists:
+            mission.registeredPhysiotherapists + delta.mk,
+        registeredPodiatrists: mission.registeredPodiatrists + delta.pp,
+      );
+    }
+    final updated = engagement.copyWith(
+      status: status,
+      updatedAt: DateTime.now(),
+    );
+    missionEngagements[index] = updated;
+    if (engagements[missionId]?.volunteerId == volunteerId) {
+      engagements[missionId] = updated;
+    }
+    _missionUpdates.add(_activeMissions());
   }
 
   @override
@@ -125,20 +305,16 @@ class MockCoordinationRepository implements CoordinationRepository {
     if (!mission.isActive || mission.isCancelled) {
       throw const RepositoryException('Cette mission a été annulée.');
     }
+    if (mission.endAt != null && !DateTime.now().isBefore(mission.endAt!)) {
+      throw const RepositoryException(
+        'Le créneau de cette mission est terminé.',
+      );
+    }
     if (engagements.containsKey(missionId)) {
       throw const RepositoryException(
         'Vous êtes déjà engagé sur cette mission.',
       );
     }
-    final updated = switch (profession) {
-      VolunteerProfession.mk => mission.copyWith(
-        registeredPhysiotherapists: mission.registeredPhysiotherapists + 1,
-      ),
-      VolunteerProfession.pp => mission.copyWith(
-        registeredPodiatrists: mission.registeredPodiatrists + 1,
-      ),
-    };
-    _missions[index] = updated;
     volunteers.add(
       Volunteer(
         firstName: firstName.trim(),
@@ -148,11 +324,14 @@ class MockCoordinationRepository implements CoordinationRepository {
         profession: profession,
       ),
     );
-    engagements[missionId] = EngagementInfo(
+    final engagement = EngagementInfo(
       missionId: missionId,
       volunteerId: 'mock-volunteer',
       profession: profession,
+      status: EngagementStatus.pending,
     );
+    engagements[missionId] = engagement;
+    missionEngagements.add(engagement);
     _missionUpdates.add(_activeMissions());
   }
 
@@ -169,21 +348,44 @@ class MockCoordinationRepository implements CoordinationRepository {
     if (!mission.isActive || mission.isCancelled) {
       throw const RepositoryException('Cette mission a été annulée.');
     }
-    final updated = switch (engagement.profession) {
-      VolunteerProfession.mk when mission.registeredPhysiotherapists > 0 =>
-        mission.copyWith(
-          registeredPhysiotherapists: mission.registeredPhysiotherapists - 1,
+    if (mission.endAt != null && !DateTime.now().isBefore(mission.endAt!)) {
+      throw const RepositoryException(
+        'Le créneau de cette mission est terminé.',
+      );
+    }
+    if (engagement.status == EngagementStatus.cancelled) {
+      throw const RepositoryException(
+        'Vous n’êtes plus engagé sur cette mission.',
+      );
+    }
+    if (engagement.status == EngagementStatus.confirmed) {
+      _missions[index] = switch (engagement.profession) {
+        VolunteerProfession.mk when mission.registeredPhysiotherapists > 0 =>
+          mission.copyWith(
+            registeredPhysiotherapists: mission.registeredPhysiotherapists - 1,
+          ),
+        VolunteerProfession.pp when mission.registeredPodiatrists > 0 =>
+          mission.copyWith(
+            registeredPodiatrists: mission.registeredPodiatrists - 1,
+          ),
+        _ => throw const RepositoryException(
+          'Le désengagement n’a pas pu être enregistré. Réessayez.',
         ),
-      VolunteerProfession.pp when mission.registeredPodiatrists > 0 =>
-        mission.copyWith(
-          registeredPodiatrists: mission.registeredPodiatrists - 1,
-        ),
-      _ => throw const RepositoryException(
-        'Le désengagement n’a pas pu être enregistré. Réessayez.',
-      ),
-    };
-    _missions[index] = updated;
-    engagements.remove(missionId);
+      };
+    }
+    final cancelled = engagement.copyWith(
+      status: EngagementStatus.cancelled,
+      updatedAt: DateTime.now(),
+    );
+    engagements[missionId] = cancelled;
+    final engagementIndex = missionEngagements.indexWhere(
+      (candidate) =>
+          candidate.missionId == missionId &&
+          candidate.volunteerId == engagement.volunteerId,
+    );
+    if (engagementIndex >= 0) {
+      missionEngagements[engagementIndex] = cancelled;
+    }
     _missionUpdates.add(_activeMissions());
   }
 

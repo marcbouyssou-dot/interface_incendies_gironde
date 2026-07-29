@@ -7,7 +7,7 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 
 void main() {
-  test('mock engagements update mission counters and status streams', () async {
+  test('mock pending engagement preserves mission counters', () async {
     final repository = MockCoordinationRepository(
       initialMissions: [needs.first],
       initialLocations: const [],
@@ -33,14 +33,17 @@ void main() {
     await updatedEmission.future;
 
     expect(emissions, hasLength(2));
-    expect(emissions.last.single.registeredPhysiotherapists, 2);
-    expect(emissions.last.single.coverage, greaterThan(needs.first.coverage));
+    expect(
+      emissions.last.single.registeredPhysiotherapists,
+      needs.first.registeredPhysiotherapists,
+    );
+    expect(emissions.last.single.coverage, needs.first.coverage);
     expect(repository.volunteers.single.firstName, 'Jeanne');
     expect(repository.volunteers.single.email, 'jeanne@example.fr');
     await subscription.cancel();
   });
 
-  test('mock engagements can move a mission to complete', () async {
+  test('mock pending engagement does not complete a mission', () async {
     final mission = CoordinationNeed(
       id: 'almost-complete',
       place: 'Mission test',
@@ -67,7 +70,8 @@ void main() {
     );
     final updated = await repository.watchMissions().first;
 
-    expect(updated.single.status, NeedStatus.complete);
+    expect(updated.single.status, NeedStatus.toComplete);
+    expect(updated.single.registeredPodiatrists, 0);
     expect(repository.volunteers.single.email, isNull);
   });
 
@@ -97,6 +101,661 @@ void main() {
     expect(emissions.last.single.place, places.first.name);
     expect(emissions.last.single.time, '22:00 — 02:00');
     await subscription.cancel();
+  });
+
+  test('a new mock engagement starts pending', () async {
+    final mission = needs.first;
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+      initialEngagements: const [],
+    );
+
+    await repository.createEngagement(
+      missionId: mission.id,
+      firstName: 'A',
+      lastName: 'B',
+      phone: '0600000000',
+      profession: VolunteerProfession.mk,
+    );
+
+    expect(
+      repository.engagements[mission.id]?.status,
+      EngagementStatus.pending,
+    );
+  });
+
+  test('a pending engagement does not increment mission counters', () {
+    expect(EngagementStatus.pending.incrementsCountersOnCreation, isFalse);
+  });
+
+  test(
+    'mock accepts pending MK and PP at quota but refuses confirmation',
+    () async {
+      for (final profession in VolunteerProfession.values) {
+        final mission = CoordinationNeed(
+          id: 'pending-full-${profession.name}',
+          place: 'Mission complète',
+          group: TerritorialGroup.medoc,
+          date: 'Aujourd’hui',
+          time: '08:00 — 12:00',
+          endAt: DateTime.now().add(const Duration(hours: 2)),
+          requiredPhysiotherapists: 1,
+          registeredPhysiotherapists: 1,
+          requiredPodiatrists: 1,
+          registeredPodiatrists: 1,
+          equipment: const [],
+        );
+        final repository = MockCoordinationRepository(
+          initialMissions: [mission],
+          initialLocations: const [],
+          initialEngagements: const [],
+        );
+
+        await repository.createEngagement(
+          missionId: mission.id,
+          firstName: 'A',
+          lastName: 'B',
+          phone: '0600000000',
+          profession: profession,
+        );
+
+        final afterCreation = repository.debugMission(mission.id)!;
+        expect(afterCreation.registeredPhysiotherapists, 1);
+        expect(afterCreation.registeredPodiatrists, 1);
+        expect(
+          repository.engagements[mission.id]?.status,
+          EngagementStatus.pending,
+        );
+
+        await expectLater(
+          repository.updateEngagementStatus(
+            missionId: mission.id,
+            volunteerId: 'mock-volunteer',
+            status: EngagementStatus.confirmed,
+          ),
+          throwsA(isA<RepositoryException>()),
+        );
+        final afterConfirmation = repository.debugMission(mission.id)!;
+        expect(afterConfirmation.registeredPhysiotherapists, 1);
+        expect(afterConfirmation.registeredPodiatrists, 1);
+        expect(
+          repository.engagements[mission.id]?.status,
+          EngagementStatus.pending,
+        );
+      }
+    },
+  );
+
+  test('missing engagement status remains compatible as confirmed', () {
+    const legacy = EngagementInfo(
+      missionId: 'legacy',
+      volunteerId: 'volunteer',
+      profession: VolunteerProfession.mk,
+    );
+
+    expect(legacy.status, EngagementStatus.confirmed);
+    expect(legacy.status.label, 'Confirmé');
+  });
+
+  test('mock coordinator moves a pending engagement to confirmed', () async {
+    final mission = CoordinationNeed(
+      id: 'mission-status',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      requiredPhysiotherapists: 0,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 2,
+      registeredPodiatrists: 1,
+      equipment: const [],
+    );
+    const engagement = EngagementInfo(
+      missionId: 'mission-status',
+      volunteerId: 'volunteer-status',
+      profession: VolunteerProfession.pp,
+      status: EngagementStatus.pending,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+      initialEngagements: const [engagement],
+    );
+
+    await repository.updateEngagementStatus(
+      missionId: engagement.missionId,
+      volunteerId: engagement.volunteerId,
+      status: EngagementStatus.confirmed,
+    );
+    expect(
+      repository.missionEngagements.single.status,
+      EngagementStatus.confirmed,
+    );
+  });
+
+  test('mock confirmed MK and PP move to standby exactly once', () async {
+    for (final profession in VolunteerProfession.values) {
+      final mission = CoordinationNeed(
+        id: 'standby-${profession.name}',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        startAt: DateTime.now().add(const Duration(hours: 1)),
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 2,
+        registeredPhysiotherapists: profession == VolunteerProfession.mk
+            ? 1
+            : 0,
+        requiredPodiatrists: 2,
+        registeredPodiatrists: profession == VolunteerProfession.pp ? 1 : 0,
+        equipment: const [],
+      );
+      final engagement = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'volunteer',
+        profession: profession,
+        status: EngagementStatus.confirmed,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [engagement],
+      );
+
+      await repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.standby,
+      );
+      final updatedMission = repository.debugMission(mission.id)!;
+      expect(updatedMission.registeredPhysiotherapists, 0);
+      expect(updatedMission.registeredPodiatrists, 0);
+      expect(
+        repository.missionEngagements.single.status,
+        EngagementStatus.standby,
+      );
+
+      await expectLater(
+        repository.updateEngagementStatus(
+          missionId: mission.id,
+          volunteerId: engagement.volunteerId,
+          status: EngagementStatus.standby,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+      expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+    }
+  });
+
+  test('mock standby transition refuses a zero profession counter', () async {
+    const mission = CoordinationNeed(
+      id: 'standby-zero',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: [],
+    );
+    const engagement = EngagementInfo(
+      missionId: 'standby-zero',
+      volunteerId: 'volunteer',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.confirmed,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: const [mission],
+      initialLocations: const [],
+      initialEngagements: const [engagement],
+    );
+
+    await expectLater(
+      repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.standby,
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+    expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+    expect(
+      repository.missionEngagements.single.status,
+      EngagementStatus.confirmed,
+    );
+  });
+
+  test('mock confirmed MK and PP are cancelled exactly once', () async {
+    for (final profession in VolunteerProfession.values) {
+      final mission = CoordinationNeed(
+        id: 'cancel-status-${profession.name}',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 2,
+        registeredPhysiotherapists: profession == VolunteerProfession.mk
+            ? 1
+            : 0,
+        requiredPodiatrists: 2,
+        registeredPodiatrists: profession == VolunteerProfession.pp ? 1 : 0,
+        equipment: const [],
+      );
+      final engagement = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'volunteer',
+        profession: profession,
+        status: EngagementStatus.confirmed,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [engagement],
+      );
+
+      await repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.cancelled,
+      );
+      expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+      expect(
+        repository.missionEngagements.single.status,
+        EngagementStatus.cancelled,
+      );
+
+      await expectLater(
+        repository.updateEngagementStatus(
+          missionId: mission.id,
+          volunteerId: engagement.volunteerId,
+          status: EngagementStatus.cancelled,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+      expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+    }
+  });
+
+  test('mock cancellation refuses a zero profession counter', () async {
+    const mission = CoordinationNeed(
+      id: 'cancel-status-zero',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: [],
+    );
+    const engagement = EngagementInfo(
+      missionId: 'cancel-status-zero',
+      volunteerId: 'volunteer',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.confirmed,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: const [mission],
+      initialLocations: const [],
+      initialEngagements: const [engagement],
+    );
+
+    await expectLater(
+      repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.cancelled,
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+    expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+    expect(
+      repository.missionEngagements.single.status,
+      EngagementStatus.confirmed,
+    );
+  });
+
+  test('mock standby MK and PP return to confirmed exactly once', () async {
+    for (final profession in VolunteerProfession.values) {
+      final mission = CoordinationNeed(
+        id: 'confirm-standby-${profession.name}',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 2,
+        registeredPhysiotherapists: 0,
+        requiredPodiatrists: 2,
+        registeredPodiatrists: 0,
+        equipment: const [],
+      );
+      final engagement = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'volunteer',
+        profession: profession,
+        status: EngagementStatus.standby,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [engagement],
+      );
+
+      await repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.confirmed,
+      );
+      final updatedMission = repository.debugMission(mission.id)!;
+      expect(
+        updatedMission.registeredPhysiotherapists,
+        profession == VolunteerProfession.mk ? 1 : 0,
+      );
+      expect(
+        updatedMission.registeredPodiatrists,
+        profession == VolunteerProfession.pp ? 1 : 0,
+      );
+
+      await expectLater(
+        repository.updateEngagementStatus(
+          missionId: mission.id,
+          volunteerId: engagement.volunteerId,
+          status: EngagementStatus.confirmed,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+      expect(repository.debugMission(mission.id)!.registeredPeople, 1);
+    }
+  });
+
+  test('mock standby confirmation refuses a reached quota', () async {
+    const mission = CoordinationNeed(
+      id: 'confirm-standby-full',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 1,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: [],
+    );
+    const engagement = EngagementInfo(
+      missionId: 'confirm-standby-full',
+      volunteerId: 'volunteer',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.standby,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: const [mission],
+      initialLocations: const [],
+      initialEngagements: const [engagement],
+    );
+
+    await expectLater(
+      repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.confirmed,
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+    expect(repository.debugMission(mission.id)!.registeredPeople, 1);
+    expect(
+      repository.missionEngagements.single.status,
+      EngagementStatus.standby,
+    );
+  });
+
+  test('mock pending MK and PP move to standby without counters', () async {
+    for (final profession in VolunteerProfession.values) {
+      final mission = CoordinationNeed(
+        id: 'pending-standby-${profession.name}',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 3,
+        registeredPhysiotherapists: 1,
+        requiredPodiatrists: 3,
+        registeredPodiatrists: 1,
+        equipment: const [],
+      );
+      final engagement = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'volunteer',
+        profession: profession,
+        status: EngagementStatus.pending,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [engagement],
+      );
+
+      await repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.standby,
+      );
+      final updatedMission = repository.debugMission(mission.id)!;
+      expect(updatedMission.registeredPhysiotherapists, 1);
+      expect(updatedMission.registeredPodiatrists, 1);
+      expect(
+        repository.missionEngagements.single.status,
+        EngagementStatus.standby,
+      );
+
+      await expectLater(
+        repository.updateEngagementStatus(
+          missionId: mission.id,
+          volunteerId: engagement.volunteerId,
+          status: EngagementStatus.standby,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+      expect(repository.debugMission(mission.id)!.registeredPeople, 2);
+    }
+  });
+
+  test('mock pending MK and PP are cancelled without counters', () async {
+    for (final profession in VolunteerProfession.values) {
+      final mission = CoordinationNeed(
+        id: 'pending-cancelled-${profession.name}',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 3,
+        registeredPhysiotherapists: 1,
+        requiredPodiatrists: 3,
+        registeredPodiatrists: 1,
+        equipment: const [],
+      );
+      final engagement = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'volunteer',
+        profession: profession,
+        status: EngagementStatus.pending,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [engagement],
+      );
+
+      await repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.cancelled,
+      );
+      final updatedMission = repository.debugMission(mission.id)!;
+      expect(updatedMission.registeredPhysiotherapists, 1);
+      expect(updatedMission.registeredPodiatrists, 1);
+      expect(
+        repository.missionEngagements.single.status,
+        EngagementStatus.cancelled,
+      );
+
+      await expectLater(
+        repository.updateEngagementStatus(
+          missionId: mission.id,
+          volunteerId: engagement.volunteerId,
+          status: EngagementStatus.cancelled,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+      expect(repository.debugMission(mission.id)!.registeredPeople, 2);
+    }
+  });
+
+  test('mock standby MK and PP are cancelled without counters', () async {
+    for (final profession in VolunteerProfession.values) {
+      final mission = CoordinationNeed(
+        id: 'standby-cancelled-${profession.name}',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 3,
+        registeredPhysiotherapists: 1,
+        requiredPodiatrists: 3,
+        registeredPodiatrists: 1,
+        equipment: const [],
+      );
+      final engagement = EngagementInfo(
+        missionId: mission.id,
+        volunteerId: 'volunteer',
+        profession: profession,
+        status: EngagementStatus.standby,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+        initialEngagements: [engagement],
+      );
+
+      await repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: engagement.volunteerId,
+        status: EngagementStatus.cancelled,
+      );
+      final updatedMission = repository.debugMission(mission.id)!;
+      expect(updatedMission.registeredPhysiotherapists, 1);
+      expect(updatedMission.registeredPodiatrists, 1);
+      expect(
+        repository.missionEngagements.single.status,
+        EngagementStatus.cancelled,
+      );
+
+      await expectLater(
+        repository.updateEngagementStatus(
+          missionId: mission.id,
+          volunteerId: engagement.volunteerId,
+          status: EngagementStatus.cancelled,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+      expect(repository.debugMission(mission.id)!.registeredPeople, 2);
+    }
+  });
+
+  test('legacy status-less MK moves to standby with one decrement', () async {
+    final mission = CoordinationNeed(
+      id: 'legacy-mk',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      requiredPhysiotherapists: 2,
+      registeredPhysiotherapists: 1,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+    );
+    const legacyEngagement = EngagementInfo(
+      missionId: 'legacy-mk',
+      volunteerId: 'legacy-volunteer',
+      profession: VolunteerProfession.mk,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+      initialEngagements: const [legacyEngagement],
+    );
+
+    await repository.updateEngagementStatus(
+      missionId: mission.id,
+      volunteerId: legacyEngagement.volunteerId,
+      status: EngagementStatus.standby,
+    );
+    expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+
+    await expectLater(
+      repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: legacyEngagement.volunteerId,
+        status: EngagementStatus.standby,
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+    expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+  });
+
+  test('legacy status-less PP is cancelled with one decrement', () async {
+    final mission = CoordinationNeed(
+      id: 'legacy-pp',
+      place: 'Mission',
+      group: TerritorialGroup.medoc,
+      date: 'Demain',
+      time: '08:00 — 12:00',
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      requiredPhysiotherapists: 0,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 2,
+      registeredPodiatrists: 1,
+      equipment: const [],
+    );
+    const legacyEngagement = EngagementInfo(
+      missionId: 'legacy-pp',
+      volunteerId: 'legacy-volunteer',
+      profession: VolunteerProfession.pp,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+      initialEngagements: const [legacyEngagement],
+    );
+
+    await repository.updateEngagementStatus(
+      missionId: mission.id,
+      volunteerId: legacyEngagement.volunteerId,
+      status: EngagementStatus.cancelled,
+    );
+    expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+
+    await expectLater(
+      repository.updateEngagementStatus(
+        missionId: mission.id,
+        volunteerId: legacyEngagement.volunteerId,
+        status: EngagementStatus.cancelled,
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+    expect(repository.debugMission(mission.id)!.registeredPeople, 0);
   });
 
   test(
@@ -139,46 +798,114 @@ void main() {
     expect(await repository.watchMissions().first, hasLength(2));
   });
 
-  test(
-    'mock MK and PP disengagement decrements only its own counter',
-    () async {
-      for (final profession in VolunteerProfession.values) {
-        final mission = CoordinationNeed(
-          id: 'cancel-${profession.name}',
-          place: 'Mission',
-          group: TerritorialGroup.medoc,
-          date: 'Aujourd’hui',
-          time: '08:00 — 12:00',
-          requiredPhysiotherapists: 1,
-          registeredPhysiotherapists: 0,
-          requiredPodiatrists: 1,
-          registeredPodiatrists: 0,
-          equipment: const [],
-        );
-        final repository = MockCoordinationRepository(
-          initialMissions: [mission],
-          initialLocations: const [],
-        );
-        await repository.createEngagement(
-          missionId: mission.id,
-          firstName: 'A',
-          lastName: 'B',
-          phone: '0600000000',
-          profession: profession,
-        );
-        await repository.cancelEngagement(mission.id);
-        final updated = (await repository.watchMissions().first).single;
-        expect(updated.registeredPhysiotherapists, 0);
-        expect(updated.registeredPodiatrists, 0);
-        expect(updated.status, NeedStatus.critical);
-        expect(repository.engagements, isEmpty);
-        await expectLater(
-          repository.cancelEngagement(mission.id),
-          throwsA(isA<RepositoryException>()),
-        );
-      }
-    },
-  );
+  group('mock volunteer disengagement', () {
+    for (final initialStatus in const [
+      EngagementStatus.pending,
+      EngagementStatus.standby,
+      EngagementStatus.confirmed,
+    ]) {
+      test('$initialStatus follows its counter rule for MK and PP', () async {
+        for (final profession in VolunteerProfession.values) {
+          final counts = initialStatus == EngagementStatus.confirmed ? 1 : 0;
+          final mission = CoordinationNeed(
+            id: 'cancel-${initialStatus.name}-${profession.name}',
+            place: 'Mission',
+            group: TerritorialGroup.medoc,
+            date: 'Aujourd’hui',
+            time: '08:00 — 12:00',
+            endAt: DateTime.now().add(const Duration(hours: 2)),
+            requiredPhysiotherapists: 1,
+            registeredPhysiotherapists: profession == VolunteerProfession.mk
+                ? counts
+                : 0,
+            requiredPodiatrists: 1,
+            registeredPodiatrists: profession == VolunteerProfession.pp
+                ? counts
+                : 0,
+            equipment: const [],
+          );
+          final engagement = EngagementInfo(
+            missionId: mission.id,
+            volunteerId: 'mock-volunteer',
+            profession: profession,
+            status: initialStatus,
+          );
+          final repository = MockCoordinationRepository(
+            initialMissions: [mission],
+            initialLocations: const [],
+            initialEngagements: [engagement],
+          );
+          repository.engagements[mission.id] = engagement;
+
+          await repository.cancelEngagement(mission.id);
+
+          final updated = repository.debugMission(mission.id)!;
+          expect(updated.registeredPhysiotherapists, 0);
+          expect(updated.registeredPodiatrists, 0);
+          expect(
+            repository.engagements[mission.id]?.status,
+            EngagementStatus.cancelled,
+          );
+          expect(
+            repository.missionEngagements.single.status,
+            EngagementStatus.cancelled,
+          );
+          await expectLater(
+            repository.cancelEngagement(mission.id),
+            throwsA(isA<RepositoryException>()),
+          );
+          expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+        }
+      });
+    }
+
+    test(
+      'legacy status-less engagement is confirmed and decremented once',
+      () async {
+        for (final profession in VolunteerProfession.values) {
+          final mission = CoordinationNeed(
+            id: 'legacy-cancel-${profession.name}',
+            place: 'Mission',
+            group: TerritorialGroup.medoc,
+            date: 'Aujourd’hui',
+            time: '08:00 — 12:00',
+            endAt: DateTime.now().add(const Duration(hours: 2)),
+            requiredPhysiotherapists: 1,
+            registeredPhysiotherapists: profession == VolunteerProfession.mk
+                ? 1
+                : 0,
+            requiredPodiatrists: 1,
+            registeredPodiatrists: profession == VolunteerProfession.pp ? 1 : 0,
+            equipment: const [],
+          );
+          final historicalEngagement = EngagementInfo(
+            missionId: mission.id,
+            volunteerId: 'mock-volunteer',
+            profession: profession,
+          );
+          final repository = MockCoordinationRepository(
+            initialMissions: [mission],
+            initialLocations: const [],
+            initialEngagements: [historicalEngagement],
+          );
+          repository.engagements[mission.id] = historicalEngagement;
+
+          await repository.cancelEngagement(mission.id);
+          expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+          expect(
+            repository.engagements[mission.id]?.status,
+            EngagementStatus.cancelled,
+          );
+
+          await expectLater(
+            repository.cancelEngagement(mission.id),
+            throwsA(isA<RepositoryException>()),
+          );
+          expect(repository.debugMission(mission.id)!.registeredPeople, 0);
+        }
+      },
+    );
+  });
 
   test('mock cancellation preserves counters and hides the mission', () async {
     final repository = MockCoordinationRepository(

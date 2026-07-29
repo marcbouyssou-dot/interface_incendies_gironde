@@ -445,6 +445,11 @@ class _NeedActions extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _EngagementStatusBadge(status: engagement.status),
+                  ),
+                  const SizedBox(height: 8),
                   FilledButton.icon(
                     onPressed: null,
                     style: FilledButton.styleFrom(
@@ -520,6 +525,38 @@ class _NeedActions extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _EngagementStatusBadge extends StatelessWidget {
+  const _EngagementStatusBadge({required this.status});
+
+  final EngagementStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, background) = switch (status) {
+      EngagementStatus.pending => (AppColors.orange, AppColors.orangeSoft),
+      EngagementStatus.confirmed => (AppColors.green, AppColors.greenSoft),
+      EngagementStatus.standby => (AppColors.navy, AppColors.background),
+      EngagementStatus.cancelled => (AppColors.red, AppColors.redSoft),
+    };
+    return Container(
+      key: Key('engagement-status-${status.name}'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        status.label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }

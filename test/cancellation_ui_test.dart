@@ -31,7 +31,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('disengagement is visible only after engagement and confirmed', (
+  testWidgets('pending engagement shows its badge and disengagement', (
     tester,
   ) async {
     final repository = MockCoordinationRepository(
@@ -60,6 +60,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('✓ JE SUIS ENGAGÉ'), findsOneWidget);
+    expect(find.text('En attente'), findsOneWidget);
 
     await tester.tap(find.text('Me désengager'));
     await tester.pumpAndSettle();
@@ -72,7 +73,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-cancel-engagement')));
     await tester.pumpAndSettle();
-    expect(repository.engagements, isEmpty);
+    expect(
+      repository.engagements['ui-mission']?.status,
+      EngagementStatus.cancelled,
+    );
     expect(
       find.text('Votre désengagement a bien été enregistré.'),
       findsOneWidget,
@@ -107,6 +111,41 @@ void main() {
     await tester.tap(find.byKey(const Key('confirm-cancel-mission')));
     await tester.pumpAndSettle();
     expect(repository.debugMission('ui-mission')?.isCancelled, isTrue);
+  });
+
+  testWidgets('coordinator confirms an engagement from the situation card', (
+    tester,
+  ) async {
+    const engagement = EngagementInfo(
+      missionId: 'ui-mission',
+      volunteerId: 'volunteer',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.pending,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission()],
+      initialLocations: const [],
+      initialEngagements: const [engagement],
+    );
+    await pumpApp(tester, repository);
+    await tester.tap(find.text('Situation').last);
+    await tester.pumpAndSettle();
+    final menu = find.byKey(const Key('engagement-menu-ui-mission_volunteer'));
+    await tester.scrollUntilVisible(
+      menu,
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirmer').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      repository.missionEngagements.single.status,
+      EngagementStatus.confirmed,
+    );
+    expect(find.text('MK • Confirmé'), findsOneWidget);
   });
 
   testWidgets('cancellation action follows site manager location rights', (

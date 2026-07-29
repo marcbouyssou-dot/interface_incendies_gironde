@@ -252,6 +252,17 @@ class _MissionRepository implements CoordinationRepository {
       Stream.value(null);
 
   @override
+  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) =>
+      Stream.value(const []);
+
+  @override
+  Future<void> updateEngagementStatus({
+    required String missionId,
+    required String volunteerId,
+    required EngagementStatus status,
+  }) async {}
+
+  @override
   Future<void> cancelEngagement(String missionId) async {}
 
   @override

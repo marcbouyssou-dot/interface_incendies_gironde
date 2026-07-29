@@ -47,6 +47,13 @@ service cloud.firestore {
       return value == 'mk' || value == 'pp';
     }
 
+    function validEngagementStatus(value) {
+      return value == 'pending'
+        || value == 'confirmed'
+        || value == 'standby'
+        || value == 'cancelled';
+    }
+
     function validVolunteerData(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
@@ -120,12 +127,6 @@ service cloud.firestore {
 
     function validMissionCounterUpdate(missionId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let mkIncrement = request.resource.data.registeredMk
-          == resource.data.registeredMk + 1
-        && request.resource.data.registeredPp == resource.data.registeredPp;
-      let ppIncrement = request.resource.data.registeredPp
-          == resource.data.registeredPp + 1
-        && request.resource.data.registeredMk == resource.data.registeredMk;
       let mkDecrement = request.resource.data.registeredMk
           == resource.data.registeredMk - 1
         && request.resource.data.registeredPp == resource.data.registeredPp;
@@ -144,20 +145,41 @@ service cloud.firestore {
         && request.resource.data.registeredMk >= 0
         && request.resource.data.registeredPp >= 0
         && request.resource.data.status == expectedStatus(request.resource.data)
-        && (
-          (existsAfter(path)
-            && getAfter(path).data.missionId == missionId
-            && getAfter(path).data.volunteerId == request.auth.uid
-            && ((mkIncrement && getAfter(path).data.profession == 'mk')
-              || (ppIncrement && getAfter(path).data.profession == 'pp')))
-          || (exists(path)
-            && !existsAfter(path)
-            && get(path).data.missionId == missionId
-            && get(path).data.volunteerId == request.auth.uid
-            && request.time < resource.data.endAt
-            && ((mkDecrement && get(path).data.profession == 'mk')
-              || (ppDecrement && get(path).data.profession == 'pp')))
-        );
+        && exists(path)
+        && existsAfter(path)
+        && get(path).data.missionId == missionId
+        && get(path).data.volunteerId == request.auth.uid
+        && getAfter(path).data.status == 'cancelled'
+        && request.time < resource.data.endAt
+        && ((mkDecrement && get(path).data.profession == 'mk')
+          || (ppDecrement && get(path).data.profession == 'pp'));
+    }
+
+    function validManagedMissionCounterUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let mkChangedOnce = (
+          request.resource.data.registeredMk == resource.data.registeredMk + 1
+          || request.resource.data.registeredMk == resource.data.registeredMk - 1
+        ) && request.resource.data.registeredPp == resource.data.registeredPp;
+      let ppChangedOnce = (
+          request.resource.data.registeredPp == resource.data.registeredPp + 1
+          || request.resource.data.registeredPp == resource.data.registeredPp - 1
+        ) && request.resource.data.registeredMk == resource.data.registeredMk;
+      return isCoordinator()
+        && canManageLocation(resource.data.locationId)
+        && changed.hasOnly([
+          'registeredMk', 'registeredPp', 'status', 'updatedAt'
+        ])
+        && resource.data.isActive == true
+        && resource.data.status != 'cancelled'
+        && request.time < resource.data.endAt
+        && request.resource.data.registeredMk >= 0
+        && request.resource.data.registeredPp >= 0
+        && request.resource.data.registeredMk <= resource.data.requiredMk
+        && request.resource.data.registeredPp <= resource.data.requiredPp
+        && request.resource.data.status == expectedStatus(request.resource.data)
+        && request.resource.data.updatedAt == request.time
+        && (mkChangedOnce || ppChangedOnce);
     }
 
     function validMissionCancellation() {
@@ -190,15 +212,19 @@ service cloud.firestore {
       let profession = request.resource.data.profession;
       return isSignedIn()
         && request.resource.data.keys().hasOnly([
-          'missionId', 'volunteerId', 'profession', 'createdAt', 'status'
+          'missionId', 'volunteerId', 'profession', 'createdAt', 'updatedAt',
+          'status'
         ])
         && request.resource.data.keys().hasAll([
-          'missionId', 'volunteerId', 'profession', 'createdAt', 'status'
+          'missionId', 'volunteerId', 'profession', 'createdAt', 'updatedAt',
+          'status'
         ])
         && engagementId == missionId + '_' + request.auth.uid
         && request.resource.data.volunteerId == request.auth.uid
         && validProfession(profession)
-        && request.resource.data.status == 'confirmed'
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
         && existsAfter(volunteerPath(request.auth.uid))
         && getAfter(volunteerPath(request.auth.uid)).data.uid
           == request.auth.uid
@@ -210,39 +236,89 @@ service cloud.firestore {
         )
         && missionBefore.isActive == true
         && missionBefore.status != 'cancelled'
-        && ((profession == 'mk'
-              && missionBefore.registeredMk < missionBefore.requiredMk
-              && missionAfter.registeredMk == missionBefore.registeredMk + 1
-              && missionAfter.registeredPp == missionBefore.registeredPp)
-          || (profession == 'pp'
-              && missionBefore.registeredPp < missionBefore.requiredPp
-              && missionAfter.registeredPp == missionBefore.registeredPp + 1
-              && missionAfter.registeredMk == missionBefore.registeredMk));
+        && request.time < missionBefore.endAt
+        && missionAfter.registeredMk == missionBefore.registeredMk
+        && missionAfter.registeredPp == missionBefore.registeredPp;
     }
 
-    function validEngagementDelete(engagementId) {
-      let missionId = resource.data.missionId;
-      let missionBefore = get(
-        /databases/$(database)/documents/missions/$(missionId)
-      ).data;
-      let missionAfter = getAfter(
-        /databases/$(database)/documents/missions/$(missionId)
-      ).data;
+    function currentEngagementStatus() {
+      return 'status' in resource.data
+        ? resource.data.status
+        : 'confirmed';
+    }
+
+    function validCoordinatorTransition(from, to) {
+      return (from == 'pending'
+          && (to == 'confirmed' || to == 'standby' || to == 'cancelled'))
+        || (from == 'confirmed'
+          && (to == 'standby' || to == 'cancelled'))
+        || (from == 'standby'
+          && (to == 'confirmed' || to == 'cancelled'));
+    }
+
+    function validEngagementMissionEffect(from, to) {
+      let missionPath = /databases/$(database)/documents/missions/$(resource.data.missionId);
+      let before = get(missionPath).data;
+      let after = getAfter(missionPath).data;
       let profession = resource.data.profession;
+      let delta = (from == 'pending' && to == 'confirmed')
+          || (from == 'standby' && to == 'confirmed')
+        ? 1
+        : ((from == 'confirmed' && (to == 'standby' || to == 'cancelled'))
+          ? -1
+          : 0);
+      return exists(missionPath)
+        && existsAfter(missionPath)
+        && before.isActive == true
+        && before.status != 'cancelled'
+        && request.time < before.endAt
+        && (
+          (delta == 0
+            && after.registeredMk == before.registeredMk
+            && after.registeredPp == before.registeredPp)
+          || (delta != 0
+            && after.registeredMk >= 0
+            && after.registeredPp >= 0
+            && after.registeredMk <= before.requiredMk
+            && after.registeredPp <= before.requiredPp
+            && after.status == expectedStatus(after)
+            && after.updatedAt == request.time
+            && ((profession == 'mk'
+                && after.registeredMk == before.registeredMk + delta
+                && after.registeredPp == before.registeredPp)
+              || (profession == 'pp'
+                && after.registeredPp == before.registeredPp + delta
+                && after.registeredMk == before.registeredMk)))
+        );
+    }
+
+    function validEngagementStatusUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let from = currentEngagementStatus();
+      let to = request.resource.data.status;
+      let mission = get(
+        /databases/$(database)/documents/missions/$(resource.data.missionId)
+      ).data;
+      return isCoordinator()
+        && canManageLocation(mission.locationId)
+        && changed.hasOnly(['status', 'updatedAt'])
+        && validEngagementStatus(to)
+        && request.resource.data.updatedAt == request.time
+        && validCoordinatorTransition(from, to)
+        && validEngagementMissionEffect(from, to);
+    }
+
+    function validOwnerCancellation(engagementId) {
+      let from = currentEngagementStatus();
       return isSignedIn()
-        && engagementId == missionId + '_' + request.auth.uid
+        && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
-        && missionBefore.isActive == true
-        && missionBefore.status != 'cancelled'
-        && request.time < missionBefore.endAt
-        && ((profession == 'mk'
-              && missionBefore.registeredMk > 0
-              && missionAfter.registeredMk == missionBefore.registeredMk - 1
-              && missionAfter.registeredPp == missionBefore.registeredPp)
-          || (profession == 'pp'
-              && missionBefore.registeredPp > 0
-              && missionAfter.registeredPp == missionBefore.registeredPp - 1
-              && missionAfter.registeredMk == missionBefore.registeredMk));
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'updatedAt'])
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.updatedAt == request.time
+        && (from == 'pending' || from == 'standby' || from == 'confirmed')
+        && validEngagementMissionEffect(from, 'cancelled');
     }
 
     match /locations/{locationId} {
@@ -258,6 +334,7 @@ service cloud.firestore {
       allow list: if resource.data.isActive == true;
       allow create: if isSignedIn() && validMissionCreate(missionId);
       allow update: if validMissionCounterUpdate(missionId)
+        || validManagedMissionCounterUpdate()
         || validMissionCancellation();
       allow delete: if false;
     }
@@ -272,9 +349,10 @@ service cloud.firestore {
     match /engagements/{engagementId} {
       allow create: if validEngagementCreate(engagementId);
       allow read: if isSignedIn()
-        && resource.data.volunteerId == request.auth.uid;
-      allow update: if false;
-      allow delete: if validEngagementDelete(engagementId);
+        && (resource.data.volunteerId == request.auth.uid || isCoordinator());
+      allow update: if validOwnerCancellation(engagementId)
+        || validEngagementStatusUpdate();
+      allow delete: if false;
     }
 
     match /roles/{uid} {
