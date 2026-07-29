@@ -14,6 +14,24 @@ bool canStartVolunteerEngagement({
   required bool isAnonymous,
 }) => !hasUser || isAnonymous;
 
+@visibleForTesting
+({bool ownerMatches, EngagementCreationResult? result})
+classifyExistingEngagement(Map<String, dynamic> data, String uid) {
+  if (data['volunteerId'] != uid) {
+    return (ownerMatches: false, result: null);
+  }
+  final status = data['status'];
+  return (
+    ownerMatches: true,
+    result: switch (status) {
+      'cancelled' => null,
+      'pending' => EngagementCreationResult.alreadyPending,
+      'standby' => EngagementCreationResult.alreadyStandby,
+      _ => EngagementCreationResult.alreadyConfirmed,
+    },
+  );
+}
+
 class FirestoreCoordinationRepository implements CoordinationRepository {
   FirestoreCoordinationRepository(
     this._firestore,
@@ -179,7 +197,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
             final profession = data['profession'] as String?;
             if (profession != VolunteerProfession.mk.name &&
                 profession != VolunteerProfession.pp.name) {
-              return null;
+              throw const RepositoryException(
+                'La profession de cet engagement est invalide.',
+              );
             }
             return EngagementInfo(
               missionId: missionId,
@@ -495,7 +515,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   }
 
   @override
-  Future<void> createEngagement({
+  Future<EngagementCreationResult> createEngagement({
     required String missionId,
     required String firstName,
     required String lastName,
@@ -529,23 +549,22 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         .doc('${missionId}_$uid');
 
     try {
-      await _firestore
-          .runTransaction((transaction) async {
+      final result = await _firestore
+          .runTransaction<EngagementCreationResult?>((transaction) async {
             final snapshot = await transaction.get(missionRef);
             if (!snapshot.exists) {
               throw const RepositoryException('Mission introuvable');
             }
             final existingEngagement = await transaction.get(engagementRef);
             final existingEngagementData = existingEngagement.data();
-            final isReengagement =
-                existingEngagement.exists &&
-                existingEngagementData?['status'] ==
-                    EngagementStatus.cancelled.name;
-            if (existingEngagement.exists && !isReengagement) {
-              throw const RepositoryException(
-                'Une demande existe déjà pour cette mission.',
-              );
+            final existing = existingEngagementData == null
+                ? null
+                : classifyExistingEngagement(existingEngagementData, uid);
+            if (existing != null && !existing.ownerMatches) return null;
+            if (existing?.result case final existingResult?) {
+              return existingResult;
             }
+            final isReengagement = existing != null;
             final existingVolunteer = await transaction.get(volunteerRef);
             final data = snapshot.data()!;
             if (data['status'] == 'cancelled') {
@@ -588,6 +607,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 'updatedAt': now,
                 'status': EngagementStatus.pending.name,
               });
+              return EngagementCreationResult.reactivated;
             } else {
               transaction.set(engagementRef, {
                 'missionId': missionId,
@@ -597,9 +617,19 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 'updatedAt': now,
                 'status': EngagementStatus.pending.name,
               });
+              return EngagementCreationResult.created;
             }
           })
           .timeout(const Duration(seconds: 15));
+      if (result == null) {
+        debugPrint(
+          'Incohérence engagement : volunteerId différent de l’UID courant.',
+        );
+        throw const RepositoryException(
+          'Cet engagement appartient à un autre volontaire.',
+        );
+      }
+      return result;
     } on FirebaseException catch (error, stackTrace) {
       debugPrint(
         'Erreur Firebase createEngagement '

@@ -12,6 +12,11 @@ import 'repositories/firestore_coordination_repository.dart';
 import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
 
+bool mustCreateAnonymousVolunteerSession({
+  required bool hasUser,
+  required bool isAnonymous,
+}) => !hasUser || !isAnonymous;
+
 class FirebaseStartupGate extends StatefulWidget {
   const FirebaseStartupGate({super.key, this.startup});
 
@@ -50,7 +55,14 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   Future<CoordinationRepository> _initializeFirebaseWork() async {
     if (Firebase.apps.isEmpty) await FirebaseBootstrap.initialize();
     final volunteerAuth = FirebaseAuth.instance;
-    if (volunteerAuth.currentUser == null) {
+    final restoredUser = volunteerAuth.currentUser;
+    if (restoredUser != null && !restoredUser.isAnonymous) {
+      await volunteerAuth.signOut();
+    }
+    if (mustCreateAnonymousVolunteerSession(
+      hasUser: restoredUser != null,
+      isAnonymous: restoredUser?.isAnonymous ?? false,
+    )) {
       await volunteerAuth.signInAnonymously();
     }
     final firestore = FirebaseFirestore.instance;

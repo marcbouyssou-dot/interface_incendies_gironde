@@ -440,6 +440,34 @@ class _NeedActions extends StatelessWidget {
         return StreamBuilder<EngagementInfo?>(
           stream: repository.watchMyEngagement(need.id),
           builder: (context, engagementSnapshot) {
+            if (engagementSnapshot.hasError) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const FilledButton(
+                    onPressed: null,
+                    child: Text('Statut indisponible'),
+                  ),
+                  ..._administrativeActions(context, access),
+                ],
+              );
+            }
+            if (engagementSnapshot.connectionState == ConnectionState.waiting &&
+                !engagementSnapshot.hasData) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const FilledButton(
+                    onPressed: null,
+                    child: SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  ..._administrativeActions(context, access),
+                ],
+              );
+            }
             final engagement = engagementSnapshot.data;
             if (engagement != null) {
               final actionLabel = switch (engagement.status) {
@@ -502,18 +530,7 @@ class _NeedActions extends StatelessWidget {
                       child: const Text('Annuler mon engagement'),
                     ),
                   ],
-                  if (access?.canManage(need.locationId ?? '') == true) ...[
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      key: Key('cancel-mission-${need.id}'),
-                      onPressed: () => showDialog<void>(
-                        context: context,
-                        builder: (_) => _CancelMissionDialog(need: need),
-                      ),
-                      icon: const Icon(Icons.cancel_outlined),
-                      label: const Text('Annuler ce besoin'),
-                    ),
-                  ],
+                  ..._administrativeActions(context, access),
                 ],
               );
             }
@@ -550,24 +567,32 @@ class _NeedActions extends StatelessWidget {
                         : '❤️ JE M’ENGAGE',
                   ),
                 ),
-                if (access?.canManage(need.locationId ?? '') == true) ...[
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    key: Key('cancel-mission-${need.id}'),
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => _CancelMissionDialog(need: need),
-                    ),
-                    icon: const Icon(Icons.cancel_outlined),
-                    label: const Text('Annuler ce besoin'),
-                  ),
-                ],
+                ..._administrativeActions(context, access),
               ],
             );
           },
         );
       },
     );
+  }
+
+  List<Widget> _administrativeActions(
+    BuildContext context,
+    ResponsibleAccess? access,
+  ) {
+    if (access?.canManage(need.locationId ?? '') != true) return const [];
+    return [
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        key: Key('cancel-mission-${need.id}'),
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (_) => _CancelMissionDialog(need: need),
+        ),
+        icon: const Icon(Icons.cancel_outlined),
+        label: const Text('Annuler ce besoin'),
+      ),
+    ];
   }
 }
 
@@ -978,10 +1003,12 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
+    late final EngagementCreationResult result;
     try {
-      await RepositoryScope.of(context).createEngagement(
+      result = await RepositoryScope.of(context).createEngagement(
         missionId: widget.need.id,
         firstName: _firstNameController.text,
         lastName: _lastNameController.text,
@@ -989,18 +1016,13 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         email: _emailController.text,
         profession: _profession,
       );
-      if (!mounted) return;
-      await Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => EngagementConfirmationScreen(need: widget.need),
-        ),
-      );
     } on RepositoryException catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
     } catch (error, stackTrace) {
       debugPrint('Erreur UI createEngagement : $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -1013,7 +1035,15 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
           ),
         ),
       );
+      return;
     }
+    if (!mounted) return;
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            EngagementConfirmationScreen(need: widget.need, result: result),
+      ),
+    );
   }
 }
 

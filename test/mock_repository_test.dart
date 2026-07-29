@@ -22,7 +22,7 @@ void main() {
     });
     await initialEmission.future;
 
-    await repository.createEngagement(
+    final result = await repository.createEngagement(
       missionId: needs.first.id,
       firstName: 'Jeanne',
       lastName: 'Martin',
@@ -40,6 +40,7 @@ void main() {
     expect(emissions.last.single.coverage, needs.first.coverage);
     expect(repository.volunteers.single.firstName, 'Jeanne');
     expect(repository.volunteers.single.email, 'jeanne@example.fr');
+    expect(result, EngagementCreationResult.created);
     await subscription.cancel();
   });
 
@@ -61,7 +62,7 @@ void main() {
       initialLocations: const [],
     );
 
-    await repository.createEngagement(
+    final result = await repository.createEngagement(
       missionId: mission.id,
       firstName: 'Sam',
       lastName: 'Dupont',
@@ -73,6 +74,7 @@ void main() {
     expect(updated.single.status, NeedStatus.toComplete);
     expect(updated.single.registeredPodiatrists, 0);
     expect(repository.volunteers.single.email, isNull);
+    expect(result, EngagementCreationResult.created);
   });
 
   test('a created mock mission is emitted immediately by the stream', () async {
@@ -111,7 +113,7 @@ void main() {
       initialEngagements: const [],
     );
 
-    await repository.createEngagement(
+    final result = await repository.createEngagement(
       missionId: mission.id,
       firstName: 'A',
       lastName: 'B',
@@ -123,6 +125,7 @@ void main() {
       repository.engagements[mission.id]?.status,
       EngagementStatus.pending,
     );
+    expect(result, EngagementCreationResult.created);
   });
 
   test(
@@ -156,7 +159,7 @@ void main() {
       );
       repository.engagements[mission.id] = cancelled;
 
-      await repository.createEngagement(
+      final result = await repository.createEngagement(
         missionId: mission.id,
         firstName: 'Jeanne',
         lastName: 'Martin',
@@ -169,6 +172,7 @@ void main() {
       expect(engagement.status, EngagementStatus.pending);
       expect(engagement.profession, VolunteerProfession.pp);
       expect(engagement.createdAt, createdAt);
+      expect(result, EngagementCreationResult.reactivated);
       expect(storedMission.registeredPhysiotherapists, 1);
       expect(storedMission.registeredPodiatrists, 0);
       expect(
@@ -185,11 +189,11 @@ void main() {
     },
   );
 
-  test('mock refuses existing active and legacy engagements', () async {
-    for (final status in const [
-      EngagementStatus.pending,
-      EngagementStatus.confirmed,
-      EngagementStatus.standby,
+  test('mock returns idempotent active and legacy engagements', () async {
+    for (final (status, expected) in const [
+      (EngagementStatus.pending, EngagementCreationResult.alreadyPending),
+      (EngagementStatus.confirmed, EngagementCreationResult.alreadyConfirmed),
+      (EngagementStatus.standby, EngagementCreationResult.alreadyStandby),
     ]) {
       final mission = CoordinationNeed(
         id: 'duplicate-${status.name}',
@@ -217,16 +221,17 @@ void main() {
       );
       repository.engagements[mission.id] = existing;
 
-      await expectLater(
-        repository.createEngagement(
-          missionId: mission.id,
-          firstName: 'A',
-          lastName: 'B',
-          phone: '0600000000',
-          profession: VolunteerProfession.mk,
-        ),
-        throwsA(isA<RepositoryException>()),
+      final result = await repository.createEngagement(
+        missionId: mission.id,
+        firstName: 'A',
+        lastName: 'B',
+        phone: '0600000000',
+        profession: VolunteerProfession.mk,
       );
+      expect(result, expected);
+      expect(repository.engagements, hasLength(1));
+      expect(repository.missionEngagements, hasLength(1));
+      expect(repository.debugMission(mission.id)?.registeredPeople, 0);
     }
 
     const legacy = EngagementInfo(
@@ -235,6 +240,45 @@ void main() {
       profession: VolunteerProfession.mk,
     );
     expect(legacy.status, EngagementStatus.confirmed);
+  });
+
+  test('mock refuses an engagement owned by another volunteer', () async {
+    final mission = CoordinationNeed(
+      id: 'wrong-owner',
+      place: 'Mission test',
+      group: TerritorialGroup.medoc,
+      date: 'Aujourd’hui',
+      time: '08:00 — 12:00',
+      endAt: DateTime.now().add(const Duration(hours: 2)),
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+    );
+    const existing = EngagementInfo(
+      missionId: 'wrong-owner',
+      volunteerId: 'another-volunteer',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.pending,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: const [],
+      initialEngagements: const [existing],
+    );
+    repository.engagements[mission.id] = existing;
+
+    await expectLater(
+      repository.createEngagement(
+        missionId: mission.id,
+        firstName: 'A',
+        lastName: 'B',
+        phone: '0600000000',
+        profession: VolunteerProfession.mk,
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
   });
 
   test('a pending engagement does not increment mission counters', () {

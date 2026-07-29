@@ -26,7 +26,7 @@ abstract interface class CoordinationRepository {
 
   Future<void> signOutResponsible();
 
-  Future<void> createEngagement({
+  Future<EngagementCreationResult> createEngagement({
     required String missionId,
     required String firstName,
     required String lastName,
@@ -75,6 +75,27 @@ class EngagementInfo {
 }
 
 enum EngagementStatus { pending, confirmed, standby, cancelled }
+
+enum EngagementCreationResult {
+  created,
+  reactivated,
+  alreadyPending,
+  alreadyConfirmed,
+  alreadyStandby,
+}
+
+extension EngagementCreationResultMessage on EngagementCreationResult {
+  String? get existingMessage => switch (this) {
+    EngagementCreationResult.alreadyPending =>
+      'Votre demande est déjà en attente.',
+    EngagementCreationResult.alreadyConfirmed =>
+      'Votre participation est déjà confirmée.',
+    EngagementCreationResult.alreadyStandby =>
+      'Vous êtes déjà inscrit comme renfort.',
+    EngagementCreationResult.created ||
+    EngagementCreationResult.reactivated => null,
+  };
+}
 
 extension EngagementStatusLabel on EngagementStatus {
   String get label => switch (this) {

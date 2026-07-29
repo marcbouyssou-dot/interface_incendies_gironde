@@ -289,7 +289,7 @@ class MockCoordinationRepository implements CoordinationRepository {
   }
 
   @override
-  Future<void> createEngagement({
+  Future<EngagementCreationResult> createEngagement({
     required String missionId,
     required String firstName,
     required String lastName,
@@ -313,9 +313,17 @@ class MockCoordinationRepository implements CoordinationRepository {
     final existingEngagement = engagements[missionId];
     if (existingEngagement != null &&
         existingEngagement.status != EngagementStatus.cancelled) {
-      throw const RepositoryException(
-        'Une demande existe déjà pour cette mission.',
-      );
+      if (existingEngagement.volunteerId != 'mock-volunteer') {
+        throw const RepositoryException(
+          'Cet engagement appartient à un autre volontaire.',
+        );
+      }
+      return switch (existingEngagement.status) {
+        EngagementStatus.pending => EngagementCreationResult.alreadyPending,
+        EngagementStatus.confirmed => EngagementCreationResult.alreadyConfirmed,
+        EngagementStatus.standby => EngagementCreationResult.alreadyStandby,
+        EngagementStatus.cancelled => throw StateError('État inaccessible'),
+      };
     }
     volunteers.add(
       Volunteer(
@@ -346,6 +354,9 @@ class MockCoordinationRepository implements CoordinationRepository {
       missionEngagements[engagementIndex] = engagement;
     }
     _missionUpdates.add(_activeMissions());
+    return existingEngagement == null
+        ? EngagementCreationResult.created
+        : EngagementCreationResult.reactivated;
   }
 
   @override

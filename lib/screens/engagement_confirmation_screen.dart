@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
+import '../repositories/coordination_repository.dart';
 import '../theme/app_theme.dart';
 
 class EngagementConfirmationScreen extends StatelessWidget {
-  const EngagementConfirmationScreen({super.key, required this.need});
+  const EngagementConfirmationScreen({
+    super.key,
+    required this.need,
+    this.result = EngagementCreationResult.created,
+  });
 
   final CoordinationNeed need;
+  final EngagementCreationResult result;
 
   @override
   Widget build(BuildContext context) {
@@ -30,14 +36,19 @@ class EngagementConfirmationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Votre demande de participation est enregistrée.',
+                    result.existingMessage ??
+                        'Votre demande de participation est enregistrée.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Elle est en attente de validation.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                  if (result == EngagementCreationResult.created ||
+                      result == EngagementCreationResult.reactivated ||
+                      result == EngagementCreationResult.alreadyPending) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Elle est en attente de validation.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   Card(
                     child: Padding(

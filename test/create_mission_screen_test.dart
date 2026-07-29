@@ -308,12 +308,12 @@ class _MissionRepository implements CoordinationRepository {
       const Stream<List<CoordinationNeed>>.empty();
 
   @override
-  Future<void> createEngagement({
+  Future<EngagementCreationResult> createEngagement({
     required String missionId,
     required String firstName,
     required String lastName,
     required String phone,
     String? email,
     required VolunteerProfession profession,
-  }) async {}
+  }) async => EngagementCreationResult.created;
 }
