@@ -69,6 +69,10 @@ class FirestoreSeedService {
         'group': location.group.name,
         'type': location.type.name,
         'address': location.address,
+        if (location.hasContactName)
+          'contactName': location.contactName!.trim(),
+        if (location.hasContactPhone)
+          'contactPhone': location.contactPhone!.trim(),
         'activeNeeds': location.activeNeeds,
         'isOperational': location.isOperational,
         if (address != null) ...{

@@ -7,6 +7,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/mission_location_details.dart';
 
 class CoordinationScreen extends StatefulWidget {
   const CoordinationScreen({super.key});
@@ -18,6 +19,7 @@ class CoordinationScreen extends StatefulWidget {
 class _CoordinationScreenState extends State<CoordinationScreen> {
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
+  Stream<List<ResponsePlace>>? _locations;
   Stream<ResponsibleAccess?>? _responsibleAccess;
 
   @override
@@ -27,6 +29,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     if (!identical(liveData, _liveData)) {
       _liveData = liveData;
       _missions = liveData.watchMissions();
+      _locations = liveData.watchLocations();
       _responsibleAccess = liveData.watchResponsibleAccess();
     }
   }
@@ -39,10 +42,17 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
         if (!missionsSnapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return StreamBuilder<ResponsibleAccess?>(
-          stream: _responsibleAccess,
-          builder: (context, accessSnapshot) =>
-              _buildContent(missionsSnapshot.data!, accessSnapshot.data),
+        return StreamBuilder<List<ResponsePlace>>(
+          stream: _locations,
+          builder: (context, locationsSnapshot) =>
+              StreamBuilder<ResponsibleAccess?>(
+                stream: _responsibleAccess,
+                builder: (context, accessSnapshot) => _buildContent(
+                  missionsSnapshot.data!,
+                  locationsSnapshot.data ?? const <ResponsePlace>[],
+                  accessSnapshot.data,
+                ),
+              ),
         );
       },
     );
@@ -50,6 +60,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
 
   Widget _buildContent(
     List<CoordinationNeed> missions,
+    List<ResponsePlace> locations,
     ResponsibleAccess? access,
   ) {
     final critical = missions
@@ -181,6 +192,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
               itemBuilder: (context, index) => _SituationRow(
                 key: ValueKey(missions[index].id),
                 need: missions[index],
+                location: responsePlaceForNeed(missions[index], locations),
                 access: access,
               ),
             ),
@@ -240,8 +252,14 @@ class _StatusMetric extends StatelessWidget {
 }
 
 class _SituationRow extends StatelessWidget {
-  const _SituationRow({super.key, required this.need, required this.access});
+  const _SituationRow({
+    super.key,
+    required this.need,
+    required this.location,
+    required this.access,
+  });
   final CoordinationNeed need;
+  final ResponsePlace? location;
   final ResponsibleAccess? access;
 
   @override
@@ -272,6 +290,16 @@ class _SituationRow extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            const SizedBox(height: 4),
+            Text(
+              location?.type.label ?? 'Lieu d’intervention',
+              style: const TextStyle(
+                color: AppColors.orange,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            MissionLocationDetails(location: location, compact: true),
             const SizedBox(height: 14),
             CoverageBar(need: need),
             const SizedBox(height: 14),

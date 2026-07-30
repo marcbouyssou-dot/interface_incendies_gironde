@@ -8,6 +8,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
 import '../theme/app_theme.dart';
+import 'mission_location_details.dart';
 
 class PageContainer extends StatelessWidget {
   const PageContainer({super.key, required this.child});
@@ -311,8 +312,14 @@ class _ProfessionQuotaRow extends StatelessWidget {
 }
 
 class NeedCard extends StatelessWidget {
-  const NeedCard({super.key, required this.need, this.compact = false});
+  const NeedCard({
+    super.key,
+    required this.need,
+    this.location,
+    this.compact = false,
+  });
   final CoordinationNeed need;
+  final ResponsePlace? location;
   final bool compact;
 
   @override
@@ -334,23 +341,21 @@ class NeedCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.fire_truck_rounded,
-                    color: AppColors.orange,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 11),
-                  Expanded(
-                    child: Text(
-                      need.place.toUpperCase(),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                ],
+              Text(
+                need.place.toUpperCase(),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
+              const SizedBox(height: 5),
+              Text(
+                location?.type.label ?? 'Lieu d’intervention',
+                key: const Key('mission-location-type'),
+                style: const TextStyle(
+                  color: AppColors.orange,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              MissionLocationDetails(location: location),
               const SizedBox(height: 20),
               const Text(
                 'Aujourd’hui',
@@ -366,15 +371,6 @@ class NeedCard extends StatelessWidget {
                 style: const TextStyle(
                   color: AppColors.navy,
                   fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Récupération pompiers',
-                style: TextStyle(
-                  color: AppColors.orange,
-                  fontSize: 13,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -394,22 +390,33 @@ class NeedCard extends StatelessWidget {
               _ProfessionQuotaRows(need: need, emphasized: true),
               const SizedBox(height: 20),
               const Divider(height: 1),
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 16,
-                children: need.equipment
-                    .map(
-                      (item) => Tooltip(
-                        message: item,
-                        child: Icon(
-                          _equipmentIcon(item),
-                          color: AppColors.navySoft,
-                          size: 25,
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
+              if (need.equipment
+                  .where((item) => item.trim().isNotEmpty)
+                  .isNotEmpty) ...[
+                const SizedBox(height: 18),
+                const Text(
+                  'MATÉRIEL DEMANDÉ',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  need.equipment
+                      .where((item) => item.trim().isNotEmpty)
+                      .join(' • '),
+                  key: const Key('mission-equipment-text'),
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.4,
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               const Divider(height: 1),
               const SizedBox(height: 18),
@@ -426,22 +433,6 @@ class NeedCard extends StatelessWidget {
         .replaceAll(':00', 'h')
         .replaceAll(' — ', ' → ')
         .replaceAll(':', 'h');
-  }
-
-  static IconData _equipmentIcon(String item) {
-    final normalized = item.toLowerCase();
-    if (normalized.contains('table') || normalized.contains('fauteuil')) {
-      return Icons.bed_rounded;
-    }
-    if (normalized.contains('froid') || normalized.contains('glace')) {
-      return Icons.ac_unit_rounded;
-    }
-    if (normalized.contains('huile') ||
-        normalized.contains('gel') ||
-        normalized.contains('serviette')) {
-      return Icons.water_drop_rounded;
-    }
-    return Icons.medical_services_rounded;
   }
 }
 

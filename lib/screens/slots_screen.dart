@@ -18,6 +18,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
   TerritorialGroup? _group;
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
+  Stream<List<ResponsePlace>>? _locations;
 
   @override
   void didChangeDependencies() {
@@ -26,6 +27,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
     if (!identical(liveData, _liveData)) {
       _liveData = liveData;
       _missions = liveData.watchMissions();
+      _locations = liveData.watchLocations();
     }
   }
 
@@ -37,12 +39,21 @@ class _SlotsScreenState extends State<SlotsScreen> {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return _buildContent(snapshot.data!);
+        return StreamBuilder<List<ResponsePlace>>(
+          stream: _locations,
+          builder: (context, locationsSnapshot) => _buildContent(
+            snapshot.data!,
+            locationsSnapshot.data ?? const <ResponsePlace>[],
+          ),
+        );
       },
     );
   }
 
-  Widget _buildContent(List<CoordinationNeed> missions) {
+  Widget _buildContent(
+    List<CoordinationNeed> missions,
+    List<ResponsePlace> locations,
+  ) {
     final statusNeeds = _filter == 0
         ? missions
         : missions.where((need) => need.status.index == _filter - 1).toList();
@@ -104,6 +115,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
               itemBuilder: (context, index) => NeedCard(
                 key: ValueKey(visibleNeeds[index].place),
                 need: visibleNeeds[index],
+                location: responsePlaceForNeed(visibleNeeds[index], locations),
               ),
               separatorBuilder: (_, _) => const SizedBox(height: 18),
             ),

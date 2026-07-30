@@ -23,6 +23,8 @@ abstract final class FirestoreLocationMapper {
       activeNeeds: _int(data['activeNeeds']),
       address: data['address'] as String?,
       structuredAddress: _structuredAddress(data),
+      contactName: data['contactName'] as String?,
+      contactPhone: data['contactPhone'] as String?,
       isOperational: data['isOperational'] as bool? ?? true,
     );
   }

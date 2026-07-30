@@ -213,6 +213,8 @@ class ResponsePlace {
     required this.activeNeeds,
     this.address,
     this.structuredAddress,
+    this.contactName,
+    this.contactPhone,
     this.isOperational = true,
   });
 
@@ -222,6 +224,8 @@ class ResponsePlace {
   final TerritorialGroup group;
   final String? address;
   final LocationAddress? structuredAddress;
+  final String? contactName;
+  final String? contactPhone;
   final bool isOperational;
   final int activeNeeds;
 
@@ -243,6 +247,31 @@ class ResponsePlace {
     }
     return 'Adresse à renseigner';
   }
+
+  bool get hasContactName => contactName?.trim().isNotEmpty == true;
+  bool get hasContactPhone => contactPhone?.trim().isNotEmpty == true;
+}
+
+ResponsePlace? responsePlaceForNeed(
+  CoordinationNeed need,
+  Iterable<ResponsePlace> locations,
+) {
+  final locationId = need.locationId?.trim();
+  if (locationId != null && locationId.isNotEmpty) {
+    for (final location in locations) {
+      if (location.id == locationId) return location;
+    }
+  }
+  final normalizedPlace = need.place.trim().toLowerCase();
+  for (final location in locations) {
+    if (location.name.trim().toLowerCase() == normalizedPlace) return location;
+  }
+  if (normalizedPlace.contains('croix-rouge')) {
+    for (final location in locations) {
+      if (location.type == ResponsePlaceType.redCross) return location;
+    }
+  }
+  return null;
 }
 
 enum AddressStatus {

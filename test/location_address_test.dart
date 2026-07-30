@@ -4,6 +4,7 @@ import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/repositories/firestore_location_mapper.dart';
 import 'package:interface_incendies_gironde/services/firestore_seed_service.dart';
+import 'package:interface_incendies_gironde/widgets/mission_location_details.dart';
 
 void main() {
   test('an old location without address remains readable', () {
@@ -16,7 +17,30 @@ void main() {
       },
     );
     expect(place.structuredAddress, isNull);
+    expect(place.contactName, isNull);
+    expect(place.contactPhone, isNull);
     expect(place.publicAddressLabel, 'Adresse à renseigner');
+  });
+
+  test('optional intervention contact fields remain Firestore compatible', () {
+    final place = FirestoreLocationMapper.fromFirestore(
+      id: 'contact',
+      data: const {
+        'name': 'Site avec référent',
+        'group': 'partnerSites',
+        'type': 'otherPartnerSite',
+        'contactName': '  Camille Martin  ',
+        'contactPhone': '  06 12 34 56 78  ',
+      },
+    );
+    final document = FirestoreSeedService(
+      store: _UnusedStore(),
+    ).toSeedDocument(place);
+
+    expect(place.contactName, '  Camille Martin  ');
+    expect(place.contactPhone, '  06 12 34 56 78  ');
+    expect(document.data['contactName'], 'Camille Martin');
+    expect(document.data['contactPhone'], '06 12 34 56 78');
   });
 
   test('a structured official address is parsed and calculated', () {
@@ -128,6 +152,63 @@ void main() {
 
     expect(castillon.structuredAddress?.city, 'Saint-Magne-de-Castillon');
     expect(cadillac.structuredAddress?.city, 'Béguey');
+  });
+
+  test('directions prefer coordinates over the verified address', () {
+    const location = ResponsePlace(
+      id: 'coordinates',
+      name: 'Site',
+      type: ResponsePlaceType.otherPartnerSite,
+      group: TerritorialGroup.partnerSites,
+      activeNeeds: 1,
+      structuredAddress: LocationAddress(
+        storedFullAddress: 'Adresse officielle',
+        latitude: 44.84,
+        longitude: -0.58,
+        status: AddressStatus.verifiedOfficial,
+      ),
+    );
+
+    expect(
+      LocationActionLinks.directions(location).toString(),
+      contains('query=44.84%2C-0.58'),
+    );
+  });
+
+  test('directions fall back to a verified address', () {
+    const location = ResponsePlace(
+      id: 'address',
+      name: 'Site',
+      type: ResponsePlaceType.otherPartnerSite,
+      group: TerritorialGroup.partnerSites,
+      activeNeeds: 1,
+      structuredAddress: LocationAddress(
+        addressLine1: '5 Avenue Gay-Lussac',
+        postalCode: '33370',
+        city: 'Artigues-près-Bordeaux',
+        status: AddressStatus.verifiedCrossSource,
+      ),
+    );
+
+    final uri = LocationActionLinks.directions(location);
+    expect(uri, isNotNull);
+    expect(uri!.queryParameters['query'], contains('5 Avenue Gay-Lussac'));
+  });
+
+  test('directions stay hidden without a reliable destination', () {
+    const location = ResponsePlace(
+      id: 'unknown',
+      name: 'Site',
+      type: ResponsePlaceType.otherPartnerSite,
+      group: TerritorialGroup.partnerSites,
+      activeNeeds: 1,
+      structuredAddress: LocationAddress(
+        status: AddressStatus.needsConfirmation,
+      ),
+    );
+
+    expect(LocationActionLinks.directions(location), isNull);
+    expect(LocationActionLinks.directions(null), isNull);
   });
 }
 
