@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/professional_equipment.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
@@ -111,7 +112,7 @@ void main() {
     expect(profile?.rpps, '10123456789');
     expect(profile?.cptsId, 'cpts-medoc');
     expect(profile?.cptsLabel, 'CPTS Médoc');
-    expect(profile?.equipment, ['Table']);
+    expect(profile?.equipment, [ProfessionalEquipmentId.massageTable]);
   });
 
   test('legacy profiles without RPPS or CPTS remain compatible', () async {
@@ -133,6 +134,33 @@ void main() {
     expect(profile?.rpps, isNull);
     expect(profile?.cptsId, isNull);
     expect(profile?.cptsLabel, isNull);
+  });
+
+  test('free historical equipment remains readable and persistable', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+      initialProfiles: const {
+        'mock-volunteer': VolunteerProfile(
+          uid: 'mock-volunteer',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          professionalIdType: ProfessionalIdType.none,
+          professionalIdValue: '',
+          profession: VolunteerProfession.doctor,
+          equipment: [' Sac historique '],
+        ),
+      },
+    );
+
+    final legacy = await repository.getVolunteerProfile();
+    expect(legacy?.equipment, ['Sac historique']);
+    await repository.saveVolunteerProfile(legacy!);
+    expect((await repository.getVolunteerProfile())?.equipment, [
+      'Sac historique',
+    ]);
   });
 
   test('profile validates modular identifiers and optional CPTS', () async {
@@ -258,7 +286,7 @@ void main() {
         professionalIdType: ProfessionalIdType.none,
         professionalIdValue: '',
         profession: VolunteerProfession.mk,
-        equipment: ['Autre matériel'],
+        equipment: [ProfessionalEquipmentId.otherEquipment],
       );
 
       await expectLater(
@@ -270,8 +298,40 @@ void main() {
         base.copyWith(otherEquipmentDetails: '  Coussin ergonomique  '),
       );
       final saved = await repository.getVolunteerProfile();
-      expect(saved?.equipment, ['Autre matériel']);
+      expect(saved?.equipment, [ProfessionalEquipmentId.otherEquipment]);
       expect(saved?.otherEquipmentDetails, 'Coussin ergonomique');
+    },
+  );
+
+  test(
+    'profession-specific equipment also requires details in Mock persistence',
+    () async {
+      final repository = MockCoordinationRepository(
+        initialMissions: const [],
+        initialLocations: const [],
+      );
+      const profile = VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.none,
+        professionalIdValue: '',
+        profession: VolunteerProfession.otherHealthProfessional,
+        equipment: [ProfessionalEquipmentId.professionSpecificEquipment],
+      );
+
+      await expectLater(
+        repository.saveVolunteerProfile(profile),
+        throwsA(isA<RepositoryException>()),
+      );
+      await repository.saveVolunteerProfile(
+        profile.copyWith(otherEquipmentDetails: 'Kit métier'),
+      );
+      expect((await repository.getVolunteerProfile())?.equipment, [
+        ProfessionalEquipmentId.professionSpecificEquipment,
+      ]);
     },
   );
 }

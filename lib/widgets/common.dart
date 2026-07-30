@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/professional_equipment.dart';
 import '../models/volunteer_profile.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
@@ -855,14 +856,6 @@ class _RegistrationSheet extends StatefulWidget {
 }
 
 class _RegistrationSheetState extends State<_RegistrationSheet> {
-  static const _equipmentOptions = [
-    'Table de massage',
-    'Crèmes / huiles de massage',
-    'Pistolet de massage',
-    'Bottes de pressothérapie',
-    'Autre matériel',
-  ];
-
   VolunteerProfession _profession = VolunteerProfession.mk;
   ProfessionalIdType _professionalIdType = ProfessionalIdType.none;
   bool _hasCpts = false;
@@ -895,6 +888,21 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   }
 
   bool get _hasAvailableProfession => _professions.any(_isAvailable);
+
+  List<ProfessionalEquipmentDefinition> get _equipmentOptions =>
+      ProfessionalEquipmentRegistry.forProfession(_profession.canonicalId!);
+
+  List<String> get _incompatibleEquipment => _selectedEquipment
+      .where(
+        (item) => !ProfessionalEquipmentRegistry.isCompatible(
+          item,
+          _profession.canonicalId!,
+        ),
+      )
+      .toList(growable: false);
+
+  bool get _equipmentDetailsRequired =>
+      ProfessionalEquipmentRegistry.requiresDetails(_selectedEquipment);
 
   @override
   void initState() {
@@ -945,14 +953,23 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         _selectedEquipment
           ..clear()
           ..addAll(
-            profile.equipment.map(_canonicalEquipment).whereType<String>(),
+            ProfessionalEquipmentRegistry.normalizeStoredValues(
+              profile.equipment.map(
+                (item) =>
+                    item.trim().toLowerCase().startsWith('autre matériel :')
+                    ? ProfessionalEquipmentId.otherEquipment
+                    : item,
+              ),
+            ),
           );
         final legacyOtherEquipment = profile.equipment
-            .where((item) => _canonicalEquipment(item) == null)
+            .where(
+              (item) =>
+                  item.trim().toLowerCase().startsWith('autre matériel :'),
+            )
             .map(
-              (item) => item.startsWith('Autre matériel :')
-                  ? item.substring('Autre matériel :'.length).trim()
-                  : item,
+              (item) =>
+                  item.substring(item.toLowerCase().indexOf(':') + 1).trim(),
             )
             .where((item) => item.isNotEmpty)
             .toList();
@@ -961,7 +978,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
             ? [profile.otherEquipmentDetails!.trim()]
             : legacyOtherEquipment;
         if (otherEquipment.isNotEmpty) {
-          _selectedEquipment.add('Autre matériel');
+          _selectedEquipment.add(ProfessionalEquipmentId.otherEquipment);
           _otherEquipmentController.text = otherEquipment.join(', ');
         }
         final profileProfessionAvailable = _isAvailable(profile.profession);
@@ -1201,24 +1218,46 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 const SizedBox(height: 4),
                 for (final equipment in _equipmentOptions)
                   CheckboxListTile(
-                    key: Key('equipment-$equipment'),
+                    key: Key('equipment-${equipment.id}'),
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(equipment),
-                    value: _selectedEquipment.contains(equipment),
+                    title: Text(equipment.label),
+                    value: _selectedEquipment.contains(equipment.id),
                     onChanged: (selected) => setState(() {
                       if (selected ?? false) {
-                        _selectedEquipment.add(equipment);
+                        _selectedEquipment.add(equipment.id);
                       } else {
-                        _selectedEquipment.remove(equipment);
-                        if (equipment == 'Autre matériel') {
-                          _otherEquipmentController.clear();
-                        }
+                        _selectedEquipment.remove(equipment.id);
                       }
                     }),
                   ),
-                if (_selectedEquipment.contains('Autre matériel'))
+                if (_incompatibleEquipment.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Équipement déjà enregistré',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 2),
+                  for (final equipment in _incompatibleEquipment)
+                    CheckboxListTile(
+                      key: Key('legacy-equipment-$equipment'),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(
+                        ProfessionalEquipmentRegistry.displayLabel(equipment),
+                      ),
+                      subtitle: const Text('Non proposé pour cette profession'),
+                      value: true,
+                      onChanged: (selected) {
+                        if (selected == false) {
+                          setState(() => _selectedEquipment.remove(equipment));
+                        }
+                      },
+                    ),
+                ],
+                if (_equipmentDetailsRequired)
                   TextFormField(
                     key: const Key('other-equipment-details'),
                     controller: _otherEquipmentController,
@@ -1252,21 +1291,6 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   static String? _required(String? value) {
     return value == null || value.trim().isEmpty ? 'Champ requis' : null;
-  }
-
-  static String? _canonicalEquipment(String value) {
-    final normalized = value.trim().toLowerCase();
-    if (normalized == 'table' ||
-        normalized == 'tables' ||
-        normalized == 'table de massage') {
-      return 'Table de massage';
-    }
-    if (normalized == 'huile' ||
-        normalized == 'huiles' ||
-        normalized == 'crèmes / huiles de massage') {
-      return 'Crèmes / huiles de massage';
-    }
-    return _equipmentOptions.contains(value) ? value : null;
   }
 
   static String? _phone(String? value) {
@@ -1319,11 +1343,10 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         cptsId: _hasCpts ? _cptsIdController.text : null,
         cptsLabel: _hasCpts ? _cptsController.text : null,
         profession: _profession,
-        equipment: [
-          ..._selectedEquipment.where((item) => item != 'Autre matériel'),
-          if (_selectedEquipment.contains('Autre matériel')) 'Autre matériel',
-        ],
-        otherEquipmentDetails: _selectedEquipment.contains('Autre matériel')
+        equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
+          _selectedEquipment,
+        ),
+        otherEquipmentDetails: _equipmentDetailsRequired
             ? _otherEquipmentController.text
             : null,
       );
@@ -1392,6 +1415,16 @@ class _ProfileSummary extends StatelessWidget {
                 ? profile.cptsLabel!
                 : 'Aucune CPTS',
           ),
+          if (profile.equipment.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              ProfessionalEquipmentRegistry.normalizeStoredValues(
+                profile.equipment,
+              ).map(ProfessionalEquipmentRegistry.displayLabel).join(' • '),
+            ),
+            if (profile.otherEquipmentDetails?.trim().isNotEmpty ?? false)
+              Text(profile.otherEquipmentDetails!.trim()),
+          ],
         ],
       ),
     );

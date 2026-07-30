@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/professional_equipment.dart';
 import 'package:interface_incendies_gironde/models/profession_quotas.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
@@ -331,11 +332,16 @@ void main() {
       );
     }
 
-    for (final profession in [
-      VolunteerProfession.doctor,
-      VolunteerProfession.nurse,
-      VolunteerProfession.otherHealthProfessional,
-    ]) {
+    final expectedEquipment = {
+      VolunteerProfession.mk: ProfessionalEquipmentId.massageTable,
+      VolunteerProfession.pp: ProfessionalEquipmentId.adaptedSeat,
+      VolunteerProfession.doctor: ProfessionalEquipmentId.stethoscope,
+      VolunteerProfession.nurse: ProfessionalEquipmentId.dressingEquipment,
+      VolunteerProfession.otherHealthProfessional:
+          ProfessionalEquipmentId.professionSpecificEquipment,
+    };
+    for (final entry in expectedEquipment.entries) {
+      final profession = entry.key;
       final choice = find.byKey(Key('profession-${profession.canonicalId}'));
       await tester.ensureVisible(choice);
       await tester.tap(choice);
@@ -348,8 +354,13 @@ void main() {
             .groupValue,
         profession,
       );
+      expect(
+        find.byKey(Key('equipment-${entry.value}')),
+        findsOneWidget,
+        reason: '${profession.label} doit afficher son matériel à 390 px',
+      );
+      expect(tester.takeException(), isNull);
     }
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('existing profile is summarized then can be edited prefilled', (
@@ -449,14 +460,146 @@ void main() {
     expect(find.byKey(const Key('other-equipment-details')), findsNothing);
 
     await tester.scrollUntilVisible(
-      find.byKey(const Key('equipment-Autre matériel')),
+      find.byKey(
+        const Key('equipment-${ProfessionalEquipmentId.otherEquipment}'),
+      ),
       200,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.tap(find.byKey(const Key('equipment-Autre matériel')));
+    await tester.tap(
+      find.byKey(
+        const Key('equipment-${ProfessionalEquipmentId.otherEquipment}'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('other-equipment-details')), findsOneWidget);
   });
+
+  testWidgets(
+    'profession change preserves incompatible and free historical equipment',
+    (tester) async {
+      final repository = MockCoordinationRepository(
+        initialMissions: [fiveProfessionMission()],
+        initialLocations: const [],
+        initialProfiles: const {
+          'mock-volunteer': VolunteerProfile(
+            uid: 'mock-volunteer',
+            firstName: 'Alice',
+            lastName: 'Martin',
+            phone: '0600000000',
+            email: 'alice@example.fr',
+            professionalIdType: ProfessionalIdType.none,
+            professionalIdValue: '',
+            profession: VolunteerProfession.mk,
+            equipment: ['Table de massage', 'Pistolet de massage', 'Sac libre'],
+          ),
+        },
+      );
+      await pumpApp(tester, repository);
+      await tester.drag(
+        find.byType(CustomScrollView).first,
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('❤️ JE M’ENGAGE'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Modifier mes informations'));
+      await tester.pumpAndSettle();
+
+      final doctor = find.byKey(const Key('profession-physician'));
+      await tester.ensureVisible(doctor);
+      await tester.tap(doctor);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(
+          const Key(
+            'equipment-${ProfessionalEquipmentId.bloodPressureMonitor}',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const Key('equipment-${ProfessionalEquipmentId.massageTable}'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.byKey(
+          const Key('legacy-equipment-${ProfessionalEquipmentId.massageTable}'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('legacy-equipment-Sac libre')),
+        findsOneWidget,
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const Key('legacy-equipment-Sac libre')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('legacy-equipment-Sac libre')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('legacy-equipment-Sac libre')), findsNothing);
+
+      final mk = find.byKey(const Key('profession-physiotherapist'));
+      await tester.ensureVisible(mk);
+      await tester.tap(mk);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(
+          const Key('equipment-${ProfessionalEquipmentId.massageTable}'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const Key('legacy-equipment-${ProfessionalEquipmentId.massageTable}'),
+        ),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'profession-specific equipment requests details without iPhone overflow',
+    (tester) async {
+      final repository = MockCoordinationRepository(
+        initialMissions: [fiveProfessionMission()],
+        initialLocations: const [],
+      );
+      await pumpApp(tester, repository);
+      await tester.drag(
+        find.byType(CustomScrollView).first,
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('❤️ JE M’ENGAGE'));
+      await tester.pumpAndSettle();
+
+      final otherProfession = find.byKey(
+        const Key('profession-other_health_professional'),
+      );
+      await tester.ensureVisible(otherProfession);
+      await tester.tap(otherProfession);
+      await tester.pumpAndSettle();
+      final specificEquipment = find.byKey(
+        const Key(
+          'equipment-${ProfessionalEquipmentId.professionSpecificEquipment}',
+        ),
+      );
+      await tester.ensureVisible(specificEquipment);
+      await tester.tap(specificEquipment);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('other-equipment-details')), findsOneWidget);
+      await tester.ensureVisible(find.text('CONFIRMER MA PARTICIPATION'));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('double submission invokes createEngagement only once', (
     tester,

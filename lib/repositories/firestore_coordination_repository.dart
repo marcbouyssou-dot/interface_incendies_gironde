@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../utils/switch_latest.dart';
@@ -668,11 +669,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               'phone': phone.trim(),
               'profession': profession.canonicalId,
               'updatedAt': now,
-              'equipment': equipment
-                  .map((item) => item.trim())
-                  .where((item) => item.isNotEmpty)
-                  .toSet()
-                  .toList(),
+              'equipment': ProfessionalEquipmentRegistry.normalizeStoredValues(
+                equipment,
+              ),
             };
             final resolvedIdType =
                 professionalIdType ??
@@ -941,7 +940,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       cptsId: _nullableTrim(data['cptsId'] as String?),
       cptsLabel: _nullableTrim(data['cptsLabel'] as String?),
       profession: profession,
-      equipment: List<String>.from(data['equipment'] as List? ?? const []),
+      equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
+        List<String>.from(data['equipment'] as List? ?? const []),
+      ),
       otherEquipmentDetails: _nullableTrim(
         data['otherEquipmentDetails'] as String?,
       ),
@@ -976,11 +977,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       'cptsId': ?cptsId,
       'cptsLabel': ?cptsLabel,
       'profession': profile.profession.canonicalId,
-      'equipment': profile.equipment
-          .map((item) => item.trim())
-          .where((item) => item.isNotEmpty)
-          .toSet()
-          .toList(),
+      'equipment': ProfessionalEquipmentRegistry.normalizeStoredValues(
+        profile.equipment,
+      ),
       'otherEquipmentDetails': ?_nullableTrim(profile.otherEquipmentDetails),
       'updatedAt': serverTimestamp,
     };
@@ -1072,7 +1071,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         'Renseignez complètement votre CPTS ou choisissez Aucune.',
       );
     }
-    if (equipment.contains('Autre matériel') &&
+    if (ProfessionalEquipmentRegistry.requiresDetails(equipment) &&
         _nullableTrim(otherEquipmentDetails) == null) {
       throw const RepositoryException(
         'Précisez le matériel que vous pouvez apporter.',

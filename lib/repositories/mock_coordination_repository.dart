@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../data/mock_data.dart';
 import '../models/need.dart';
+import '../models/professional_equipment.dart';
 import '../models/volunteer_profile.dart';
 import 'coordination_repository.dart';
 
@@ -91,8 +92,15 @@ class MockCoordinationRepository implements CoordinationRepository {
   }
 
   @override
-  Future<VolunteerProfile?> getVolunteerProfile() async =>
-      volunteerProfiles[volunteerUid];
+  Future<VolunteerProfile?> getVolunteerProfile() async {
+    final profile = volunteerProfiles[volunteerUid];
+    if (profile == null) return null;
+    return profile.copyWith(
+      equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
+        profile.equipment,
+      ),
+    );
+  }
 
   @override
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
@@ -129,11 +137,9 @@ class MockCoordinationRepository implements CoordinationRepository {
       cptsId: _nullableTrim(profile.cptsId),
       cptsLabel: _nullableTrim(profile.cptsLabel),
       profession: profile.profession,
-      equipment: profile.equipment
-          .map((item) => item.trim())
-          .where((item) => item.isNotEmpty)
-          .toSet()
-          .toList(),
+      equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
+        profile.equipment,
+      ),
       otherEquipmentDetails: _nullableTrim(profile.otherEquipmentDetails),
       createdAt: existing?.createdAt ?? profile.createdAt ?? now,
       updatedAt: now,
@@ -446,11 +452,7 @@ class MockCoordinationRepository implements CoordinationRepository {
       cptsId: _nullableTrim(cptsId),
       cptsLabel: _nullableTrim(cptsLabel),
       profession: profession,
-      equipment: equipment
-          .map((item) => item.trim())
-          .where((item) => item.isNotEmpty)
-          .toSet()
-          .toList(),
+      equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(equipment),
       otherEquipmentDetails: _nullableTrim(otherEquipmentDetails),
       createdAt: existingProfile?.createdAt ?? now,
       updatedAt: now,
@@ -634,7 +636,7 @@ class MockCoordinationRepository implements CoordinationRepository {
         'Renseignez complètement votre CPTS ou choisissez Aucune.',
       );
     }
-    if (equipment.contains('Autre matériel') &&
+    if (ProfessionalEquipmentRegistry.requiresDetails(equipment) &&
         _nullableTrim(otherEquipmentDetails) == null) {
       throw const RepositoryException(
         'Précisez le matériel que vous pouvez apporter.',
