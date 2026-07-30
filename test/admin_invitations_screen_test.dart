@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
@@ -112,6 +114,7 @@ void main() {
     );
     expect(find.text('Expirée'), findsOneWidget);
     expect(find.text('Annulée'), findsOneWidget);
+    expect(find.text('Préparer le compte'), findsOneWidget);
     expect(find.text('Lieu indisponible'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -225,6 +228,71 @@ void main() {
     expect(find.byKey(const Key('cancel-invitation-pending')), findsNothing);
   });
 
+  testWidgets('provisioning is confirmed, single and never claims email sent', (
+    tester,
+  ) async {
+    final repository = _ProvisionInvitationRepository(
+      _invitation(
+        id: 'pending',
+        status: AdminInvitationStatus.pending,
+        now: now,
+      ),
+    );
+    await pumpApp(tester, invitationRepository: repository);
+    await openInvitations(tester);
+
+    await tester.tap(find.byKey(const Key('provision-invitation-pending')));
+    await tester.pumpAndSettle();
+    expect(find.text('Préparer ce compte ?'), findsOneWidget);
+    expect(find.textContaining('Aucun e-mail ne sera envoyé'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-provision-invitation')));
+    await tester.pump();
+
+    expect(repository.calls, 1);
+    expect(find.text('Préparation…'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('provision-invitation-pending')));
+    expect(repository.calls, 1);
+
+    repository.complete();
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Compte préparé. L’envoi automatique de l’invitation sera activé prochainement.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('e-mail envoyé'), findsNothing);
+  });
+
+  testWidgets('provisioning error is explicit and keeps the pending action', (
+    tester,
+  ) async {
+    final repository = _ProvisionInvitationRepository(
+      _invitation(
+        id: 'pending',
+        status: AdminInvitationStatus.pending,
+        now: now,
+      ),
+    );
+    await pumpApp(tester, invitationRepository: repository);
+    await openInvitations(tester);
+    await tester.tap(find.byKey(const Key('provision-invitation-pending')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-provision-invitation')));
+    await tester.pump();
+    repository.fail();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Le compte n’a pas pu être préparé. Réessayez.'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('provision-invitation-pending')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('invitation listener is stable across rebuilds', (tester) async {
     final repository = _CountingInvitationRepository();
     await pumpApp(tester, invitationRepository: repository);
@@ -280,4 +348,52 @@ class _CountingInvitationRepository implements AdminInvitationRepository {
 
   @override
   Future<AdminInvitation?> getInvitation(String invitationId) async => null;
+
+  @override
+  Future<AdminProvisioningResult> provisionInvitation(
+    String invitationId,
+  ) async => const AdminProvisioningResult(
+    accountProvisioned: true,
+    emailDelivery: 'pending',
+    alreadyProvisioned: false,
+  );
+}
+
+class _ProvisionInvitationRepository implements AdminInvitationRepository {
+  _ProvisionInvitationRepository(this.invitation);
+
+  final AdminInvitation invitation;
+  final Completer<AdminProvisioningResult> _completer = Completer();
+  int calls = 0;
+
+  void complete() => _completer.complete(
+    const AdminProvisioningResult(
+      accountProvisioned: true,
+      emailDelivery: 'pending',
+      alreadyProvisioned: false,
+    ),
+  );
+
+  void fail() => _completer.completeError(StateError('server failed'));
+
+  @override
+  Stream<List<AdminInvitation>> watchInvitations() =>
+      Stream.value([invitation]);
+
+  @override
+  Future<AdminProvisioningResult> provisionInvitation(String invitationId) {
+    calls++;
+    return _completer.future;
+  }
+
+  @override
+  Future<void> cancelInvitation(String invitationId) async {}
+
+  @override
+  Future<AdminInvitation> createInvitation(AdminInvitationDraft draft) =>
+      throw UnimplementedError();
+
+  @override
+  Future<AdminInvitation?> getInvitation(String invitationId) async =>
+      invitation;
 }

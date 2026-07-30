@@ -179,6 +179,10 @@ class _CoordinatorInvitationsContentState
                           invitation: invitation,
                           locationsById: locationsById,
                           onCancel: () => _cancel(invitation),
+                          onProvision: () => _provision(invitation),
+                          provisioning: _provisioningIds.contains(
+                            invitation.id,
+                          ),
                         ),
                       ),
                     ),
@@ -223,6 +227,54 @@ class _CoordinatorInvitationsContentState
       );
     }
   }
+
+  final Set<String> _provisioningIds = {};
+
+  Future<void> _provision(AdminInvitation invitation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Préparer ce compte ?'),
+        content: const Text(
+          'Le compte Firebase Auth et son rôle seront préparés. '
+          'Aucun e-mail ne sera envoyé à cette étape.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Retour'),
+          ),
+          FilledButton(
+            key: const Key('confirm-provision-invitation'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Préparer le compte'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || _provisioningIds.contains(invitation.id)) return;
+    setState(() => _provisioningIds.add(invitation.id));
+    try {
+      await widget.repository.provisionInvitation(invitation.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Compte préparé. L’envoi automatique de l’invitation sera activé prochainement.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Le compte n’a pas pu être préparé. Réessayez.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _provisioningIds.remove(invitation.id));
+    }
+  }
 }
 
 class _InvitationCard extends StatelessWidget {
@@ -230,11 +282,15 @@ class _InvitationCard extends StatelessWidget {
     required this.invitation,
     required this.locationsById,
     required this.onCancel,
+    required this.onProvision,
+    required this.provisioning,
   });
 
   final AdminInvitation invitation;
   final Map<String, ResponsePlace> locationsById;
   final VoidCallback onCancel;
+  final VoidCallback onProvision;
+  final bool provisioning;
 
   @override
   Widget build(BuildContext context) {
@@ -292,13 +348,22 @@ class _InvitationCard extends StatelessWidget {
             ),
             if (effectiveStatus == AdminInvitationStatus.pending) ...[
               const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  key: Key('cancel-invitation-${invitation.id}'),
-                  onPressed: onCancel,
-                  child: const Text('Annuler'),
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton(
+                    key: Key('provision-invitation-${invitation.id}'),
+                    onPressed: provisioning ? null : onProvision,
+                    child: Text(
+                      provisioning ? 'Préparation…' : 'Préparer le compte',
+                    ),
+                  ),
+                  TextButton(
+                    key: Key('cancel-invitation-${invitation.id}'),
+                    onPressed: provisioning ? null : onCancel,
+                    child: const Text('Annuler'),
+                  ),
+                ],
               ),
             ],
           ],

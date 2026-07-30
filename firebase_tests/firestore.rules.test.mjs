@@ -1208,6 +1208,16 @@ test('admin invitations: protected creation fields are enforced', async () => {
       adminInvitation({role: 'administrator', locationIds: []}),
     ),
   );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), `${collectionName}/server-fields`),
+      adminInvitation({
+        acceptedUid: 'target',
+        provisionedAt: serverTimestamp(),
+        activationLinkGeneratedAt: serverTimestamp(),
+      }),
+    ),
+  );
 });
 
 test('admin invitations: client cannot accept, mutate identity or delete', async () => {
@@ -1220,6 +1230,9 @@ test('admin invitations: client cannot accept, mutate identity or delete', async
     updateDoc(doc(db('coord'), reference), {
       status: 'accepted',
       acceptedAt: serverTimestamp(),
+      acceptedUid: 'target',
+      provisionedAt: serverTimestamp(),
+      activationLinkGeneratedAt: serverTimestamp(),
     }),
   );
   await assertFails(

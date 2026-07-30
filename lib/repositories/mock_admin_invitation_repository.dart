@@ -66,6 +66,38 @@ class MockAdminInvitationRepository implements AdminInvitationRepository {
     _emit();
   }
 
+  @override
+  Future<AdminProvisioningResult> provisionInvitation(
+    String invitationId,
+  ) async {
+    final invitation = _invitations[invitationId];
+    if (invitation == null) throw StateError('Invitation introuvable.');
+    if (invitation.status == AdminInvitationStatus.accepted) {
+      return const AdminProvisioningResult(
+        accountProvisioned: true,
+        emailDelivery: 'pending',
+        alreadyProvisioned: true,
+      );
+    }
+    if (!invitation.isPending || invitation.isExpired) {
+      throw StateError('Cette invitation ne peut pas être préparée.');
+    }
+    final provisionedAt = _now();
+    _invitations[invitationId] = invitation.copyWith(
+      status: AdminInvitationStatus.accepted,
+      acceptedAt: provisionedAt,
+      acceptedUid: 'mock-admin-$invitationId',
+      provisionedAt: provisionedAt,
+      activationLinkGeneratedAt: provisionedAt,
+    );
+    _emit();
+    return const AdminProvisioningResult(
+      accountProvisioned: true,
+      emailDelivery: 'pending',
+      alreadyProvisioned: false,
+    );
+  }
+
   Future<void> dispose() => _updates.close();
 
   void _emit() => _updates.add(_sortedInvitations());

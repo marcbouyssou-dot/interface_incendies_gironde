@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/admin_invitation.dart';
 import 'admin_invitation_repository.dart';
@@ -20,6 +21,8 @@ abstract interface class AdminInvitationFirestoreDataSource {
   Future<String> addDocument(Map<String, Object?> data);
 
   Future<void> updateDocument(String id, Map<String, Object?> data);
+
+  Future<Map<String, dynamic>> provisionInvitation(String id);
 }
 
 class AdminInvitationDocument {
@@ -31,10 +34,17 @@ class AdminInvitationDocument {
 
 class FirestoreAdminInvitationDataSource
     implements AdminInvitationFirestoreDataSource {
-  FirestoreAdminInvitationDataSource(this.firestore, this.auth);
+  FirestoreAdminInvitationDataSource(
+    this.firestore,
+    this.auth, {
+    FirebaseFunctions? functions,
+  }) : functions =
+           functions ??
+           FirebaseFunctions.instanceFor(app: auth.app, region: 'europe-west1');
 
   final FirebaseFirestore firestore;
   final FirebaseAuth auth;
+  final FirebaseFunctions functions;
 
   @override
   String? get currentUserId => auth.currentUser?.uid;
@@ -88,6 +98,18 @@ class FirestoreAdminInvitationDataSource
   @override
   Future<void> updateDocument(String id, Map<String, Object?> data) {
     return firestore.collection('adminInvitations').doc(id).update(data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> provisionInvitation(String id) async {
+    final result = await functions
+        .httpsCallable('provisionAdminInvitation')
+        .call<Object?>({'invitationId': id});
+    final data = result.data;
+    if (data is! Map) {
+      throw StateError('Réponse de provisionnement invalide.');
+    }
+    return Map<String, dynamic>.from(data);
   }
 }
 
@@ -171,6 +193,19 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
     });
   }
 
+  @override
+  Future<AdminProvisioningResult> provisionInvitation(
+    String invitationId,
+  ) async {
+    await _requireCoordinator();
+    final data = await _dataSource.provisionInvitation(invitationId);
+    return AdminProvisioningResult(
+      accountProvisioned: data['accountProvisioned'] == true,
+      emailDelivery: data['emailDelivery'] as String? ?? 'pending',
+      alreadyProvisioned: data['alreadyProvisioned'] == true,
+    );
+  }
+
   Future<String> _requireCoordinator() async {
     final uid = _dataSource.currentUserId;
     if (uid == null) throw StateError('Session responsable requise.');
@@ -196,6 +231,16 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
       acceptedAt: data['acceptedAt'] == null
           ? null
           : _dateTime(data['acceptedAt'], 'acceptedAt'),
+      acceptedUid: data['acceptedUid'] as String?,
+      provisionedAt: data['provisionedAt'] == null
+          ? null
+          : _dateTime(data['provisionedAt'], 'provisionedAt'),
+      activationLinkGeneratedAt: data['activationLinkGeneratedAt'] == null
+          ? null
+          : _dateTime(
+              data['activationLinkGeneratedAt'],
+              'activationLinkGeneratedAt',
+            ),
     );
   }
 }

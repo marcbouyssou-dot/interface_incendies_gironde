@@ -25,6 +25,9 @@ class AdminInvitation {
     required this.expiresAt,
     required this.status,
     this.acceptedAt,
+    this.acceptedUid,
+    this.provisionedAt,
+    this.activationLinkGeneratedAt,
   });
 
   final String id;
@@ -37,6 +40,9 @@ class AdminInvitation {
   final DateTime expiresAt;
   final AdminInvitationStatus status;
   final DateTime? acceptedAt;
+  final String? acceptedUid;
+  final DateTime? provisionedAt;
+  final DateTime? activationLinkGeneratedAt;
 
   bool get isPending => status == AdminInvitationStatus.pending;
   bool get isExpired =>
@@ -46,6 +52,9 @@ class AdminInvitation {
   AdminInvitation copyWith({
     AdminInvitationStatus? status,
     DateTime? acceptedAt,
+    String? acceptedUid,
+    DateTime? provisionedAt,
+    DateTime? activationLinkGeneratedAt,
   }) {
     return AdminInvitation(
       id: id,
@@ -58,6 +67,10 @@ class AdminInvitation {
       expiresAt: expiresAt,
       status: status ?? this.status,
       acceptedAt: acceptedAt ?? this.acceptedAt,
+      acceptedUid: acceptedUid ?? this.acceptedUid,
+      provisionedAt: provisionedAt ?? this.provisionedAt,
+      activationLinkGeneratedAt:
+          activationLinkGeneratedAt ?? this.activationLinkGeneratedAt,
     );
   }
 }

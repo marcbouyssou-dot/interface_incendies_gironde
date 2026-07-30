@@ -144,6 +144,39 @@ void main() {
     await expectLater(repository.createInvitation(draft()), throwsStateError);
     expect(source.createdDocuments, 0);
   });
+
+  test(
+    'mock repository provisions pending invitation without email delivery',
+    () async {
+      final repository = MockAdminInvitationRepository(now: () => now);
+      addTearDown(repository.dispose);
+      final created = await repository.createInvitation(draft());
+
+      final result = await repository.provisionInvitation(created.id);
+      final stored = await repository.getInvitation(created.id);
+
+      expect(result.accountProvisioned, isTrue);
+      expect(result.emailDelivery, 'pending');
+      expect(stored?.status, AdminInvitationStatus.accepted);
+      expect(stored?.acceptedUid, isNotEmpty);
+      expect(stored?.provisionedAt, now);
+    },
+  );
+
+  test('firestore repository delegates provisioning to the callable', () async {
+    final source = _FakeInvitationDataSource(now: now);
+    final repository = FirestoreAdminInvitationRepository(
+      dataSource: source,
+      now: () => now,
+    );
+
+    final result = await repository.provisionInvitation('invitation-a');
+
+    expect(source.provisionedInvitationId, 'invitation-a');
+    expect(result.accountProvisioned, isTrue);
+    expect(result.emailDelivery, 'pending');
+    expect(result.alreadyProvisioned, isFalse);
+  });
 }
 
 Map<String, Object?> _invitationData({required DateTime now}) => {
@@ -166,6 +199,7 @@ class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
   final List<AdminInvitationDocument> documents = [];
   int createdDocuments = 0;
   Map<String, Object?>? lastUpdate;
+  String? provisionedInvitationId;
 
   @override
   String? get currentUserId => 'coord';
@@ -204,6 +238,16 @@ class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
       id: id,
       data: {...existing.data, ...data},
     );
+  }
+
+  @override
+  Future<Map<String, dynamic>> provisionInvitation(String id) async {
+    provisionedInvitationId = id;
+    return {
+      'accountProvisioned': true,
+      'emailDelivery': 'pending',
+      'alreadyProvisioned': false,
+    };
   }
 
   @override
