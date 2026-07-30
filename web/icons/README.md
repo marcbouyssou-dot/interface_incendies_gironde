@@ -1,4 +1,4 @@
-# Icônes Recup33
+# Icônes MobSanté
 
 Les PNG officiels utilisent les noms suivants :
 

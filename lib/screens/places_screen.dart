@@ -4,6 +4,7 @@ import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'about_screen.dart';
 
 class PlacesScreen extends StatefulWidget {
   const PlacesScreen({super.key});
@@ -79,6 +80,20 @@ class _PlacesScreenState extends State<PlacesScreen> {
                 const Text(
                   '2026',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    key: const Key('about-entry'),
+                    leading: const Icon(Icons.info_outline_rounded),
+                    title: const Text('À propos'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const AboutScreen(),
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 TerritorialGroupFilter(

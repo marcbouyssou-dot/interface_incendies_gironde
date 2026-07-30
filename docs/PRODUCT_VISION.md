@@ -1,5 +1,8 @@
 # Vision produit — InterfaceRecup33
 
+Nom court visible : **MobSanté**. Nom technique et historique :
+**InterfaceRecup33**.
+
 ## Objectif
 
 InterfaceRecup33 coordonne la mobilisation de professionnels de santé lors

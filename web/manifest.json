@@ -1,11 +1,11 @@
 {
-    "name": "Interface Récup",
-    "short_name": "Recup33",
+    "name": "InterfaceRecup33 — MobSanté",
+    "short_name": "MobSanté",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F4F6F8",
     "theme_color": "#10233E",
-    "description": "Interface Récup — Incendies Gironde",
+    "description": "MobSanté — Interface de mobilisation des professionnels de santé",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
