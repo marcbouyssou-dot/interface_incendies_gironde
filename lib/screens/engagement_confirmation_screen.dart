@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/mission_location_details.dart';
 
 class EngagementConfirmationScreen extends StatelessWidget {
   const EngagementConfirmationScreen({
     super.key,
     required this.need,
+    this.location,
     this.result = EngagementCreationResult.created,
   });
 
   final CoordinationNeed need;
+  final ResponsePlace? location;
   final EngagementCreationResult result;
 
   @override
@@ -58,6 +61,10 @@ class EngagementConfirmationScreen extends StatelessWidget {
                             label: 'Lieu',
                             value: need.place,
                           ),
+                          if (location?.verifiedAddress != null) ...[
+                            const SizedBox(height: 6),
+                            LocationAddressLine(location: location),
+                          ],
                           const SizedBox(height: 18),
                           _ConfirmationDetail(
                             icon: Icons.schedule_rounded,

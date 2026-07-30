@@ -28,15 +28,50 @@ abstract final class LocationActionLinks {
   }
 }
 
+class LocationAddressLine extends StatelessWidget {
+  const LocationAddressLine({
+    super.key,
+    required this.location,
+    this.maxLines = 2,
+    this.selectable = false,
+  });
+
+  final ResponsePlace? location;
+  final int maxLines;
+  final bool selectable;
+
+  @override
+  Widget build(BuildContext context) {
+    final address = location?.verifiedAddress?.trim();
+    if (address == null || address.isEmpty) return const SizedBox.shrink();
+    const style = TextStyle(
+      color: AppColors.textMuted,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      height: 1.35,
+    );
+    final text = Text(
+      address,
+      key: const Key('location-address-line'),
+      maxLines: maxLines,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+    return selectable ? SelectionArea(child: text) : text;
+  }
+}
+
 class MissionLocationDetails extends StatelessWidget {
   const MissionLocationDetails({
     super.key,
     required this.location,
     this.compact = false,
+    this.phoneButtonLabel,
   });
 
   final ResponsePlace? location;
   final bool compact;
+  final String? phoneButtonLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -63,12 +98,10 @@ class MissionLocationDetails extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (address != null)
-            SelectionArea(
-              child: Text(
-                address,
-                key: const Key('mission-location-address'),
-                style: style,
-              ),
+            LocationAddressLine(
+              key: const Key('mission-location-address'),
+              location: place,
+              selectable: true,
             ),
           if (place.hasContactName) ...[
             if (address != null) const SizedBox(height: 4),
@@ -87,7 +120,7 @@ class MissionLocationDetails extends StatelessWidget {
                 minimumSize: const Size(44, 36),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text(place.contactPhone!.trim()),
+              child: Text(phoneButtonLabel ?? place.contactPhone!.trim()),
             ),
           if (directions != null)
             TextButton.icon(

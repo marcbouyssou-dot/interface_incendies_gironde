@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_identity.dart';
 import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
@@ -156,7 +157,7 @@ class _CrisisHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'InterfaceRecup33',
+                    AppIdentity.shortName,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 2),

@@ -34,6 +34,7 @@ migrate_working_dir/
 /coverage/
 node_modules/
 data/location_address_dry_run.json
+data/location_address_dry_run_report.json
 data/location_address_backup.json
 
 # Symbolication related

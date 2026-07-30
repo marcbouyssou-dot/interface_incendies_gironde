@@ -4,7 +4,9 @@ import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/mission_location_details.dart';
 import 'about_screen.dart';
+import 'location_detail_screen.dart';
 
 class PlacesScreen extends StatefulWidget {
   const PlacesScreen({super.key});
@@ -17,6 +19,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
   TerritorialGroup? _group;
   LiveCoordinationData? _liveData;
   Stream<List<ResponsePlace>>? _locations;
+  Stream<List<CoordinationNeed>>? _missions;
 
   @override
   void didChangeDependencies() {
@@ -25,6 +28,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
     if (!identical(liveData, _liveData)) {
       _liveData = liveData;
       _locations = liveData.watchLocations();
+      _missions = liveData.watchMissions();
     }
   }
 
@@ -111,8 +115,20 @@ class _PlacesScreenState extends State<PlacesScreen> {
             sliver: SliverList.separated(
               itemCount: visiblePlaces.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) =>
-                  _PlaceCard(place: visiblePlaces[index]),
+              itemBuilder: (context, index) => _PlaceCard(
+                place: visiblePlaces[index],
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => LiveCoordinationDataScope(
+                      data: _liveData!,
+                      child: LocationDetailScreen(
+                        location: visiblePlaces[index],
+                        missions: _missions,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -122,8 +138,9 @@ class _PlacesScreenState extends State<PlacesScreen> {
 }
 
 class _PlaceCard extends StatelessWidget {
-  const _PlaceCard({required this.place});
+  const _PlaceCard({required this.place, required this.onTap});
   final ResponsePlace place;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -135,59 +152,77 @@ class _PlaceCard extends StatelessWidget {
       ResponsePlaceType.interventionSector => Icons.location_city_outlined,
     };
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.orangeSoft,
-                borderRadius: BorderRadius.circular(15),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: Key('place-card-${place.id}'),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.orangeSoft,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(icon, color: AppColors.orange),
               ),
-              child: Icon(icon, color: AppColors.orange),
-            ),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    place.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    place.group.label,
-                    style: const TextStyle(
-                      color: AppColors.orange,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      place.name,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    place.type.label,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    place.publicAddressLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 7),
-                  _ActivityStatus(
-                    active: place.isActive,
-                    operational: place.isOperational,
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      place.group.label,
+                      style: const TextStyle(
+                        color: AppColors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      place.type.label,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    if (place.verifiedAddress != null) ...[
+                      const SizedBox(height: 4),
+                      LocationAddressLine(location: place),
+                    ],
+                    const SizedBox(height: 7),
+                    _ActivityStatus(
+                      active: place.isActive,
+                      operational: place.isOperational,
+                    ),
+                    const SizedBox(height: 7),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Voir le lieu',
+                          style: TextStyle(
+                            color: AppColors.navy,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        SizedBox(width: 3),
+                        Icon(Icons.chevron_right_rounded, size: 17),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

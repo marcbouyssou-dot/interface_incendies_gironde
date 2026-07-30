@@ -137,17 +137,19 @@ L’outil d’administration est séparé de l’application :
 ```bash
 cd scripts
 npm install
-export FIREBASE_PROJECT_ID=<your-project-id>
+export FIREBASE_PROJECT_ID=mobilisation-sante
 gcloud auth application-default login
 node update_location_addresses.mjs --dry-run
-node update_location_addresses.mjs --apply
+node update_location_addresses.mjs --apply-confirmed
 ```
 
-Le dry-run est obligatoire et lié par empreinte au CSV et au projet. Le mode
-`--apply` refuse un identifiant inconnu, sauvegarde tous les documents locaux
-dans `data/location_address_backup.json`, puis modifie uniquement les champs
-d’adresse. Ne pas exécuter ces commandes contre la production sans validation
-humaine du rapport.
+Sans argument, l’outil reste en dry-run. Il refuse tout projet autre que
+`mobilisation-sante` et lie le rapport au CSV et au projet par empreinte. Le
+mode `--apply-confirmed` exige ce rapport préalable, refuse les conflits,
+sauvegarde les documents dans `data/location_address_backup.json`, puis ajoute
+uniquement les champs d’adresse vérifiés encore absents. Il n’écrase ni adresse
+ni contact existant et ignore `needs_confirmation` et `not_found`. Ne pas
+exécuter ce mode contre la production sans validation humaine du rapport.
 
 # Désengagement et annulation RC1.3
 

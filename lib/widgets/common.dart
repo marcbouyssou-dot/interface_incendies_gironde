@@ -421,7 +421,7 @@ class NeedCard extends StatelessWidget {
               const SizedBox(height: 20),
               const Divider(height: 1),
               const SizedBox(height: 18),
-              _NeedActions(need: need),
+              _NeedActions(need: need, location: location),
             ],
           ),
         ),
@@ -438,9 +438,10 @@ class NeedCard extends StatelessWidget {
 }
 
 class _NeedActions extends StatefulWidget {
-  const _NeedActions({required this.need});
+  const _NeedActions({required this.need, required this.location});
 
   final CoordinationNeed need;
+  final ResponsePlace? location;
 
   @override
   State<_NeedActions> createState() => _NeedActionsState();
@@ -526,7 +527,10 @@ class _NeedActionsState extends State<_NeedActions> {
                         context: context,
                         isScrollControlled: true,
                         showDragHandle: true,
-                        builder: (_) => _RegistrationSheet(need: need),
+                        builder: (_) => _RegistrationSheet(
+                          need: need,
+                          location: widget.location,
+                        ),
                       )
                     : null,
                 style: FilledButton.styleFrom(
@@ -570,7 +574,8 @@ class _NeedActionsState extends State<_NeedActions> {
                   context: context,
                   isScrollControlled: true,
                   showDragHandle: true,
-                  builder: (_) => _RegistrationSheet(need: need),
+                  builder: (_) =>
+                      _RegistrationSheet(need: need, location: widget.location),
                 ),
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.orange,
@@ -848,8 +853,9 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
 }
 
 class _RegistrationSheet extends StatefulWidget {
-  const _RegistrationSheet({required this.need});
+  const _RegistrationSheet({required this.need, required this.location});
   final CoordinationNeed need;
+  final ResponsePlace? location;
 
   @override
   State<_RegistrationSheet> createState() => _RegistrationSheetState();
@@ -1374,8 +1380,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     if (!mounted) return;
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            EngagementConfirmationScreen(need: widget.need, result: result),
+        builder: (_) => EngagementConfirmationScreen(
+          need: widget.need,
+          location: widget.location,
+          result: result,
+        ),
       ),
     );
   }

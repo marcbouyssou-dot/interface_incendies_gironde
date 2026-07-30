@@ -45,7 +45,7 @@ void main() {
     tester,
   ) async {
     await pumpIPhone(tester);
-    expect(find.text('InterfaceRecup33'), findsOneWidget);
+    expect(find.text('MobSanté'), findsOneWidget);
     expect(find.text('Incendies Gironde'), findsOneWidget);
     expect(find.text('64 % de couverture'), findsOneWidget);
     expect(find.text('MÉRIGNAC'), findsOneWidget);
@@ -57,14 +57,21 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final location = responsePlaceForNeed(needs.first, places);
     await tester.pumpWidget(
-      MaterialApp(home: EngagementConfirmationScreen(need: needs.first)),
+      MaterialApp(
+        home: EngagementConfirmationScreen(
+          need: needs.first,
+          location: location,
+        ),
+      ),
     );
 
     expect(find.text('Merci !'), findsOneWidget);
     expect(find.text('Votre engagement est confirmé.'), findsOneWidget);
     expect(find.text('Elle est en attente de validation.'), findsNothing);
     expect(find.text(needs.first.place), findsOneWidget);
+    expect(find.text(location!.verifiedAddress!), findsOneWidget);
     expect(find.text(needs.first.time), findsOneWidget);
     expect(find.text('Retour aux interventions'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -117,7 +124,7 @@ void main() {
       );
     }
 
-    expect(find.text('InterfaceRecup33'), findsOneWidget);
+    expect(find.text('MobSanté'), findsOneWidget);
   });
 
   testWidgets('tabs are lazy and shared streams are created only once', (
