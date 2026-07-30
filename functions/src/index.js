@@ -2,7 +2,7 @@ import {getApps, initializeApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
 import {FieldValue, getFirestore} from 'firebase-admin/firestore';
 import {HttpsError, onCall} from 'firebase-functions/v2/https';
-import {defineString} from 'firebase-functions/params';
+import {defineSecret, defineString} from 'firebase-functions/params';
 
 import {
   ProvisioningError,
@@ -15,24 +15,53 @@ import {
 if (getApps().length === 0) initializeApp();
 
 const appUrl = defineString('MOBSANTE_APP_URL');
+const emailFrom = defineString('MOBSANTE_EMAIL_FROM');
+const emailFromName = defineString('MOBSANTE_EMAIL_FROM_NAME', {default: ''});
+const emailReplyTo = defineString('MOBSANTE_EMAIL_REPLY_TO', {default: ''});
+const notificationMode = defineString('MOBSANTE_NOTIFICATION_MODE');
+const resendApiKey = process.env.MOBSANTE_NOTIFICATION_MODE === 'fake'
+  ? null
+  : defineSecret('RESEND_API_KEY');
 const injectedEmulatorFailures = new Set();
 const injectedEmulatorNotificationFailures = new Set();
 
 export const provisionAdminInvitation = onCall(
-  {region: 'europe-west1'},
+  {
+    region: 'europe-west1',
+    secrets: resendApiKey === null ? [] : [resendApiKey],
+  },
   async (request) => {
     try {
       const firestore = getFirestore();
       const auth = getAuth();
+      const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true';
+      const configuredAppUrl = appUrl.value();
+      const configuredNotificationMode = notificationMode.value();
+      if (
+        (configuredNotificationMode === 'fake' && !isEmulator)
+        || !new Set(['fake', 'resend']).has(configuredNotificationMode)
+      ) {
+        throw new ProvisioningError(
+          'failed-precondition',
+          'Mode de notification serveur invalide.',
+        );
+      }
       return await provision({
         invitationId: request.data?.invitationId,
         callerUid: request.auth?.uid,
-        appUrl: appUrl.value(),
+        appUrl: configuredAppUrl,
         notificationService: createServerNotificationService({
-          isEmulator: process.env.FUNCTIONS_EMULATOR === 'true',
+          mode: configuredNotificationMode === 'fake' ? 'emulator' : 'real',
           emulatorFailure: emulatorNotificationFailure(
             request.data?.invitationId,
           ),
+          configuration: isEmulator ? undefined : {
+            apiKey: resendApiKey?.value(),
+            fromEmail: emailFrom.value(),
+            fromName: emailFromName.value(),
+            replyTo: emailReplyTo.value(),
+            appUrl: configuredAppUrl,
+          },
         }),
         services: adminServices({
           firestore,

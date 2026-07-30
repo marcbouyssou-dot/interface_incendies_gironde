@@ -482,6 +482,12 @@ test('notification is sent once through the injected service', async () => {
   assert.equal(state.notifications[0].recipient, 'responsable@example.fr');
   assert.match(state.notifications[0].text, /Rôle attribué/);
   assert.match(state.notifications[0].text, /Ne transférez pas ce lien/);
+  assert.match(state.notifications[0].html, /MobSanté/);
+  assert.equal(
+    /InterfaceRecup33|interfacerecup33\.netlify\.app|mot de passe/i
+      .test(JSON.stringify(state.notifications[0])),
+    false,
+  );
   assert.equal(state.invitation.notificationStatus, 'sent');
   assert.equal(
     state.invitation.notificationProviderMessageId,

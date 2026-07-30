@@ -40,18 +40,28 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
   marque `notificationStatus: failed` avec un code normalisé, puis retourne une
   erreur métier `unavailable`.
 
-## Variable requise
+## Paramètres serveur
 
 `MOBSANTE_APP_URL` doit contenir l’URL de base HTTPS de MobSanté, sans
 paramètres, fragment ni identifiants intégrés. La Function ajoute elle-même le
 chemin `/activation`. Une URL HTTP est acceptée uniquement sur `localhost`,
 `127.0.0.1` ou `::1` pour les tests locaux.
 
+Les paramètres non secrets sont `MOBSANTE_APP_URL`,
+`MOBSANTE_EMAIL_FROM`, `MOBSANTE_EMAIL_FROM_NAME` (facultatif) et
+`MOBSANTE_EMAIL_REPLY_TO` (facultatif), ainsi que
+`MOBSANTE_NOTIFICATION_MODE`.
+
 Deux environnements dotenv Firebase sont suivis :
 
 - `.env.demo-mobsante` : `http://127.0.0.1:5000`, réservé aux émulateurs ;
 - `.env.mobilisation-sante` : `https://mobsante.netlify.app`, URL publique de
   production.
+
+L’expéditeur `notifications@example.test` de démonstration est factice. La
+valeur de production `CONFIGURE_BEFORE_DEPLOYMENT` bloque volontairement la
+composition réelle jusqu’à son remplacement par une adresse vérifiée. Ces
+fichiers ne doivent jamais contenir `RESEND_API_KEY`.
 
 La destination de production normalisée est donc
 `https://mobsante.netlify.app/activation`. Le domaine
@@ -76,15 +86,54 @@ est isolée dans `notifications/create_notification_service.js` :
 
 - les tests unitaires injectent directement un faux service ;
 - les Emulators utilisent `FakeNotificationProvider`, sans réseau ;
-- hors Emulator, un provider non configuré échoue explicitement sans être
-  construit avec un secret absent ;
-- le futur branchement serveur pourra injecter `ResendNotificationProvider`
-  sans modifier le cœur métier.
+- hors Emulator, la composition valide les paramètres puis construit
+  `ResendNotificationProvider` ;
+- la clé est lue uniquement depuis le secret Functions `RESEND_API_KEY` ;
+- la callable déclare explicitement ce secret dans ses options Functions v2.
+
+Le mode est explicite : `fake` pour `demo-mobsante` et `resend` pour
+`mobilisation-sante`. En mode `fake`, aucun `SecretParam` n’est déclaré et le
+CLI Emulator ne contacte pas Secret Manager. Le mode `fake` est refusé hors
+Emulator. En mode `resend`, `defineSecret('RESEND_API_KEY')` est déclaré et lié
+uniquement à la callable.
 
 Les champs persistés sont limités à `notificationStatus`,
 `notificationSentAt` ou `notificationFailedAt`, `notificationProvider`,
 `notificationProviderMessageId` et `notificationErrorCode`. Aucun corps
 d’e-mail, lien d’activation, secret, retour brut ou stack n’est stocké.
+
+### Préparation du secret Resend
+
+Le dépôt ne définit aucun projet Firebase par défaut (`.firebaserc` absent).
+Toutes les commandes doivent donc préciser leur cible. La future création du
+secret se fera interactivement, sans valeur dans la ligne de commande :
+
+```bash
+firebase functions:secrets:set RESEND_API_KEY \
+  --project <firebase-project-id>
+```
+
+Pour vérifier son existence sans afficher sa valeur, consulter les versions et
+leur état dans Google Cloud Secret Manager, ou utiliser :
+
+```bash
+gcloud secrets versions list RESEND_API_KEY \
+  --project <firebase-project-id>
+```
+
+`demo-mobsante` est réservé aux Emulators. Le projet réel explicitement prévu
+est `mobilisation-sante`. Après validation du domaine et de l’expéditeur,
+remplacer uniquement les paramètres non secrets de
+`.env.mobilisation-sante`, rejouer toutes les suites, puis déployer uniquement
+la callable :
+
+```bash
+firebase deploy --only functions:provisionAdminInvitation \
+  --project mobilisation-sante
+```
+
+Ces commandes sont documentées pour un lot futur et ne sont pas exécutées
+pendant cette préparation.
 
 ## Développement local
 
@@ -100,8 +149,8 @@ npm --prefix functions run test:emulator
 
 La suite intégrée démarre Auth (9099), Firestore (8080), Functions (5001) et
 l’interface Emulator (4000) via `firebase emulators:exec`. Elle impose le projet
-fictif `demo-mobsante`. Le fichier `.env.demo-mobsante` ne contient que l’URL
-locale non sensible. La panne de transaction est injectable uniquement quand
+fictif `demo-mobsante`. Le fichier `.env.demo-mobsante` ne contient que des
+paramètres factices non sensibles. La panne de transaction est injectable uniquement quand
 `FUNCTIONS_EMULATOR=true`; aucune donnée fournie par un appelant ne peut
 l’activer en production.
 
@@ -147,9 +196,8 @@ Avant tout déploiement :
    autoriser `mobsante.netlify.app` dans Firebase Auth ;
 4. vérifier le modèle d’e-mail Firebase de réinitialisation, son domaine
    d’action et le lien reçu sur Safari iPhone et Chrome Desktop ;
-5. choisir le transport d’e-mail ; stocker ses identifiants avec
-   `defineSecret`/Google Cloud Secret Manager et les lier uniquement à la
-   Function concernée ;
+5. créer le secret `RESEND_API_KEY`, vérifier l’expéditeur et remplacer
+   `CONFIGURE_BEFORE_DEPLOYMENT` ;
 6. vérifier les services de déploiement de 2e génération : Cloud Functions,
    Cloud Run, Cloud Build, Artifact Registry et Cloud Storage pour les sources ;
 7. examiner les coûts à l’usage et la rétention Artifact Registry ; aucun coût
