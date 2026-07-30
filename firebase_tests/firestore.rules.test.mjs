@@ -1115,3 +1115,100 @@ test('roles: own get allowed; other get and all writes denied', async () => {
   await assertFails(updateDoc(doc(db('coord'), 'roles/coord'), {active: false}));
   await assertFails(deleteDoc(doc(db('coord'), 'roles/coord')));
 });
+
+function adminInvitation(overrides = {}) {
+  return {
+    email: 'responsable@example.fr',
+    displayName: 'Responsable Exemple',
+    role: 'site_manager',
+    locationIds: ['site-a'],
+    createdBy: 'coord',
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    status: 'pending',
+    acceptedAt: null,
+    ...overrides,
+  };
+}
+
+test('admin invitations: coordinator creates, reads and cancels', async () => {
+  await seed();
+  const reference = 'adminInvitations/invitation-a';
+  await assertSucceeds(
+    setDoc(doc(db('coord'), reference), adminInvitation()),
+  );
+  await assertSucceeds(getDoc(doc(db('coord'), reference)));
+  await assertSucceeds(getDocs(collection(db('coord'), 'adminInvitations')));
+  await assertSucceeds(
+    updateDoc(doc(db('coord'), reference), {status: 'cancelled'}),
+  );
+});
+
+test('admin invitations: manager, volunteer and anonymous have no access', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'adminInvitations/invitation-a'),
+      adminInvitation({createdAt: Timestamp.now()}),
+    );
+  });
+  await assertFails(
+    setDoc(
+      doc(db('manager'), 'adminInvitations/manager-invitation'),
+      adminInvitation({createdBy: 'manager'}),
+    ),
+  );
+  await assertFails(getDoc(doc(db('manager'), 'adminInvitations/invitation-a')));
+  await assertFails(getDoc(doc(db('alice'), 'adminInvitations/invitation-a')));
+  await assertFails(getDoc(doc(db(), 'adminInvitations/invitation-a')));
+});
+
+test('admin invitations: protected creation fields are enforced', async () => {
+  await seed();
+  const collectionName = 'adminInvitations';
+  await assertFails(
+    setDoc(
+      doc(db('coord'), `${collectionName}/accepted`),
+      adminInvitation({status: 'accepted'}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), `${collectionName}/wrong-author`),
+      adminInvitation({createdBy: 'other'}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), `${collectionName}/coordinator-role`),
+      adminInvitation({role: 'coordinator'}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), `${collectionName}/no-location`),
+      adminInvitation({locationIds: []}),
+    ),
+  );
+});
+
+test('admin invitations: client cannot accept, mutate identity or delete', async () => {
+  await seed();
+  const reference = 'adminInvitations/invitation-a';
+  await assertSucceeds(
+    setDoc(doc(db('coord'), reference), adminInvitation()),
+  );
+  await assertFails(
+    updateDoc(doc(db('coord'), reference), {
+      status: 'accepted',
+      acceptedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(db('coord'), reference), {
+      status: 'cancelled',
+      email: 'other@example.fr',
+    }),
+  );
+  await assertFails(deleteDoc(doc(db('coord'), reference)));
+});

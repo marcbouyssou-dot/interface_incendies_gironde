@@ -654,6 +654,36 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /adminInvitations/{invitationId} {
+      allow read: if isCoordinator();
+      allow create: if isCoordinator()
+        && request.resource.data.keys().hasOnly([
+          'email', 'displayName', 'role', 'locationIds', 'createdBy',
+          'createdAt', 'expiresAt', 'status', 'acceptedAt'
+        ])
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.role == 'site_manager'
+        && request.resource.data.locationIds is list
+        && request.resource.data.locationIds.size() > 0
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.status == 'pending'
+        && request.resource.data.acceptedAt == null;
+      allow update: if isCoordinator()
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['status']);
+      allow delete: if false;
+    }
+
     match /roles/{uid} {
       allow get: if isVolunteerOwner(uid);
       allow list, create, update, delete: if false;
