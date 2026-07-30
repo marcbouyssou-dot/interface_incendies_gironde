@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
+import '../repositories/coordination_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'about_screen.dart';
+import 'admin_invitations_screen.dart';
 import 'location_detail_screen.dart';
 
 class PlacesScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
   LiveCoordinationData? _liveData;
   Stream<List<ResponsePlace>>? _locations;
   Stream<List<CoordinationNeed>>? _missions;
+  Stream<ResponsibleAccess?>? _responsibleAccess;
 
   @override
   void didChangeDependencies() {
@@ -29,6 +32,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
       _liveData = liveData;
       _locations = liveData.watchLocations();
       _missions = liveData.watchMissions();
+      _responsibleAccess = liveData.watchResponsibleAccess();
     }
   }
 
@@ -98,6 +102,38 @@ class _PlacesScreenState extends State<PlacesScreen> {
                       ),
                     ),
                   ),
+                ),
+                StreamBuilder<ResponsibleAccess?>(
+                  stream: _responsibleAccess,
+                  builder: (context, snapshot) {
+                    if (snapshot.data?.isCoordinator != true) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Card(
+                        child: ListTile(
+                          key: const Key('admin-invitations-entry'),
+                          leading: const Icon(
+                            Icons.admin_panel_settings_outlined,
+                          ),
+                          title: const Text('Responsables'),
+                          subtitle: const Text(
+                            'Invitations et accès aux centres',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => LiveCoordinationDataScope(
+                                data: _liveData!,
+                                child: const AdminInvitationsScreen(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 20),
                 TerritorialGroupFilter(

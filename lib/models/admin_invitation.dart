@@ -76,6 +76,7 @@ class AdminInvitationDraft {
        );
 
   static const siteManagerRole = 'site_manager';
+  static const coordinatorRole = 'coordinator';
 
   final String email;
   final String displayName;
@@ -90,11 +91,16 @@ class AdminInvitationDraft {
     if (displayName.isEmpty) {
       throw const FormatException('Le nom du responsable est obligatoire.');
     }
-    if (role != siteManagerRole) {
+    if (role != siteManagerRole && role != coordinatorRole) {
       throw const FormatException('Rôle d’invitation invalide.');
     }
-    if (locationIds.isEmpty) {
+    if (role == siteManagerRole && locationIds.isEmpty) {
       throw const FormatException('Sélectionnez au moins un lieu.');
+    }
+    if (role == coordinatorRole && locationIds.isNotEmpty) {
+      throw const FormatException(
+        'Un coordinateur départemental ne doit pas être limité à un lieu.',
+      );
     }
     if (!expiresAt.isAfter(now)) {
       throw const FormatException('La date d’expiration doit être future.');

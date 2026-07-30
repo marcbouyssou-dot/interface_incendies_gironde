@@ -1142,6 +1142,12 @@ test('admin invitations: coordinator creates, reads and cancels', async () => {
   await assertSucceeds(
     updateDoc(doc(db('coord'), reference), {status: 'cancelled'}),
   );
+  await assertSucceeds(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/coordinator-invitation'),
+      adminInvitation({role: 'coordinator', locationIds: []}),
+    ),
+  );
 });
 
 test('admin invitations: manager, volunteer and anonymous have no access', async () => {
@@ -1178,16 +1184,28 @@ test('admin invitations: protected creation fields are enforced', async () => {
       adminInvitation({createdBy: 'other'}),
     ),
   );
-  await assertFails(
+  await assertSucceeds(
     setDoc(
       doc(db('coord'), `${collectionName}/coordinator-role`),
-      adminInvitation({role: 'coordinator'}),
+      adminInvitation({role: 'coordinator', locationIds: []}),
     ),
   );
   await assertFails(
     setDoc(
       doc(db('coord'), `${collectionName}/no-location`),
       adminInvitation({locationIds: []}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), `${collectionName}/coordinator-with-location`),
+      adminInvitation({role: 'coordinator', locationIds: ['site-a']}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), `${collectionName}/unknown-role`),
+      adminInvitation({role: 'administrator', locationIds: []}),
     ),
   );
 });

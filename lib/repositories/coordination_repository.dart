@@ -1,8 +1,11 @@
 import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
+import 'admin_invitation_repository.dart';
 
 abstract interface class CoordinationRepository {
+  AdminInvitationRepository get adminInvitationRepository;
+
   Stream<List<CoordinationNeed>> watchMissions();
 
   Stream<List<ResponsePlace>> watchLocations();

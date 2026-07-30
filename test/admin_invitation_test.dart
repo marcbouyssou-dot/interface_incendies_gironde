@@ -38,6 +38,30 @@ void main() {
     );
   });
 
+  test('coordinator invitation has no location restriction', () {
+    final value = AdminInvitationDraft(
+      email: 'coord@example.fr',
+      displayName: 'Coordination Gironde',
+      role: AdminInvitationDraft.coordinatorRole,
+      locationIds: const {},
+      expiresAt: now.add(const Duration(days: 7)),
+    );
+    value.validate(now: now);
+
+    expect(value.role, 'coordinator');
+    expect(value.locationIds, isEmpty);
+    expect(
+      () => AdminInvitationDraft(
+        email: 'coord@example.fr',
+        displayName: 'Coordination Gironde',
+        role: AdminInvitationDraft.coordinatorRole,
+        locationIds: const {'site-a'},
+        expiresAt: now.add(const Duration(days: 7)),
+      ).validate(now: now),
+      throwsFormatException,
+    );
+  });
+
   test(
     'mock repository creates, reads, watches and cancels invitations',
     () async {

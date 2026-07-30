@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'repositories/coordination_repository.dart';
+import 'repositories/admin_invitation_repository_scope.dart';
 import 'repositories/mock_coordination_repository.dart';
 import 'repositories/repository_scope.dart';
 import 'screens/app_shell.dart';
@@ -13,13 +14,18 @@ class FireCoordinationApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final coordinationRepository =
+        repository ?? MockCoordinationRepository.instance;
     return RepositoryScope(
-      repository: repository ?? MockCoordinationRepository.instance,
-      child: MaterialApp(
-        title: 'Interface Récup',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        home: const AppShell(),
+      repository: coordinationRepository,
+      child: AdminInvitationRepositoryScope(
+        repository: coordinationRepository.adminInvitationRepository,
+        child: MaterialApp(
+          title: 'Interface Récup',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          home: const AppShell(),
+        ),
       ),
     );
   }

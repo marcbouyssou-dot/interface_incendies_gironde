@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
+import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
@@ -305,6 +306,8 @@ class _MissionRepository implements CoordinationRepository {
   final Completer<String> _completer = Completer<String>();
   int calls = 0;
   MissionDraft? lastDraft;
+  @override
+  final adminInvitationRepository = MockAdminInvitationRepository();
 
   @override
   Stream<EngagementInfo?> watchMyEngagement(String missionId) =>

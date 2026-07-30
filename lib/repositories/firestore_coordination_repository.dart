@@ -8,7 +8,9 @@ import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../utils/switch_latest.dart';
+import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
+import 'firestore_admin_invitation_repository.dart';
 import 'firestore_location_mapper.dart';
 import 'firestore_mission_mapper.dart';
 
@@ -49,6 +51,12 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   final FirebaseAuth _auth;
   final FirebaseFirestore _responsibleFirestore;
   final FirebaseAuth _responsibleAuth;
+  @override
+  late final AdminInvitationRepository adminInvitationRepository =
+      FirestoreAdminInvitationRepository.withFirebase(
+        firestore: _responsibleFirestore,
+        auth: _responsibleAuth,
+      );
 
   @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() {

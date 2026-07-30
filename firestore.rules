@@ -665,9 +665,14 @@ service cloud.firestore {
         && request.resource.data.email.size() > 3
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() > 0
-        && request.resource.data.role == 'site_manager'
+        && request.resource.data.role in ['site_manager', 'coordinator']
         && request.resource.data.locationIds is list
-        && request.resource.data.locationIds.size() > 0
+        && (
+          (request.resource.data.role == 'site_manager'
+            && request.resource.data.locationIds.size() > 0)
+          || (request.resource.data.role == 'coordinator'
+            && request.resource.data.locationIds.size() == 0)
+        )
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.expiresAt is timestamp
