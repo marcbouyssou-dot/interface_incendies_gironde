@@ -43,6 +43,17 @@ void main() {
     expect(volunteerProfessionFromId('physician'), VolunteerProfession.doctor);
     expect(volunteerProfessionFromId('mk'), VolunteerProfession.mk);
     expect(volunteerProfessionFromId('podiatrist'), VolunteerProfession.pp);
+    expect(volunteerProfessionFromId('pp'), VolunteerProfession.pp);
+    expect(volunteerProfessionFromId('doctor'), VolunteerProfession.doctor);
+    expect(volunteerProfessionFromId('nurse'), VolunteerProfession.nurse);
+    expect(
+      volunteerProfessionFromId('otherHealthProfessional'),
+      VolunteerProfession.otherHealthProfessional,
+    );
+    expect(
+      volunteerProfessionFromId('other_health_professional'),
+      VolunteerProfession.otherHealthProfessional,
+    );
     expect(VolunteerProfession.pp.label, 'Pédicure-podologue');
     expect(
       VolunteerProfession.nurse.label,

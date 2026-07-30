@@ -16,12 +16,7 @@ void main() {
         VolunteerProfession.otherHealthProfessional.label,
         'Autre professionnel de santé',
       );
-      expect(
-        VolunteerProfession.values.where(
-          (profession) => profession.isSupportedByCurrentMission,
-        ),
-        [VolunteerProfession.mk, VolunteerProfession.pp],
-      );
+      expect(VolunteerProfession.values, hasLength(5));
     },
   );
 

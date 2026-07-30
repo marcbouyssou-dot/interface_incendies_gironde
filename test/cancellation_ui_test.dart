@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/profession_quotas.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
@@ -22,6 +23,31 @@ void main() {
     requiredPodiatrists: 0,
     registeredPodiatrists: 0,
     equipment: [],
+    createdBy: 'mock-coordinator',
+  );
+
+  CoordinationNeed fiveProfessionMission() => CoordinationNeed(
+    id: 'five-profession-mission',
+    locationId: 'site-a',
+    place: 'Site A',
+    group: TerritorialGroup.medoc,
+    date: 'Aujourd’hui',
+    time: '08:00 — 12:00',
+    requiredPhysiotherapists: 1,
+    registeredPhysiotherapists: 0,
+    requiredPodiatrists: 1,
+    registeredPodiatrists: 0,
+    professionQuotas: ProfessionQuotas.fromMaps(
+      requiredByProfession: const {
+        'physiotherapist': 1,
+        'podiatrist': 1,
+        'physician': 1,
+        'nurse': 1,
+        'other_health_professional': 1,
+      },
+      registeredByProfession: const {},
+    ),
+    equipment: const [],
     createdBy: 'mock-coordinator',
   );
 
@@ -47,6 +73,8 @@ void main() {
       find.widgetWithText(TextFormField, 'Email'),
       'a@example.fr',
     );
+    await tester.ensureVisible(find.byKey(const Key('professional-id-type')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('professional-id-type')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('RPPS').last);
@@ -55,6 +83,8 @@ void main() {
       find.widgetWithText(TextFormField, 'Numéro RPPS'),
       '10123456789',
     );
+    await tester.ensureVisible(find.byKey(const Key('cpts-choice')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('cpts-choice')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Renseigner une CPTS').last);
@@ -238,7 +268,17 @@ void main() {
       initialLocations: const [],
     );
     await pumpApp(tester, repository);
-    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
+    final missionScroll = find
+        .descendant(
+          of: find.byType(CustomScrollView).first,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      find.text('❤️ JE M’ENGAGE'),
+      300,
+      scrollable: missionScroll,
+    );
     await tester.tap(find.text('❤️ JE M’ENGAGE'));
     await tester.pumpAndSettle();
 
@@ -256,7 +296,60 @@ void main() {
     );
     expect(mkTile.enabled, isTrue);
     expect(ppTile.enabled, isFalse);
-    expect(find.text('Besoin couvert'), findsOneWidget);
+    expect(find.text('Aucun besoin disponible'), findsNWidgets(4));
+  });
+
+  testWidgets('all five professions are selectable without iPhone overflow', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      initialMissions: [fiveProfessionMission()],
+      initialLocations: const [],
+    );
+    await pumpApp(tester, repository);
+    await tester.drag(
+      find.byType(CustomScrollView).first,
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('❤️ JE M’ENGAGE'));
+    await tester.pumpAndSettle();
+
+    for (final label in [
+      'Masseur-kinésithérapeute',
+      'Pédicure-podologue',
+      'Médecin',
+      'Infirmier / Infirmière',
+      'Autre professionnel de santé',
+    ]) {
+      expect(
+        find.descendant(
+          of: find.byType(RadioGroup<VolunteerProfession>),
+          matching: find.text(label),
+        ),
+        findsOneWidget,
+      );
+    }
+
+    for (final profession in [
+      VolunteerProfession.doctor,
+      VolunteerProfession.nurse,
+      VolunteerProfession.otherHealthProfessional,
+    ]) {
+      final choice = find.byKey(Key('profession-${profession.canonicalId}'));
+      await tester.ensureVisible(choice);
+      await tester.tap(choice);
+      await tester.pump();
+      expect(
+        tester
+            .widget<RadioGroup<VolunteerProfession>>(
+              find.byType(RadioGroup<VolunteerProfession>),
+            )
+            .groupValue,
+        profession,
+      );
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('existing profile is summarized then can be edited prefilled', (

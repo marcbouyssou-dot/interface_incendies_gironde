@@ -666,7 +666,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               'firstName': firstName.trim(),
               'lastName': lastName.trim(),
               'phone': phone.trim(),
-              'profession': profession.name,
+              'profession': profession.canonicalId,
               'updatedAt': now,
               'equipment': equipment
                   .map((item) => item.trim())
@@ -711,7 +711,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
             }, SetOptions(merge: true));
             if (isReengagement) {
               transaction.update(engagementRef, {
-                'profession': profession.name,
+                'profession': profession.canonicalId,
                 'updatedAt': now,
                 'status': EngagementStatus.confirmed.name,
               });
@@ -719,7 +719,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               transaction.set(engagementRef, {
                 'missionId': missionId,
                 'volunteerId': uid,
-                'profession': profession.name,
+                'profession': profession.canonicalId,
                 'createdAt': now,
                 'updatedAt': now,
                 'status': EngagementStatus.confirmed.name,
@@ -916,9 +916,14 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     Map<String, dynamic> data,
   ) {
     final professionName = data['profession'] as String?;
-    final profession = VolunteerProfession.values
-        .where((value) => value.name == professionName)
-        .firstOrNull;
+    VolunteerProfession? profession;
+    if (professionName != null) {
+      try {
+        profession = volunteerProfessionFromId(professionName);
+      } on FormatException {
+        profession = null;
+      }
+    }
     if (profession == null) {
       throw const RepositoryException(
         'La profession enregistrée dans ce profil est invalide.',
@@ -970,7 +975,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
           : null),
       'cptsId': ?cptsId,
       'cptsLabel': ?cptsLabel,
-      'profession': profile.profession.name,
+      'profession': profile.profession.canonicalId,
       'equipment': profile.equipment
           .map((item) => item.trim())
           .where((item) => item.isNotEmpty)

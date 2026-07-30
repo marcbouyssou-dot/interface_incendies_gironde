@@ -8,6 +8,11 @@ import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 
+const _legacyQuotaProfessions = [
+  VolunteerProfession.mk,
+  VolunteerProfession.pp,
+];
+
 void main() {
   test('mock confirmed engagement increments its mission counter', () async {
     final repository = MockCoordinationRepository(
@@ -393,9 +398,7 @@ void main() {
   test(
     'mock refuses a new engagement when its profession quota is reached',
     () async {
-      for (final profession in VolunteerProfession.values.where(
-        (value) => value.isSupportedByCurrentMission,
-      )) {
+      for (final profession in _legacyQuotaProfessions) {
         final mission = CoordinationNeed(
           id: 'pending-full-${profession.name}',
           place: 'Mission complète',
@@ -493,9 +496,7 @@ void main() {
   });
 
   test('mock confirmed MK and PP move to standby exactly once', () async {
-    for (final profession in VolunteerProfession.values.where(
-      (value) => value.isSupportedByCurrentMission,
-    )) {
+    for (final profession in _legacyQuotaProfessions) {
       final mission = CoordinationNeed(
         id: 'standby-${profession.name}',
         place: 'Mission',
@@ -590,9 +591,7 @@ void main() {
   });
 
   test('mock confirmed MK and PP are cancelled exactly once', () async {
-    for (final profession in VolunteerProfession.values.where(
-      (value) => value.isSupportedByCurrentMission,
-    )) {
+    for (final profession in _legacyQuotaProfessions) {
       final mission = CoordinationNeed(
         id: 'cancel-status-${profession.name}',
         place: 'Mission',
@@ -684,9 +683,7 @@ void main() {
   });
 
   test('mock standby MK and PP return to confirmed exactly once', () async {
-    for (final profession in VolunteerProfession.values.where(
-      (value) => value.isSupportedByCurrentMission,
-    )) {
+    for (final profession in _legacyQuotaProfessions) {
       final mission = CoordinationNeed(
         id: 'confirm-standby-${profession.name}',
         place: 'Mission',
@@ -780,9 +777,7 @@ void main() {
   });
 
   test('mock pending MK and PP move to standby without counters', () async {
-    for (final profession in VolunteerProfession.values.where(
-      (value) => value.isSupportedByCurrentMission,
-    )) {
+    for (final profession in _legacyQuotaProfessions) {
       final mission = CoordinationNeed(
         id: 'pending-standby-${profession.name}',
         place: 'Mission',
@@ -834,9 +829,7 @@ void main() {
   });
 
   test('mock pending MK and PP are cancelled without counters', () async {
-    for (final profession in VolunteerProfession.values.where(
-      (value) => value.isSupportedByCurrentMission,
-    )) {
+    for (final profession in _legacyQuotaProfessions) {
       final mission = CoordinationNeed(
         id: 'pending-cancelled-${profession.name}',
         place: 'Mission',
@@ -888,9 +881,7 @@ void main() {
   });
 
   test('mock standby MK and PP are cancelled without counters', () async {
-    for (final profession in VolunteerProfession.values.where(
-      (value) => value.isSupportedByCurrentMission,
-    )) {
+    for (final profession in _legacyQuotaProfessions) {
       final mission = CoordinationNeed(
         id: 'standby-cancelled-${profession.name}',
         place: 'Mission',
@@ -1074,9 +1065,7 @@ void main() {
       EngagementStatus.confirmed,
     ]) {
       test('$initialStatus follows its counter rule for MK and PP', () async {
-        for (final profession in VolunteerProfession.values.where(
-          (value) => value.isSupportedByCurrentMission,
-        )) {
+        for (final profession in _legacyQuotaProfessions) {
           final counts = initialStatus == EngagementStatus.confirmed ? 1 : 0;
           final mission = CoordinationNeed(
             id: 'cancel-${initialStatus.name}-${profession.name}',
@@ -1133,9 +1122,7 @@ void main() {
     test(
       'legacy status-less engagement is confirmed and decremented once',
       () async {
-        for (final profession in VolunteerProfession.values.where(
-          (value) => value.isSupportedByCurrentMission,
-        )) {
+        for (final profession in _legacyQuotaProfessions) {
           final mission = CoordinationNeed(
             id: 'legacy-cancel-${profession.name}',
             place: 'Mission',
@@ -1255,48 +1242,52 @@ void main() {
     );
   });
 
-  test('mock creates an engagement for a generic physician quota', () async {
-    final mission = CoordinationNeed(
-      id: 'generic-physician-creation',
-      place: 'Mission',
-      group: TerritorialGroup.medoc,
-      date: 'Demain',
-      time: '08:00 — 12:00',
-      endAt: DateTime.now().add(const Duration(hours: 2)),
-      requiredPhysiotherapists: 0,
-      registeredPhysiotherapists: 0,
-      requiredPodiatrists: 0,
-      registeredPodiatrists: 0,
-      professionQuotas: ProfessionQuotas.fromMaps(
-        requiredByProfession: const {'physician': 1},
-        registeredByProfession: const {},
-      ),
-      equipment: const [],
-    );
-    final repository = MockCoordinationRepository(
-      initialMissions: [mission],
-      initialLocations: const [],
-    );
+  test('mock creates an engagement for each canonical profession', () async {
+    for (final profession in VolunteerProfession.values) {
+      final professionId = profession.canonicalId!;
+      final mission = CoordinationNeed(
+        id: 'generic-$professionId-creation',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: profession == VolunteerProfession.mk ? 1 : 0,
+        registeredPhysiotherapists: 0,
+        requiredPodiatrists: profession == VolunteerProfession.pp ? 1 : 0,
+        registeredPodiatrists: 0,
+        professionQuotas: ProfessionQuotas.fromMaps(
+          requiredByProfession: {professionId: 1},
+          registeredByProfession: const {},
+        ),
+        equipment: const [],
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+      );
 
-    await repository.createEngagement(
-      missionId: mission.id,
-      firstName: 'Alice',
-      lastName: 'Martin',
-      phone: '0600000000',
-      email: 'alice@example.fr',
-      professionalIdType: ProfessionalIdType.none,
-      professionalIdValue: '',
-      profession: VolunteerProfession.doctor,
-    );
+      await repository.createEngagement(
+        missionId: mission.id,
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.none,
+        professionalIdValue: '',
+        profession: profession,
+      );
 
-    expect(
-      repository
-          .debugMission(mission.id)!
-          .professionQuotas
-          .quotaFor('physician')
-          .registered,
-      1,
-    );
+      expect(
+        repository
+            .debugMission(mission.id)!
+            .professionQuotas
+            .quotaFor(professionId)
+            .registered,
+        1,
+      );
+      expect((await repository.getVolunteerProfile())?.profession, profession);
+    }
   });
 }
 

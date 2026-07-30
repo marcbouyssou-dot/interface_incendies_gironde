@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/repository_scope.dart';
@@ -365,9 +366,11 @@ class _EngagementRowState extends State<_EngagementRow> {
   @override
   Widget build(BuildContext context) {
     final engagement = widget.engagement;
-    final profession = engagement.profession == VolunteerProfession.mk
-        ? 'MK'
-        : 'PP';
+    final profession =
+        HealthProfessionRegistry.byId(
+          engagement.profession.canonicalId!,
+        )?.shortLabel ??
+        engagement.profession.label;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(

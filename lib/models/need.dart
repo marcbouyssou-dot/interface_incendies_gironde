@@ -16,9 +16,6 @@ extension VolunteerProfessionLabel on VolunteerProfession {
   };
 
   String get label => HealthProfessionRegistry.byId(canonicalId!)!.label;
-
-  bool get isSupportedByCurrentMission =>
-      this == VolunteerProfession.mk || this == VolunteerProfession.pp;
 }
 
 VolunteerProfession volunteerProfessionFromId(String value) {

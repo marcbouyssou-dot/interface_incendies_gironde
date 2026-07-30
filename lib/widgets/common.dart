@@ -664,11 +664,7 @@ class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
           Text(widget.need.place),
           Text(widget.need.date),
           Text(widget.need.time),
-          Text(
-            widget.engagement.profession == VolunteerProfession.mk
-                ? 'Masseur-kinésithérapeute'
-                : 'Pédicure-podologue',
-          ),
+          Text(widget.engagement.profession.label),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: const TextStyle(color: AppColors.red)),
@@ -863,19 +859,26 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   VolunteerProfile? _profile;
   bool _profileLoadStarted = false;
 
-  bool get _mkAvailable =>
-      widget.need.registeredPhysiotherapists <
-      widget.need.requiredPhysiotherapists;
+  List<VolunteerProfession> get _professions => HealthProfessionRegistry.values
+      .map((definition) => volunteerProfessionFromId(definition.id))
+      .toList(growable: false);
 
-  bool get _ppAvailable =>
-      widget.need.registeredPodiatrists < widget.need.requiredPodiatrists;
+  bool _isAvailable(VolunteerProfession profession) {
+    final quota = widget.need.professionQuotas.quotaFor(
+      profession.canonicalId!,
+    );
+    return quota.required > 0 && quota.registered < quota.required;
+  }
+
+  bool get _hasAvailableProfession => _professions.any(_isAvailable);
 
   @override
   void initState() {
     super.initState();
-    if (!_mkAvailable && _ppAvailable) {
-      _profession = VolunteerProfession.pp;
-    }
+    _profession = _professions.firstWhere(
+      _isAvailable,
+      orElse: () => _professions.first,
+    );
   }
 
   @override
@@ -937,20 +940,14 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
           _selectedEquipment.add('Autre matériel');
           _otherEquipmentController.text = otherEquipment.join(', ');
         }
-        final profileProfessionAvailable =
-            (profile.profession == VolunteerProfession.mk && _mkAvailable) ||
-            (profile.profession == VolunteerProfession.pp && _ppAvailable);
+        final profileProfessionAvailable = _isAvailable(profile.profession);
         if (profileProfessionAvailable) {
           _profession = profile.profession;
         }
       }
       setState(() {
         _profile = profile;
-        _editingProfile =
-            profile == null ||
-            !profile.profession.isSupportedByCurrentMission ||
-            !((profile.profession == VolunteerProfession.mk && _mkAvailable) ||
-                (profile.profession == VolunteerProfession.pp && _ppAvailable));
+        _editingProfile = profile == null || !_isAvailable(profile.profession);
         _loadingProfile = false;
         _profileError = null;
       });
@@ -1040,24 +1037,17 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   onChanged: (value) => setState(() => _profession = value!),
                   child: Column(
                     children: [
-                      RadioListTile<VolunteerProfession>(
-                        contentPadding: EdgeInsets.zero,
-                        value: VolunteerProfession.mk,
-                        enabled: _mkAvailable,
-                        title: const Text('Masseur-kinésithérapeute'),
-                        subtitle: _mkAvailable
-                            ? null
-                            : const Text('Besoin couvert'),
-                      ),
-                      RadioListTile<VolunteerProfession>(
-                        contentPadding: EdgeInsets.zero,
-                        value: VolunteerProfession.pp,
-                        enabled: _ppAvailable,
-                        title: const Text('Pédicure-podologue'),
-                        subtitle: _ppAvailable
-                            ? null
-                            : const Text('Besoin couvert'),
-                      ),
+                      for (final profession in _professions)
+                        RadioListTile<VolunteerProfession>(
+                          key: Key('profession-${profession.canonicalId}'),
+                          contentPadding: EdgeInsets.zero,
+                          value: profession,
+                          enabled: _isAvailable(profession),
+                          title: Text(profession.label),
+                          subtitle: _isAvailable(profession)
+                              ? null
+                              : const Text('Aucun besoin disponible'),
+                        ),
                     ],
                   ),
                 ),
@@ -1216,7 +1206,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 const SizedBox(height: 8),
               ],
               FilledButton(
-                onPressed: _submitting || (!_mkAvailable && !_ppAvailable)
+                onPressed: _submitting || !_hasAvailableProfession
                     ? null
                     : _submit,
                 child: _submitting
