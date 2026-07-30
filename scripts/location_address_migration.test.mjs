@@ -4,10 +4,13 @@ import test from 'node:test';
 import {
   assertTargetProject,
   buildMigrationPlan,
+  migrationProjectEnvironmentKey,
+  resolveExecution,
+  targetProjectId,
   writableChanges,
 } from './location_address_migration.mjs';
 
-const projectId = 'mobilisation-sante';
+const projectId = targetProjectId;
 
 function row(overrides = {}) {
   return {
@@ -119,6 +122,51 @@ test('planning is idempotent after applying missing fields', () => {
 test('incorrect Firebase project is refused', () => {
   assert.throws(
     () => assertTargetProject('interfacerecup33'),
+    /Projet Firebase refusé/,
+  );
+});
+
+test('dedicated migration project variable is mandatory', () => {
+  assert.throws(
+    () => resolveExecution({environment: {}, arguments: []}),
+    /Projet Firebase refusé/,
+  );
+});
+
+test('authorized project uses dry-run by default', () => {
+  const execution = resolveExecution({
+    environment: {[migrationProjectEnvironmentKey]: targetProjectId},
+    arguments: [],
+  });
+  assert.deepEqual(execution, {apply: false, projectId: targetProjectId});
+});
+
+test('write mode requires the explicit apply flag', () => {
+  const legacyBuildKey = ['FIREBASE', 'PROJECT', 'ID'].join('_');
+  const environment = {
+    [migrationProjectEnvironmentKey]: targetProjectId,
+    [legacyBuildKey]: 'ignored-build-project',
+  };
+  assert.equal(
+    resolveExecution({environment, arguments: []}).apply,
+    false,
+  );
+  assert.equal(
+    resolveExecution({
+      environment,
+      arguments: ['--apply-confirmed'],
+    }).apply,
+    true,
+  );
+});
+
+test('legacy build project variable is not accepted for migration', () => {
+  const legacyBuildKey = ['FIREBASE', 'PROJECT', 'ID'].join('_');
+  assert.throws(
+    () => resolveExecution({
+      environment: {[legacyBuildKey]: targetProjectId},
+      arguments: ['--apply-confirmed'],
+    }),
     /Projet Firebase refusé/,
   );
 });

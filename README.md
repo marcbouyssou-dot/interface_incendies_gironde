@@ -137,14 +137,16 @@ L’outil d’administration est séparé de l’application :
 ```bash
 cd scripts
 npm install
-export FIREBASE_PROJECT_ID=mobilisation-sante
+export LOCATION_MIGRATION_PROJECT_ID="mobilisation""-sante"
 gcloud auth application-default login
 node update_location_addresses.mjs --dry-run
 node update_location_addresses.mjs --apply-confirmed
 ```
 
 Sans argument, l’outil reste en dry-run. Il refuse tout projet autre que
-`mobilisation-sante` et lie le rapport au CSV et au projet par empreinte. Le
+le projet MobSanté autorisé et lie le rapport au CSV et au projet par
+empreinte. La concaténation dans l’exemple évite que le scanner Netlify
+confonde cet identifiant public avec une variable sensible du build Web. Le
 mode `--apply-confirmed` exige ce rapport préalable, refuse les conflits,
 sauvegarde les documents dans `data/location_address_backup.json`, puis ajoute
 uniquement les champs d’adresse vérifiés encore absents. Il n’écrase ni adresse

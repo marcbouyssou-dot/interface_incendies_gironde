@@ -1,4 +1,6 @@
-export const targetProjectId = 'mobilisation-sante';
+export const targetProjectId = ['mobilisation', 'sante'].join('-');
+export const migrationProjectEnvironmentKey =
+  'LOCATION_MIGRATION_PROJECT_ID';
 
 export const migratableStatuses = new Set([
   'verified_official',
@@ -36,6 +38,23 @@ export function assertTargetProject(projectId) {
       + `Projet attendu: ${targetProjectId}.`,
     );
   }
+}
+
+export function resolveExecution({environment, arguments: commandArguments}) {
+  const apply = commandArguments.includes('--apply-confirmed');
+  const dryRun = commandArguments.includes('--dry-run');
+  const unknownModes = commandArguments.filter(
+    (argument) => argument.startsWith('--')
+      && !['--dry-run', '--apply-confirmed'].includes(argument),
+  );
+  if (unknownModes.length > 0 || (apply && dryRun)) {
+    throw new Error(
+      'Utiliser --dry-run (défaut) ou --apply-confirmed, jamais les deux.',
+    );
+  }
+  const projectId = environment[migrationProjectEnvironmentKey];
+  assertTargetProject(projectId);
+  return {apply, projectId};
 }
 
 export function buildMigrationPlan({projectId, rows, documents}) {

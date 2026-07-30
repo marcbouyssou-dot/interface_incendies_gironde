@@ -5,9 +5,9 @@ import {readFile, writeFile} from 'node:fs/promises';
 import {applicationDefault, initializeApp} from 'firebase-admin/app';
 import {getFirestore} from 'firebase-admin/firestore';
 import {
-  assertTargetProject,
   buildMigrationPlan,
   parseCsv,
+  resolveExecution,
   sanitizePlan,
   writableChanges,
 } from './location_address_migration.mjs';
@@ -15,19 +15,10 @@ import {
 const csvPath = new URL('../data/locations_verified.csv', import.meta.url);
 const reportPath = new URL('../data/location_address_dry_run.json', import.meta.url);
 const backupPath = new URL('../data/location_address_backup.json', import.meta.url);
-const apply = process.argv.includes('--apply-confirmed');
-const unknownModes = process.argv.filter(
-  (argument) => argument.startsWith('--')
-    && !['--dry-run', '--apply-confirmed'].includes(argument),
-);
-if (unknownModes.length > 0 || (apply && process.argv.includes('--dry-run'))) {
-  throw new Error(
-    'Utiliser --dry-run (défaut) ou --apply-confirmed, jamais les deux.',
-  );
-}
-
-const projectId = process.env.FIREBASE_PROJECT_ID;
-assertTargetProject(projectId);
+const {apply, projectId} = resolveExecution({
+  environment: process.env,
+  arguments: process.argv.slice(2),
+});
 console.log(`Projet Firebase ciblé: ${projectId}`);
 console.log(apply ? 'Mode: APPLY CONFIRMÉ' : 'Mode: DRY RUN (aucune écriture)');
 
