@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
+import 'package:interface_incendies_gironde/screens/app_shell.dart';
+import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
 
 void main() {
   Future<void> pumpIPhone(WidgetTester tester) async {
@@ -13,18 +15,27 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('splash shows final branding before missions', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(const FireCoordinationApp());
+  testWidgets(
+    'ready application enters the shell without a fixed splash delay',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(const FireCoordinationApp());
 
-    expect(find.text('InterfaceRecup33'), findsOneWidget);
-    expect(find.text('Incendies Gironde'), findsOneWidget);
-    expect(find.byKey(const Key('brand-logo-slot')), findsOneWidget);
+      expect(find.byType(AppShell), findsOneWidget);
+    },
+  );
 
-    await tester.pumpAndSettle();
-    expect(find.text('Encore 9 professionnels à mobiliser'), findsOneWidget);
+  testWidgets('brand mark uses the optimized interface asset', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: BrandMark(size: 92))),
+    );
+
+    final image = tester.widget<Image>(find.byType(Image));
+    final provider = image.image as AssetImage;
+    expect(provider.assetName, BrandMark.officialAssetPath);
+    expect(provider.assetName, isNot(contains('logo_hd.png')));
   });
 
   testWidgets('missions render immediately without overflow at iPhone width', (

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/mock_coordination_repository.dart';
 import 'repositories/repository_scope.dart';
-import 'screens/splash_screen.dart';
+import 'screens/app_shell.dart';
 import 'theme/app_theme.dart';
 
 class FireCoordinationApp extends StatelessWidget {
@@ -19,7 +19,7 @@ class FireCoordinationApp extends StatelessWidget {
         title: 'Interface Récup',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
-        home: const SplashScreen(),
+        home: const AppShell(),
       ),
     );
   }

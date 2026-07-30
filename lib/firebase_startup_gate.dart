@@ -9,6 +9,7 @@ import 'app.dart';
 import 'firebase_bootstrap.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/firestore_coordination_repository.dart';
+import 'screens/splash_screen.dart';
 import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
 
@@ -113,11 +114,9 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
           home: Scaffold(
-            body: Center(
-              child: snapshot.hasError
-                  ? _StartupError(onRetry: _retry)
-                  : const CircularProgressIndicator(),
-            ),
+            body: snapshot.hasError
+                ? Center(child: _StartupError(onRetry: _retry))
+                : const SplashScreen(),
           ),
         );
       },

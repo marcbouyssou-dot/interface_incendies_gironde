@@ -1,9 +1,30 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/firebase_startup_gate.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/screens/splash_screen.dart';
 
 void main() {
+  testWidgets('real startup work displays branding without a fixed timer', (
+    tester,
+  ) async {
+    final pending = Completer<CoordinationRepository>();
+
+    await tester.pumpWidget(FirebaseStartupGate(startup: () => pending.future));
+    await tester.pump();
+
+    expect(find.byType(SplashScreen), findsOneWidget);
+    expect(find.text('InterfaceRecup33'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    pending.complete(MockCoordinationRepository.instance);
+    await tester.pumpAndSettle();
+    expect(find.byType(SplashScreen), findsNothing);
+  });
+
   testWidgets('a startup failure replaces the spinner with a retry state', (
     tester,
   ) async {

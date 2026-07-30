@@ -10,7 +10,7 @@ class BrandMark extends StatelessWidget {
     this.onDarkBackground = false,
   });
 
-  static const officialAssetPath = 'assets/branding/logo_hd.png';
+  static const officialAssetPath = 'assets/branding/logo_ui_256.png';
 
   final double size;
   final String? assetPath;
