@@ -4,6 +4,7 @@ import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/volunteer_profile.dart';
 import '../repositories/coordination_repository.dart';
+import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
 import '../theme/app_theme.dart';
@@ -444,16 +445,48 @@ class NeedCard extends StatelessWidget {
   }
 }
 
-class _NeedActions extends StatelessWidget {
+class _NeedActions extends StatefulWidget {
   const _NeedActions({required this.need});
 
   final CoordinationNeed need;
 
   @override
+  State<_NeedActions> createState() => _NeedActionsState();
+}
+
+class _NeedActionsState extends State<_NeedActions> {
+  LiveCoordinationData? _liveData;
+  Stream<EngagementInfo?>? _engagement;
+
+  CoordinationNeed get need => widget.need;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateStream();
+  }
+
+  @override
+  void didUpdateWidget(_NeedActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.need.id != widget.need.id) {
+      _engagement = null;
+      _updateStream();
+    }
+  }
+
+  void _updateStream() {
+    final liveData = LiveCoordinationDataScope.of(context);
+    if (!identical(liveData, _liveData) || _engagement == null) {
+      _liveData = liveData;
+      _engagement = liveData.watchMyEngagement(need.id);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final repository = RepositoryScope.of(context);
     return StreamBuilder<EngagementInfo?>(
-      stream: repository.watchMyEngagement(need.id),
+      stream: _engagement,
       builder: (context, engagementSnapshot) {
         if (engagementSnapshot.hasError) {
           return const FilledButton(

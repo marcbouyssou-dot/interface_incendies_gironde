@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
+import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -30,6 +31,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   String? _errorMessage;
   _PublishedMission? _publishedMission;
   CoordinationRepository? _repository;
+  LiveCoordinationData? _liveData;
   Stream<ResponsibleAccess?>? _responsibleAccess;
   Stream<List<ResponsePlace>>? _locations;
 
@@ -37,10 +39,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final repository = RepositoryScope.of(context);
-    if (!identical(repository, _repository)) {
+    final liveData = LiveCoordinationDataScope.of(context);
+    if (!identical(repository, _repository) ||
+        !identical(liveData, _liveData)) {
       _repository = repository;
-      _responsibleAccess = repository.watchResponsibleAccess();
-      _locations = repository.watchLocations();
+      _liveData = liveData;
+      _responsibleAccess = liveData.watchResponsibleAccess();
+      _locations = liveData.watchLocations();
     }
   }
 

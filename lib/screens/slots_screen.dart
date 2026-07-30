@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
-import '../repositories/repository_scope.dart';
+import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
@@ -16,11 +16,23 @@ class SlotsScreen extends StatefulWidget {
 class _SlotsScreenState extends State<SlotsScreen> {
   int _filter = 0;
   TerritorialGroup? _group;
+  LiveCoordinationData? _liveData;
+  Stream<List<CoordinationNeed>>? _missions;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final liveData = LiveCoordinationDataScope.of(context);
+    if (!identical(liveData, _liveData)) {
+      _liveData = liveData;
+      _missions = liveData.watchMissions();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<CoordinationNeed>>(
-      stream: RepositoryScope.of(context).watchMissions(),
+      stream: _missions,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());

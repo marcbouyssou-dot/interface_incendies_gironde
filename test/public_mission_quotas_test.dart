@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/profession_quotas.dart';
+import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
@@ -46,15 +47,21 @@ void main() {
     tester.view.physicalSize = Size(390, height);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: places,
+    );
+    final liveData = LiveCoordinationData(repository);
+    addTearDown(liveData.dispose);
     await tester.pumpWidget(
       RepositoryScope(
-        repository: MockCoordinationRepository(
-          initialMissions: [mission],
-          initialLocations: places,
-        ),
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: Scaffold(body: SingleChildScrollView(child: child)),
+        repository: repository,
+        child: LiveCoordinationDataScope(
+          data: liveData,
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: Scaffold(body: SingleChildScrollView(child: child)),
+          ),
         ),
       ),
     );

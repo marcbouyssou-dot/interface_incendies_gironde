@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
+import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
 import 'package:interface_incendies_gironde/screens/app_shell.dart';
 import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
@@ -117,6 +120,61 @@ void main() {
     expect(find.text('InterfaceRecup33'), findsOneWidget);
   });
 
+  testWidgets('tabs are lazy and shared streams are created only once', (
+    tester,
+  ) async {
+    final repository = _CountingRepository();
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(repository.missionFactories, 1);
+    expect(repository.locationFactories, 0);
+    expect(repository.accessFactories, 0);
+    expect(find.text('SITUATION'), findsNothing);
+    expect(find.text('URPS MK Nouvelle-Aquitaine'), findsNothing);
+
+    await tester.tap(find.text('Critiques'));
+    await tester.pumpAndSettle();
+    expect(repository.missionFactories, 1);
+    expect(
+      repository.volunteerEngagementFactories.values.every(
+        (count) => count == 1,
+      ),
+      isTrue,
+    );
+
+    await tester.tap(find.text('Situation').last);
+    await tester.pumpAndSettle();
+    expect(find.text('SITUATION'), findsOneWidget);
+    expect(repository.missionFactories, 1);
+    expect(repository.accessFactories, 1);
+    expect(
+      repository.missionEngagementFactories.values.every((count) => count == 1),
+      isTrue,
+    );
+
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    expect(repository.locationFactories, 1);
+
+    await tester.tap(find.text('Déclarer').last);
+    await tester.pumpAndSettle();
+    expect(repository.locationFactories, 1);
+    expect(repository.accessFactories, 1);
+
+    await tester.tap(find.text('Missions').last);
+    await tester.pumpAndSettle();
+    expect(find.text('PARC DES EXPOSITIONS DE BORDEAUX'), findsNothing);
+    expect(repository.missionFactories, 1);
+    expect(repository.locationFactories, 1);
+    expect(repository.accessFactories, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('slot filters update visible cards', (tester) async {
     await pumpIPhone(tester);
     await tester.tap(find.text('Critiques'));
@@ -163,4 +221,50 @@ void main() {
     expect(find.text('MÉRIGNAC'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _CountingRepository extends MockCoordinationRepository {
+  int missionFactories = 0;
+  int locationFactories = 0;
+  int accessFactories = 0;
+  final Map<String, int> volunteerEngagementFactories = {};
+  final Map<String, int> missionEngagementFactories = {};
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissions() {
+    missionFactories++;
+    return super.watchMissions();
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    locationFactories++;
+    return super.watchLocations();
+  }
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() {
+    accessFactories++;
+    return super.watchResponsibleAccess();
+  }
+
+  @override
+  Stream<EngagementInfo?> watchMyEngagement(String missionId) {
+    volunteerEngagementFactories.update(
+      missionId,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
+    return super.watchMyEngagement(missionId);
+  }
+
+  @override
+  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
+    missionEngagementFactories.update(
+      missionId,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
+    return super.watchMissionEngagements(missionId);
+  }
 }

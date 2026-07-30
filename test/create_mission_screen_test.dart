@@ -6,6 +6,7 @@ import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
@@ -18,12 +19,17 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    final liveData = LiveCoordinationData(repository);
+    addTearDown(liveData.dispose);
     await tester.pumpWidget(
       RepositoryScope(
         repository: repository,
-        child: MaterialApp(
-          theme: AppTheme.light,
-          home: const Scaffold(body: SafeArea(child: CreateNeedScreen())),
+        child: LiveCoordinationDataScope(
+          data: liveData,
+          child: MaterialApp(
+            theme: AppTheme.light,
+            home: const Scaffold(body: SafeArea(child: CreateNeedScreen())),
+          ),
         ),
       ),
     );

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
-import '../repositories/repository_scope.dart';
+import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 
@@ -14,11 +14,23 @@ class PlacesScreen extends StatefulWidget {
 
 class _PlacesScreenState extends State<PlacesScreen> {
   TerritorialGroup? _group;
+  LiveCoordinationData? _liveData;
+  Stream<List<ResponsePlace>>? _locations;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final liveData = LiveCoordinationDataScope.of(context);
+    if (!identical(liveData, _liveData)) {
+      _liveData = liveData;
+      _locations = liveData.watchLocations();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<ResponsePlace>>(
-      stream: RepositoryScope.of(context).watchLocations(),
+      stream: _locations,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());

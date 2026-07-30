@@ -3,27 +3,55 @@ import 'package:flutter/material.dart';
 import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
+import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 
-class CoordinationScreen extends StatelessWidget {
+class CoordinationScreen extends StatefulWidget {
   const CoordinationScreen({super.key});
+
+  @override
+  State<CoordinationScreen> createState() => _CoordinationScreenState();
+}
+
+class _CoordinationScreenState extends State<CoordinationScreen> {
+  LiveCoordinationData? _liveData;
+  Stream<List<CoordinationNeed>>? _missions;
+  Stream<ResponsibleAccess?>? _responsibleAccess;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final liveData = LiveCoordinationDataScope.of(context);
+    if (!identical(liveData, _liveData)) {
+      _liveData = liveData;
+      _missions = liveData.watchMissions();
+      _responsibleAccess = liveData.watchResponsibleAccess();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<CoordinationNeed>>(
-      stream: RepositoryScope.of(context).watchMissions(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+      stream: _missions,
+      builder: (context, missionsSnapshot) {
+        if (!missionsSnapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return _buildContent(snapshot.data!);
+        return StreamBuilder<ResponsibleAccess?>(
+          stream: _responsibleAccess,
+          builder: (context, accessSnapshot) =>
+              _buildContent(missionsSnapshot.data!, accessSnapshot.data),
+        );
       },
     );
   }
 
-  Widget _buildContent(List<CoordinationNeed> missions) {
+  Widget _buildContent(
+    List<CoordinationNeed> missions,
+    ResponsibleAccess? access,
+  ) {
     final critical = missions
         .where((need) => need.status == NeedStatus.critical)
         .length;
@@ -150,8 +178,11 @@ class CoordinationScreen extends StatelessWidget {
             sliver: SliverList.separated(
               itemCount: missions.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) =>
-                  _SituationRow(need: missions[index]),
+              itemBuilder: (context, index) => _SituationRow(
+                key: ValueKey(missions[index].id),
+                need: missions[index],
+                access: access,
+              ),
             ),
           ),
         ],
@@ -209,8 +240,9 @@ class _StatusMetric extends StatelessWidget {
 }
 
 class _SituationRow extends StatelessWidget {
-  const _SituationRow({required this.need});
+  const _SituationRow({super.key, required this.need, required this.access});
   final CoordinationNeed need;
+  final ResponsibleAccess? access;
 
   @override
   Widget build(BuildContext context) {
@@ -243,8 +275,8 @@ class _SituationRow extends StatelessWidget {
             const SizedBox(height: 14),
             CoverageBar(need: need),
             const SizedBox(height: 14),
-            _MissionEngagements(need: need),
-            _ResponsibleMissionActions(need: need),
+            if (access?.isCoordinator == true) _MissionEngagements(need: need),
+            _ResponsibleMissionActions(need: need, access: access),
           ],
         ),
       ),
@@ -253,79 +285,96 @@ class _SituationRow extends StatelessWidget {
 }
 
 class _ResponsibleMissionActions extends StatelessWidget {
-  const _ResponsibleMissionActions({required this.need});
+  const _ResponsibleMissionActions({required this.need, required this.access});
 
   final CoordinationNeed need;
+  final ResponsibleAccess? access;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<ResponsibleAccess?>(
-      stream: RepositoryScope.of(context).watchResponsibleAccess(),
-      builder: (context, snapshot) {
-        final access = snapshot.data;
-        if (access == null ||
-            need.createdBy == null ||
-            need.createdBy != access.uid ||
-            !need.isActive ||
-            need.isCancelled) {
-          return const SizedBox.shrink();
-        }
-        return Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: MissionCancellationButton(need: need),
-        );
-      },
+    if (access == null ||
+        need.createdBy == null ||
+        need.createdBy != access!.uid ||
+        !need.isActive ||
+        need.isCancelled) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: MissionCancellationButton(need: need),
     );
   }
 }
 
-class _MissionEngagements extends StatelessWidget {
+class _MissionEngagements extends StatefulWidget {
   const _MissionEngagements({required this.need});
 
   final CoordinationNeed need;
 
   @override
+  State<_MissionEngagements> createState() => _MissionEngagementsState();
+}
+
+class _MissionEngagementsState extends State<_MissionEngagements> {
+  LiveCoordinationData? _liveData;
+  Stream<List<EngagementInfo>>? _engagements;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateStream();
+  }
+
+  @override
+  void didUpdateWidget(_MissionEngagements oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.need.id != widget.need.id) {
+      _engagements = null;
+      _updateStream();
+    }
+  }
+
+  void _updateStream() {
+    final liveData = LiveCoordinationDataScope.of(context);
+    if (!identical(liveData, _liveData) || _engagements == null) {
+      _liveData = liveData;
+      _engagements = liveData.watchMissionEngagements(widget.need.id);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final repository = RepositoryScope.of(context);
-    return StreamBuilder<ResponsibleAccess?>(
-      stream: repository.watchResponsibleAccess(),
-      builder: (context, accessSnapshot) {
-        if (accessSnapshot.data?.isCoordinator != true) {
-          return const SizedBox.shrink();
+    return StreamBuilder<List<EngagementInfo>>(
+      stream: _engagements,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text(
+            'Engagements indisponibles',
+            style: TextStyle(
+              color: AppColors.red,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          );
         }
-        return StreamBuilder<List<EngagementInfo>>(
-          stream: repository.watchMissionEngagements(need.id),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return const Text(
-                'Engagements indisponibles',
-                style: TextStyle(
-                  color: AppColors.red,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              );
-            }
-            final engagements = snapshot.data;
-            if (engagements == null) {
-              return const LinearProgressIndicator();
-            }
-            if (engagements.isEmpty) {
-              return const Text(
-                'Aucun engagé',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              );
-            }
-            return Column(
-              children: engagements
-                  .map((engagement) => _EngagementRow(engagement: engagement))
-                  .toList(growable: false),
-            );
-          },
+        final engagements = snapshot.data;
+        if (engagements == null) {
+          return const LinearProgressIndicator();
+        }
+        if (engagements.isEmpty) {
+          return const Text(
+            'Aucun engagé',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          );
+        }
+        return Column(
+          children: engagements
+              .map((engagement) => _EngagementRow(engagement: engagement))
+              .toList(growable: false),
         );
       },
     );
