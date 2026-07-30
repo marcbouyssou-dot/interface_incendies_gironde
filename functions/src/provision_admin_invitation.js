@@ -2,16 +2,10 @@ const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const ALLOWED_ROLES = new Set(['site_manager', 'coordinator']);
 
 export class ProvisioningError extends Error {
-  constructor(code, message) {
-    super(message);
+  constructor(code, message, options = {}) {
+    super(message, options);
     this.name = 'ProvisioningError';
     this.code = code;
-  }
-}
-
-export class PendingAdminInvitationMailer {
-  async prepare() {
-    return {delivery: 'pending'};
   }
 }
 
@@ -19,7 +13,7 @@ export async function provisionAdminInvitation({
   invitationId,
   callerUid,
   services,
-  mailer = new PendingAdminInvitationMailer(),
+  notificationService,
   appUrl,
   now = new Date(),
 }) {
@@ -39,12 +33,26 @@ export async function provisionAdminInvitation({
   if (!invitation) {
     throw new ProvisioningError('not-found', 'Invitation introuvable.');
   }
-  if (invitation.status === 'accepted' && invitation.acceptedUid) {
+  const alreadyProvisioned = invitation.status === 'accepted'
+    && typeof invitation.acceptedUid === 'string'
+    && invitation.acceptedUid !== '';
+  if (alreadyProvisioned && invitation.notificationStatus === 'sent') {
     return safeResult({
       alreadyProvisioned: true,
+      emailDelivery: 'sent',
     });
   }
-  validateInvitation(invitation, now);
+  if (alreadyProvisioned) {
+    validateInvitationData(invitation);
+  } else {
+    validateInvitation(invitation, now);
+  }
+  if (!notificationService || typeof notificationService.send !== 'function') {
+    throw new ProvisioningError(
+      'failed-precondition',
+      'Service de notification indisponible.',
+    );
+  }
 
   let user;
   let createdUser = false;
@@ -91,40 +99,110 @@ export async function provisionAdminInvitation({
   }
 
   let activationLink;
+  let provisioningCommitted = alreadyProvisioned;
   try {
     activationLink = await services.generatePasswordResetLink(
       invitation.email,
       {url: activationUrl, handleCodeInApp: true},
     );
-    await mailer.prepare({
-      recipient: invitation.email,
-      activationLink,
-      displayName: invitation.displayName,
-    });
-    await services.commitProvisioning({
-      invitationId,
-      targetUid: user.uid,
-      expectedInvitation: invitation,
-      role: {
-        ...expectedRole,
-        createdBy: callerUid,
-      },
-      timestamps: {
-        acceptedAt: now,
-        provisionedAt: now,
-        activationLinkGeneratedAt: now,
-      },
-    });
+    if (!alreadyProvisioned) {
+      await services.commitProvisioning({
+        invitationId,
+        targetUid: user.uid,
+        expectedInvitation: invitation,
+        role: {
+          ...expectedRole,
+          createdBy: callerUid,
+        },
+        timestamps: {
+          acceptedAt: now,
+          provisionedAt: now,
+          activationLinkGeneratedAt: now,
+        },
+      });
+      provisioningCommitted = true;
+    }
+
+    try {
+      const notificationResult = await notificationService.send(
+        buildInvitationNotification({invitation, activationLink}),
+      );
+      await services.markNotificationSent({
+        invitationId,
+        targetUid: user.uid,
+        provider: notificationResult.provider,
+        providerMessageId: notificationResult.providerMessageId,
+        sentAt: now,
+      });
+    } catch (error) {
+      const errorCode = normalizedNotificationErrorCode(error);
+      try {
+        await services.markNotificationFailed({
+          invitationId,
+          targetUid: user.uid,
+          errorCode,
+          failedAt: now,
+        });
+      } catch {
+        // The original notification failure remains the actionable cause.
+      }
+      throw new ProvisioningError(
+        'unavailable',
+        'Le compte est prêt, mais la notification n’a pas pu être envoyée.',
+        {cause: error},
+      );
+    }
   } catch (error) {
-    if (createdUser) await compensateCreatedUser(services, user.uid);
+    if (createdUser && !provisioningCommitted) {
+      await compensateCreatedUser(services, user.uid);
+    }
     throw error;
   } finally {
     activationLink = null;
   }
 
   return safeResult({
-    alreadyProvisioned: false,
+    alreadyProvisioned,
+    emailDelivery: 'sent',
   });
+}
+
+export function buildInvitationNotification({invitation, activationLink}) {
+  const roleLabel = invitation.role === 'coordinator'
+    ? 'Coordinateur départemental'
+    : 'Responsable de centre';
+  const expiration = asDate(invitation.expiresAt);
+  const expirationText = expiration
+    ? expiration.toLocaleDateString('fr-FR', {timeZone: 'UTC'})
+    : 'la date indiquée dans votre invitation';
+  const text = [
+    `Bonjour ${invitation.displayName ?? ''},`.trim(),
+    '',
+    'Votre compte responsable MobSanté a été préparé.',
+    `Rôle attribué : ${roleLabel}.`,
+    `Activez votre compte avant le ${expirationText} :`,
+    activationLink,
+    '',
+    'Ne transférez pas ce lien personnel.',
+    'Si vous avez reçu ce message par erreur, vous pouvez l’ignorer.',
+  ].join('\n');
+  const html = [
+    `<p>Bonjour ${escapeHtml(invitation.displayName ?? '')},</p>`,
+    '<p>Votre compte responsable MobSanté a été préparé.</p>',
+    `<p><strong>Rôle attribué :</strong> ${roleLabel}.<br>`,
+    `Activez votre compte avant le ${expirationText} :</p>`,
+    `<p><a href="${escapeHtml(activationLink)}">Activer mon compte</a></p>`,
+    '<p>Ne transférez pas ce lien personnel.</p>',
+    '<p>Si vous avez reçu ce message par erreur, vous pouvez l’ignorer.</p>',
+  ].join('');
+  return {
+    channel: 'email',
+    recipient: invitation.email,
+    subject: 'Activez votre compte responsable MobSanté',
+    text,
+    html,
+    metadata: {kind: 'admin-invitation'},
+  };
 }
 
 export function buildActivationUrl(value) {
@@ -170,6 +248,10 @@ function validateInvitation(invitation, now) {
   if (!expiresAt || expiresAt <= now) {
     throw new ProvisioningError('failed-precondition', 'Invitation expirée.');
   }
+  validateInvitationData(invitation);
+}
+
+function validateInvitationData(invitation) {
   invitation.email = normalizedEmail(invitation.email);
   if (!EMAIL_PATTERN.test(invitation.email)) {
     throw new ProvisioningError('invalid-argument', 'Adresse e-mail invalide.');
@@ -211,13 +293,29 @@ async function compensateCreatedUser(services, uid) {
   }
 }
 
-function safeResult({alreadyProvisioned}) {
+function safeResult({alreadyProvisioned, emailDelivery}) {
   return {
     accountProvisioned: true,
-    emailDelivery: 'pending',
+    emailDelivery,
     invitationStatus: 'accepted',
     alreadyProvisioned,
   };
+}
+
+function normalizedNotificationErrorCode(error) {
+  const value = error?.code;
+  return typeof value === 'string' && /^[a-z0-9_-]{1,64}$/i.test(value)
+    ? value
+    : 'notification-failed';
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function normalizedEmail(value) {

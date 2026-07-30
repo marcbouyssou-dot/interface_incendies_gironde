@@ -8,7 +8,7 @@
   "main": "src/index.js",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "test:emulator": "MOBSANTE_APP_URL=http://127.0.0.1:5000 MOBSANTE_EMULATOR_FAIL_INVITATION_IDS=failure-new,failure-existing firebase emulators:exec --config ../firebase.json --only auth,firestore,functions --project demo-mobsante \"node --test --test-concurrency=1 test/emulator/*.test.js\""
+    "test:emulator": "MOBSANTE_APP_URL=http://127.0.0.1:5000 MOBSANTE_EMULATOR_FAIL_INVITATION_IDS=failure-new,failure-existing MOBSANTE_EMULATOR_FAIL_NOTIFICATION_IDS=notification-failure firebase emulators:exec --config ../firebase.json --only auth,firestore,functions --project demo-mobsante \"node --test --test-concurrency=1 test/emulator/*.test.js\""
   },
   "dependencies": {
     "firebase-admin": "^13.4.0",

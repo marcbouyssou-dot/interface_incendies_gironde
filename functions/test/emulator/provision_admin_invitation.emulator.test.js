@@ -118,7 +118,7 @@ test('main flow provisions Auth, role and accepted invitation safely', async () 
   const response = await callable({invitationId});
   assert.deepEqual(response.data, {
     accountProvisioned: true,
-    emailDelivery: 'pending',
+    emailDelivery: 'sent',
     invitationStatus: 'accepted',
     alreadyProvisioned: false,
   });
@@ -139,6 +139,14 @@ test('main flow provisions Auth, role and accepted invitation safely', async () 
   assert.ok(accepted.acceptedAt);
   assert.ok(accepted.provisionedAt);
   assert.ok(accepted.activationLinkGeneratedAt);
+  assert.equal(accepted.notificationStatus, 'sent');
+  assert.equal(accepted.notificationProvider, 'fake');
+  assert.equal(
+    accepted.notificationProviderMessageId,
+    'emulator-message-id',
+  );
+  assert.ok(accepted.notificationSentAt);
+  assert.equal('notificationErrorCode' in accepted, false);
 
   const persisted = JSON.stringify({role, accepted});
   assert.equal(persisted.includes('oobCode'), false);
@@ -209,6 +217,7 @@ test('already accepted invitation is an idempotent safe success', async () => {
   await seedInvitation(id, {
     status: 'accepted',
     acceptedUid: 'existing-target',
+    notificationStatus: 'sent',
   });
   const response = await callable({invitationId: id});
   assert.equal(response.data.alreadyProvisioned, true);
@@ -292,6 +301,42 @@ test('second call creates neither a second account, role nor activation timestam
     second.activationLinkGeneratedAt.toMillis(),
     first.activationLinkGeneratedAt.toMillis(),
   );
+  assert.equal(
+    second.notificationSentAt.toMillis(),
+    first.notificationSentAt.toMillis(),
+  );
+});
+
+test('notification failure preserves provisioning and retry sends once', async () => {
+  const callable = await coordinator();
+  const invitation = await seedInvitation('notification-failure');
+
+  await assertCallableCode(
+    () => callable({invitationId: 'notification-failure'}),
+    'unavailable',
+  );
+  const target = await adminAuth.getUserByEmail(invitation.email);
+  const failed = (
+    await db.collection('adminInvitations').doc('notification-failure').get()
+  ).data();
+  assert.equal(failed.status, 'accepted');
+  assert.equal(failed.acceptedUid, target.uid);
+  assert.equal(failed.notificationStatus, 'failed');
+  assert.equal(failed.notificationErrorCode, 'provider-failure');
+  assert.ok(
+    (await db.collection('roles').doc(target.uid).get()).exists,
+  );
+
+  const retry = await callable({invitationId: 'notification-failure'});
+  const sent = (
+    await db.collection('adminInvitations').doc('notification-failure').get()
+  ).data();
+  assert.equal(retry.data.alreadyProvisioned, true);
+  assert.equal(retry.data.emailDelivery, 'sent');
+  assert.equal(sent.notificationStatus, 'sent');
+  assert.equal(sent.notificationProviderMessageId, 'emulator-message-id');
+  assert.equal('notificationErrorCode' in sent, false);
+  assert.equal((await adminAuth.getUserByEmail(invitation.email)).uid, target.uid);
 });
 
 test('new Auth account is compensated when Firestore commit fails', async () => {

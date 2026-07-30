@@ -14,22 +14,31 @@ la seule couche autorisée à créer un compte Firebase Auth et un document
    compatible et non désactivé.
 5. Elle génère un lien officiel Firebase de définition/réinitialisation du mot
    de passe.
-6. Une transaction crée ou contrôle `roles/{uid}` puis marque l’invitation
-   `accepted`.
+6. Une transaction crée ou contrôle `roles/{uid}`, marque l’invitation
+   `accepted` et initialise sa notification à `pending`.
+7. Le cœur métier construit le message et appelle uniquement
+   `NotificationService.send(message)`.
+8. L’invitation est marquée `sent` ou `failed` sans stocker le contenu du
+   message ni la réponse brute du fournisseur.
 
 Le lien complet n’est ni renvoyé au client, ni stocké dans Firestore, ni
 journalisé. Seuls les timestamps de provisionnement sont conservés.
 
 ## Idempotence et erreurs partielles
 
-- Une invitation déjà acceptée avec `acceptedUid` retourne un succès
-  idempotent sans recréer de compte ni de lien.
+- Une invitation acceptée dont la notification est `sent` retourne un succès
+  idempotent sans recréer de compte, de rôle, de lien ni de notification.
+- Une invitation acceptée dont la notification est `failed` peut être relancée
+  sans recréer le compte ni le rôle. Un nouveau lien est alors généré.
 - Un rôle existant doit correspondre exactement au rôle et aux centres
   demandés.
 - Si Firestore échoue après la création d’un nouveau compte Auth, la Function
   tente de supprimer uniquement ce compte nouvellement créé. Un compte
   préexistant n’est jamais supprimé.
 - L’invitation reste `pending` tant que la transaction finale n’a pas réussi.
+- Un échec d’envoi après cette transaction conserve le compte et le rôle,
+  marque `notificationStatus: failed` avec un code normalisé, puis retourne une
+  erreur métier `unavailable`.
 
 ## Variable requise
 
@@ -60,12 +69,22 @@ Le lien généré utilise alors
 d’action, permet de choisir le mot de passe puis propose explicitement d’ouvrir
 la connexion responsable existante.
 
-## Transport d’e-mail
+## Composition des notifications
 
-`PendingAdminInvitationMailer` est volontairement passif. Il n’envoie aucun
-e-mail et le résultat public indique toujours `emailDelivery: pending`.
-RC2.3A.4 devra choisir et configurer un transport transactionnel avant de
-présenter un envoi comme effectif.
+Le provisionnement dépend uniquement de `NotificationService`. La composition
+est isolée dans `notifications/create_notification_service.js` :
+
+- les tests unitaires injectent directement un faux service ;
+- les Emulators utilisent `FakeNotificationProvider`, sans réseau ;
+- hors Emulator, un provider non configuré échoue explicitement sans être
+  construit avec un secret absent ;
+- le futur branchement serveur pourra injecter `ResendNotificationProvider`
+  sans modifier le cœur métier.
+
+Les champs persistés sont limités à `notificationStatus`,
+`notificationSentAt` ou `notificationFailedAt`, `notificationProvider`,
+`notificationProviderMessageId` et `notificationErrorCode`. Aucun corps
+d’e-mail, lien d’activation, secret, retour brut ou stack n’est stocké.
 
 ## Développement local
 
@@ -95,11 +114,12 @@ réel ou une ressource distante.
   `invitationStatus` et `alreadyProvisioned`.
 - Le lien d’activation, son `oobCode` et les données Admin SDK ne sont ni
   renvoyés, ni persistés, ni journalisés.
-- L’ordre est : validation, compte Auth, génération du lien, puis transaction
-  rôle + invitation.
+- L’ordre est : validation, compte Auth, génération du lien, transaction rôle
+  + invitation, puis notification et persistance de son résultat normalisé.
 - En cas d’échec avant la transaction, seul un compte créé par cet appel est
   compensé. Un compte préexistant n’est jamais supprimé.
-- Le transport d’e-mail reste passif et n’annonce aucun envoi.
+- Aucun provider réel n’est construit tant que sa configuration serveur n’est
+  pas explicitement injectée.
 
 ## Audit des dépendances
 

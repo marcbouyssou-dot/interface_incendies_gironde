@@ -5,15 +5,18 @@ import {HttpsError, onCall} from 'firebase-functions/v2/https';
 import {defineString} from 'firebase-functions/params';
 
 import {
-  PendingAdminInvitationMailer,
   ProvisioningError,
   provisionAdminInvitation as provision,
 } from './provision_admin_invitation.js';
+import {
+  createServerNotificationService,
+} from './notifications/create_notification_service.js';
 
 if (getApps().length === 0) initializeApp();
 
 const appUrl = defineString('MOBSANTE_APP_URL');
 const injectedEmulatorFailures = new Set();
+const injectedEmulatorNotificationFailures = new Set();
 
 export const provisionAdminInvitation = onCall(
   {region: 'europe-west1'},
@@ -25,7 +28,12 @@ export const provisionAdminInvitation = onCall(
         invitationId: request.data?.invitationId,
         callerUid: request.auth?.uid,
         appUrl: appUrl.value(),
-        mailer: new PendingAdminInvitationMailer(),
+        notificationService: createServerNotificationService({
+          isEmulator: process.env.FUNCTIONS_EMULATOR === 'true',
+          emulatorFailure: emulatorNotificationFailure(
+            request.data?.invitationId,
+          ),
+        }),
         services: adminServices({
           firestore,
           auth,
@@ -121,10 +129,80 @@ export function adminServices({
           acceptedAt: timestamps.acceptedAt,
           provisionedAt: timestamps.provisionedAt,
           activationLinkGeneratedAt: timestamps.activationLinkGeneratedAt,
+          notificationStatus: 'pending',
+          notificationErrorCode: FieldValue.delete(),
+          notificationFailedAt: FieldValue.delete(),
         });
       });
     },
+    async markNotificationSent({
+      invitationId,
+      targetUid,
+      provider,
+      providerMessageId,
+      sentAt,
+    }) {
+      await updateNotificationState({
+        firestore,
+        invitationId,
+        targetUid,
+        values: {
+          notificationStatus: 'sent',
+          notificationSentAt: sentAt,
+          notificationProvider: provider,
+          notificationProviderMessageId: providerMessageId,
+          notificationErrorCode: FieldValue.delete(),
+          notificationFailedAt: FieldValue.delete(),
+        },
+      });
+    },
+    async markNotificationFailed({
+      invitationId,
+      targetUid,
+      errorCode,
+      failedAt,
+    }) {
+      await updateNotificationState({
+        firestore,
+        invitationId,
+        targetUid,
+        values: {
+          notificationStatus: 'failed',
+          notificationErrorCode: errorCode,
+          notificationFailedAt: failedAt,
+          notificationSentAt: FieldValue.delete(),
+          notificationProvider: FieldValue.delete(),
+          notificationProviderMessageId: FieldValue.delete(),
+        },
+      });
+    },
   };
+}
+
+async function updateNotificationState({
+  firestore,
+  invitationId,
+  targetUid,
+  values,
+}) {
+  const invitationRef = firestore
+    .collection('adminInvitations')
+    .doc(invitationId);
+  await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(invitationRef);
+    const current = snapshot.data();
+    if (
+      !snapshot.exists
+      || current.status !== 'accepted'
+      || current.acceptedUid !== targetUid
+    ) {
+      throw new ProvisioningError(
+        'aborted',
+        'L’invitation a changé pendant la notification.',
+      );
+    }
+    transaction.update(invitationRef, values);
+  });
 }
 
 function emulatorCommitFailure(invitationId) {
@@ -142,6 +220,25 @@ function emulatorCommitFailure(invitationId) {
   }
   injectedEmulatorFailures.add(invitationId);
   return true;
+}
+
+function emulatorNotificationFailure(invitationId) {
+  if (process.env.FUNCTIONS_EMULATOR !== 'true') return undefined;
+  const configuredIds = new Set(
+    (process.env.MOBSANTE_EMULATOR_FAIL_NOTIFICATION_IDS ?? '')
+      .split(',')
+      .filter(Boolean),
+  );
+  if (
+    !configuredIds.has(invitationId)
+    || injectedEmulatorNotificationFailures.has(invitationId)
+  ) {
+    return undefined;
+  }
+  injectedEmulatorNotificationFailures.add(invitationId);
+  const error = new Error('Injected emulator-only notification failure');
+  error.code = 'provider-failure';
+  return error;
 }
 
 function compatibleRole(existing, expected) {

@@ -29,6 +29,7 @@ function harness({
   role,
   failCommit = false,
   failLink = false,
+  failNotification = false,
 } = {}) {
   const state = {
     callerRole,
@@ -39,7 +40,9 @@ function harness({
     deleted: [],
     commits: [],
     links: [],
-    mail: [],
+    notifications: [],
+    notificationSent: [],
+    notificationFailed: [],
   };
   const services = {
     async getRole(uid) {
@@ -78,16 +81,43 @@ function harness({
         ...state.invitation,
         status: 'accepted',
         acceptedUid: value.targetUid,
+        notificationStatus: 'pending',
+      };
+    },
+    async markNotificationSent(value) {
+      state.notificationSent.push(value);
+      state.invitation = {
+        ...state.invitation,
+        notificationStatus: 'sent',
+        notificationProvider: value.provider,
+        notificationProviderMessageId: value.providerMessageId,
+      };
+    },
+    async markNotificationFailed(value) {
+      state.notificationFailed.push(value);
+      state.invitation = {
+        ...state.invitation,
+        notificationStatus: 'failed',
+        notificationErrorCode: value.errorCode,
       };
     },
   };
-  const mailer = {
-    async prepare(value) {
-      state.mail.push(value);
-      return {delivery: 'pending'};
+  const notificationService = {
+    async send(value) {
+      state.notifications.push(value);
+      if (failNotification) {
+        const error = new Error('simulated notification failure');
+        error.code = 'provider-failure';
+        throw error;
+      }
+      return {
+        success: true,
+        provider: 'fake',
+        providerMessageId: 'fake-message-id',
+      };
     },
   };
-  return {state, services, mailer};
+  return {state, services, notificationService};
 }
 
 async function provision(setup = {}) {
@@ -96,7 +126,7 @@ async function provision(setup = {}) {
     invitationId: 'invitation-a',
     callerUid: 'coord',
     services: value.services,
-    mailer: value.mailer,
+    notificationService: value.notificationService,
     appUrl,
     now,
   });
@@ -112,13 +142,13 @@ async function rejectsCode(action, code) {
 }
 
 test('unauthenticated caller is refused', async () => {
-  const {services, mailer} = harness();
+  const {services, notificationService} = harness();
   await rejectsCode(
     () => provisionAdminInvitation({
       invitationId: 'invitation-a',
       callerUid: null,
       services,
-      mailer,
+      notificationService,
       appUrl,
       now,
     }),
@@ -132,13 +162,13 @@ for (const [label, callerRole] of [
   ['inactive coordinator', {role: 'coordinator', active: false}],
 ]) {
   test(`${label} is refused`, async () => {
-    const {services, mailer} = harness({callerRole});
+    const {services, notificationService} = harness({callerRole});
     await rejectsCode(
       () => provisionAdminInvitation({
         invitationId: 'invitation-a',
         callerUid: 'coord',
         services,
-        mailer,
+        notificationService,
         appUrl,
         now,
       }),
@@ -159,7 +189,7 @@ test('active coordinator provisions a new account and site manager role', async 
   assert.deepEqual(state.commits[0].role.locationIds, ['site-a', 'site-b']);
   assert.equal(state.commits[0].role.role, 'site_manager');
   assert.equal(state.commits[0].role.active, true);
-  assert.equal(result.emailDelivery, 'pending');
+  assert.equal(result.emailDelivery, 'sent');
   assert.equal(result.accountProvisioned, true);
   assert.equal(result.invitationStatus, 'accepted');
   assert.deepEqual(Object.keys(result).sort(), [
@@ -180,13 +210,13 @@ test('coordinator role is created without locations', async () => {
 });
 
 test('unknown invitation is refused', async () => {
-  const {services, mailer} = harness({invitationValue: null});
+  const {services, notificationService} = harness({invitationValue: null});
   await rejectsCode(
     () => provisionAdminInvitation({
       invitationId: 'missing',
       callerUid: 'coord',
       services,
-      mailer,
+      notificationService,
       appUrl,
       now,
     }),
@@ -199,13 +229,13 @@ for (const [label, value] of [
   ['cancelled', invitation({status: 'cancelled'})],
 ]) {
   test(`${label} invitation is refused`, async () => {
-    const {services, mailer} = harness({invitationValue: value});
+    const {services, notificationService} = harness({invitationValue: value});
     await rejectsCode(
       () => provisionAdminInvitation({
         invitationId: 'invitation-a',
         callerUid: 'coord',
         services,
-        mailer,
+        notificationService,
         appUrl,
         now,
       }),
@@ -219,12 +249,14 @@ test('accepted invitation is idempotent', async () => {
     invitationValue: invitation({
       status: 'accepted',
       acceptedUid: 'existing-uid',
+      notificationStatus: 'sent',
     }),
   });
   assert.equal(result.alreadyProvisioned, true);
   assert.equal(state.created.length, 0);
   assert.equal(state.commits.length, 0);
   assert.equal(state.links.length, 0);
+  assert.equal(state.notifications.length, 0);
 });
 
 test('existing account without role receives the expected role', async () => {
@@ -271,7 +303,7 @@ test('incompatible role is refused without mutation', async () => {
       invitationId: 'invitation-a',
       callerUid: 'coord',
       services: value.services,
-      mailer: value.mailer,
+      notificationService: value.notificationService,
       appUrl,
       now,
     }),
@@ -293,7 +325,7 @@ test('disabled existing account is refused', async () => {
       invitationId: 'invitation-a',
       callerUid: 'coord',
       services: value.services,
-      mailer: value.mailer,
+      notificationService: value.notificationService,
       appUrl,
       now,
     }),
@@ -307,13 +339,14 @@ test('Firestore failure compensates new Auth account and does not accept', async
     invitationId: 'invitation-a',
     callerUid: 'coord',
     services: value.services,
-    mailer: value.mailer,
+    notificationService: value.notificationService,
     appUrl,
     now,
   }));
   assert.deepEqual(value.state.deleted, ['created-uid']);
   assert.equal(value.state.invitation.status, 'pending');
   assert.equal(value.state.commits.length, 0);
+  assert.equal(value.state.notifications.length, 0);
 });
 
 test('activation-link failure compensates a newly created account', async () => {
@@ -322,13 +355,14 @@ test('activation-link failure compensates a newly created account', async () => 
     invitationId: 'invitation-a',
     callerUid: 'coord',
     services: value.services,
-    mailer: value.mailer,
+    notificationService: value.notificationService,
     appUrl,
     now,
   }));
   assert.deepEqual(value.state.deleted, ['created-uid']);
   assert.equal(value.state.invitation.status, 'pending');
   assert.equal(value.state.commits.length, 0);
+  assert.equal(value.state.notifications.length, 0);
 });
 
 test('activation-link failure never deletes a pre-existing account', async () => {
@@ -344,7 +378,7 @@ test('activation-link failure never deletes a pre-existing account', async () =>
     invitationId: 'invitation-a',
     callerUid: 'coord',
     services: value.services,
-    mailer: value.mailer,
+    notificationService: value.notificationService,
     appUrl,
     now,
   }));
@@ -358,7 +392,7 @@ test('retry after a compensated failure provisions without duplicate state', asy
     invitationId: 'invitation-a',
     callerUid: 'coord',
     services: value.services,
-    mailer: value.mailer,
+    notificationService: value.notificationService,
     appUrl,
     now,
   }));
@@ -369,7 +403,7 @@ test('retry after a compensated failure provisions without duplicate state', asy
     invitationId: 'invitation-a',
     callerUid: 'coord',
     services: retry.services,
-    mailer: retry.mailer,
+    notificationService: retry.notificationService,
     appUrl,
     now,
   });
@@ -385,7 +419,10 @@ test('activation link uses Emulator URL and is captured but never persisted', as
     'http://127.0.0.1:5000/activation',
   );
   assert.equal(state.links[0].settings.handleCodeInApp, true);
-  assert.match(state.mail[0].activationLink, /^http:\/\/127\.0\.0\.1:9099/);
+  assert.match(
+    state.notifications[0].text,
+    /http:\/\/127\.0\.0\.1:9099/,
+  );
   assert.equal(
     JSON.stringify(state.commits).includes('127.0.0.1:9099'),
     false,
@@ -437,10 +474,83 @@ for (const value of [
   });
 }
 
-test('production mail transport remains pending and sends nothing', async () => {
+test('notification is sent once through the injected service', async () => {
   const {state, result} = await provision();
-  assert.equal(state.mail.length, 1);
-  assert.equal(result.emailDelivery, 'pending');
+  assert.equal(state.notifications.length, 1);
+  assert.equal(state.notificationSent.length, 1);
+  assert.equal(result.emailDelivery, 'sent');
+  assert.equal(state.notifications[0].recipient, 'responsable@example.fr');
+  assert.match(state.notifications[0].text, /Rôle attribué/);
+  assert.match(state.notifications[0].text, /Ne transférez pas ce lien/);
+  assert.equal(state.invitation.notificationStatus, 'sent');
+  assert.equal(
+    state.invitation.notificationProviderMessageId,
+    'fake-message-id',
+  );
+  assert.equal(
+    JSON.stringify(state.invitation).includes('Votre compte responsable'),
+    false,
+  );
+});
+
+test('notification failure preserves provisioned account and role', async () => {
+  const value = harness({failNotification: true});
+  await rejectsCode(
+    () => provisionAdminInvitation({
+      invitationId: 'invitation-a',
+      callerUid: 'coord',
+      services: value.services,
+      notificationService: value.notificationService,
+      appUrl,
+      now,
+    }),
+    'unavailable',
+  );
+  assert.equal(value.state.deleted.length, 0);
+  assert.equal(value.state.commits.length, 1);
+  assert.equal(value.state.role.role, 'site_manager');
+  assert.equal(value.state.invitation.status, 'accepted');
+  assert.equal(value.state.invitation.notificationStatus, 'failed');
+  assert.equal(
+    value.state.invitation.notificationErrorCode,
+    'provider-failure',
+  );
+  assert.equal(
+    JSON.stringify(value.state.invitation).includes('simulated'),
+    false,
+  );
+});
+
+test('retry after notification failure sends without recreating account or role', async () => {
+  const first = harness({failNotification: true});
+  await assert.rejects(() => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: first.services,
+    notificationService: first.notificationService,
+    appUrl,
+    now,
+  }));
+
+  const retry = harness({
+    invitationValue: first.state.invitation,
+    user: first.state.user,
+    role: first.state.role,
+  });
+  const result = await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: retry.services,
+    notificationService: retry.notificationService,
+    appUrl,
+    now,
+  });
+  assert.equal(retry.state.created.length, 0);
+  assert.equal(retry.state.commits.length, 0);
+  assert.equal(retry.state.notifications.length, 1);
+  assert.equal(retry.state.invitation.notificationStatus, 'sent');
+  assert.equal(result.alreadyProvisioned, true);
+  assert.equal(result.emailDelivery, 'sent');
 });
 
 test('captured logs and public result never expose activation secrets', async () => {
@@ -462,13 +572,13 @@ test('captured logs and public result never expose activation secrets', async ()
 });
 
 test('MOBSANTE_APP_URL is mandatory', async () => {
-  const {services, mailer} = harness();
+  const {services, notificationService} = harness();
   await rejectsCode(
     () => provisionAdminInvitation({
       invitationId: 'invitation-a',
       callerUid: 'coord',
       services,
-      mailer,
+      notificationService,
       appUrl: '',
       now,
     }),
