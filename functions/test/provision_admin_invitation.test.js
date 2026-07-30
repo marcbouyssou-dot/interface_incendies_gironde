@@ -27,6 +27,7 @@ function harness({
   user,
   role,
   failCommit = false,
+  failLink = false,
 } = {}) {
   const state = {
     callerRole,
@@ -64,6 +65,7 @@ function harness({
       state.user = null;
     },
     async generatePasswordResetLink(email, settings) {
+      if (failLink) throw new Error('link failed');
       state.links.push({email, settings});
       return `http://127.0.0.1:9099/action?email=${email}`;
     },
@@ -158,6 +160,13 @@ test('active coordinator provisions a new account and site manager role', async 
   assert.equal(state.commits[0].role.active, true);
   assert.equal(result.emailDelivery, 'pending');
   assert.equal(result.accountProvisioned, true);
+  assert.equal(result.invitationStatus, 'accepted');
+  assert.deepEqual(Object.keys(result).sort(), [
+    'accountProvisioned',
+    'alreadyProvisioned',
+    'emailDelivery',
+    'invitationStatus',
+  ]);
   assert.equal('activationLink' in result, false);
 });
 
@@ -212,7 +221,6 @@ test('accepted invitation is idempotent', async () => {
     }),
   });
   assert.equal(result.alreadyProvisioned, true);
-  assert.equal(result.uid, 'existing-uid');
   assert.equal(state.created.length, 0);
   assert.equal(state.commits.length, 0);
   assert.equal(state.links.length, 0);
@@ -307,6 +315,68 @@ test('Firestore failure compensates new Auth account and does not accept', async
   assert.equal(value.state.commits.length, 0);
 });
 
+test('activation-link failure compensates a newly created account', async () => {
+  const value = harness({failLink: true});
+  await assert.rejects(() => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    mailer: value.mailer,
+    appUrl,
+    now,
+  }));
+  assert.deepEqual(value.state.deleted, ['created-uid']);
+  assert.equal(value.state.invitation.status, 'pending');
+  assert.equal(value.state.commits.length, 0);
+});
+
+test('activation-link failure never deletes a pre-existing account', async () => {
+  const value = harness({
+    failLink: true,
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  await assert.rejects(() => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    mailer: value.mailer,
+    appUrl,
+    now,
+  }));
+  assert.deepEqual(value.state.deleted, []);
+  assert.equal(value.state.invitation.status, 'pending');
+});
+
+test('retry after a compensated failure provisions without duplicate state', async () => {
+  const value = harness({failCommit: true});
+  await assert.rejects(() => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    mailer: value.mailer,
+    appUrl,
+    now,
+  }));
+  assert.deepEqual(value.state.deleted, ['created-uid']);
+
+  const retry = harness({invitationValue: value.state.invitation});
+  const result = await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: retry.services,
+    mailer: retry.mailer,
+    appUrl,
+    now,
+  });
+  assert.equal(retry.state.created.length, 1);
+  assert.equal(retry.state.commits.length, 1);
+  assert.equal(result.invitationStatus, 'accepted');
+});
+
 test('activation link uses Emulator URL and is captured but never persisted', async () => {
   const {state, result} = await provision();
   assert.equal(state.links[0].settings.url, appUrl);
@@ -322,6 +392,24 @@ test('production mail transport remains pending and sends nothing', async () => 
   const {state, result} = await provision();
   assert.equal(state.mail.length, 1);
   assert.equal(result.emailDelivery, 'pending');
+});
+
+test('captured logs and public result never expose activation secrets', async () => {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const logs = [];
+  console.log = (...values) => logs.push(values);
+  console.error = (...values) => logs.push(values);
+  try {
+    const {state, result} = await provision();
+    const serialized = JSON.stringify({logs, result, commits: state.commits});
+    assert.equal(serialized.includes('oobCode'), false);
+    assert.equal(serialized.includes('127.0.0.1:9099'), false);
+    assert.equal('activationLink' in result, false);
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
 });
 
 test('MOBSANTE_APP_URL is mandatory', async () => {

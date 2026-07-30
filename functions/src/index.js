@@ -13,6 +13,7 @@ import {
 if (getApps().length === 0) initializeApp();
 
 const appUrl = defineString('MOBSANTE_APP_URL');
+const injectedEmulatorFailures = new Set();
 
 export const provisionAdminInvitation = onCall(
   {region: 'europe-west1'},
@@ -25,7 +26,11 @@ export const provisionAdminInvitation = onCall(
         callerUid: request.auth?.uid,
         appUrl: appUrl.value(),
         mailer: new PendingAdminInvitationMailer(),
-        services: adminServices({firestore, auth}),
+        services: adminServices({
+          firestore,
+          auth,
+          shouldFailCommit: emulatorCommitFailure,
+        }),
       });
     } catch (error) {
       if (error instanceof ProvisioningError) {
@@ -39,7 +44,11 @@ export const provisionAdminInvitation = onCall(
   },
 );
 
-export function adminServices({firestore, auth}) {
+export function adminServices({
+  firestore,
+  auth,
+  shouldFailCommit = () => false,
+}) {
   return {
     async getRole(uid) {
       const snapshot = await firestore.collection('roles').doc(uid).get();
@@ -64,6 +73,9 @@ export function adminServices({firestore, auth}) {
       role,
       timestamps,
     }) {
+      if (shouldFailCommit(invitationId)) {
+        throw new Error('Injected emulator-only commit failure');
+      }
       await firestore.runTransaction(async (transaction) => {
         const invitationRef = firestore
           .collection('adminInvitations')
@@ -113,6 +125,23 @@ export function adminServices({firestore, auth}) {
       });
     },
   };
+}
+
+function emulatorCommitFailure(invitationId) {
+  if (process.env.FUNCTIONS_EMULATOR !== 'true') return false;
+  const configuredIds = new Set(
+    (process.env.MOBSANTE_EMULATOR_FAIL_INVITATION_IDS ?? '')
+      .split(',')
+      .filter(Boolean),
+  );
+  if (
+    !configuredIds.has(invitationId)
+    || injectedEmulatorFailures.has(invitationId)
+  ) {
+    return false;
+  }
+  injectedEmulatorFailures.add(invitationId);
+  return true;
 }
 
 function compatibleRole(existing, expected) {

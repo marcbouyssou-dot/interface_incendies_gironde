@@ -41,8 +41,6 @@ export async function provisionAdminInvitation({
   }
   if (invitation.status === 'accepted' && invitation.acceptedUid) {
     return safeResult({
-      uid: invitation.acceptedUid,
-      role: invitation.role,
       alreadyProvisioned: true,
     });
   }
@@ -125,8 +123,6 @@ export async function provisionAdminInvitation({
   }
 
   return safeResult({
-    uid: user.uid,
-    role: invitation.role,
     alreadyProvisioned: false,
   });
 }
@@ -183,12 +179,11 @@ async function compensateCreatedUser(services, uid) {
   }
 }
 
-function safeResult({uid, role, alreadyProvisioned}) {
+function safeResult({alreadyProvisioned}) {
   return {
     accountProvisioned: true,
     emailDelivery: 'pending',
-    uid,
-    role,
+    invitationStatus: 'accepted',
     alreadyProvisioned,
   };
 }

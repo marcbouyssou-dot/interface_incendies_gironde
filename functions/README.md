@@ -35,13 +35,19 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
 
 `MOBSANTE_APP_URL` doit contenir une URL MobSanté autorisée par Firebase Auth.
 Elle est obligatoire avant tout futur déploiement. Aucune URL de production
-n’est supposée dans le code.
+n’est supposée dans le code, car aucune URL Netlify certaine n’est présente
+dans le dépôt. Le domaine choisi devra être ajouté dans Firebase Authentication
+> Settings > Authorized domains.
 
 Les tests utilisent :
 
 ```text
 http://127.0.0.1:5000/activation
 ```
+
+Le chemin `/activation` est réservé au prochain parcours d’acceptation. Aucun
+écran correspondant n’existe encore : il devra être implémenté et testé avant
+l’envoi réel d’une invitation.
 
 ## Transport d’e-mail
 
@@ -52,21 +58,75 @@ présenter un envoi comme effectif.
 
 ## Développement local
 
+Le runtime de référence est Node.js 20. Le fichier `.nvmrc` permet de le
+sélectionner avec `nvm use`; sur macOS, une installation Homebrew non liée peut
+être utilisée en préfixant temporairement le `PATH`.
+
 ```bash
-npm --prefix functions install
+npm ci --prefix functions
 npm --prefix functions test
+npm --prefix functions run test:emulator
 ```
 
-Les tests sont unitaires, injectent Auth/Firestore/mailer et n’accèdent à
-aucun projet Firebase réel. Les émulateurs Auth, Firestore et Functions sont
-déclarés dans `firebase.json` pour la future validation intégrée.
+La suite intégrée démarre Auth (9099), Firestore (8080), Functions (5001) et
+l’interface Emulator (4000) via `firebase emulators:exec`. Elle impose le projet
+fictif `demo-mobsante`. Le fichier `.env.demo-mobsante` ne contient que l’URL
+locale non sensible. La panne de transaction est injectable uniquement quand
+`FUNCTIONS_EMULATOR=true`; aucune donnée fournie par un appelant ne peut
+l’activer en production.
+
+Règle absolue : ne jamais lancer ces tests avec `mobilisation-sante`, un compte
+réel ou une ressource distante.
+
+## Garanties de sécurité
+
+- La réponse callable est limitée à `accountProvisioned`, `emailDelivery`,
+  `invitationStatus` et `alreadyProvisioned`.
+- Le lien d’activation, son `oobCode` et les données Admin SDK ne sont ni
+  renvoyés, ni persistés, ni journalisés.
+- L’ordre est : validation, compte Auth, génération du lien, puis transaction
+  rôle + invitation.
+- En cas d’échec avant la transaction, seul un compte créé par cet appel est
+  compensé. Un compte préexistant n’est jamais supprimé.
+- Le transport d’e-mail reste passif et n’annonce aucun envoi.
+
+## Audit des dépendances
+
+À exécuter sous Node.js 20 sans correction forcée :
+
+```bash
+npm --prefix functions audit
+npm --prefix functions audit --omit=dev
+npm --prefix functions outdated
+```
+
+Les alertes de développement liées au CLI et aux émulateurs doivent être
+distinguées des dépendances réellement embarquées. Ne jamais exécuter
+`npm audit fix --force` sans étude des ruptures et validation complète.
 
 ## Déploiement futur
 
 Avant tout déploiement :
 
-1. valider la cible Firebase `mobilisation-sante` ;
-2. configurer `MOBSANTE_APP_URL` avec l’URL approuvée ;
-3. choisir le transport d’e-mail et ses secrets hors dépôt ;
-4. exécuter les suites Flutter, Functions et Emulator ;
-5. déployer explicitement Functions et règles uniquement après autorisation.
+1. vérifier manuellement que le projet cible est sur le plan Blaze, requis pour
+   déployer Cloud Functions ;
+2. valider explicitement la cible Firebase `mobilisation-sante` et la région
+   `europe-west1` ;
+3. confirmer l’URL Netlify canonique, implémenter `/activation`, définir
+   `MOBSANTE_APP_URL` et autoriser son domaine dans Firebase Auth ;
+4. choisir le transport d’e-mail ; stocker ses identifiants avec
+   `defineSecret`/Google Cloud Secret Manager et les lier uniquement à la
+   Function concernée ;
+5. vérifier les services de déploiement de 2e génération : Cloud Functions,
+   Cloud Run, Cloud Build, Artifact Registry et Cloud Storage pour les sources ;
+6. examiner les coûts à l’usage et la rétention Artifact Registry ; aucun coût
+   nul n’est supposé ;
+7. exécuter toutes les suites sous Node.js 20 ;
+8. déployer explicitement la seule Function et les seules règles autorisées.
+
+Références officielles :
+
+- https://firebase.google.com/docs/functions/get-started
+- https://firebase.google.com/docs/functions/manage-functions
+- https://firebase.google.com/docs/functions/config-env
+- https://firebase.google.com/docs/auth/web/passing-state-in-email-actions
