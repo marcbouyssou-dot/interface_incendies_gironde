@@ -10,7 +10,9 @@ import 'places_screen.dart';
 import 'slots_screen.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({super.key, this.initialIndex = 0});
+
+  final int initialIndex;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -25,7 +27,8 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    _screens[0] = const SlotsScreen();
+    _currentIndex = widget.initialIndex;
+    _screens[_currentIndex] = _createScreen(_currentIndex);
   }
 
   @override

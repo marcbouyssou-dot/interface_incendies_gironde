@@ -33,21 +33,32 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
 
 ## Variable requise
 
-`MOBSANTE_APP_URL` doit contenir une URL MobSanté autorisée par Firebase Auth.
-Elle est obligatoire avant tout futur déploiement. Aucune URL de production
-n’est supposée dans le code, car aucune URL Netlify certaine n’est présente
-dans le dépôt. Le domaine choisi devra être ajouté dans Firebase Authentication
-> Settings > Authorized domains.
+`MOBSANTE_APP_URL` doit contenir l’URL de base HTTPS de MobSanté, sans
+paramètres, fragment ni identifiants intégrés. La Function ajoute elle-même le
+chemin `/activation`. Une URL HTTP est acceptée uniquement sur `localhost`,
+`127.0.0.1` ou `::1` pour les tests locaux.
+
+Deux environnements dotenv Firebase sont suivis :
+
+- `.env.demo-mobsante` : `http://127.0.0.1:5000`, réservé aux émulateurs ;
+- `.env.mobilisation-sante` : `https://mobsante.netlify.app`, URL publique de
+  production.
+
+La destination de production normalisée est donc
+`https://mobsante.netlify.app/activation`. Le domaine
+`mobsante.netlify.app` doit être ajouté manuellement dans Firebase
+Authentication > Settings > Authorized domains.
 
 Les tests utilisent :
 
 ```text
-http://127.0.0.1:5000/activation
+http://127.0.0.1:5000
 ```
 
-Le chemin `/activation` est réservé au prochain parcours d’acceptation. Aucun
-écran correspondant n’existe encore : il devra être implémenté et testé avant
-l’envoi réel d’une invitation.
+Le lien généré utilise alors
+`http://127.0.0.1:5000/activation`. L’écran Flutter associé vérifie le code
+d’action, permet de choisir le mot de passe puis propose explicitement d’ouvrir
+la connexion responsable existante.
 
 ## Transport d’e-mail
 
@@ -112,17 +123,19 @@ Avant tout déploiement :
    déployer Cloud Functions ;
 2. valider explicitement la cible Firebase `mobilisation-sante` et la région
    `europe-west1` ;
-3. confirmer l’URL Netlify canonique, implémenter `/activation`, définir
-   `MOBSANTE_APP_URL` et autoriser son domaine dans Firebase Auth ;
-4. choisir le transport d’e-mail ; stocker ses identifiants avec
+3. vérifier que `https://mobsante.netlify.app` reste l’URL canonique publiée et
+   autoriser `mobsante.netlify.app` dans Firebase Auth ;
+4. vérifier le modèle d’e-mail Firebase de réinitialisation, son domaine
+   d’action et le lien reçu sur Safari iPhone et Chrome Desktop ;
+5. choisir le transport d’e-mail ; stocker ses identifiants avec
    `defineSecret`/Google Cloud Secret Manager et les lier uniquement à la
    Function concernée ;
-5. vérifier les services de déploiement de 2e génération : Cloud Functions,
+6. vérifier les services de déploiement de 2e génération : Cloud Functions,
    Cloud Run, Cloud Build, Artifact Registry et Cloud Storage pour les sources ;
-6. examiner les coûts à l’usage et la rétention Artifact Registry ; aucun coût
+7. examiner les coûts à l’usage et la rétention Artifact Registry ; aucun coût
    nul n’est supposé ;
-7. exécuter toutes les suites sous Node.js 20 ;
-8. déployer explicitement la seule Function et les seules règles autorisées.
+8. exécuter toutes les suites sous Node.js 20 ;
+9. déployer explicitement la seule Function et les seules règles autorisées.
 
 Références officielles :
 

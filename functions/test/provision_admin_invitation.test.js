@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildActivationUrl,
   ProvisioningError,
   provisionAdminInvitation,
 } from '../src/provision_admin_invitation.js';
 
 const now = new Date('2026-07-30T10:00:00.000Z');
-const appUrl = 'http://127.0.0.1:5000/activation';
+const appUrl = 'http://127.0.0.1:5000';
 
 function invitation(overrides = {}) {
   return {
@@ -379,7 +380,11 @@ test('retry after a compensated failure provisions without duplicate state', asy
 
 test('activation link uses Emulator URL and is captured but never persisted', async () => {
   const {state, result} = await provision();
-  assert.equal(state.links[0].settings.url, appUrl);
+  assert.equal(
+    state.links[0].settings.url,
+    'http://127.0.0.1:5000/activation',
+  );
+  assert.equal(state.links[0].settings.handleCodeInApp, true);
   assert.match(state.mail[0].activationLink, /^http:\/\/127\.0\.0\.1:9099/);
   assert.equal(
     JSON.stringify(state.commits).includes('127.0.0.1:9099'),
@@ -387,6 +392,50 @@ test('activation link uses Emulator URL and is captured but never persisted', as
   );
   assert.equal(JSON.stringify(result).includes('127.0.0.1:9099'), false);
 });
+
+test('activation URL is normalized safely', () => {
+  assert.equal(
+    buildActivationUrl('https://mobsante.netlify.app'),
+    'https://mobsante.netlify.app/activation',
+  );
+  assert.equal(
+    buildActivationUrl('https://mobsante.netlify.app/'),
+    'https://mobsante.netlify.app/activation',
+  );
+  assert.equal(
+    buildActivationUrl('https://mobsante.netlify.app/activation/'),
+    'https://mobsante.netlify.app/activation',
+  );
+  assert.equal(
+    buildActivationUrl('https://mobsante.example/'),
+    'https://mobsante.example/activation',
+  );
+  assert.equal(
+    buildActivationUrl('https://mobsante.example/activation/'),
+    'https://mobsante.example/activation',
+  );
+  assert.equal(
+    buildActivationUrl('http://localhost:5000'),
+    'http://localhost:5000/activation',
+  );
+});
+
+for (const value of [
+  'http://mobsante.example',
+  'ftp://mobsante.example',
+  'https://user:secret@mobsante.example',
+  'https://mobsante.example?redirect=https://evil.example',
+  'not-an-url',
+]) {
+  test(`unsafe activation URL is refused: ${value}`, () => {
+    assert.throws(
+      () => buildActivationUrl(value),
+      (error) =>
+        error instanceof ProvisioningError
+        && error.code === 'failed-precondition',
+    );
+  });
+}
 
 test('production mail transport remains pending and sends nothing', async () => {
   const {state, result} = await provision();

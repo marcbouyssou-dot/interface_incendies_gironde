@@ -19,9 +19,10 @@ bool mustCreateAnonymousVolunteerSession({
 }) => !hasUser || !isAnonymous;
 
 class FirebaseStartupGate extends StatefulWidget {
-  const FirebaseStartupGate({super.key, this.startup});
+  const FirebaseStartupGate({super.key, this.startup, this.initialTab = 0});
 
   final Future<CoordinationRepository> Function()? startup;
+  final int initialTab;
 
   @override
   State<FirebaseStartupGate> createState() => _FirebaseStartupGateState();
@@ -108,7 +109,10 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
       future: _startup,
       builder: (context, snapshot) {
         if (snapshot.hasData) {
-          return FireCoordinationApp(repository: snapshot.data);
+          return FireCoordinationApp(
+            repository: snapshot.data,
+            initialTab: widget.initialTab,
+          );
         }
         return MaterialApp(
           debugShowCheckedModeBanner: false,

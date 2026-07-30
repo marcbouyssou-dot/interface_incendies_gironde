@@ -8,9 +8,10 @@ import 'screens/app_shell.dart';
 import 'theme/app_theme.dart';
 
 class FireCoordinationApp extends StatelessWidget {
-  const FireCoordinationApp({super.key, this.repository});
+  const FireCoordinationApp({super.key, this.repository, this.initialTab = 0});
 
   final CoordinationRepository? repository;
+  final int initialTab;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +25,7 @@ class FireCoordinationApp extends StatelessWidget {
           title: 'Interface Récup',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
-          home: const AppShell(),
+          home: AppShell(initialIndex: initialTab),
         ),
       ),
     );

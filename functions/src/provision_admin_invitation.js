@@ -25,7 +25,7 @@ export async function provisionAdminInvitation({
 }) {
   requireText(invitationId, 'invalid-argument', 'Invitation invalide.');
   requireText(callerUid, 'unauthenticated', 'Authentification requise.');
-  requireText(appUrl, 'failed-precondition', 'MOBSANTE_APP_URL est requise.');
+  const activationUrl = buildActivationUrl(appUrl);
 
   const callerRole = await services.getRole(callerUid);
   if (callerRole?.active !== true || callerRole?.role !== 'coordinator') {
@@ -94,7 +94,7 @@ export async function provisionAdminInvitation({
   try {
     activationLink = await services.generatePasswordResetLink(
       invitation.email,
-      {url: appUrl, handleCodeInApp: false},
+      {url: activationUrl, handleCodeInApp: true},
     );
     await mailer.prepare({
       recipient: invitation.email,
@@ -125,6 +125,38 @@ export async function provisionAdminInvitation({
   return safeResult({
     alreadyProvisioned: false,
   });
+}
+
+export function buildActivationUrl(value) {
+  requireText(value, 'failed-precondition', 'MOBSANTE_APP_URL est requise.');
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ProvisioningError(
+      'failed-precondition',
+      'MOBSANTE_APP_URL est invalide.',
+    );
+  }
+  const isLocalEmulator = url.protocol === 'http:'
+    && new Set(['127.0.0.1', 'localhost', '::1']).has(url.hostname);
+  if (url.protocol !== 'https:' && !isLocalEmulator) {
+    throw new ProvisioningError(
+      'failed-precondition',
+      'MOBSANTE_APP_URL doit utiliser HTTPS.',
+    );
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new ProvisioningError(
+      'failed-precondition',
+      'MOBSANTE_APP_URL contient des éléments interdits.',
+    );
+  }
+  const basePath = url.pathname.replace(/\/+$/, '');
+  url.pathname = basePath.endsWith('/activation')
+    ? basePath
+    : `${basePath}/activation`;
+  return url.toString().replace(/\/$/, '');
 }
 
 function validateInvitation(invitation, now) {

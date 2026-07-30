@@ -2,6 +2,21 @@
 
 PWA Flutter de coordination en temps réel des professionnels volontaires.
 
+## Activation des comptes responsables
+
+Les liens d’activation générés côté serveur ouvrent la route publique
+`/activation`. Cette route initialise uniquement Firebase et le service
+d’authentification nécessaire à la définition du mot de passe. Elle ne démarre
+ni session anonyme, ni repository métier, ni flux Firestore.
+
+La variable serveur `MOBSANTE_APP_URL` contient l’URL de base HTTPS canonique
+`https://mobsante.netlify.app`. La fonction ajoute elle-même `/activation`.
+Pour les émulateurs locaux uniquement, une URL HTTP sur `localhost` ou
+`127.0.0.1` est acceptée.
+
+Le domaine `mobsante.netlify.app` doit être autorisé manuellement dans Firebase
+Authentication avant tout déploiement du parcours d’invitation.
+
 ## Modes de données
 
 Le mode mock est actif par défaut, notamment pour les tests :
