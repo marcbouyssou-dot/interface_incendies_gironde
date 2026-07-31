@@ -1058,6 +1058,28 @@ void main() {
     expect(await repository.watchMissions().first, hasLength(2));
   });
 
+  test('mock cumulative coordinator keeps global mission access', () async {
+    final access = ResponsibleAccess.v2(
+      uid: 'cumulative',
+      roles: const ['coordinator', 'site_manager'],
+      locationIds: {places.first.id},
+      active: true,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: places.take(2).toList(),
+      responsibleAccess: access,
+    );
+
+    await repository.createMission(_draftFor(places[1]));
+
+    expect(
+      (await repository.watchResponsibleAccess().first)?.isCumulative,
+      isTrue,
+    );
+    expect(await repository.watchMissions().first, hasLength(1));
+  });
+
   group('mock volunteer disengagement', () {
     for (final initialStatus in const [
       EngagementStatus.pending,

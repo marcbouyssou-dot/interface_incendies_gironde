@@ -21,6 +21,12 @@ bool canStartVolunteerEngagement({
 }) => !hasUser || isAnonymous;
 
 @visibleForTesting
+ResponsibleAccess parseResponsibleAccessDocument({
+  required String uid,
+  required Map<String, Object?> data,
+}) => ResponsibleAccessParser.parse(uid: uid, data: data);
+
+@visibleForTesting
 ({bool ownerMatches, EngagementCreationResult? result})
 classifyExistingEngagement(Map<String, dynamic> data, String uid) {
   if (data['volunteerId'] != uid) {
@@ -70,14 +76,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
           .snapshots()
           .map((snapshot) {
             if (!snapshot.exists) return null;
-            final data = snapshot.data()!;
-            return ResponsibleAccess(
+            return parseResponsibleAccessDocument(
               uid: user.uid,
-              role: data['role'] as String? ?? '',
-              locationIds: Set<String>.from(
-                data['locationIds'] as List? ?? const [],
-              ),
-              active: data['active'] as bool? ?? false,
+              data: snapshot.data()!,
             );
           });
     });
@@ -107,20 +108,28 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
           'Votre compte n’est pas autorisé à publier pour ce lieu.',
         );
       }
-      final data = roleSnapshot.data()!;
-      final access = ResponsibleAccess(
-        uid: user.uid,
-        role: data['role'] as String? ?? '',
-        locationIds: Set<String>.from(data['locationIds'] as List? ?? const []),
-        active: data['active'] as bool? ?? false,
-      );
+      late final ResponsibleAccess access;
+      try {
+        access = parseResponsibleAccessDocument(
+          uid: user.uid,
+          data: roleSnapshot.data()!,
+        );
+      } on ResponsibleAccessFormatException catch (error, stackTrace) {
+        await _restoreAnonymousSession();
+        debugPrint('Autorisation responsable invalide (${error.code.name})');
+        debugPrintStack(stackTrace: stackTrace);
+        throw const RepositoryException(
+          'Votre autorisation responsable est invalide. '
+          'Contactez la coordination.',
+        );
+      }
       if (!access.active) {
         await _restoreAnonymousSession();
         throw const RepositoryException(
           'Votre compte responsable est inactif.',
         );
       }
-      if (!access.isCoordinator && !access.isSiteManager) {
+      if (!access.hasPrivilegedAccess) {
         await _restoreAnonymousSession();
         throw const RepositoryException(
           'Votre compte n’est pas autorisé à publier pour ce lieu.',
@@ -331,7 +340,10 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         .doc(user.uid)
         .get();
     final data = role.data();
-    if (data?['active'] != true || data?['role'] != 'coordinator') {
+    final access = data == null
+        ? null
+        : parseResponsibleAccessDocument(uid: user.uid, data: data);
+    if (access?.isCoordinator != true) {
       throw const RepositoryException(
         'Seul un coordinateur peut modifier ce statut.',
       );
@@ -522,17 +534,17 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         .collection('roles')
         .doc(user.uid)
         .get();
-    if (!role.exists || role.data()?['active'] != true) {
+    final roleData = role.data();
+    if (!role.exists || roleData == null) {
       throw const RepositoryException('Votre compte responsable est inactif.');
     }
-    final access = ResponsibleAccess(
+    final access = parseResponsibleAccessDocument(
       uid: user.uid,
-      role: role.data()?['role'] as String? ?? '',
-      locationIds: Set<String>.from(
-        role.data()?['locationIds'] as List? ?? const [],
-      ),
-      active: true,
+      data: roleData,
     );
+    if (!access.active) {
+      throw const RepositoryException('Votre compte responsable est inactif.');
+    }
     if (!access.canManage(draft.location.id)) {
       throw const RepositoryException(
         'Votre compte n’est pas autorisé à publier pour ce lieu.',

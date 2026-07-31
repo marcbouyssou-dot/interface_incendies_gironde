@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/admin_invitation.dart';
+import '../models/responsible_access.dart';
 import 'admin_invitation_repository.dart';
 
 abstract interface class AdminInvitationFirestoreDataSource {
@@ -210,7 +211,9 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
     final uid = _dataSource.currentUserId;
     if (uid == null) throw StateError('Session responsable requise.');
     final role = await _dataSource.getCurrentRole();
-    if (role?['active'] != true || role?['role'] != 'coordinator') {
+    if (role == null) throw StateError('Accès coordinateur requis.');
+    final access = ResponsibleAccessParser.parse(uid: uid, data: role);
+    if (!access.isCoordinator) {
       throw StateError('Accès coordinateur requis.');
     }
     return uid;

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/admin_invitation.dart';
+import 'package:interface_incendies_gironde/models/responsible_access.dart';
 import 'package:interface_incendies_gironde/repositories/firestore_admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
 
@@ -145,6 +146,51 @@ void main() {
     expect(source.createdDocuments, 0);
   });
 
+  test('firestore repository accepts a cumulative V2 coordinator', () async {
+    final source = _FakeInvitationDataSource(
+      now: now,
+      roleDocument: {
+        'role': 'coordinator',
+        'roles': ['coordinator', 'site_manager'],
+        'locationIds': ['bazas'],
+        'active': true,
+        'schemaVersion': 2,
+      },
+    );
+    final repository = FirestoreAdminInvitationRepository(
+      dataSource: source,
+      now: () => now,
+    );
+
+    final created = await repository.createInvitation(draft());
+
+    expect(created.status, AdminInvitationStatus.pending);
+    expect(source.createdDocuments, 1);
+  });
+
+  test('firestore repository exposes a malformed role document', () async {
+    final source = _FakeInvitationDataSource(
+      now: now,
+      roleDocument: {
+        'role': 'coordinator',
+        'roles': ['coordinator', 'unknown'],
+        'locationIds': const [],
+        'active': true,
+        'schemaVersion': 2,
+      },
+    );
+    final repository = FirestoreAdminInvitationRepository(
+      dataSource: source,
+      now: () => now,
+    );
+
+    await expectLater(
+      repository.createInvitation(draft()),
+      throwsA(isA<ResponsibleAccessFormatException>()),
+    );
+    expect(source.createdDocuments, 0);
+  });
+
   test(
     'mock repository provisions pending invitation without email delivery',
     () async {
@@ -192,10 +238,15 @@ Map<String, Object?> _invitationData({required DateTime now}) => {
 };
 
 class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
-  _FakeInvitationDataSource({required this.now, this.role = 'coordinator'});
+  _FakeInvitationDataSource({
+    required this.now,
+    this.role = 'coordinator',
+    this.roleDocument,
+  });
 
   final DateTime now;
   final String role;
+  final Map<String, Object?>? roleDocument;
   final List<AdminInvitationDocument> documents = [];
   int createdDocuments = 0;
   Map<String, Object?>? lastUpdate;
@@ -224,10 +275,13 @@ class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
   }
 
   @override
-  Future<Map<String, Object?>?> getCurrentRole() async => {
-    'role': role,
-    'active': true,
-  };
+  Future<Map<String, Object?>?> getCurrentRole() async =>
+      roleDocument ??
+      {
+        'role': role,
+        'locationIds': role == 'site_manager' ? ['site-a'] : <String>[],
+        'active': true,
+      };
 
   @override
   Future<void> updateDocument(String id, Map<String, Object?> data) async {

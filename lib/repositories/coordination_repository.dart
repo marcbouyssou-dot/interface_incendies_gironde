@@ -1,7 +1,10 @@
 import '../models/need.dart';
 import '../models/profession_quotas.dart';
+import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
 import 'admin_invitation_repository.dart';
+
+export '../models/responsible_access.dart';
 
 abstract interface class CoordinationRepository {
   AdminInvitationRepository get adminInvitationRepository;
@@ -152,27 +155,6 @@ abstract final class EngagementCounterTransition {
       VolunteerProfession.otherHealthProfessional => (mk: 0, pp: 0),
     };
   }
-}
-
-class ResponsibleAccess {
-  const ResponsibleAccess({
-    required this.uid,
-    required this.role,
-    required this.locationIds,
-    required this.active,
-  });
-
-  final String uid;
-  final String role;
-  final Set<String> locationIds;
-  final bool active;
-
-  bool get isCoordinator => active && role == 'coordinator';
-  bool get isSiteManager => active && role == 'site_manager';
-  String? get singleManagedLocationId =>
-      isSiteManager && locationIds.length == 1 ? locationIds.single : null;
-  bool canManage(String locationId) =>
-      isCoordinator || (isSiteManager && locationIds.contains(locationId));
 }
 
 class MissionDraft {

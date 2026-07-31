@@ -15,6 +15,7 @@ List<CoordinationNeed> missionsVisibleToResponsible({
   required List<ResponsePlace> locations,
   required ResponsibleAccess? access,
 }) {
+  if (access?.isCoordinator == true) return missions;
   if (access?.isSiteManager != true) return missions;
   return missions
       .where((mission) {

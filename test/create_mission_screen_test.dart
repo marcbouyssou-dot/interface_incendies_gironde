@@ -272,6 +272,76 @@ void main() {
     expect(find.text('Bordeaux Benauge'), findsNothing);
   });
 
+  testWidgets('cumulative coordinator retains the global location selector', (
+    tester,
+  ) async {
+    final operational = places
+        .where((location) => location.isOperational)
+        .take(2)
+        .toList(growable: false);
+    final repository = _MissionRepository(
+      access: ResponsibleAccess.v2(
+        uid: 'cumulative',
+        roles: const ['coordinator', 'site_manager'],
+        locationIds: {operational.first.id},
+        active: true,
+      ),
+      locations: operational,
+    );
+    await pumpForm(tester, repository);
+
+    expect(find.byKey(const Key('mission-location')), findsOneWidget);
+    expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+    final selector = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: find.byKey(const Key('mission-location')),
+        matching: find.byType(DropdownButton<String>),
+      ),
+    );
+    expect(selector.items?.map((item) => item.value), [
+      operational[0].id,
+      operational[1].id,
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'multi-site manager selector contains only authorized locations',
+    (tester) async {
+      final operational = places
+          .where((location) => location.isOperational)
+          .take(3)
+          .toList(growable: false);
+      final allowed = operational.take(2).toList(growable: false);
+      final denied = operational[2];
+      final repository = _MissionRepository(
+        access: ResponsibleAccess.v2(
+          uid: 'multi-manager',
+          roles: const ['site_manager'],
+          locationIds: allowed.map((location) => location.id).toSet(),
+          active: true,
+        ),
+        locations: [...allowed, denied],
+      );
+      await pumpForm(tester, repository);
+
+      expect(find.byKey(const Key('mission-location')), findsOneWidget);
+      expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+      final selector = tester.widget<DropdownButton<String>>(
+        find.descendant(
+          of: find.byKey(const Key('mission-location')),
+          matching: find.byType(DropdownButton<String>),
+        ),
+      );
+      expect(selector.items?.map((item) => item.value), [
+        allowed[0].id,
+        allowed[1].id,
+      ]);
+      expect(selector.items?.any((item) => item.value == denied.id), isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('an earlier end time crosses midnight and equal times are invalid', () {
     final overnight = MissionSchedule.fromLocal(
       date: DateTime(2026, 7, 30),

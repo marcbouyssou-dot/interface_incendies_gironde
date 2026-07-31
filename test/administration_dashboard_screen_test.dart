@@ -9,6 +9,7 @@ import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/admin_invitations_screen.dart';
+import 'package:interface_incendies_gironde/screens/coordination_screen.dart';
 
 void main() {
   const coordinator = ResponsibleAccess(
@@ -133,6 +134,69 @@ void main() {
 
     expect(find.byKey(const Key('mission-location')), findsOneWidget);
     expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+  });
+
+  testWidgets(
+    'cumulative coordinator keeps global dashboard and invitations at 390x844',
+    (tester) async {
+      await pumpDashboard(
+        tester,
+        access: ResponsibleAccess.v2(
+          uid: 'cumulative',
+          roles: const ['coordinator', 'site_manager'],
+          locationIds: {places.first.id},
+          active: true,
+        ),
+        locations: [places.first, places[1]],
+      );
+
+      expect(find.text('Coordination départementale'), findsOneWidget);
+      expect(find.text('Tous les lieux de Gironde'), findsOneWidget);
+      expect(find.byKey(const Key('admin-invitations-entry')), findsOneWidget);
+      expect(
+        find.byKey(const Key('administration-create-need')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('cumulative coordinator statistics include every mission', (
+    tester,
+  ) async {
+    final firstMission = needs.first;
+    final firstLocation = responsePlaceForNeed(firstMission, places)!;
+    final secondMission = needs.firstWhere(
+      (mission) =>
+          responsePlaceForNeed(mission, places)?.id != firstLocation.id,
+    );
+    final secondLocation = responsePlaceForNeed(secondMission, places)!;
+    final access = ResponsibleAccess.v2(
+      uid: 'cumulative',
+      roles: const ['coordinator', 'site_manager'],
+      locationIds: {firstLocation.id},
+      active: true,
+    );
+    expect(
+      missionsVisibleToResponsible(
+        missions: [firstMission, secondMission],
+        locations: [firstLocation, secondLocation],
+        access: access,
+      ),
+      [firstMission, secondMission],
+    );
+    await pumpDashboard(
+      tester,
+      access: access,
+      missions: [firstMission, secondMission],
+      locations: [firstLocation, secondLocation],
+    );
+
+    await tester.tap(find.byKey(const Key('administration-statistics')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SITUATION'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('statistics action opens Situation and preserves site scope', (

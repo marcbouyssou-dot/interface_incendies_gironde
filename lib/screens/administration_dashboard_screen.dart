@@ -73,7 +73,7 @@ class _AdministrationDashboardScreenState
             onSignOut: _repository!.signOutResponsible,
           );
         }
-        if (!access.isCoordinator && !access.isSiteManager) {
+        if (!access.hasPrivilegedAccess) {
           return _ResponsibleAccessUnavailable(
             message: 'Votre compte ne dispose pas d’un rôle autorisé.',
             onRetry: widget.onRetryAccess,

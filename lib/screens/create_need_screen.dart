@@ -660,9 +660,14 @@ class _LocationInput extends StatelessWidget {
         final available = snapshot.data!
             .where((location) => location.isOperational)
             .toList(growable: false);
-        if (access.isSiteManager) {
+        if (access.singleManagedLocationId != null) {
           return _buildLockedLocation(context, available);
         }
+        final selectable = access.isLocationRestricted
+            ? available
+                  .where((location) => access.locationIds.contains(location.id))
+                  .toList(growable: false)
+            : available;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -672,13 +677,13 @@ class _LocationInput extends StatelessWidget {
               key: const Key('mission-location'),
               isExpanded: true,
               initialValue:
-                  available.any(
+                  selectable.any(
                     (location) => location.id == selectedLocation?.id,
                   )
                   ? selectedLocation?.id
                   : null,
               hint: const Text('Choisir un lieu'),
-              items: available
+              items: selectable
                   .map(
                     (location) => DropdownMenuItem(
                       value: location.id,
@@ -691,7 +696,7 @@ class _LocationInput extends StatelessWidget {
                   .toList(),
               onChanged: enabled
                   ? (id) => onSelected(
-                      available
+                      selectable
                           .where((location) => location.id == id)
                           .firstOrNull,
                     )
