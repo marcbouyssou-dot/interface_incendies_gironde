@@ -14,8 +14,9 @@ la seule couche autorisée à créer un compte Firebase Auth et un document
    compatible et non désactivé.
 5. Elle génère un lien officiel Firebase de définition/réinitialisation du mot
    de passe.
-6. Une transaction crée ou contrôle `roles/{uid}`, marque l’invitation
-   `accepted` et initialise sa notification à `pending`.
+6. Une transaction relit `roles/{uid}`, fusionne additivement le rôle et les
+   centres, écrit le format V2 canonique, marque l’invitation `accepted` et
+   initialise sa notification à `pending`.
 7. Le cœur métier construit le message et appelle uniquement
    `NotificationService.send(message)`.
 8. L’invitation est marquée `sent` ou `failed` sans stocker le contenu du
@@ -30,8 +31,14 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
   idempotent sans recréer de compte, de rôle, de lien ni de notification.
 - Une invitation acceptée dont la notification est `failed` peut être relancée
   sans recréer le compte ni le rôle. Un nouveau lien est alors généré.
-- Un rôle existant doit correspondre exactement au rôle et aux centres
-  demandés.
+- Un rôle legacy ou V2 valide est conservé puis enrichi sans retrait implicite.
+  Un document V2 invalide ne retombe jamais sur sa projection legacy.
+- Les rôles sont ordonnés `coordinator`, puis `site_manager`. Le champ `role`
+  reste une projection de compatibilité et `schemaVersion` vaut `2`.
+- Les centres existants et demandés sont fusionnés, triés et dédupliqués. Le
+  wildcard legacy d’un coordinateur n’est jamais persisté comme un centre V2.
+- Un rôle inactif ou malformé bloque l’attribution sans mutation ni
+  réactivation implicite.
 - Si Firestore échoue après la création d’un nouveau compte Auth, la Function
   tente de supprimer uniquement ce compte nouvellement créé. Un compte
   préexistant n’est jamais supprimé.
@@ -39,6 +46,21 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
 - Un échec d’envoi après cette transaction conserve le compte et le rôle,
   marque `notificationStatus: failed` avec un code normalisé, puis retourne une
   erreur métier `unavailable`.
+
+## Concurrence et propriété des responsabilités
+
+Le cœur métier conserve la validation de l’appelant, le cycle Auth, le lien
+d’activation, l’idempotence, la notification et la compensation. Le module pur
+`responsible_access.js` est l’unique source serveur pour parser les formats
+legacy/V2 et calculer une fusion canonique. L’adaptateur Admin SDK dans
+`index.js` exécute cette fusion dans la transaction qui relit simultanément
+l’invitation et le rôle.
+
+Les retries natifs des transactions Firestore empêchent deux invitations
+concurrentes de perdre un rôle ou un centre. Une course de création Auth sur le
+même e-mail réutilise le compte créé par l’appel gagnant. Les métadonnées
+`createdAt` et `createdBy`, ainsi que les champs historiques compatibles, sont
+préservés ; `updatedAt` est renouvelé par timestamp serveur.
 
 ## Paramètres serveur
 

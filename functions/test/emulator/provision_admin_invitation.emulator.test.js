@@ -32,7 +32,13 @@ function email(prefix) {
   return `${unique(prefix)}@example.test`;
 }
 
-async function client({uid, role, active = true, locationIds = []} = {}) {
+async function client({
+  uid,
+  role,
+  roleDocument,
+  active = true,
+  locationIds = [],
+} = {}) {
   const name = unique('client');
   const app = initializeApp({projectId, apiKey: 'fake-api-key'}, name);
   clientApps.push(app);
@@ -49,8 +55,8 @@ async function client({uid, role, active = true, locationIds = []} = {}) {
       password,
       disabled: false,
     });
-    if (role) {
-      await db.collection('roles').doc(user.uid).set({
+    if (role || roleDocument) {
+      await db.collection('roles').doc(user.uid).set(roleDocument ?? {
         role,
         active,
         locationIds,
@@ -129,8 +135,10 @@ test('main flow provisions Auth, role and accepted invitation safely', async () 
     await db.collection('adminInvitations').doc(invitationId).get()
   ).data();
   assert.equal(role.role, 'site_manager');
+  assert.deepEqual(role.roles, ['site_manager']);
   assert.deepEqual(role.locationIds, ['merignac']);
   assert.equal(role.active, true);
+  assert.equal(role.schemaVersion, 2);
   assert.match(role.createdBy, /^coordinator-/);
   assert.ok(role.createdAt);
   assert.ok(role.updatedAt);
@@ -187,6 +195,23 @@ test('unknown invitation is refused', async () => {
   );
 });
 
+test('active cumulative V2 coordinator can provision an invitation', async () => {
+  const callable = await client({
+    uid: unique('v2-coordinator'),
+    roleDocument: {
+      role: 'coordinator',
+      roles: ['coordinator', 'site_manager'],
+      locationIds: ['merignac'],
+      active: true,
+      schemaVersion: 2,
+    },
+  });
+  const id = unique('v2-coordinator-invitation');
+  await seedInvitation(id);
+  const response = await callable({invitationId: id});
+  assert.equal(response.data.invitationStatus, 'accepted');
+});
+
 for (const [label, overrides, code] of [
   ['cancelled invitation', {status: 'cancelled'}, 'failed-precondition'],
   [
@@ -237,6 +262,8 @@ test('existing account without role receives the expected role', async () => {
   await callable({invitationId: id});
   const role = (await db.collection('roles').doc(target.uid).get()).data();
   assert.equal(role.role, 'site_manager');
+  assert.deepEqual(role.roles, ['site_manager']);
+  assert.equal(role.schemaVersion, 2);
 });
 
 test('existing account with compatible role is accepted', async () => {
@@ -255,21 +282,224 @@ test('existing account with compatible role is accepted', async () => {
   await callable({invitationId: id});
   const role = (await db.collection('roles').doc(target.uid).get()).data();
   assert.equal(role.createdBy, 'previous-coordinator');
+  assert.deepEqual(role.roles, ['site_manager']);
+  assert.equal(role.schemaVersion, 2);
 });
 
-test('existing account with incompatible role is refused', async () => {
+test('existing coordinator receives site manager additively', async () => {
   const callable = await coordinator();
-  const targetEmail = email('existing-incompatible');
+  const targetEmail = email('existing-coordinator');
   const target = await adminAuth.createUser({email: targetEmail});
   await db.collection('roles').doc(target.uid).set({
     role: 'coordinator',
     locationIds: [],
     active: true,
   });
-  const id = unique('existing-incompatible');
+  const id = unique('existing-coordinator');
   await seedInvitation(id, {email: targetEmail});
-  await assertCallableCode(() => callable({invitationId: id}), 'already-exists');
-  assert.equal((await db.collection('adminInvitations').doc(id).get()).data().status, 'pending');
+  await callable({invitationId: id});
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  assert.equal(role.role, 'coordinator');
+  assert.deepEqual(role.roles, ['coordinator', 'site_manager']);
+  assert.deepEqual(role.locationIds, ['merignac']);
+  assert.equal(role.schemaVersion, 2);
+});
+
+test('existing site manager receives coordinator without losing metadata', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('manager-to-coordinator');
+  const target = await adminAuth.createUser({email: targetEmail});
+  const createdAt = Timestamp.fromDate(new Date('2026-01-02T03:04:05Z'));
+  await db.collection('roles').doc(target.uid).set({
+    role: 'site_manager',
+    locationIds: ['bazas'],
+    active: true,
+    createdAt,
+    createdBy: 'bootstrap-coordinator',
+    historicalNote: 'preserved',
+  });
+  const id = unique('manager-to-coordinator');
+  await seedInvitation(id, {
+    email: targetEmail,
+    role: 'coordinator',
+    locationIds: [],
+  });
+  await callable({invitationId: id});
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  assert.equal(role.role, 'coordinator');
+  assert.deepEqual(role.roles, ['coordinator', 'site_manager']);
+  assert.deepEqual(role.locationIds, ['bazas']);
+  assert.equal(role.createdAt.toMillis(), createdAt.toMillis());
+  assert.equal(role.createdBy, 'bootstrap-coordinator');
+  assert.equal(role.historicalNote, 'preserved');
+  assert.ok(role.updatedAt);
+});
+
+test('legacy coordinator wildcard becomes cumulative without wildcard', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('wildcard-coordinator');
+  const target = await adminAuth.createUser({email: targetEmail});
+  await db.collection('roles').doc(target.uid).set({
+    role: 'coordinator',
+    locationIds: ['*'],
+    active: true,
+  });
+  const id = unique('wildcard-coordinator');
+  await seedInvitation(id, {email: targetEmail, locationIds: ['bazas']});
+  await callable({invitationId: id});
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  assert.deepEqual(role.roles, ['coordinator', 'site_manager']);
+  assert.deepEqual(role.locationIds, ['bazas']);
+  assert.equal(role.locationIds.includes('*'), false);
+});
+
+test('existing cumulative V2 role merges a new center idempotently', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('cumulative');
+  const target = await adminAuth.createUser({email: targetEmail});
+  await db.collection('roles').doc(target.uid).set({
+    role: 'coordinator',
+    roles: ['coordinator', 'site_manager'],
+    locationIds: ['bazas'],
+    active: true,
+    schemaVersion: 2,
+  });
+  const id = unique('cumulative');
+  await seedInvitation(id, {
+    email: targetEmail,
+    locationIds: ['bassens', 'bazas'],
+  });
+  await callable({invitationId: id});
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  assert.deepEqual(role.roles, ['coordinator', 'site_manager']);
+  assert.deepEqual(role.locationIds, ['bassens', 'bazas']);
+});
+
+test('different invitations for the same role and center keep one canonical state', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('repeated-assignment');
+  const firstId = unique('repeated-assignment-first');
+  const secondId = unique('repeated-assignment-second');
+
+  await seedInvitation(firstId, {
+    email: targetEmail,
+    locationIds: ['bazas'],
+  });
+  await callable({invitationId: firstId});
+
+  const target = await adminAuth.getUserByEmail(targetEmail);
+  const firstRole = (
+    await db.collection('roles').doc(target.uid).get()
+  ).data();
+
+  await seedInvitation(secondId, {
+    email: targetEmail,
+    locationIds: ['bazas'],
+  });
+  await callable({invitationId: secondId});
+
+  const secondRole = (
+    await db.collection('roles').doc(target.uid).get()
+  ).data();
+  assert.equal(secondRole.role, firstRole.role);
+  assert.deepEqual(secondRole.roles, firstRole.roles);
+  assert.deepEqual(secondRole.locationIds, firstRole.locationIds);
+  assert.equal(secondRole.active, firstRole.active);
+  assert.equal(secondRole.schemaVersion, firstRole.schemaVersion);
+  assert.equal(secondRole.createdAt.toMillis(), firstRole.createdAt.toMillis());
+  assert.equal(secondRole.createdBy, firstRole.createdBy);
+});
+
+test('inactive existing role is refused without deleting Auth', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('inactive-role');
+  const target = await adminAuth.createUser({email: targetEmail});
+  await db.collection('roles').doc(target.uid).set({
+    role: 'coordinator', locationIds: [], active: false,
+  });
+  const id = unique('inactive-role');
+  await seedInvitation(id, {email: targetEmail});
+  await assertCallableCode(
+    () => callable({invitationId: id}),
+    'failed-precondition',
+  );
+  assert.equal((await adminAuth.getUser(target.uid)).uid, target.uid);
+  assert.equal(
+    (await db.collection('adminInvitations').doc(id).get()).data().status,
+    'pending',
+  );
+});
+
+test('malformed existing role is refused without mutation or Auth deletion', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('malformed-role');
+  const target = await adminAuth.createUser({email: targetEmail});
+  const malformed = {
+    role: 'coordinator',
+    roles: ['site_manager', 'coordinator'],
+    locationIds: ['bazas'],
+    active: true,
+    schemaVersion: 2,
+  };
+  await db.collection('roles').doc(target.uid).set(malformed);
+  const id = unique('malformed-role');
+  await seedInvitation(id, {email: targetEmail});
+  await assertCallableCode(
+    () => callable({invitationId: id}),
+    'failed-precondition',
+  );
+  assert.deepEqual(
+    (await db.collection('roles').doc(target.uid).get()).data(),
+    malformed,
+  );
+  assert.equal((await adminAuth.getUser(target.uid)).uid, target.uid);
+});
+
+test('concurrent center invitations merge without lost update', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('concurrent-centers');
+  const target = await adminAuth.createUser({email: targetEmail});
+  const firstId = unique('center-a');
+  const secondId = unique('center-b');
+  await Promise.all([
+    seedInvitation(firstId, {email: targetEmail, locationIds: ['bazas']}),
+    seedInvitation(secondId, {email: targetEmail, locationIds: ['bassens']}),
+  ]);
+  await Promise.all([
+    callable({invitationId: firstId}),
+    callable({invitationId: secondId}),
+  ]);
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  assert.deepEqual(role.roles, ['site_manager']);
+  assert.deepEqual(role.locationIds, ['bassens', 'bazas']);
+});
+
+test('concurrent role invitations merge into a cumulative account', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('concurrent-roles');
+  const target = await adminAuth.createUser({email: targetEmail});
+  const coordinatorId = unique('role-coordinator');
+  const managerId = unique('role-manager');
+  await Promise.all([
+    seedInvitation(coordinatorId, {
+      email: targetEmail,
+      role: 'coordinator',
+      locationIds: [],
+    }),
+    seedInvitation(managerId, {
+      email: targetEmail,
+      role: 'site_manager',
+      locationIds: ['bazas'],
+    }),
+  ]);
+  await Promise.all([
+    callable({invitationId: coordinatorId}),
+    callable({invitationId: managerId}),
+  ]);
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  assert.equal(role.role, 'coordinator');
+  assert.deepEqual(role.roles, ['coordinator', 'site_manager']);
+  assert.deepEqual(role.locationIds, ['bazas']);
 });
 
 test('disabled existing account is refused', async () => {
@@ -380,5 +610,9 @@ test('pre-existing Auth account is never deleted on Firestore failure', async ()
     (await db.collection('adminInvitations').doc('failure-existing').get())
       .data().status,
     'pending',
+  );
+  assert.equal(
+    (await db.collection('roles').doc(target.uid).get()).exists,
+    false,
   );
 });

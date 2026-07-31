@@ -1,3 +1,9 @@
+import {
+  hasActiveCoordinatorRole,
+  normalizeRequestedAssignment,
+  ResponsibleAccessError,
+} from './responsible_access.js';
+
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const ALLOWED_ROLES = new Set(['site_manager', 'coordinator']);
 
@@ -22,7 +28,7 @@ export async function provisionAdminInvitation({
   const activationUrl = buildActivationUrl(appUrl);
 
   const callerRole = await services.getRole(callerUid);
-  if (callerRole?.active !== true || callerRole?.role !== 'coordinator') {
+  if (!hasActiveCoordinatorRole(callerRole)) {
     throw new ProvisioningError(
       'permission-denied',
       'Accès coordinateur actif requis.',
@@ -54,47 +60,19 @@ export async function provisionAdminInvitation({
     );
   }
 
-  let user;
-  let createdUser = false;
-  try {
-    user = await services.getUserByEmail(invitation.email);
-  } catch (error) {
-    if (error?.code !== 'auth/user-not-found') throw error;
-  }
+  const account = await getOrCreateUser({services, invitation});
+  const user = account.user;
+  const createdUser = account.created;
   if (user?.disabled === true) {
     throw new ProvisioningError(
       'failed-precondition',
       'Le compte existant est désactivé.',
     );
   }
-  if (!user) {
-    user = await services.createUser({
-      email: invitation.email,
-      displayName: invitation.displayName,
-      emailVerified: false,
-      disabled: false,
-    });
-    createdUser = true;
-  } else if (normalizedEmail(user.email) !== invitation.email) {
+  if (normalizedEmail(user.email) !== invitation.email) {
     throw new ProvisioningError(
       'failed-precondition',
       'L’adresse du compte existant est incompatible.',
-    );
-  }
-
-  const expectedRole = {
-    role: invitation.role,
-    locationIds: invitation.role === 'coordinator'
-      ? []
-      : [...invitation.locationIds].sort(),
-    active: true,
-  };
-  const existingRole = await services.getRole(user.uid);
-  if (existingRole && !rolesAreCompatible(existingRole, expectedRole)) {
-    if (createdUser) await compensateCreatedUser(services, user.uid);
-    throw new ProvisioningError(
-      'already-exists',
-      'Un rôle incompatible existe déjà pour ce compte.',
     );
   }
 
@@ -115,10 +93,7 @@ export async function provisionAdminInvitation({
         invitationId,
         targetUid: user.uid,
         expectedInvitation: invitation,
-        role: {
-          ...expectedRole,
-          createdBy: callerUid,
-        },
+        createdBy: callerUid,
         timestamps: {
           acceptedAt: now,
           provisionedAt: now,
@@ -161,7 +136,7 @@ export async function provisionAdminInvitation({
     if (createdUser && !provisioningCommitted) {
       await compensateCreatedUser(services, user.uid);
     }
-    throw error;
+    throw normalizedAccessError(error);
   } finally {
     firebaseActionLink = null;
     activationLink = null;
@@ -302,30 +277,17 @@ function validateInvitationData(invitation) {
   if (!ALLOWED_ROLES.has(invitation.role)) {
     throw new ProvisioningError('invalid-argument', 'Rôle invalide.');
   }
-  if (!Array.isArray(invitation.locationIds)) {
-    throw new ProvisioningError('invalid-argument', 'Centres invalides.');
-  }
-  if (
-    (invitation.role === 'site_manager' && invitation.locationIds.length === 0)
-    || (invitation.role === 'coordinator'
-      && invitation.locationIds.length !== 0)
-  ) {
+  try {
+    const assignment = normalizeRequestedAssignment(invitation);
+    invitation.locationIds = [...assignment.locationIds];
+  } catch (error) {
+    if (!(error instanceof ResponsibleAccessError)) throw error;
     throw new ProvisioningError(
       'invalid-argument',
       'Périmètre de centres incohérent.',
+      {cause: error},
     );
   }
-}
-
-function rolesAreCompatible(existing, expected) {
-  return existing.role === expected.role
-    && existing.active === expected.active
-    && sameStrings(existing.locationIds, expected.locationIds);
-}
-
-function sameStrings(left, right) {
-  if (!Array.isArray(left) || left.length !== right.length) return false;
-  return [...left].sort().every((value, index) => value === [...right].sort()[index]);
 }
 
 async function compensateCreatedUser(services, uid) {
@@ -334,6 +296,57 @@ async function compensateCreatedUser(services, uid) {
   } catch {
     // A retry reuses the account if compensation is unavailable.
   }
+}
+
+async function getOrCreateUser({services, invitation}) {
+  try {
+    return {
+      user: await services.getUserByEmail(invitation.email),
+      created: false,
+    };
+  } catch (error) {
+    if (error?.code !== 'auth/user-not-found') throw error;
+  }
+  try {
+    return {
+      user: await services.createUser({
+        email: invitation.email,
+        displayName: invitation.displayName,
+        emailVerified: false,
+        disabled: false,
+      }),
+      created: true,
+    };
+  } catch (error) {
+    if (error?.code !== 'auth/email-already-exists') throw error;
+    return {
+      user: await services.getUserByEmail(invitation.email),
+      created: false,
+    };
+  }
+}
+
+function normalizedAccessError(error) {
+  if (!(error instanceof ResponsibleAccessError)) return error;
+  if (error.code === 'inactive-role') {
+    return new ProvisioningError(
+      'failed-precondition',
+      'Le compte responsable existant est inactif.',
+      {cause: error},
+    );
+  }
+  if (error.code === 'invalid-assignment') {
+    return new ProvisioningError(
+      'invalid-argument',
+      'L’attribution demandée est invalide.',
+      {cause: error},
+    );
+  }
+  return new ProvisioningError(
+    'failed-precondition',
+    'Le rôle existant ne peut pas être modifié automatiquement.',
+    {cause: error},
+  );
 }
 
 function safeResult({alreadyProvisioned, emailDelivery}) {

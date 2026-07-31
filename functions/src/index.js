@@ -9,6 +9,10 @@ import {
   provisionAdminInvitation as provision,
 } from './provision_admin_invitation.js';
 import {
+  mergeResponsibleAccess,
+  normalizeRequestedAssignment,
+} from './responsible_access.js';
+import {
   createServerNotificationService,
 } from './notifications/create_notification_service.js';
 
@@ -108,7 +112,7 @@ export function adminServices({
       invitationId,
       targetUid,
       expectedInvitation,
-      role,
+      createdBy,
       timestamps,
     }) {
       if (shouldFailCommit(invitationId)) {
@@ -128,6 +132,8 @@ export function adminServices({
           !invitationSnapshot.exists
           || current.status !== 'pending'
           || current.email !== expectedInvitation.email
+          || current.role !== expectedInvitation.role
+          || !sameRequestedLocations(current, expectedInvitation)
         ) {
           throw new ProvisioningError(
             'aborted',
@@ -135,20 +141,18 @@ export function adminServices({
           );
         }
         const existingRole = roleSnapshot.exists ? roleSnapshot.data() : null;
-        if (existingRole && !compatibleRole(existingRole, role)) {
-          throw new ProvisioningError(
-            'already-exists',
-            'Un rôle incompatible existe déjà.',
-          );
-        }
+        const mergedRole = mergeResponsibleAccess(existingRole, current);
         transaction.set(
           roleRef,
           {
-            role: role.role,
-            locationIds: role.locationIds,
-            active: true,
+            ...(existingRole ?? {}),
+            role: mergedRole.role,
+            roles: [...mergedRole.roles],
+            locationIds: [...mergedRole.locationIds],
+            active: mergedRole.active,
+            schemaVersion: mergedRole.schemaVersion,
             createdAt: existingRole?.createdAt ?? FieldValue.serverTimestamp(),
-            createdBy: existingRole?.createdBy ?? role.createdBy,
+            createdBy: existingRole?.createdBy ?? createdBy,
             updatedAt: FieldValue.serverTimestamp(),
           },
           {merge: false},
@@ -271,11 +275,17 @@ function emulatorNotificationFailure(invitationId) {
   return error;
 }
 
-function compatibleRole(existing, expected) {
-  const left = [...(existing.locationIds ?? [])].sort();
-  const right = [...expected.locationIds].sort();
-  return existing.role === expected.role
-    && existing.active === true
-    && left.length === right.length
-    && left.every((value, index) => value === right[index]);
+function sameRequestedLocations(current, expected) {
+  try {
+    const currentAssignment = normalizeRequestedAssignment(current);
+    const expectedAssignment = normalizeRequestedAssignment(expected);
+    return currentAssignment.role === expectedAssignment.role
+      && currentAssignment.locationIds.length
+        === expectedAssignment.locationIds.length
+      && currentAssignment.locationIds.every(
+        (value, index) => value === expectedAssignment.locationIds[index],
+      );
+  } catch {
+    return false;
+  }
 }

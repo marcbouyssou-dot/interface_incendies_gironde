@@ -7,6 +7,7 @@ import {
   ProvisioningError,
   provisionAdminInvitation,
 } from '../src/provision_admin_invitation.js';
+import {mergeResponsibleAccess} from '../src/responsible_access.js';
 
 const now = new Date('2026-07-30T10:00:00.000Z');
 const appUrl = 'http://127.0.0.1:5000';
@@ -38,6 +39,7 @@ function harness({
   invitationValue = invitation(),
   user,
   role,
+  raceUser,
   failCommit = false,
   failLink = false,
   failNotification = false,
@@ -72,6 +74,12 @@ function harness({
       return state.user;
     },
     async createUser(properties) {
+      if (raceUser) {
+        state.user = raceUser;
+        const error = new Error('email already exists');
+        error.code = 'auth/email-already-exists';
+        throw error;
+      }
       state.created.push(properties);
       state.user = {uid: 'created-uid', ...properties};
       return state.user;
@@ -87,8 +95,18 @@ function harness({
     },
     async commitProvisioning(value) {
       if (failCommit) throw new Error('firestore failed');
-      state.commits.push(value);
-      state.role = value.role;
+      const mergedRole = mergeResponsibleAccess(
+        state.role,
+        state.invitation,
+      );
+      state.role = {
+        ...(state.role ?? {}),
+        ...mergedRole,
+        createdAt: state.role?.createdAt ?? now,
+        createdBy: state.role?.createdBy ?? value.createdBy,
+        updatedAt: now,
+      };
+      state.commits.push({...value, role: state.role});
       state.invitation = {
         ...state.invitation,
         status: 'accepted',
@@ -283,7 +301,7 @@ test('existing account without role receives the expected role', async () => {
   assert.equal(state.commits[0].targetUid, 'existing-uid');
 });
 
-test('existing compatible role is accepted idempotently', async () => {
+test('existing compatible role is rewritten canonically without loss', async () => {
   const compatible = {
     role: 'site_manager',
     locationIds: ['site-b', 'site-a'],
@@ -299,16 +317,55 @@ test('existing compatible role is accepted idempotently', async () => {
   });
   assert.equal(state.commits.length, 1);
   assert.equal(state.created.length, 0);
+  assert.deepEqual(state.role.roles, ['site_manager']);
+  assert.equal(state.role.schemaVersion, 2);
 });
 
-test('incompatible role is refused without mutation', async () => {
-  const value = harness({
+test('existing coordinator receives the site manager role additively', async () => {
+  const {state} = await provision({
     user: {
       uid: 'existing-uid',
       email: 'responsable@example.fr',
       disabled: false,
     },
     role: {role: 'coordinator', locationIds: [], active: true},
+  });
+  assert.deepEqual(state.role.roles, ['coordinator', 'site_manager']);
+  assert.deepEqual(state.role.locationIds, ['site-a', 'site-b']);
+  assert.equal(state.role.role, 'coordinator');
+  assert.match(state.notifications[0].text, /Responsable de centre/);
+  assert.doesNotMatch(
+    state.notifications[0].text,
+    /Coordinateur départemental/,
+  );
+});
+
+test('existing site manager receives coordinator without losing locations', async () => {
+  const {state} = await provision({
+    invitationValue: invitation({role: 'coordinator', locationIds: []}),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+    role: {
+      role: 'site_manager',
+      locationIds: ['site-b'],
+      active: true,
+    },
+  });
+  assert.deepEqual(state.role.roles, ['coordinator', 'site_manager']);
+  assert.deepEqual(state.role.locationIds, ['site-b']);
+});
+
+test('malformed existing role is refused without deleting existing Auth', async () => {
+  const value = harness({
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+    role: {role: 'administrator', locationIds: [], active: true},
   });
   await rejectsCode(
     () => provisionAdminInvitation({
@@ -319,9 +376,47 @@ test('incompatible role is refused without mutation', async () => {
       appUrl,
       now,
     }),
-    'already-exists',
+    'failed-precondition',
   );
   assert.equal(value.state.commits.length, 0);
+  assert.deepEqual(value.state.deleted, []);
+});
+
+test('inactive existing role is refused without implicit reactivation', async () => {
+  const value = harness({
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+    role: {role: 'coordinator', locationIds: [], active: false},
+  });
+  await rejectsCode(
+    () => provisionAdminInvitation({
+      invitationId: 'invitation-a',
+      callerUid: 'coord',
+      services: value.services,
+      notificationService: value.notificationService,
+      appUrl,
+      now,
+    }),
+    'failed-precondition',
+  );
+  assert.equal(value.state.role.active, false);
+  assert.deepEqual(value.state.deleted, []);
+});
+
+test('concurrent Auth creation reuses the account created by the winner', async () => {
+  const {state} = await provision({
+    raceUser: {
+      uid: 'race-winner-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  assert.equal(state.created.length, 0);
+  assert.equal(state.commits[0].targetUid, 'race-winner-uid');
+  assert.deepEqual(state.deleted, []);
 });
 
 test('disabled existing account is refused', async () => {
