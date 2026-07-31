@@ -98,13 +98,18 @@ export async function provisionAdminInvitation({
     );
   }
 
+  let firebaseActionLink;
   let activationLink;
   let provisioningCommitted = alreadyProvisioned;
   try {
-    activationLink = await services.generatePasswordResetLink(
+    firebaseActionLink = await services.generatePasswordResetLink(
       invitation.email,
       {url: activationUrl, handleCodeInApp: true},
     );
+    activationLink = buildCustomActivationLink({
+      firebaseActionLink,
+      activationUrl,
+    });
     if (!alreadyProvisioned) {
       await services.commitProvisioning({
         invitationId,
@@ -158,6 +163,7 @@ export async function provisionAdminInvitation({
     }
     throw error;
   } finally {
+    firebaseActionLink = null;
     activationLink = null;
   }
 
@@ -235,6 +241,43 @@ export function buildActivationUrl(value) {
     ? basePath
     : `${basePath}/activation`;
   return url.toString().replace(/\/$/, '');
+}
+
+export function buildCustomActivationLink({firebaseActionLink, activationUrl}) {
+  let firebaseUrl;
+  let mobSanteUrl;
+  try {
+    firebaseUrl = new URL(firebaseActionLink);
+    mobSanteUrl = new URL(activationUrl);
+  } catch {
+    throw invalidGeneratedActivationLink();
+  }
+
+  const mode = firebaseUrl.searchParams.get('mode');
+  const oobCode = firebaseUrl.searchParams.get('oobCode')?.trim() ?? '';
+  if (mode !== 'resetPassword' || oobCode === '') {
+    throw invalidGeneratedActivationLink();
+  }
+
+  mobSanteUrl.searchParams.set('mode', mode);
+  mobSanteUrl.searchParams.set('oobCode', oobCode);
+  copyOptionalQueryParameter(firebaseUrl, mobSanteUrl, 'apiKey');
+  copyOptionalQueryParameter(firebaseUrl, mobSanteUrl, 'lang');
+  return mobSanteUrl.toString();
+}
+
+function copyOptionalQueryParameter(source, target, name) {
+  const value = source.searchParams.get(name);
+  if (value !== null && value !== '') {
+    target.searchParams.set(name, value);
+  }
+}
+
+function invalidGeneratedActivationLink() {
+  return new ProvisioningError(
+    'internal',
+    'Le lien d’activation n’a pas pu être préparé.',
+  );
 }
 
 function validateInvitation(invitation, now) {

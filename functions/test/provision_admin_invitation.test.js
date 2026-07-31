@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   buildActivationUrl,
+  buildCustomActivationLink,
   ProvisioningError,
   provisionAdminInvitation,
 } from '../src/provision_admin_invitation.js';
@@ -22,6 +23,16 @@ function invitation(overrides = {}) {
   };
 }
 
+function firebasePasswordResetLink(settings) {
+  const url = new URL('https://test-project.firebaseapp.com/__/auth/action');
+  url.searchParams.set('mode', 'resetPassword');
+  url.searchParams.set('oobCode', 'test-action-code');
+  url.searchParams.set('apiKey', 'public-test-api-key');
+  url.searchParams.set('continueUrl', settings.url);
+  url.searchParams.set('lang', 'fr');
+  return url.toString();
+}
+
 function harness({
   callerRole = {role: 'coordinator', active: true, locationIds: []},
   invitationValue = invitation(),
@@ -30,6 +41,7 @@ function harness({
   failCommit = false,
   failLink = false,
   failNotification = false,
+  generatedPasswordResetLink,
 } = {}) {
   const state = {
     callerRole,
@@ -71,7 +83,7 @@ function harness({
     async generatePasswordResetLink(email, settings) {
       if (failLink) throw new Error('link failed');
       state.links.push({email, settings});
-      return `http://127.0.0.1:9099/action?email=${email}`;
+      return generatedPasswordResetLink ?? firebasePasswordResetLink(settings);
     },
     async commitProvisioning(value) {
       if (failCommit) throw new Error('firestore failed');
@@ -412,7 +424,7 @@ test('retry after a compensated failure provisions without duplicate state', asy
   assert.equal(result.invitationStatus, 'accepted');
 });
 
-test('activation link uses Emulator URL and is captured but never persisted', async () => {
+test('notification receives the custom Emulator activation URL only', async () => {
   const {state, result} = await provision();
   assert.equal(
     state.links[0].settings.url,
@@ -421,14 +433,124 @@ test('activation link uses Emulator URL and is captured but never persisted', as
   assert.equal(state.links[0].settings.handleCodeInApp, true);
   assert.match(
     state.notifications[0].text,
-    /http:\/\/127\.0\.0\.1:9099/,
+    /http:\/\/127\.0\.0\.1:5000\/activation\?/,
   );
+  assert.match(state.notifications[0].text, /mode=resetPassword/);
+  assert.match(state.notifications[0].text, /oobCode=test-action-code/);
+  assert.doesNotMatch(state.notifications[0].text, /firebaseapp\.com/);
   assert.equal(
-    JSON.stringify(state.commits).includes('127.0.0.1:9099'),
+    JSON.stringify(state.commits).includes('test-action-code'),
     false,
   );
-  assert.equal(JSON.stringify(result).includes('127.0.0.1:9099'), false);
+  assert.equal(JSON.stringify(result).includes('test-action-code'), false);
 });
+
+test('production notification receives a MobSanté activation URL', async () => {
+  const value = harness();
+  await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl: 'https://mobsante.netlify.app',
+    now,
+  });
+
+  assert.match(
+    value.state.notifications[0].text,
+    /https:\/\/mobsante\.netlify\.app\/activation\?/,
+  );
+  assert.match(value.state.notifications[0].text, /mode=resetPassword/);
+  assert.match(value.state.notifications[0].text, /oobCode=test-action-code/);
+  assert.doesNotMatch(value.state.notifications[0].text, /firebaseapp\.com/);
+});
+
+test('custom activation link copies all supported Firebase parameters', () => {
+  const result = buildCustomActivationLink({
+    firebaseActionLink: firebasePasswordResetLink({
+      url: 'https://mobsante.netlify.app/activation',
+    }),
+    activationUrl: 'https://mobsante.netlify.app/activation',
+  });
+  const url = new URL(result);
+
+  assert.equal(url.origin, 'https://mobsante.netlify.app');
+  assert.equal(url.pathname, '/activation');
+  assert.equal(url.searchParams.get('mode'), 'resetPassword');
+  assert.equal(url.searchParams.get('oobCode'), 'test-action-code');
+  assert.equal(url.searchParams.get('apiKey'), 'public-test-api-key');
+  assert.equal(url.searchParams.get('lang'), 'fr');
+  assert.equal(url.searchParams.has('continueUrl'), false);
+});
+
+test('custom activation link accepts a missing apiKey', () => {
+  const firebaseUrl = new URL(firebasePasswordResetLink({url: appUrl}));
+  firebaseUrl.searchParams.delete('apiKey');
+  const result = new URL(buildCustomActivationLink({
+    firebaseActionLink: firebaseUrl.toString(),
+    activationUrl: `${appUrl}/activation`,
+  }));
+
+  assert.equal(result.searchParams.has('apiKey'), false);
+  assert.equal(result.searchParams.get('oobCode'), 'test-action-code');
+});
+
+test('custom activation link accepts a missing lang', () => {
+  const firebaseUrl = new URL(firebasePasswordResetLink({url: appUrl}));
+  firebaseUrl.searchParams.delete('lang');
+  const result = new URL(buildCustomActivationLink({
+    firebaseActionLink: firebaseUrl.toString(),
+    activationUrl: `${appUrl}/activation`,
+  }));
+
+  assert.equal(result.searchParams.has('lang'), false);
+  assert.equal(result.searchParams.get('oobCode'), 'test-action-code');
+});
+
+test('custom activation link preserves existing parameters and encodes values', () => {
+  const firebaseUrl = new URL('https://test-project.firebaseapp.com/action');
+  firebaseUrl.searchParams.set('mode', 'resetPassword');
+  firebaseUrl.searchParams.set('oobCode', 'code +/=?&é');
+  const result = new URL(buildCustomActivationLink({
+    firebaseActionLink: firebaseUrl.toString(),
+    activationUrl: 'https://mobsante.netlify.app/activation?source=invitation',
+  }));
+
+  assert.equal(result.searchParams.get('source'), 'invitation');
+  assert.equal(result.searchParams.get('oobCode'), 'code +/=?&é');
+});
+
+for (const [label, generatedPasswordResetLink] of [
+  ['malformed URL', 'not-a-url'],
+  ['missing mode', 'https://test-project.firebaseapp.com/action?oobCode=code'],
+  [
+    'unexpected mode',
+    'https://test-project.firebaseapp.com/action?mode=verifyEmail&oobCode=code',
+  ],
+  ['missing oobCode', 'https://test-project.firebaseapp.com/action?mode=resetPassword'],
+  [
+    'empty oobCode',
+    'https://test-project.firebaseapp.com/action?mode=resetPassword&oobCode=',
+  ],
+]) {
+  test(`invalid Firebase action link is refused before notification: ${label}`, async () => {
+    const value = harness({generatedPasswordResetLink});
+    await rejectsCode(
+      () => provisionAdminInvitation({
+        invitationId: 'invitation-a',
+        callerUid: 'coord',
+        services: value.services,
+        notificationService: value.notificationService,
+        appUrl,
+        now,
+      }),
+      'internal',
+    );
+    assert.equal(value.state.notifications.length, 0);
+    assert.equal(value.state.commits.length, 0);
+    assert.deepEqual(value.state.deleted, ['created-uid']);
+  });
+}
 
 test('activation URL is normalized safely', () => {
   assert.equal(
