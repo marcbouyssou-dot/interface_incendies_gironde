@@ -14,29 +14,95 @@ service cloud.firestore {
       return get(rolePath()).data;
     }
 
+    function hasOnlyStringLocationIds(values) {
+      return values is list
+        && values.size() <= 65
+        && (values.size() == 0
+          || values.join('\u001f').split('\u001f') == values)
+        && !('' in values)
+        && !('\u001f' in values);
+    }
+
+    function validLocationIds(values) {
+      return hasOnlyStringLocationIds(values)
+        && !('*' in values)
+        && values.toSet().size() == values.size()
+        && values.size() > 0;
+    }
+
+    function isLegacyRoleDocument(role) {
+      return !('roles' in role)
+        && !('schemaVersion' in role)
+        && role.active is bool
+        && role.role in ['coordinator', 'site_manager']
+        && (
+          (role.role == 'coordinator'
+            && (!('locationIds' in role)
+              || (role.locationIds is list
+                && (role.locationIds == [] || role.locationIds == ['*']))))
+          || (role.role == 'site_manager'
+            && 'locationIds' in role
+            && validLocationIds(role.locationIds))
+        );
+    }
+
+    function isV2RoleDocument(role) {
+      let validRoles = role.roles is list
+        && (role.roles == ['coordinator']
+          || role.roles == ['site_manager']
+          || role.roles == ['coordinator', 'site_manager']);
+      let containsSiteManager = validRoles
+        && 'site_manager' in role.roles;
+      return 'roles' in role
+        && 'schemaVersion' in role
+        && role.schemaVersion is int
+        && role.schemaVersion == 2
+        && role.active is bool
+        && validRoles
+        && role.role == (('coordinator' in role.roles)
+          ? 'coordinator'
+          : 'site_manager')
+        && (containsSiteManager
+          ? validLocationIds(role.locationIds)
+          : role.locationIds == []);
+    }
+
+    function isValidRoleDocument(role) {
+      return 'roles' in role
+        ? isV2RoleDocument(role)
+        : isLegacyRoleDocument(role);
+    }
+
+    function hasRole(role, roleName) {
+      return 'roles' in role
+        ? roleName in role.roles
+        : role.role == roleName;
+    }
+
     function hasActiveRole() {
       return isSignedIn()
         && exists(rolePath())
+        && isValidRoleDocument(currentRole())
         && currentRole().active == true;
     }
 
     function isCoordinator() {
-      return hasActiveRole() && currentRole().role == 'coordinator';
+      return hasActiveRole()
+        && hasRole(currentRole(), 'coordinator');
     }
 
     function isActiveSiteManager() {
-      return hasActiveRole() && currentRole().role == 'site_manager';
-    }
-
-    function isAuthorizedSiteManagerFor(locationId) {
-      return isActiveSiteManager()
-        && currentRole().locationIds is list
-        && locationId in currentRole().locationIds;
+      return hasActiveRole()
+        && hasRole(currentRole(), 'site_manager');
     }
 
     function canManageLocation(locationId) {
-      return isCoordinator()
-        || isAuthorizedSiteManagerFor(locationId);
+      return hasActiveRole()
+        && (
+          hasRole(currentRole(), 'coordinator')
+          || (hasRole(currentRole(), 'site_manager')
+            && locationId in currentRole().locationIds)
+        );
     }
 
     function isVolunteerOwner(uid) {
@@ -435,7 +501,6 @@ service cloud.firestore {
     function validManagedMissionCounterUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isCoordinator()
-        && canManageLocation(resource.data.locationId)
         && changed.hasOnly([
           'registeredMk', 'registeredPp', 'registeredByProfession',
           'requiredByProfession', 'status', 'updatedAt'
@@ -555,7 +620,6 @@ service cloud.firestore {
         /databases/$(database)/documents/missions/$(resource.data.missionId)
       ).data;
       return isCoordinator()
-        && canManageLocation(mission.locationId)
         && changed.hasOnly(['status', 'updatedAt'])
         && validEngagementStatus(to)
         && request.resource.data.updatedAt == request.time

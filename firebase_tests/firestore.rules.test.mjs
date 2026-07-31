@@ -62,6 +62,43 @@ async function seed(extra = {}) {
   });
 }
 
+async function seedRole(uid, data) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `roles/${uid}`), data);
+  });
+}
+
+function legacyRole(role, locationIds, active = true) {
+  return {
+    role,
+    ...(locationIds === undefined ? {} : {locationIds}),
+    active,
+  };
+}
+
+function v2Role(roles, locationIds, overrides = {}) {
+  return {
+    role: roles.includes('coordinator') ? 'coordinator' : 'site_manager',
+    roles,
+    locationIds,
+    active: true,
+    schemaVersion: 2,
+    ...overrides,
+  };
+}
+
+async function createMissionFor(uid, id, locationId = 'site-a') {
+  return setDoc(
+    doc(db(uid), `missions/${id}`),
+    mission({
+      id,
+      locationId,
+      locationName: locationId === 'site-a' ? 'Site A' : 'Site B',
+      createdBy: uid,
+    }),
+  );
+}
+
 function mission(overrides = {}) {
   return {
     id: 'mission-a',
@@ -1242,4 +1279,259 @@ test('admin invitations: client cannot accept, mutate identity or delete', async
     }),
   );
   await assertFails(deleteDoc(doc(db('coord'), reference)));
+});
+
+test('roles dual-read: valid legacy scopes keep their exact permissions', async () => {
+  await seed({mission: false});
+  await seedRole('coord-no-scope', legacyRole('coordinator', undefined));
+  await seedRole('coord-empty', legacyRole('coordinator', []));
+  await seedRole(
+    'manager-multi',
+    legacyRole('site_manager', ['site-a', 'site-b']),
+  );
+
+  await assertSucceeds(createMissionFor('coord', 'legacy-wildcard', 'site-b'));
+  await assertSucceeds(
+    createMissionFor('coord-no-scope', 'legacy-no-scope', 'site-b'),
+  );
+  await assertSucceeds(createMissionFor('coord-empty', 'legacy-empty', 'site-b'));
+  await assertSucceeds(createMissionFor('manager', 'legacy-single', 'site-a'));
+  await assertSucceeds(
+    createMissionFor('manager-multi', 'legacy-multi', 'site-b'),
+  );
+  await assertFails(createMissionFor('manager', 'legacy-outside', 'site-b'));
+});
+
+test('roles dual-read: invalid and inactive legacy documents deny access', async () => {
+  await seed({mission: false});
+  const cases = [
+    ['legacy-empty-manager', legacyRole('site_manager', [])],
+    ['legacy-wildcard-manager', legacyRole('site_manager', ['*'])],
+    ['legacy-unknown', legacyRole('administrator', [])],
+    ['legacy-inactive', legacyRole('coordinator', ['*'], false)],
+  ];
+
+  for (const [uid, roleData] of cases) {
+    await seedRole(uid, roleData);
+    await assertFails(createMissionFor(uid, `mission-${uid}`));
+  }
+});
+
+test('roles dual-read: valid V2 roles enforce coordinator priority', async () => {
+  await seed({mission: false});
+  await seedRole('v2-coord', v2Role(['coordinator'], []));
+  await seedRole('v2-manager', v2Role(['site_manager'], ['site-a']));
+  await seedRole(
+    'v2-manager-multi',
+    v2Role(['site_manager'], ['site-a', 'site-b']),
+  );
+  await seedRole(
+    'v2-cumulative',
+    v2Role(['coordinator', 'site_manager'], ['site-a']),
+  );
+
+  await assertSucceeds(createMissionFor('v2-coord', 'v2-global', 'site-b'));
+  await assertSucceeds(createMissionFor('v2-manager', 'v2-local', 'site-a'));
+  await assertFails(createMissionFor('v2-manager', 'v2-outside', 'site-b'));
+  await assertSucceeds(
+    createMissionFor('v2-manager-multi', 'v2-multi-local', 'site-b'),
+  );
+  await assertSucceeds(
+    createMissionFor('v2-cumulative', 'v2-cumulative-global', 'site-b'),
+  );
+  const roleSnapshot = await assertSucceeds(
+    getDoc(doc(db('v2-cumulative'), 'roles/v2-cumulative')),
+  );
+  assert.deepEqual(roleSnapshot.data().roles, ['coordinator', 'site_manager']);
+});
+
+test('roles dual-read: invalid V2 role lists never fall back to role', async () => {
+  await seed({mission: false});
+  const missingSchema = v2Role(['coordinator'], []);
+  delete missingSchema.schemaVersion;
+  const cases = [
+    ['v2-roles-type', v2Role('coordinator', [])],
+    ['v2-empty-roles', v2Role([], [])],
+    ['v2-duplicate', v2Role(['coordinator', 'coordinator'], [])],
+    [
+      'v2-order',
+      v2Role(['site_manager', 'coordinator'], ['site-a']),
+    ],
+    ['v2-unknown', v2Role(['unknown'], ['site-a'])],
+    [
+      'v2-non-string-role',
+      v2Role(['coordinator', 42], []),
+    ],
+    ['v2-missing-schema', missingSchema],
+    ['v2-wrong-schema', v2Role(['coordinator'], [], {schemaVersion: 3})],
+    [
+      'v2-wrong-projection',
+      v2Role(['coordinator', 'site_manager'], ['site-a'], {
+        role: 'site_manager',
+      }),
+    ],
+  ];
+
+  for (const [uid, roleData] of cases) {
+    await seedRole(uid, roleData);
+    await assertFails(createMissionFor(uid, `mission-${uid}`));
+  }
+});
+
+test('roles dual-read: invalid V2 fields and scopes deny all privilege', async () => {
+  await seed({mission: false});
+  const missingActive = v2Role(['coordinator'], []);
+  delete missingActive.active;
+  const missingLocationIds = v2Role(['site_manager'], ['site-a']);
+  delete missingLocationIds.locationIds;
+  const cases = [
+    ['v2-active-missing', missingActive],
+    [
+      'v2-active-type',
+      v2Role(['coordinator'], [], {active: 'true'}),
+    ],
+    ['v2-location-missing', missingLocationIds],
+    [
+      'v2-location-type',
+      v2Role(['site_manager'], 'site-a'),
+    ],
+    [
+      'v2-location-item-type',
+      v2Role(['site_manager'], ['site-a', 42]),
+    ],
+    [
+      'v2-location-duplicate',
+      v2Role(['site_manager'], ['site-a', 'site-a']),
+    ],
+    ['v2-wildcard', v2Role(['site_manager'], ['*'])],
+    ['v2-coordinator-scoped', v2Role(['coordinator'], ['site-a'])],
+    ['v2-manager-empty', v2Role(['site_manager'], [])],
+    [
+      'v2-cumulative-empty',
+      v2Role(['coordinator', 'site_manager'], []),
+    ],
+  ];
+
+  for (const [uid, roleData] of cases) {
+    await seedRole(uid, roleData);
+    await assertFails(createMissionFor(uid, `mission-${uid}`));
+  }
+});
+
+test('roles dual-read: V2 invitation access remains coordinator-only', async () => {
+  await seed();
+  await seedRole('v2-coord', v2Role(['coordinator'], []));
+  await seedRole('v2-manager', v2Role(['site_manager'], ['site-a']));
+  await seedRole(
+    'v2-cumulative',
+    v2Role(['coordinator', 'site_manager'], ['site-a']),
+  );
+
+  await assertSucceeds(
+    setDoc(
+      doc(db('v2-coord'), 'adminInvitations/v2-coord'),
+      adminInvitation({createdBy: 'v2-coord'}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('v2-manager'), 'adminInvitations/v2-manager'),
+      adminInvitation({createdBy: 'v2-manager'}),
+    ),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(db('v2-cumulative'), 'adminInvitations/v2-cumulative'),
+      adminInvitation({createdBy: 'v2-cumulative'}),
+    ),
+  );
+});
+
+test('roles dual-read: V2 coordinators retain engagement administration', async () => {
+  await seed();
+  await seedRole('v2-coord', v2Role(['coordinator'], []));
+  await seedRole('v2-manager', v2Role(['site_manager'], ['site-a']));
+  await seedRole(
+    'v2-cumulative',
+    v2Role(['coordinator', 'site_manager'], ['site-a']),
+  );
+  await seedEngagement('alice', 'pending');
+  await seedEngagement('bob', 'pending');
+
+  await assertSucceeds(
+    getDoc(doc(db('v2-coord'), 'engagements/mission-a_alice')),
+  );
+  await assertSucceeds(getDocs(collection(db('v2-coord'), 'engagements')));
+  await assertFails(
+    getDoc(doc(db('v2-manager'), 'engagements/mission-a_alice')),
+  );
+  await assertSucceeds(
+    updateEngagement('v2-coord', 'alice', 'standby'),
+  );
+  await assertSucceeds(
+    updateEngagement('v2-cumulative', 'bob', 'standby'),
+  );
+  await assertFails(updateEngagement('v2-manager', 'bob', 'cancelled'));
+});
+
+test('roles dual-read: own role remains readable but never client-writable', async () => {
+  await seed();
+  await seedRole('v2-manager', v2Role(['site_manager'], ['site-a']));
+
+  await assertSucceeds(getDoc(doc(db('v2-manager'), 'roles/v2-manager')));
+  await assertFails(getDoc(doc(db('v2-manager'), 'roles/coord')));
+  await assertFails(
+    updateDoc(doc(db('v2-manager'), 'roles/v2-manager'), {
+      role: 'coordinator',
+      roles: ['coordinator', 'site_manager'],
+      schemaVersion: 2,
+    }),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('alice'), 'roles/alice'),
+      v2Role(['coordinator'], []),
+    ),
+  );
+});
+
+test('roles dual-read: inactive cumulative role is denied everywhere', async () => {
+  await seed({mission: false});
+  await seedRole(
+    'v2-inactive',
+    v2Role(['coordinator', 'site_manager'], ['site-a'], {active: false}),
+  );
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'adminInvitations/inactive'),
+      adminInvitation({createdAt: Timestamp.now()}),
+    );
+    await setDoc(doc(context.firestore(), 'engagements/mission-x_alice'), {
+      missionId: 'mission-x',
+      volunteerId: 'alice',
+      profession: 'mk',
+      status: 'pending',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+  });
+
+  await assertFails(createMissionFor('v2-inactive', 'inactive-mission'));
+  await assertFails(
+    getDoc(doc(db('v2-inactive'), 'adminInvitations/inactive')),
+  );
+  await assertFails(
+    getDoc(doc(db('v2-inactive'), 'engagements/mission-x_alice')),
+  );
+  await assertSucceeds(getDoc(doc(db('v2-inactive'), 'roles/v2-inactive')));
+});
+
+test('roles dual-read: anonymous professional rights do not open admin data', async () => {
+  await seed();
+  await assertSucceeds(engage('anonymous-professional'));
+  await assertFails(
+    getDocs(collection(db('anonymous-professional'), 'adminInvitations')),
+  );
+  await assertFails(getDocs(collection(db(), 'adminInvitations')));
+  await assertFails(getDocs(collection(db(), 'roles')));
 });
