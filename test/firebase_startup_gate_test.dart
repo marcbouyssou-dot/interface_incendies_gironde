@@ -17,7 +17,9 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SplashScreen), findsOneWidget);
-    expect(find.text('InterfaceRecup33'), findsOneWidget);
+    expect(find.text('MobSanté'), findsOneWidget);
+    expect(find.text('Incendies Gironde'), findsOneWidget);
+    expect(find.text('InterfaceRecup33'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
 
     pending.complete(MockCoordinationRepository.instance);

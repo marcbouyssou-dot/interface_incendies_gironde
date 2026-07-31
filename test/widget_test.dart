@@ -197,9 +197,9 @@ void main() {
     await tester.tap(find.text('Plus').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('URPS MK Nouvelle-Aquitaine'), findsOneWidget);
-    expect(find.text('Version RC1'), findsOneWidget);
-    expect(find.text('2026'), findsOneWidget);
+    expect(find.text('MobSanté'), findsOneWidget);
+    expect(find.text('Incendies Gironde'), findsOneWidget);
+    expect(find.text('Version RC1'), findsNothing);
     await tester.tap(find.byKey(const Key('places-territorial-filter')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Médoc').last);

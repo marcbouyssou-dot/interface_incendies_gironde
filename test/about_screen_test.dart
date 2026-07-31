@@ -16,7 +16,7 @@ void main() {
     final index = File('web/index.html').readAsStringSync();
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
-    expect(manifest['name'], 'InterfaceRecup33 — MobSanté');
+    expect(manifest['name'], 'MobSanté — Incendies Gironde');
     expect(manifest['short_name'], 'MobSanté');
     expect(index, contains('name="application-name" content="MobSanté"'));
     expect(
@@ -24,7 +24,16 @@ void main() {
       contains('name="apple-mobile-web-app-title" content="MobSanté"'),
     );
     expect(index, isNot(contains('content="Recup33"')));
+    expect(index, contains('<title>MobSanté — Incendies Gironde</title>'));
     expect(pubspec, contains('version: ${AppIdentity.version}'));
+  });
+
+  testWidgets('Flutter application exposes the MobSanté title', (tester) async {
+    await tester.pumpWidget(const FireCoordinationApp());
+
+    final application = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(application.title, AppIdentity.productName);
+    expect(application.title, isNot(AppIdentity.technicalName));
   });
 
   testWidgets('About content is factual, provisional and responsive', (
@@ -52,7 +61,7 @@ void main() {
     expect(find.text('Version ${AppIdentity.version}'), findsOneWidget);
     expect(find.text('Confidentialité'), findsOneWidget);
     expect(find.text('Mentions légales'), findsOneWidget);
-    expect(find.textContaining('MB — VP URPS MK'), findsOneWidget);
+    expect(find.text(AppIdentity.designerCredit), findsOneWidget);
     expect(
       find.textContaining('application officielle de l’URPS'),
       findsNothing,
@@ -75,6 +84,35 @@ void main() {
     expect(credit.style?.fontSize, 11);
     expect(credit.style?.fontWeight, FontWeight.w400);
     expect(tester.takeException(), isNull);
+  });
+
+  test('active identity surfaces contain no obsolete visible branding', () {
+    final activeFiles = [
+      'lib/screens/splash_screen.dart',
+      'lib/app.dart',
+      'lib/screens/places_screen.dart',
+      'lib/screens/about_screen.dart',
+      'web/index.html',
+      'web/manifest.json',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
+
+    for (final obsolete in [
+      'InterfaceRecup33',
+      'Interface Récup',
+      'Interface Recup',
+      'Recup33',
+      'MobSante',
+      'Mob Santé',
+      'Version RC1',
+      'MB — VP URPS MK NA',
+    ]) {
+      expect(activeFiles, isNot(contains(obsolete)));
+    }
+    expect(AppIdentity.technicalName, 'InterfaceRecup33');
+    expect(
+      File('lib/app_entry.dart').readAsStringSync(),
+      contains('class MobSanteEntry'),
+    );
   });
 
   testWidgets('Plus opens About and the back action returns to Plus', (

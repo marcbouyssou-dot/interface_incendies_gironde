@@ -1,6 +1,8 @@
-# Logo HD officiel
+# Identité visuelle MobSanté
 
-Le fichier officiel utilisé par l’application est `logo_hd.png`.
+Le composant `BrandMark` utilise `logo_ui_256.png`, optimisé pour l’interface.
+Le fichier `logo_hd.png` reste la source haute définition et n’est pas embarqué
+dans le build Flutter.
 
 Le visuel doit réunir :
 
@@ -9,5 +11,4 @@ Le visuel doit réunir :
 - la signature URPS ;
 - la mention MK NA.
 
-Le composant `BrandMark` charge ce chemin par défaut. Sa taille reste contrainte
-par le widget.
+La taille d’affichage reste contrainte par le widget.

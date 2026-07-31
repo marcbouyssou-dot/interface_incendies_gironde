@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'config/app_identity.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/admin_invitation_repository_scope.dart';
 import 'repositories/mock_coordination_repository.dart';
@@ -22,7 +23,7 @@ class FireCoordinationApp extends StatelessWidget {
       child: AdminInvitationRepositoryScope(
         repository: coordinationRepository.adminInvitationRepository,
         child: MaterialApp(
-          title: 'Interface Récup',
+          title: AppIdentity.productName,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
           home: AppShell(initialIndex: initialTab),

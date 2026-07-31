@@ -32,10 +32,10 @@ class BrandMark extends StatelessWidget {
         : Image.asset(
             assetPath!,
             fit: BoxFit.contain,
-            semanticLabel: 'Logo casque et flamme URPS MK NA',
+            semanticLabel: 'Logo MobSanté',
           );
     return Semantics(
-      label: 'Logo casque et flamme',
+      label: 'Logo MobSanté',
       image: true,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(size * .22),

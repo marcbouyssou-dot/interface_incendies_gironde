@@ -1,4 +1,4 @@
-# Interface Récup
+# MobSanté — Incendies Gironde
 
 PWA Flutter de coordination en temps réel des professionnels volontaires.
 

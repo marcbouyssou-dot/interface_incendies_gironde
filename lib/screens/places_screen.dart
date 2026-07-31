@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_identity.dart';
 import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/coordination_repository.dart';
@@ -68,7 +69,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'URPS MK Nouvelle-Aquitaine',
+                  AppIdentity.productName,
                   style: TextStyle(
                     color: AppColors.navy,
                     fontSize: 13,
@@ -77,17 +78,12 @@ class _PlacesScreenState extends State<PlacesScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Version RC1',
+                  AppIdentity.productSubtitle,
                   style: TextStyle(
                     color: AppColors.navy,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  '2026',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
                 Card(

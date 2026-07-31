@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand_mark.dart';
 
@@ -18,7 +19,7 @@ class SplashScreen extends StatelessWidget {
               BrandMark(size: 92, onDarkBackground: true),
               SizedBox(height: 24),
               Text(
-                'InterfaceRecup33',
+                AppIdentity.productName,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 28,
@@ -28,7 +29,7 @@ class SplashScreen extends StatelessWidget {
               ),
               SizedBox(height: 7),
               Text(
-                'Incendies Gironde',
+                AppIdentity.productSubtitle,
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 15,

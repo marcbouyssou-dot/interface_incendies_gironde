@@ -1,11 +1,11 @@
-# Vision produit — InterfaceRecup33
+# Vision produit — MobSanté
 
-Nom court visible : **MobSanté**. Nom technique et historique :
+Nom du produit visible : **MobSanté**. Nom technique et historique :
 **InterfaceRecup33**.
 
 ## Objectif
 
-InterfaceRecup33 coordonne la mobilisation de professionnels de santé lors
+MobSanté coordonne la mobilisation de professionnels de santé lors
 d’incendies et, à terme, d’autres crises sanitaires en Gironde.
 
 L’application permet de publier des missions, de visualiser immédiatement les
@@ -13,7 +13,7 @@ besoins par profession et de confirmer la participation des volontaires. Son
 objectif est de faire parvenir rapidement les bonnes personnes, avec le bon
 matériel, sur les lieux qui en ont le plus besoin.
 
-InterfaceRecup33 ne remplace pas la chaîne de commandement ni les outils des
+MobSanté ne remplace pas la chaîne de commandement ni les outils des
 services de secours. Elle apporte une interface commune, ciblée sur la
 mobilisation des professionnels de santé volontaires et la couverture des
 besoins terrain.

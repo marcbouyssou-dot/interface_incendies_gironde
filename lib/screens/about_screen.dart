@@ -26,7 +26,7 @@ class AboutScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
             children: [
               Text(
-                AppIdentity.shortName,
+                AppIdentity.productName,
                 style: Theme.of(context).textTheme.headlineLarge,
               ),
               const SizedBox(height: 6),
@@ -77,7 +77,7 @@ class AboutScreen extends StatelessWidget {
               ),
               const SizedBox(height: 36),
               const Text(
-                AppIdentity.designCredit,
+                AppIdentity.designerCredit,
                 key: Key('design-credit'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
