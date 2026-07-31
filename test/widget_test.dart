@@ -114,6 +114,9 @@ void main() {
   ) async {
     await pumpIPhone(tester);
 
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect(navigation.destinations, hasLength(4));
+
     for (final label in ['Déclarer', 'Situation', 'Plus', 'Missions']) {
       await tester.tap(find.text(label).last);
       await tester.pumpAndSettle();

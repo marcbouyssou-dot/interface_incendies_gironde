@@ -9,6 +9,22 @@ import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 
+@visibleForTesting
+List<CoordinationNeed> missionsVisibleToResponsible({
+  required List<CoordinationNeed> missions,
+  required List<ResponsePlace> locations,
+  required ResponsibleAccess? access,
+}) {
+  if (access?.isSiteManager != true) return missions;
+  return missions
+      .where((mission) {
+        final location = responsePlaceForNeed(mission, locations);
+        final locationId = location?.id ?? mission.locationId;
+        return locationId != null && access!.locationIds.contains(locationId);
+      })
+      .toList(growable: false);
+}
+
 class CoordinationScreen extends StatefulWidget {
   const CoordinationScreen({super.key});
 
@@ -63,17 +79,25 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     List<ResponsePlace> locations,
     ResponsibleAccess? access,
   ) {
-    final critical = missions
+    final visibleMissions = missionsVisibleToResponsible(
+      missions: missions,
+      locations: locations,
+      access: access,
+    );
+    final critical = visibleMissions
         .where((need) => need.status == NeedStatus.critical)
         .length;
-    final incomplete = missions
+    final incomplete = visibleMissions
         .where((need) => need.status == NeedStatus.toComplete)
         .length;
-    final complete = missions
+    final complete = visibleMissions
         .where((need) => need.status == NeedStatus.complete)
         .length;
-    final required = missions.fold(0, (sum, item) => sum + item.requiredPeople);
-    final mobilized = missions.fold(
+    final required = visibleMissions.fold(
+      0,
+      (sum, item) => sum + item.requiredPeople,
+    );
+    final mobilized = visibleMissions.fold(
       0,
       (sum, item) => sum + item.registeredPeople,
     );
@@ -187,12 +211,15 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
             sliver: SliverList.separated(
-              itemCount: missions.length,
+              itemCount: visibleMissions.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) => _SituationRow(
-                key: ValueKey(missions[index].id),
-                need: missions[index],
-                location: responsePlaceForNeed(missions[index], locations),
+                key: ValueKey(visibleMissions[index].id),
+                need: visibleMissions[index],
+                location: responsePlaceForNeed(
+                  visibleMissions[index],
+                  locations,
+                ),
                 access: access,
               ),
             ),

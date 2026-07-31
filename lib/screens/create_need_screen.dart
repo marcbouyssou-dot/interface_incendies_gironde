@@ -66,10 +66,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         }
         final access = snapshot.data;
         if (access == null) {
-          return _ResponsibleLogin(repository: repository);
+          return ResponsibleLogin(repository: repository);
         }
         if (!access.active) {
-          return _ResponsibleLogin(
+          return ResponsibleLogin(
             repository: repository,
             initialMessage: 'Votre compte responsable est inactif.',
           );
@@ -404,17 +404,21 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   static String _two(int value) => value.toString().padLeft(2, '0');
 }
 
-class _ResponsibleLogin extends StatefulWidget {
-  const _ResponsibleLogin({required this.repository, this.initialMessage});
+class ResponsibleLogin extends StatefulWidget {
+  const ResponsibleLogin({
+    super.key,
+    required this.repository,
+    this.initialMessage,
+  });
 
   final CoordinationRepository repository;
   final String? initialMessage;
 
   @override
-  State<_ResponsibleLogin> createState() => _ResponsibleLoginState();
+  State<ResponsibleLogin> createState() => _ResponsibleLoginState();
 }
 
-class _ResponsibleLoginState extends State<_ResponsibleLogin> {
+class _ResponsibleLoginState extends State<ResponsibleLogin> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;

@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import 'administration_dashboard_screen.dart';
 import 'coordination_screen.dart';
-import 'create_need_screen.dart';
 import 'places_screen.dart';
 import 'slots_screen.dart';
 
@@ -50,7 +52,11 @@ class _AppShellState extends State<AppShell> {
 
   Widget _createScreen(int index) => switch (index) {
     0 => const SlotsScreen(),
-    1 => CreateNeedScreen(onViewMission: () => _selectTab(0)),
+    1 => AdministrationDashboardScreen(
+      onViewMission: () => _selectTab(0),
+      onOpenStatistics: () => _selectTab(2),
+      onRetryAccess: _refreshLiveData,
+    ),
     2 => const CoordinationScreen(),
     3 => const PlacesScreen(),
     _ => throw RangeError.index(index, _screens),
@@ -61,6 +67,12 @@ class _AppShellState extends State<AppShell> {
       _screens[index] ??= _createScreen(index);
       _currentIndex = index;
     });
+  }
+
+  void _refreshLiveData() {
+    final previous = _liveData;
+    setState(() => _liveData = LiveCoordinationData(_repository!));
+    if (previous != null) unawaited(previous.dispose());
   }
 
   @override

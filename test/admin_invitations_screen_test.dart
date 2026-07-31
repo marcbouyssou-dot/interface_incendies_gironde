@@ -40,7 +40,7 @@ void main() {
     );
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Plus'));
+    await tester.tap(find.text('Déclarer'));
     await tester.pumpAndSettle();
     return repository;
   }
@@ -50,7 +50,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('entry is visible only to an active coordinator', (tester) async {
+  testWidgets('dashboard entry is visible only to an active coordinator', (
+    tester,
+  ) async {
     await pumpApp(tester);
     expect(find.byKey(const Key('admin-invitations-entry')), findsOneWidget);
 
