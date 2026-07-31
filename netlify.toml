@@ -4,6 +4,7 @@
 
 [build.environment]
   FLUTTER_VERSION = "3.41.8"
+  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_PROJECT_ID"
 
 [[redirects]]
   from = "/*"
