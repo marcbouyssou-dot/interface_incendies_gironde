@@ -8,6 +8,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/location_multi_selector.dart';
 
 class AdminInvitationsScreen extends StatefulWidget {
   const AdminInvitationsScreen({super.key});
@@ -459,34 +460,27 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _searchController = TextEditingController();
   final Set<String> _selectedLocations = {};
   String _role = AdminInvitationDraft.siteManagerRole;
   int _expirationDays = 7;
   bool _submitting = false;
-  String _search = '';
 
-  List<ResponsePlace> get _availableLocations {
-    final query = _search.trim().toLowerCase();
-    final values = widget.locations
-        .where((location) => location.isOperational)
-        .where((location) {
-          if (query.isEmpty) return true;
-          final city = location.structuredAddress?.city ?? '';
-          return '${location.name} ${location.type.label} $city'
-              .toLowerCase()
-              .contains(query);
-        })
-        .toList();
-    values.sort((left, right) => left.name.compareTo(right.name));
-    return values;
-  }
+  bool get _hasValidIdentity =>
+      _nameController.text.trim().isNotEmpty &&
+      RegExp(
+        r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+      ).hasMatch(_emailController.text.trim());
+
+  bool get _canSubmit =>
+      !_submitting &&
+      _hasValidIdentity &&
+      (_role == AdminInvitationDraft.coordinatorRole ||
+          _selectedLocations.isNotEmpty);
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -494,12 +488,19 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Inviter un responsable')),
+      bottomNavigationBar: _InvitationSubmitBar(
+        submitting: _submitting,
+        enabled: _canSubmit,
+        onSubmit: _submit,
+      ),
       body: PageContainer(
         child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: ListView(
             key: const Key('admin-invitation-form'),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
             children: [
               TextFormField(
                 key: const Key('invitation-display-name'),
@@ -509,6 +510,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 validator: (value) => value == null || value.trim().isEmpty
                     ? 'Saisissez le nom du responsable.'
                     : null,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 14),
               TextFormField(
@@ -523,6 +525,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                       ? null
                       : 'Saisissez une adresse e-mail valide.';
                 },
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<String>(
@@ -564,55 +567,17 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 const SizedBox(height: 22),
                 const SectionTitle(title: 'Centres autorisés'),
                 const SizedBox(height: 10),
-                TextFormField(
-                  key: const Key('location-search'),
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    labelText: 'Rechercher un centre',
-                    prefixIcon: Icon(Icons.search_rounded),
-                  ),
-                  onChanged: (value) => setState(() => _search = value),
+                LocationMultiSelector(
+                  locations: widget.locations,
+                  selectedIds: _selectedLocations,
+                  enabled: !_submitting,
+                  onChanged: (selectedIds) => setState(() {
+                    _selectedLocations
+                      ..clear()
+                      ..addAll(selectedIds);
+                  }),
                 ),
-                const SizedBox(height: 8),
-                if (_selectedLocations.isEmpty)
-                  const Text(
-                    'Sélectionnez au moins un centre.',
-                    key: Key('location-selection-hint'),
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                  ),
-                ..._availableLocations.map((location) {
-                  final city = location.structuredAddress?.city?.trim();
-                  final details = [
-                    location.type.label,
-                    if (city != null && city.isNotEmpty) city,
-                  ].join(' · ');
-                  return CheckboxListTile(
-                    key: Key('invitation-location-${location.id}'),
-                    value: _selectedLocations.contains(location.id),
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(location.name),
-                    subtitle: Text(details),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    onChanged: (selected) => setState(() {
-                      if (selected == true) {
-                        _selectedLocations.add(location.id);
-                      } else {
-                        _selectedLocations.remove(location.id);
-                      }
-                    }),
-                  );
-                }),
               ],
-              const SizedBox(height: 22),
-              SizedBox(
-                height: 56,
-                child: FilledButton.icon(
-                  key: const Key('create-admin-invitation'),
-                  onPressed: _submitting ? null : _submit,
-                  icon: const Icon(Icons.send_rounded),
-                  label: Text(_submitting ? 'Création…' : 'Créer l’invitation'),
-                ),
-              ),
             ],
           ),
         ),
@@ -653,6 +618,54 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   String _messageFor(Object error) {
     if (error is FormatException) return error.message;
     return 'L’invitation n’a pas pu être créée. Réessayez.';
+  }
+}
+
+class _InvitationSubmitBar extends StatelessWidget {
+  const _InvitationSubmitBar({
+    required this.submitting,
+    required this.enabled,
+    required this.onSubmit,
+  });
+
+  final bool submitting;
+  final bool enabled;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 10,
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SafeArea(
+          top: false,
+          minimum: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          child: SizedBox(
+            height: 56,
+            child: FilledButton.icon(
+              key: const Key('create-admin-invitation'),
+              onPressed: enabled ? onSubmit : null,
+              icon: submitting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.send_rounded),
+              label: Text(submitting ? 'Création…' : 'Créer l’invitation'),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

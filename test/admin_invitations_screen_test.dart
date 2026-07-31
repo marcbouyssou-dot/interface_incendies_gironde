@@ -141,16 +141,19 @@ void main() {
     );
     final location = places.where((place) => place.isOperational).first;
     await tester.scrollUntilVisible(
-      find.byKey(Key('invitation-location-${location.id}')),
+      find.byKey(const Key('location-search')),
       250,
       scrollable: _scrollableInside(const Key('admin-invitation-form')),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(Key('invitation-location-${location.id}')),
+      120,
+      scrollable: _scrollableInside(const Key('location-selector-list')),
     );
     await tester.tap(find.byKey(Key('invitation-location-${location.id}')));
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('create-admin-invitation')),
-      250,
-      scrollable: _scrollableInside(const Key('admin-invitation-form')),
-    );
+    await tester.pump();
+    expect(find.byKey(const Key('create-admin-invitation')), findsOneWidget);
     await tester.tap(find.byKey(const Key('create-admin-invitation')));
     await tester.pumpAndSettle();
 
@@ -198,6 +201,88 @@ void main() {
         (await invitationsRepository.watchInvitations().first).single;
     expect(created.role, AdminInvitationDraft.coordinatorRole);
     expect(created.locationIds, isEmpty);
+  });
+
+  testWidgets(
+    'submit action stays visible and follows form validity on iPhone',
+    (tester) async {
+      await pumpApp(tester);
+      await openInvitations(tester);
+      await tester.tap(find.byKey(const Key('invite-admin-button')));
+      await tester.pumpAndSettle();
+
+      final submitFinder = find.byKey(const Key('create-admin-invitation'));
+      expect(submitFinder, findsOneWidget);
+      expect(tester.getRect(submitFinder).bottom, lessThanOrEqualTo(844));
+      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+
+      await tester.enterText(
+        find.byKey(const Key('invitation-display-name')),
+        'Responsable mobile',
+      );
+      await tester.enterText(
+        find.byKey(const Key('invitation-email')),
+        'mobile@mobsante.fr',
+      );
+      await tester.pump();
+      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+
+      final location = places.where((place) => place.isOperational).first;
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('location-search')),
+        250,
+        scrollable: _scrollableInside(const Key('admin-invitation-form')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('invitation-location-${location.id}')));
+      await tester.pump();
+      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+
+      await tester.tap(find.byKey(const Key('location-search')));
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(() => tester.view.viewInsets = FakeViewPadding.zero);
+      await tester.pumpAndSettle();
+      expect(submitFinder, findsOneWidget);
+      expect(tester.getRect(submitFinder).bottom, lessThanOrEqualTo(544));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('role and validity choices keep their existing behavior', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await openInvitations(tester);
+    await tester.tap(find.byKey(const Key('invite-admin-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('invitation-expiration')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('14 jours').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<int>>(
+            find.byKey(const Key('invitation-expiration')),
+          )
+          .initialValue,
+      14,
+    );
+    expect(find.text('14 jours'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('invitation-role')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('location-search')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('invitation-role')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Responsable de centre').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('location-search')), findsOneWidget);
+    expect(find.text('14 jours'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('pending invitation can be cancelled after confirmation', (
