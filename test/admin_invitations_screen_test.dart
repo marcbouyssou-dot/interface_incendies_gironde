@@ -108,7 +108,7 @@ void main() {
     await openInvitations(tester);
 
     expect(find.text('En attente'), findsOneWidget);
-    expect(find.text('Acceptée'), findsOneWidget);
+    expect(find.text('Compte préparé'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('invitation-card-cancelled')),
       250,
@@ -166,7 +166,8 @@ void main() {
     expect(created.status, AdminInvitationStatus.pending);
     expect(
       find.text(
-        'Invitation créée. L’envoi de l’email sera activé dans une prochaine étape.',
+        'Invitation créée. Préparez maintenant le compte pour envoyer '
+        'l’e-mail d’activation.',
       ),
       findsOneWidget,
     );
@@ -315,7 +316,7 @@ void main() {
     expect(find.byKey(const Key('cancel-invitation-pending')), findsNothing);
   });
 
-  testWidgets('provisioning is confirmed, single and never claims email sent', (
+  testWidgets('provisioning confirms immediate activation email delivery', (
     tester,
   ) async {
     final repository = _ProvisionInvitationRepository(
@@ -331,7 +332,12 @@ void main() {
     await tester.tap(find.byKey(const Key('provision-invitation-pending')));
     await tester.pumpAndSettle();
     expect(find.text('Préparer ce compte ?'), findsOneWidget);
-    expect(find.textContaining('Aucun e-mail ne sera envoyé'), findsOneWidget);
+    expect(
+      find.textContaining('envoie immédiatement l’e-mail d’activation'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Aucun e-mail ne sera envoyé'), findsNothing);
+    expect(find.textContaining('idempotente'), findsOneWidget);
     await tester.tap(find.byKey(const Key('confirm-provision-invitation')));
     await tester.pump();
 
@@ -343,12 +349,11 @@ void main() {
     repository.complete();
     await tester.pumpAndSettle();
     expect(
-      find.text(
-        'Compte préparé. L’envoi automatique de l’invitation sera activé prochainement.',
-      ),
+      find.text('Compte préparé et e-mail d’activation envoyé.'),
       findsOneWidget,
     );
-    expect(find.textContaining('e-mail envoyé'), findsNothing);
+    expect(find.textContaining('compte activé'), findsNothing);
+    expect(find.textContaining('Compte activé'), findsNothing);
   });
 
   testWidgets('provisioning error is explicit and keeps the pending action', (
@@ -456,7 +461,7 @@ class _ProvisionInvitationRepository implements AdminInvitationRepository {
   void complete() => _completer.complete(
     const AdminProvisioningResult(
       accountProvisioned: true,
-      emailDelivery: 'pending',
+      emailDelivery: 'sent',
       alreadyProvisioned: false,
     ),
   );

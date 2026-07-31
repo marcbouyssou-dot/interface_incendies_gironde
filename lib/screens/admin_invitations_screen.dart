@@ -123,7 +123,8 @@ class _CoordinatorInvitationsContentState
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Invitation créée. L’envoi de l’email sera activé dans une prochaine étape.',
+          'Invitation créée. Préparez maintenant le compte pour envoyer '
+          'l’e-mail d’activation.',
         ),
       ),
     );
@@ -237,8 +238,10 @@ class _CoordinatorInvitationsContentState
       builder: (context) => AlertDialog(
         title: const Text('Préparer ce compte ?'),
         content: const Text(
-          'Le compte Firebase Auth et son rôle seront préparés. '
-          'Aucun e-mail ne sera envoyé à cette étape.',
+          'Cette action prépare le compte responsable et envoie immédiatement '
+          'l’e-mail d’activation.\n\n'
+          'L’action est idempotente : un compte déjà préparé ne sera pas '
+          'recréé.',
         ),
         actions: [
           TextButton(
@@ -260,9 +263,7 @@ class _CoordinatorInvitationsContentState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Compte préparé. L’envoi automatique de l’invitation sera activé prochainement.',
-          ),
+          content: Text('Compte préparé et e-mail d’activation envoyé.'),
         ),
       );
     } catch (_) {
@@ -383,7 +384,7 @@ class _InvitationStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
       AdminInvitationStatus.pending => ('En attente', AppColors.orange),
-      AdminInvitationStatus.accepted => ('Acceptée', AppColors.green),
+      AdminInvitationStatus.accepted => ('Compte préparé', AppColors.green),
       AdminInvitationStatus.expired => ('Expirée', AppColors.textMuted),
       AdminInvitationStatus.cancelled => ('Annulée', AppColors.red),
     };
