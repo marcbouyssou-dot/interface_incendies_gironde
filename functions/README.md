@@ -92,10 +92,11 @@ est isolée dans `notifications/create_notification_service.js` :
 - la callable déclare explicitement ce secret dans ses options Functions v2.
 
 Le mode est explicite : `fake` pour `demo-mobsante` et `resend` pour
-`mobilisation-sante`. En mode `fake`, aucun `SecretParam` n’est déclaré et le
-CLI Emulator ne contacte pas Secret Manager. Le mode `fake` est refusé hors
-Emulator. En mode `resend`, `defineSecret('RESEND_API_KEY')` est déclaré et lié
-uniquement à la callable.
+`mobilisation-sante`. Pendant la découverte Emulator, le marqueur
+`FUNCTIONS_EMULATOR` empêche de déclarer un `SecretParam` : le CLI ne contacte
+donc pas Secret Manager. Le mode `fake` reste refusé hors Emulator. Hors
+Emulator, `defineSecret('RESEND_API_KEY')` est déclaré et lié uniquement à la
+callable ; la configuration `resend` de production l’utilise à l’exécution.
 
 Les champs persistés sont limités à `notificationStatus`,
 `notificationSentAt` ou `notificationFailedAt`, `notificationProvider`,

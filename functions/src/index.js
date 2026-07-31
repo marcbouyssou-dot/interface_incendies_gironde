@@ -19,7 +19,8 @@ const emailFrom = defineString('MOBSANTE_EMAIL_FROM');
 const emailFromName = defineString('MOBSANTE_EMAIL_FROM_NAME', {default: ''});
 const emailReplyTo = defineString('MOBSANTE_EMAIL_REPLY_TO', {default: ''});
 const notificationMode = defineString('MOBSANTE_NOTIFICATION_MODE');
-const resendApiKey = process.env.MOBSANTE_NOTIFICATION_MODE === 'fake'
+const isFunctionsEmulator = process.env.FUNCTIONS_EMULATOR === 'true';
+const resendApiKey = isFunctionsEmulator
   ? null
   : defineSecret('RESEND_API_KEY');
 const injectedEmulatorFailures = new Set();
@@ -34,7 +35,7 @@ export const provisionAdminInvitation = onCall(
     try {
       const firestore = getFirestore();
       const auth = getAuth();
-      const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true';
+      const isEmulator = isFunctionsEmulator;
       const configuredAppUrl = appUrl.value();
       const configuredNotificationMode = notificationMode.value();
       if (
