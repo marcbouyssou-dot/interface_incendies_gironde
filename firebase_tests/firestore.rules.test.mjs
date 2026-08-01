@@ -27,6 +27,9 @@ const blankLocationIdVectors = [
   '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200A', '\u2028',
   '\u2029', '\u202F', '\u205F', '\u3000', '\uFEFF',
 ];
+const hourInMilliseconds = 60 * 60 * 1000;
+const missionStartDelayInHours = 24;
+const missionDurationInHours = 4;
 
 before(async () => {
   env = await initializeTestEnvironment({
@@ -106,13 +109,18 @@ async function createMissionFor(uid, id, locationId = 'site-a') {
 }
 
 function mission(overrides = {}) {
+  const startAt = Timestamp.fromMillis(
+    Date.now() + missionStartDelayInHours * hourInMilliseconds,
+  );
   return {
     id: 'mission-a',
     locationId: 'site-a',
     locationName: 'Site A',
     territorialGroup: 'medoc',
-    startAt: Timestamp.fromDate(new Date('2026-08-01T08:00:00Z')),
-    endAt: Timestamp.fromDate(new Date('2026-08-01T12:00:00Z')),
+    startAt,
+    endAt: Timestamp.fromMillis(
+      startAt.toMillis() + missionDurationInHours * hourInMilliseconds,
+    ),
     requiredMk: 2,
     requiredPp: 1,
     registeredMk: 0,
@@ -355,9 +363,14 @@ test('missions: invalid manager, quotas, counters, dates and extra fields denied
   await assertFails(setDoc(doc(db('coord'), 'missions/x3'), mission({
     id: 'x3', registeredMk: 1,
   })));
-  await assertFails(setDoc(doc(db('coord'), 'missions/x4'), mission({
-    id: 'x4', endAt: Timestamp.fromDate(new Date('2026-08-01T07:00:00Z')),
-  })));
+  const invalidDatesMission = mission({id: 'x4'});
+  invalidDatesMission.endAt = Timestamp.fromMillis(
+    invalidDatesMission.startAt.toMillis() - hourInMilliseconds,
+  );
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/x4'),
+    invalidDatesMission,
+  ));
   await assertFails(setDoc(doc(db('coord'), 'missions/x5'), mission({
     id: 'x5', secret: true,
   })));
