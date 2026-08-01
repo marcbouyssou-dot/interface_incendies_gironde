@@ -16,8 +16,10 @@ import {
   httpsCallable,
 } from 'firebase/functions';
 
+import {adminServices} from '../../src/index.js';
+
 const projectId = 'demo-mobsante';
-const adminApp = initializeAdminApp({projectId});
+const adminApp = initializeAdminApp({projectId}, 'provisioning-emulator-tests');
 const adminAuth = getAdminAuth(adminApp);
 const db = getAdminFirestore(adminApp);
 const clientApps = [];
@@ -217,6 +219,49 @@ test('active cumulative V2 coordinator can provision an invitation', async () =>
   await seedInvitation(id);
   const response = await callable({invitationId: id});
   assert.equal(response.data.invitationStatus, 'accepted');
+});
+
+test('provisioning transaction refuses a coordinator revoked after authorization', async () => {
+  const callerUid = unique('revoked-coordinator');
+  const targetUid = unique('revoked-target');
+  const invitationId = unique('revoked-invitation');
+  const invitation = await seedInvitation(invitationId, {
+    createdBy: callerUid,
+  });
+  await db.collection('roles').doc(callerUid).set({
+    role: 'coordinator',
+    active: false,
+    locationIds: [],
+  });
+
+  const services = adminServices({firestore: db, auth: adminAuth});
+  await assert.rejects(
+    services.commitProvisioning({
+      invitationId,
+      targetUid,
+      expectedInvitation: invitation,
+      createdBy: callerUid,
+      timestamps: {
+        acceptedAt: Timestamp.now(),
+        provisionedAt: Timestamp.now(),
+        activationLinkGeneratedAt: Timestamp.now(),
+      },
+    }),
+    (error) => {
+      assert.equal(error.code, 'permission-denied');
+      return true;
+    },
+  );
+
+  const unchangedInvitation = (
+    await db.collection('adminInvitations').doc(invitationId).get()
+  ).data();
+  assert.equal(unchangedInvitation.status, 'pending');
+  assert.equal('acceptedUid' in unchangedInvitation, false);
+  assert.equal(
+    (await db.collection('roles').doc(targetUid).get()).exists,
+    false,
+  );
 });
 
 for (const [label, overrides, code] of [

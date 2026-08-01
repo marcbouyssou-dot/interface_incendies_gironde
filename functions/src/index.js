@@ -9,6 +9,7 @@ import {
   provisionAdminInvitation as provision,
 } from './provision_admin_invitation.js';
 import {
+  hasActiveCoordinatorRole,
   mergeResponsibleAccess,
   normalizeRequestedAssignment,
 } from './responsible_access.js';
@@ -122,10 +123,22 @@ export function adminServices({
           .collection('adminInvitations')
           .doc(invitationId);
         const roleRef = firestore.collection('roles').doc(targetUid);
-        const [invitationSnapshot, roleSnapshot] = await Promise.all([
-          transaction.get(invitationRef),
-          transaction.get(roleRef),
-        ]);
+        const callerRoleRef = firestore.collection('roles').doc(createdBy);
+        const [invitationSnapshot, roleSnapshot, callerRoleSnapshot] =
+          await Promise.all([
+            transaction.get(invitationRef),
+            transaction.get(roleRef),
+            transaction.get(callerRoleRef),
+          ]);
+        if (
+          !callerRoleSnapshot.exists
+          || !hasActiveCoordinatorRole(callerRoleSnapshot.data())
+        ) {
+          throw new ProvisioningError(
+            'permission-denied',
+            'Accès coordinateur actif requis.',
+          );
+        }
         const current = invitationSnapshot.data();
         if (
           !invitationSnapshot.exists
