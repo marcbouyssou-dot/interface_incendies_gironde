@@ -89,21 +89,37 @@ async function client({
 }
 
 function pendingInvitation(overrides = {}) {
-  return {
+  const timestamp = Timestamp.now();
+  const base = {
     email: email('target'),
     displayName: 'Camille Martin',
     role: 'site_manager',
     locationIds: ['merignac'],
     createdBy: 'coordinator',
-    createdAt: Timestamp.now(),
+    createdAt: timestamp,
     expiresAt: Timestamp.fromDate(new Date(Date.now() + 3_600_000)),
     status: 'pending',
-    ...overrides,
+    acceptedAt: null,
   };
+  if (overrides.status === 'accepted') {
+    Object.assign(base, {
+      status: 'accepted',
+      acceptedAt: timestamp,
+      acceptedUid: 'existing-target',
+      provisionedAt: timestamp,
+      activationLinkGeneratedAt: timestamp,
+    });
+  }
+  return {...base, ...overrides};
 }
 
 async function seedInvitation(id, overrides = {}) {
   const value = pendingInvitation(overrides);
+  await db.collection('adminInvitations').doc(id).set(value);
+  return value;
+}
+
+async function seedRawInvitation(id, value) {
   await db.collection('adminInvitations').doc(id).set(value);
   return value;
 }
@@ -132,6 +148,21 @@ async function assertCallableCode(action, expected) {
     assert.equal(error.code, `functions/${expected}`);
     return true;
   });
+}
+
+async function assertNoProvisioningEffects({callable, id, value, code}) {
+  const before = (
+    await db.collection('adminInvitations').doc(id).get()
+  ).data();
+  await assertCallableCode(() => callable({invitationId: id}), code);
+  await assert.rejects(
+    () => adminAuth.getUserByEmail(value.email),
+    (error) => error.code === 'auth/user-not-found',
+  );
+  const after = (
+    await db.collection('adminInvitations').doc(id).get()
+  ).data();
+  assert.deepEqual(after, before);
 }
 
 before(() => {
@@ -223,6 +254,31 @@ test('unknown invitation is refused', async () => {
     'not-found',
   );
 });
+
+for (const [label, mutate, code] of [
+  ['unknown field', (value) => Object.assign(value, {roles: ['coordinator']}), 'failed-precondition'],
+  ['missing createdBy', (value) => delete value.createdBy, 'failed-precondition'],
+  ['invalid createdAt type', (value) => Object.assign(value, {createdAt: '2026-07-30'}), 'failed-precondition'],
+  ['incoherent expiresAt', (value) => Object.assign(value, {expiresAt: value.createdAt}), 'failed-precondition'],
+  ['incoherent acceptedAt', (value) => Object.assign(value, {acceptedAt: Timestamp.now()}), 'failed-precondition'],
+  ['Unicode blank displayName', (value) => Object.assign(value, {displayName: '\u0085'}), 'failed-precondition'],
+  ['unknown status', (value) => Object.assign(value, {status: 'queued'}), 'failed-precondition'],
+  ['cancelled status', (value) => Object.assign(value, {status: 'cancelled'}), 'failed-precondition'],
+  ['expired invitation', (value) => {
+    const current = Date.now();
+    value.createdAt = Timestamp.fromMillis(current - 7_200_000);
+    value.expiresAt = Timestamp.fromMillis(current - 3_600_000);
+  }, 'failed-precondition'],
+]) {
+  test(`${label} is refused before every Auth or Firestore effect`, async () => {
+    const callable = await coordinator();
+    const id = unique('invalid-raw-invitation');
+    const value = pendingInvitation();
+    mutate(value);
+    await seedRawInvitation(id, value);
+    await assertNoProvisioningEffects({callable, id, value, code});
+  });
+}
 
 test('active cumulative V2 coordinator can provision an invitation', async () => {
   const callable = await client({
@@ -472,13 +528,13 @@ for (const [label, overrides, code] of [
     {expiresAt: Timestamp.fromMillis(Date.now() - 60_000)},
     'failed-precondition',
   ],
-  ['invalid email', {email: 'invalid'}, 'invalid-argument'],
-  ['invalid role', {role: 'administrator'}, 'invalid-argument'],
-  ['site manager without location', {locationIds: []}, 'invalid-argument'],
+  ['invalid email', {email: 'invalid'}, 'failed-precondition'],
+  ['invalid role', {role: 'administrator'}, 'failed-precondition'],
+  ['site manager without location', {locationIds: []}, 'failed-precondition'],
   [
     'coordinator with locations',
     {role: 'coordinator', locationIds: ['merignac']},
-    'invalid-argument',
+    'failed-precondition',
   ],
 ]) {
   test(`${label} is refused`, async () => {

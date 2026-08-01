@@ -5,6 +5,9 @@ import {HttpsError, onCall} from 'firebase-functions/v2/https';
 import {defineSecret, defineString} from 'firebase-functions/params';
 
 import {
+  normalizeAdminInvitationEmail,
+} from './admin_invitation_validation.js';
+import {
   ProvisioningError,
   provisionAdminInvitation as provision,
 } from './provision_admin_invitation.js';
@@ -146,7 +149,8 @@ export function adminServices({
           invitationSnapshot.exists
           && current.status === 'accepted'
           && current.acceptedUid === targetUid
-          && current.email === expectedInvitation.email
+          && normalizeAdminInvitationEmail(current.email)
+            === expectedInvitation.email
           && current.role === expectedInvitation.role
           && sameRequestedLocations(current, expectedInvitation)
           && existingRole !== null
@@ -157,7 +161,8 @@ export function adminServices({
         if (
           !invitationSnapshot.exists
           || current.status !== 'pending'
-          || current.email !== expectedInvitation.email
+          || normalizeAdminInvitationEmail(current.email)
+            !== expectedInvitation.email
           || current.role !== expectedInvitation.role
           || !sameRequestedLocations(current, expectedInvitation)
         ) {

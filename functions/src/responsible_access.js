@@ -6,6 +6,10 @@ const RULES_LIST_SEPARATOR = '\u001f';
 const BLANK_LOCATION_ID_PATTERN =
   /^[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]*$/u;
 
+export function isCanonicalBlankText(value) {
+  return typeof value === 'string' && BLANK_LOCATION_ID_PATTERN.test(value);
+}
+
 export class ResponsibleAccessError extends Error {
   constructor(code, message) {
     super(message);
@@ -149,7 +153,7 @@ function normalizeLocationIds(value, errorFactory = malformedRole) {
   }
   if (value.some((item) =>
     typeof item !== 'string'
-    || BLANK_LOCATION_ID_PATTERN.test(item)
+    || isCanonicalBlankText(item)
     || item === '*'
     || item.includes(RULES_LIST_SEPARATOR))) {
     throw errorFactory();

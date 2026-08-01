@@ -21,15 +21,27 @@ const BLANK_LOCATION_ID_VECTORS = [
 ];
 
 function invitation(overrides = {}) {
-  return {
+  const base = {
     email: 'responsable@example.fr',
     displayName: 'Camille Martin',
     role: 'site_manager',
     locationIds: ['site-a', 'site-b'],
+    createdBy: 'coord',
+    createdAt: new Date('2026-07-30T09:00:00.000Z'),
     status: 'pending',
+    acceptedAt: null,
     expiresAt: new Date('2026-08-06T10:00:00.000Z'),
-    ...overrides,
   };
+  if (overrides.status === 'accepted') {
+    Object.assign(base, {
+      status: 'accepted',
+      acceptedAt: now,
+      acceptedUid: 'existing-uid',
+      provisionedAt: now,
+      activationLinkGeneratedAt: now,
+    });
+  }
+  return {...base, ...overrides};
 }
 
 function locations(start, count) {
@@ -74,6 +86,7 @@ function harness({
     notificationReservations: [],
     notificationSent: [],
     notificationFailed: [],
+    authLookups: 0,
   };
   const services = {
     async getRole(uid) {
@@ -83,6 +96,7 @@ function harness({
       return state.invitation;
     },
     async getUserByEmail() {
+      state.authLookups += 1;
       if (!state.user) {
         const error = new Error('missing');
         error.code = 'auth/user-not-found';
@@ -128,6 +142,10 @@ function harness({
         ...state.invitation,
         status: 'accepted',
         acceptedUid: value.targetUid,
+        acceptedAt: value.timestamps.acceptedAt,
+        provisionedAt: value.timestamps.provisionedAt,
+        activationLinkGeneratedAt:
+          value.timestamps.activationLinkGeneratedAt,
         notificationStatus: 'pending',
       };
     },
@@ -230,6 +248,26 @@ async function rejectsCode(action, code) {
   });
 }
 
+async function rejectsReason(action, reason) {
+  await assert.rejects(action, (error) => {
+    assert.ok(error instanceof ProvisioningError);
+    assert.equal(error.code, 'failed-precondition');
+    assert.equal(error.reason, reason);
+    return true;
+  });
+}
+
+function assertNoProvisioningEffects(state, invitationBefore) {
+  assert.equal(state.authLookups, 0);
+  assert.deepEqual(state.created, []);
+  assert.deepEqual(state.links, []);
+  assert.deepEqual(state.commits, []);
+  assert.deepEqual(state.notificationReservations, []);
+  assert.deepEqual(state.notifications, []);
+  assert.equal(state.role, undefined);
+  assert.deepEqual(state.invitation, invitationBefore);
+}
+
 test('unauthenticated caller is refused', async () => {
   const {services, notificationService} = harness();
   await rejectsCode(
@@ -314,6 +352,71 @@ test('unknown invitation is refused', async () => {
   );
 });
 
+for (const [label, invitationValue, reason] of [
+  [
+    'unknown field',
+    invitation({roles: ['coordinator']}),
+    'invalid-admin-invitation',
+  ],
+  [
+    'invalid creator',
+    invitation({createdBy: '\u0085'}),
+    'invalid-admin-invitation',
+  ],
+  [
+    'invalid created timestamp',
+    invitation({createdAt: '2026-07-30'}),
+    'invalid-admin-invitation',
+  ],
+  [
+    'incoherent acceptedAt',
+    invitation({acceptedAt: now}),
+    'invalid-admin-invitation',
+  ],
+  [
+    'blank display name',
+    invitation({displayName: '\u0085'}),
+    'invalid-admin-invitation',
+  ],
+  [
+    'unknown status',
+    invitation({status: 'queued'}),
+    'invalid-admin-invitation',
+  ],
+  [
+    'expired invitation',
+    invitation({expiresAt: now}),
+    'admin-invitation-expired',
+  ],
+  [
+    'cancelled invitation',
+    invitation({status: 'cancelled'}),
+    'admin-invitation-cancelled',
+  ],
+  [
+    'invalid scope',
+    invitation({locationIds: []}),
+    'invalid-admin-invitation',
+  ],
+]) {
+  test(`${label} has zero Auth, Firestore or notification effects`, async () => {
+    const value = harness({invitationValue});
+    const invitationBefore = structuredClone(invitationValue);
+    await rejectsReason(
+      () => provisionAdminInvitation({
+        invitationId: 'invitation-a',
+        callerUid: 'coord',
+        services: value.services,
+        notificationService: value.notificationService,
+        appUrl,
+        now,
+      }),
+      reason,
+    );
+    assertNoProvisioningEffects(value.state, invitationBefore);
+  });
+}
+
 test('blank invitation location is refused before Auth or Firestore writes', async () => {
   for (const locationId of [
     ...BLANK_LOCATION_ID_VECTORS,
@@ -332,7 +435,7 @@ test('blank invitation location is refused before Auth or Firestore writes', asy
         appUrl,
         now,
       }),
-      'invalid-argument',
+      'failed-precondition',
     );
 
     assert.equal(value.state.created.length, 0);
@@ -376,7 +479,7 @@ for (const [label, value] of [
   });
 }
 
-test('accepted invitation is idempotent', async () => {
+test('accepted sent invitation without providerMessageId stays terminal', async () => {
   const {state, result} = await provision({
     invitationValue: invitation({
       status: 'accepted',
@@ -385,6 +488,7 @@ test('accepted invitation is idempotent', async () => {
     }),
   });
   assert.equal(result.alreadyProvisioned, true);
+  assert.equal(state.authLookups, 0);
   assert.equal(state.created.length, 0);
   assert.equal(state.commits.length, 0);
   assert.equal(state.links.length, 0);
@@ -655,6 +759,10 @@ test('concurrent provisioning never deletes an adopted new Auth account', async 
         ...current,
         status: 'accepted',
         acceptedUid: value.targetUid,
+        acceptedAt: value.timestamps.acceptedAt,
+        provisionedAt: value.timestamps.provisionedAt,
+        activationLinkGeneratedAt:
+          value.timestamps.activationLinkGeneratedAt,
         notificationStatus: 'pending',
       });
     },
@@ -685,7 +793,14 @@ test('concurrent provisioning never deletes an adopted new Auth account', async 
       invitations.set(value.invitationId, {
         ...current,
         notificationStatus: 'sent',
+        notificationSentAt: value.sentAt,
+        notificationProvider: value.provider,
+        notificationProviderMessageId: value.providerMessageId,
       });
+      const sent = invitations.get(value.invitationId);
+      delete sent.notificationAttemptId;
+      delete sent.notificationReservedAt;
+      delete sent.notificationLeaseExpiresAt;
       return {state: 'sent'};
     },
     async markNotificationFailed() {},

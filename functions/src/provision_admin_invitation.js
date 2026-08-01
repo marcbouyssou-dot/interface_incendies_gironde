@@ -1,13 +1,16 @@
 import {createHash, randomUUID} from 'node:crypto';
 
 import {
+  AdminInvitationValidationCode,
+  AdminInvitationValidationError,
+  validateProvisionableAdminInvitation,
+} from './admin_invitation_validation.js';
+
+import {
   hasActiveCoordinatorRole,
-  normalizeRequestedAssignment,
   ResponsibleAccessError,
 } from './responsible_access.js';
 
-const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const ALLOWED_ROLES = new Set(['site_manager', 'coordinator']);
 export const NOTIFICATION_LEASE_DURATION_MS = 5 * 60 * 1000;
 
 export class ProvisioningError extends Error {
@@ -15,6 +18,7 @@ export class ProvisioningError extends Error {
     super(message, options);
     this.name = 'ProvisioningError';
     this.code = code;
+    this.reason = options.reason;
   }
 }
 
@@ -39,23 +43,23 @@ export async function provisionAdminInvitation({
     );
   }
 
-  const invitation = await services.getInvitation(invitationId);
-  if (!invitation) {
+  const rawInvitation = await services.getInvitation(invitationId);
+  if (!rawInvitation) {
     throw new ProvisioningError('not-found', 'Invitation introuvable.');
   }
+  let invitation;
+  try {
+    invitation = validateProvisionableAdminInvitation(rawInvitation, {now});
+  } catch (error) {
+    throw normalizedInvitationValidationError(error);
+  }
   let alreadyProvisioned = invitation.status === 'accepted'
-    && typeof invitation.acceptedUid === 'string'
-    && invitation.acceptedUid !== '';
+    && typeof invitation.acceptedUid === 'string';
   if (alreadyProvisioned && invitation.notificationStatus === 'sent') {
     return safeResult({
       alreadyProvisioned: true,
       emailDelivery: 'sent',
     });
-  }
-  if (alreadyProvisioned) {
-    validateInvitationData(invitation);
-  } else {
-    validateInvitation(invitation, now);
   }
   if (!notificationService || typeof notificationService.send !== 'function') {
     throw new ProvisioningError(
@@ -305,41 +309,6 @@ function invalidGeneratedActivationLink() {
   );
 }
 
-function validateInvitation(invitation, now) {
-  if (invitation.status !== 'pending') {
-    throw new ProvisioningError(
-      'failed-precondition',
-      'Cette invitation n’est plus en attente.',
-    );
-  }
-  const expiresAt = asDate(invitation.expiresAt);
-  if (!expiresAt || expiresAt <= now) {
-    throw new ProvisioningError('failed-precondition', 'Invitation expirée.');
-  }
-  validateInvitationData(invitation);
-}
-
-function validateInvitationData(invitation) {
-  invitation.email = normalizedEmail(invitation.email);
-  if (!EMAIL_PATTERN.test(invitation.email)) {
-    throw new ProvisioningError('invalid-argument', 'Adresse e-mail invalide.');
-  }
-  if (!ALLOWED_ROLES.has(invitation.role)) {
-    throw new ProvisioningError('invalid-argument', 'Rôle invalide.');
-  }
-  try {
-    const assignment = normalizeRequestedAssignment(invitation);
-    invitation.locationIds = [...assignment.locationIds];
-  } catch (error) {
-    if (!(error instanceof ResponsibleAccessError)) throw error;
-    throw new ProvisioningError(
-      'invalid-argument',
-      'Périmètre de centres incohérent.',
-      {cause: error},
-    );
-  }
-}
-
 async function getOrCreateUser({services, invitation}) {
   try {
     return await services.getUserByEmail(invitation.email);
@@ -386,6 +355,29 @@ function normalizedAccessError(error) {
     'failed-precondition',
     'Le rôle existant ne peut pas être modifié automatiquement.',
     {cause: error},
+  );
+}
+
+function normalizedInvitationValidationError(error) {
+  if (!(error instanceof AdminInvitationValidationError)) return error;
+  if (error.reason === AdminInvitationValidationCode.expired) {
+    return new ProvisioningError(
+      'failed-precondition',
+      'Invitation expirée.',
+      {cause: error, reason: error.reason},
+    );
+  }
+  if (error.reason === AdminInvitationValidationCode.cancelled) {
+    return new ProvisioningError(
+      'failed-precondition',
+      'Cette invitation a été annulée.',
+      {cause: error, reason: error.reason},
+    );
+  }
+  return new ProvisioningError(
+    'failed-precondition',
+    'Cette invitation ne peut pas être préparée.',
+    {cause: error, reason: error.reason},
   );
 }
 
