@@ -75,6 +75,7 @@ class FirestoreSeedService {
           'contactPhone': location.contactPhone!.trim(),
         'activeNeeds': location.activeNeeds,
         'isOperational': location.isOperational,
+        'active': true,
         if (address != null) ...{
           'addressLine1': address.addressLine1,
           'addressLine2': address.addressLine2,

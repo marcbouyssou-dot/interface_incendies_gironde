@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'admin_invitations_screen.dart';
 import 'create_need_screen.dart';
+import 'location_administration_screen.dart';
 
 class AdministrationDashboardScreen extends StatefulWidget {
   const AdministrationDashboardScreen({
@@ -161,6 +162,14 @@ class _AdministrationDashboard extends StatelessWidget {
     );
   }
 
+  void _openLocations(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const LocationAdministrationScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PageContainer(
@@ -190,6 +199,15 @@ class _AdministrationDashboard extends StatelessWidget {
             onTap: () => _openCreateNeed(context),
           ),
           if (access.isCoordinator) ...[
+            const SizedBox(height: 12),
+            _AdministrationActionCard(
+              key: const Key('admin-locations-entry'),
+              semanticLabel: 'Ouvrir la gestion des lieux',
+              icon: Icons.location_city_outlined,
+              title: 'Lieux',
+              description: 'Créer, modifier et désactiver les centres',
+              onTap: () => _openLocations(context),
+            ),
             const SizedBox(height: 12),
             _AdministrationActionCard(
               key: const Key('admin-invitations-entry'),

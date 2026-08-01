@@ -216,6 +216,7 @@ class ResponsePlace {
     this.contactName,
     this.contactPhone,
     this.isOperational = true,
+    this.isEnabled = true,
   });
 
   final String id;
@@ -227,6 +228,7 @@ class ResponsePlace {
   final String? contactName;
   final String? contactPhone;
   final bool isOperational;
+  final bool isEnabled;
   final int activeNeeds;
 
   bool get isActive => activeNeeds > 0;

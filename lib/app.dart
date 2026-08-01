@@ -4,6 +4,7 @@ import 'config/app_identity.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/admin_invitation_repository_scope.dart';
 import 'repositories/mock_coordination_repository.dart';
+import 'repositories/location_administration_repository_scope.dart';
 import 'repositories/repository_scope.dart';
 import 'repositories/responsible_access_administration_repository_scope.dart';
 import 'screens/app_shell.dart';
@@ -23,14 +24,17 @@ class FireCoordinationApp extends StatelessWidget {
       repository: coordinationRepository,
       child: AdminInvitationRepositoryScope(
         repository: coordinationRepository.adminInvitationRepository,
-        child: ResponsibleAccessAdministrationRepositoryScope(
-          repository:
-              coordinationRepository.responsibleAccessAdministrationRepository,
-          child: MaterialApp(
-            title: AppIdentity.productName,
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            home: AppShell(initialIndex: initialTab),
+        child: LocationAdministrationRepositoryScope(
+          repository: coordinationRepository.locationAdministrationRepository,
+          child: ResponsibleAccessAdministrationRepositoryScope(
+            repository: coordinationRepository
+                .responsibleAccessAdministrationRepository,
+            child: MaterialApp(
+              title: AppIdentity.productName,
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.light,
+              home: AppShell(initialIndex: initialTab),
+            ),
           ),
         ),
       ),

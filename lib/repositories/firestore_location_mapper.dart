@@ -26,6 +26,7 @@ abstract final class FirestoreLocationMapper {
       contactName: data['contactName'] as String?,
       contactPhone: data['contactPhone'] as String?,
       isOperational: data['isOperational'] as bool? ?? true,
+      isEnabled: data['active'] as bool? ?? true,
     );
   }
 

@@ -56,7 +56,7 @@ class _LocationMultiSelectorState extends State<LocationMultiSelector> {
   }
 
   List<ResponsePlace> get _availableLocations => widget.locations
-      .where((location) => location.isOperational)
+      .where((location) => location.isOperational && location.isEnabled)
       .toList(growable: false);
 
   List<ResponsePlace> get _filteredLocations {

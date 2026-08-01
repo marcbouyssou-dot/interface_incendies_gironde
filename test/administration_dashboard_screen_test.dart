@@ -10,6 +10,7 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/admin_invitations_screen.dart';
 import 'package:interface_incendies_gironde/screens/coordination_screen.dart';
+import 'package:interface_incendies_gironde/screens/location_administration_screen.dart';
 
 void main() {
   const coordinator = ResponsibleAccess(
@@ -117,12 +118,24 @@ void main() {
     expect(find.text('Tous les lieux de Gironde'), findsOneWidget);
     expect(find.byKey(const Key('administration-create-need')), findsOneWidget);
     expect(find.byKey(const Key('admin-invitations-entry')), findsOneWidget);
+    expect(find.byKey(const Key('admin-locations-entry')), findsOneWidget);
     expect(find.byKey(const Key('administration-statistics')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('admin-invitations-entry')));
     await tester.pumpAndSettle();
     expect(find.byType(AdminInvitationsScreen), findsOneWidget);
     expect(find.text('Invitations et accès aux centres'), findsOneWidget);
+  });
+
+  testWidgets('coordinator opens location administration', (tester) async {
+    await pumpDashboard(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('admin-locations-entry')));
+    await tester.tap(find.byKey(const Key('admin-locations-entry')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LocationAdministrationScreen), findsOneWidget);
+    expect(find.text('Créer un lieu'), findsOneWidget);
   });
 
   testWidgets('coordinator create form retains access to all locations', (

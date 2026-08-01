@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import '../data/mock_data.dart';
+import '../models/admin_location.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/volunteer_profile.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
 import 'mock_admin_invitation_repository.dart';
+import 'location_administration_repository.dart';
+import 'mock_location_administration_repository.dart';
 import 'mock_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 
@@ -17,6 +20,7 @@ class MockCoordinationRepository implements CoordinationRepository {
     List<EngagementInfo>? initialEngagements,
     Map<String, VolunteerProfile>? initialProfiles,
     AdminInvitationRepository? adminInvitationRepository,
+    LocationAdministrationRepository? locationAdministrationRepository,
     ResponsibleAccessAdministrationRepository?
     responsibleAccessAdministrationRepository,
     this.volunteerUid = 'mock-volunteer',
@@ -37,13 +41,22 @@ class MockCoordinationRepository implements CoordinationRepository {
            responsibleAccessAdministrationRepository ??
            MockResponsibleAccessAdministrationRepository(
              currentUid: responsibleAccess?.uid ?? 'mock-coordinator',
-           );
+           ) {
+    this.locationAdministrationRepository =
+        locationAdministrationRepository ??
+        MockLocationAdministrationRepository.fromResponsePlaces(
+          _locations,
+          onChanged: _replaceLocations,
+        );
+  }
 
   static final instance = MockCoordinationRepository();
 
   final List<CoordinationNeed> _missions;
   @override
   final AdminInvitationRepository adminInvitationRepository;
+  @override
+  late final LocationAdministrationRepository locationAdministrationRepository;
   @override
   final ResponsibleAccessAdministrationRepository
   responsibleAccessAdministrationRepository;
@@ -56,6 +69,7 @@ class MockCoordinationRepository implements CoordinationRepository {
   final List<EngagementInfo> missionEngagements;
 
   final _missionUpdates = StreamController<List<CoordinationNeed>>.broadcast();
+  final _locationUpdates = StreamController<List<ResponsePlace>>.broadcast();
   static const _mockAccess = ResponsibleAccess(
     uid: 'mock-coordinator',
     role: 'coordinator',
@@ -327,7 +341,60 @@ class MockCoordinationRepository implements CoordinationRepository {
 
   @override
   Stream<List<ResponsePlace>> watchLocations() {
-    return Stream.value(List.unmodifiable(_locations));
+    return Stream.multi((controller) {
+      controller.add(List.unmodifiable(_locations));
+      final subscription = _locationUpdates.stream.listen(controller.add);
+      controller.onCancel = subscription.cancel;
+    });
+  }
+
+  void _replaceLocations(List<AdminLocation> locations) {
+    final existing = {for (final location in _locations) location.id: location};
+    _locations
+      ..clear()
+      ..addAll(
+        locations.map((location) {
+          final previous = existing[location.id];
+          final hasAddress = [
+            location.addressLine1,
+            location.addressLine2,
+            location.postalCode,
+            location.city,
+          ].any((value) => value?.trim().isNotEmpty == true);
+          return ResponsePlace(
+            id: location.id,
+            name: location.name,
+            type: location.type,
+            group: location.group,
+            activeNeeds: previous?.activeNeeds ?? 0,
+            structuredAddress: LocationAddress(
+              addressLine1: location.addressLine1,
+              addressLine2: location.addressLine2,
+              postalCode: location.postalCode,
+              city: location.city,
+              country: location.country,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              status:
+                  previous?.structuredAddress?.status ??
+                  (hasAddress
+                      ? AddressStatus.needsConfirmation
+                      : AddressStatus.notFound),
+              sourceUrl: previous?.structuredAddress?.sourceUrl,
+              sourceLabel: previous?.structuredAddress?.sourceLabel,
+              secondSourceUrl: previous?.structuredAddress?.secondSourceUrl,
+              secondSourceLabel: previous?.structuredAddress?.secondSourceLabel,
+              verifiedAt: previous?.structuredAddress?.verifiedAt,
+              notes: previous?.structuredAddress?.notes,
+            ),
+            contactName: location.contactName,
+            contactPhone: location.contactPhone,
+            isOperational: location.isOperational,
+            isEnabled: location.active,
+          );
+        }),
+      );
+    _locationUpdates.add(List.unmodifiable(_locations));
   }
 
   @override

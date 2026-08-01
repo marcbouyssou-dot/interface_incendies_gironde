@@ -702,7 +702,7 @@ class _LocationInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final available = locations
-        .where((location) => location.isOperational)
+        .where((location) => location.isOperational && location.isEnabled)
         .toList(growable: false);
     if (access.singleManagedLocationId != null) {
       return _buildLockedLocation(context, available);

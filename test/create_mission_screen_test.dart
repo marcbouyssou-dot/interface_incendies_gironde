@@ -8,6 +8,7 @@ import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
+import 'package:interface_incendies_gironde/repositories/mock_location_administration_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
@@ -399,6 +400,9 @@ class _MissionRepository implements CoordinationRepository {
   MissionDraft? lastDraft;
   @override
   final adminInvitationRepository = MockAdminInvitationRepository();
+  @override
+  final locationAdministrationRepository =
+      MockLocationAdministrationRepository();
   @override
   final responsibleAccessAdministrationRepository =
       MockResponsibleAccessAdministrationRepository();

@@ -3,12 +3,15 @@ import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
 import 'admin_invitation_repository.dart';
+import 'location_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 
 export '../models/responsible_access.dart';
 
 abstract interface class CoordinationRepository {
   AdminInvitationRepository get adminInvitationRepository;
+
+  LocationAdministrationRepository get locationAdministrationRepository;
 
   ResponsibleAccessAdministrationRepository
   get responsibleAccessAdministrationRepository;
