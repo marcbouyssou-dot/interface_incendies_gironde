@@ -109,7 +109,7 @@ export class ResendNotificationProvider extends NotificationProvider {
       : `${normalizedName} <${normalizedEmail}>`;
   }
 
-  async send(message) {
+  async send(message, options = {}) {
     if (message?.channel !== 'email') {
       throw new ResendNotificationProviderError(
         'unsupported-channel',
@@ -128,7 +128,11 @@ export class ResendNotificationProvider extends NotificationProvider {
 
     let response;
     try {
-      response = await this.#client.emails.send(payload);
+      response = options.idempotencyKey === undefined
+        ? await this.#client.emails.send(payload)
+        : await this.#client.emails.send(payload, {
+          idempotencyKey: options.idempotencyKey,
+        });
     } catch (error) {
       throw new ResendNotificationProviderError(
         'send-failed',

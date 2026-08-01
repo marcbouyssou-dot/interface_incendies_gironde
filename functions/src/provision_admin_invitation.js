@@ -1,3 +1,5 @@
+import {createHash, randomUUID} from 'node:crypto';
+
 import {
   hasActiveCoordinatorRole,
   normalizeRequestedAssignment,
@@ -6,6 +8,7 @@ import {
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const ALLOWED_ROLES = new Set(['site_manager', 'coordinator']);
+export const NOTIFICATION_LEASE_DURATION_MS = 5 * 60 * 1000;
 
 export class ProvisioningError extends Error {
   constructor(code, message, options = {}) {
@@ -22,6 +25,7 @@ export async function provisionAdminInvitation({
   notificationService,
   appUrl,
   now = new Date(),
+  createNotificationAttemptId = randomUUID,
 }) {
   requireText(invitationId, 'invalid-argument', 'Invitation invalide.');
   requireText(callerUid, 'unauthenticated', 'Authentification requise.');
@@ -39,7 +43,7 @@ export async function provisionAdminInvitation({
   if (!invitation) {
     throw new ProvisioningError('not-found', 'Invitation introuvable.');
   }
-  const alreadyProvisioned = invitation.status === 'accepted'
+  let alreadyProvisioned = invitation.status === 'accepted'
     && typeof invitation.acceptedUid === 'string'
     && invitation.acceptedUid !== '';
   if (alreadyProvisioned && invitation.notificationStatus === 'sent') {
@@ -86,7 +90,7 @@ export async function provisionAdminInvitation({
       activationUrl,
     });
     if (!alreadyProvisioned) {
-      await services.commitProvisioning({
+      const commitResult = await services.commitProvisioning({
         invitationId,
         targetUid: user.uid,
         expectedInvitation: invitation,
@@ -97,25 +101,58 @@ export async function provisionAdminInvitation({
           activationLinkGeneratedAt: now,
         },
       });
+      if (commitResult?.state === 'already-provisioned') {
+        alreadyProvisioned = true;
+      }
     }
 
-    try {
-      const notificationResult = await notificationService.send(
-        buildInvitationNotification({invitation, activationLink}),
-      );
-      await services.markNotificationSent({
-        invitationId,
-        targetUid: user.uid,
-        provider: notificationResult.provider,
-        providerMessageId: notificationResult.providerMessageId,
-        sentAt: now,
+    const attemptId = createNotificationAttemptId();
+    requireText(
+      attemptId,
+      'internal',
+      'La tentative de notification est invalide.',
+    );
+    const reservation = await services.reserveNotificationDelivery({
+      invitationId,
+      targetUid: user.uid,
+      attemptId,
+      reservedAt: now,
+      leaseExpiresAt: new Date(
+        now.getTime() + NOTIFICATION_LEASE_DURATION_MS,
+      ),
+    });
+    if (reservation.state === 'sent') {
+      return safeResult({
+        alreadyProvisioned: true,
+        emailDelivery: 'sent',
       });
+    }
+    if (reservation.state === 'in-progress') {
+      return safeResult({
+        alreadyProvisioned: true,
+        emailDelivery: 'pending',
+      });
+    }
+    if (reservation.state !== 'reserved') {
+      throw new ProvisioningError(
+        'aborted',
+        'La notification ne peut pas être réservée.',
+      );
+    }
+
+    let notificationResult;
+    try {
+      notificationResult = await notificationService.send(
+        buildInvitationNotification({invitation, activationLink}),
+        {idempotencyKey: invitationNotificationIdempotencyKey(invitationId)},
+      );
     } catch (error) {
       const errorCode = normalizedNotificationErrorCode(error);
       try {
         await services.markNotificationFailed({
           invitationId,
           targetUid: user.uid,
+          attemptId,
           errorCode,
           failedAt: now,
         });
@@ -128,6 +165,20 @@ export async function provisionAdminInvitation({
         {cause: error},
       );
     }
+    const finalization = await services.markNotificationSent({
+      invitationId,
+      targetUid: user.uid,
+      attemptId,
+      provider: notificationResult.provider,
+      providerMessageId: notificationResult.providerMessageId,
+      sentAt: now,
+    });
+    if (finalization?.state === 'in-progress') {
+      return safeResult({
+        alreadyProvisioned: true,
+        emailDelivery: 'pending',
+      });
+    }
   } catch (error) {
     throw normalizedAccessError(error);
   } finally {
@@ -139,6 +190,12 @@ export async function provisionAdminInvitation({
     alreadyProvisioned,
     emailDelivery: 'sent',
   });
+}
+
+export function invitationNotificationIdempotencyKey(invitationId) {
+  requireText(invitationId, 'invalid-argument', 'Invitation invalide.');
+  const digest = createHash('sha256').update(invitationId).digest('hex');
+  return `admin-invitation:${digest}:activation`;
 }
 
 export function buildInvitationNotification({invitation, activationLink}) {

@@ -18,7 +18,7 @@ export class NotificationProvider {
 
   async send() {
     throw new NotificationProviderConfigurationError(
-      'Le fournisseur de notifications ne définit pas send(message).',
+      'Le fournisseur de notifications ne définit pas send(message, options).',
     );
   }
 }

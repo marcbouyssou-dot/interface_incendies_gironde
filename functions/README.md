@@ -17,9 +17,15 @@ la seule couche autorisée à créer un compte Firebase Auth et un document
 6. Une transaction relit `roles/{uid}`, fusionne additivement le rôle et les
    centres, écrit le format V2 canonique, marque l’invitation `accepted` et
    initialise sa notification à `pending`.
-7. Le cœur métier construit le message et appelle uniquement
-   `NotificationService.send(message)`.
-8. L’invitation est marquée `sent` ou `failed` sans stocker le contenu du
+7. Une seconde transaction réserve l’envoi avec une tentative propriétaire et
+   un lease de cinq minutes. Une réservation active ou un état `sent` bloque
+   tout nouvel appel au fournisseur.
+8. Le cœur métier construit le message et appelle uniquement
+   `NotificationService.send(message, {idempotencyKey})`. La clé stable est le
+   SHA-256 de l’identifiant d’invitation dans le format
+   `admin-invitation:<digest>:activation`.
+9. L’invitation est marquée `sent` ou `failed` uniquement si la tentative qui
+   finalise possède toujours la réservation, sans stocker le contenu du
    message ni la réponse brute du fournisseur.
 
 Le lien complet n’est ni renvoyé au client, ni stocké dans Firestore, ni
@@ -31,6 +37,8 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
   idempotent sans recréer de compte, de rôle, de lien ni de notification.
 - Une invitation acceptée dont la notification est `failed` peut être relancée
   sans recréer le compte ni le rôle. Un nouveau lien est alors généré.
+- Une réservation abandonnée redevient disponible après cinq minutes. Toutes
+  les relances conservent la même clé d’idempotence fournisseur.
 - Un rôle legacy ou V2 valide est conservé puis enrichi sans retrait implicite.
   Un document V2 invalide ne retombe jamais sur sa projection legacy.
 - Les rôles sont ordonnés `coordinator`, puis `site_manager`. Le champ `role`
@@ -64,6 +72,14 @@ concurrentes de perdre un rôle ou un centre. Une course de création Auth sur l
 même e-mail réutilise le compte créé par l’appel gagnant. Les métadonnées
 `createdAt` et `createdBy`, ainsi que les champs historiques compatibles, sont
 préservés ; `updatedAt` est renouvelé par timestamp serveur.
+
+La notification possède également un verrou transactionnel. L’état `sending`
+stocke `notificationAttemptId`, `notificationReservedAt` et
+`notificationLeaseExpiresAt`. Une seule transaction obtient la réservation ;
+les finalisations vérifient l’identifiant de tentative. L’état `sent` est
+terminal : une tentative ancienne ou un échec tardif ne peuvent jamais le
+remplacer. Les documents historiques sans champs de réservation restent
+lisibles et relançables lorsqu’ils sont `pending` ou `failed`.
 
 ## Paramètres serveur
 
@@ -123,8 +139,10 @@ donc pas Secret Manager. Le mode `fake` reste refusé hors Emulator. Hors
 Emulator, `defineSecret('RESEND_API_KEY')` est déclaré et lié uniquement à la
 callable ; la configuration `resend` de production l’utilise à l’exécution.
 
-Les champs persistés sont limités à `notificationStatus`,
-`notificationSentAt` ou `notificationFailedAt`, `notificationProvider`,
+Les champs persistés sont limités à `notificationStatus`, aux champs temporaires
+`notificationAttemptId`, `notificationReservedAt` et
+`notificationLeaseExpiresAt`, à `notificationSentAt` ou
+`notificationFailedAt`, `notificationProvider`,
 `notificationProviderMessageId` et `notificationErrorCode`. Aucun corps
 d’e-mail, lien d’activation, secret, retour brut ou stack n’est stocké.
 

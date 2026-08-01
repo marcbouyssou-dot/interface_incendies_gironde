@@ -12,6 +12,7 @@ import {
   hasActiveCoordinatorRole,
   mergeResponsibleAccess,
   normalizeRequestedAssignment,
+  parseResponsibleAccess,
 } from './responsible_access.js';
 import {
   createServerNotificationService,
@@ -118,7 +119,7 @@ export function adminServices({
       if (shouldFailCommit(invitationId)) {
         throw new Error('Injected emulator-only commit failure');
       }
-      await firestore.runTransaction(async (transaction) => {
+      return firestore.runTransaction(async (transaction) => {
         const invitationRef = firestore
           .collection('adminInvitations')
           .doc(invitationId);
@@ -140,6 +141,19 @@ export function adminServices({
           );
         }
         const current = invitationSnapshot.data();
+        const existingRole = roleSnapshot.exists ? roleSnapshot.data() : null;
+        if (
+          invitationSnapshot.exists
+          && current.status === 'accepted'
+          && current.acceptedUid === targetUid
+          && current.email === expectedInvitation.email
+          && current.role === expectedInvitation.role
+          && sameRequestedLocations(current, expectedInvitation)
+          && existingRole !== null
+          && hasProvisionedAssignment(existingRole, current)
+        ) {
+          return {state: 'already-provisioned'};
+        }
         if (
           !invitationSnapshot.exists
           || current.status !== 'pending'
@@ -152,7 +166,6 @@ export function adminServices({
             'L’invitation a changé pendant le provisionnement.',
           );
         }
-        const existingRole = roleSnapshot.exists ? roleSnapshot.data() : null;
         const mergedRole = mergeResponsibleAccess(existingRole, current);
         transaction.set(
           roleRef,
@@ -176,27 +189,85 @@ export function adminServices({
           provisionedAt: timestamps.provisionedAt,
           activationLinkGeneratedAt: timestamps.activationLinkGeneratedAt,
           notificationStatus: 'pending',
+          notificationAttemptId: FieldValue.delete(),
+          notificationReservedAt: FieldValue.delete(),
+          notificationLeaseExpiresAt: FieldValue.delete(),
+          notificationSentAt: FieldValue.delete(),
+          notificationProvider: FieldValue.delete(),
+          notificationProviderMessageId: FieldValue.delete(),
           notificationErrorCode: FieldValue.delete(),
           notificationFailedAt: FieldValue.delete(),
         });
+        return {state: 'provisioned'};
+      });
+    },
+    async reserveNotificationDelivery({
+      invitationId,
+      targetUid,
+      attemptId,
+      reservedAt,
+      leaseExpiresAt,
+    }) {
+      const invitationRef = firestore
+        .collection('adminInvitations')
+        .doc(invitationId);
+      const roleRef = firestore.collection('roles').doc(targetUid);
+      return firestore.runTransaction(async (transaction) => {
+        const [snapshot, roleSnapshot] = await Promise.all([
+          transaction.get(invitationRef),
+          transaction.get(roleRef),
+        ]);
+        const current = acceptedInvitation(snapshot, targetUid);
+        if (
+          !roleSnapshot.exists
+          || !hasProvisionedAssignment(roleSnapshot.data(), current)
+        ) {
+          throw new ProvisioningError(
+            'aborted',
+            'Le rôle attendu n’est pas attribué.',
+          );
+        }
+        if (current.notificationStatus === 'sent') {
+          return {state: 'sent'};
+        }
+        if (hasActiveNotificationLease(current, reservedAt)) {
+          return {state: 'in-progress'};
+        }
+        transaction.update(invitationRef, {
+          notificationStatus: 'sending',
+          notificationAttemptId: attemptId,
+          notificationReservedAt: reservedAt,
+          notificationLeaseExpiresAt: leaseExpiresAt,
+          notificationSentAt: FieldValue.delete(),
+          notificationProvider: FieldValue.delete(),
+          notificationProviderMessageId: FieldValue.delete(),
+          notificationErrorCode: FieldValue.delete(),
+          notificationFailedAt: FieldValue.delete(),
+        });
+        return {state: 'reserved'};
       });
     },
     async markNotificationSent({
       invitationId,
       targetUid,
+      attemptId,
       provider,
       providerMessageId,
       sentAt,
     }) {
-      await updateNotificationState({
+      return finalizeNotificationState({
         firestore,
         invitationId,
         targetUid,
+        attemptId,
         values: {
           notificationStatus: 'sent',
           notificationSentAt: sentAt,
           notificationProvider: provider,
           notificationProviderMessageId: providerMessageId,
+          notificationAttemptId: FieldValue.delete(),
+          notificationReservedAt: FieldValue.delete(),
+          notificationLeaseExpiresAt: FieldValue.delete(),
           notificationErrorCode: FieldValue.delete(),
           notificationFailedAt: FieldValue.delete(),
         },
@@ -205,17 +276,22 @@ export function adminServices({
     async markNotificationFailed({
       invitationId,
       targetUid,
+      attemptId,
       errorCode,
       failedAt,
     }) {
-      await updateNotificationState({
+      return finalizeNotificationState({
         firestore,
         invitationId,
         targetUid,
+        attemptId,
         values: {
           notificationStatus: 'failed',
           notificationErrorCode: errorCode,
           notificationFailedAt: failedAt,
+          notificationAttemptId: FieldValue.delete(),
+          notificationReservedAt: FieldValue.delete(),
+          notificationLeaseExpiresAt: FieldValue.delete(),
           notificationSentAt: FieldValue.delete(),
           notificationProvider: FieldValue.delete(),
           notificationProviderMessageId: FieldValue.delete(),
@@ -225,30 +301,78 @@ export function adminServices({
   };
 }
 
-async function updateNotificationState({
+async function finalizeNotificationState({
   firestore,
   invitationId,
   targetUid,
+  attemptId,
   values,
 }) {
   const invitationRef = firestore
     .collection('adminInvitations')
     .doc(invitationId);
-  await firestore.runTransaction(async (transaction) => {
+  return firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(invitationRef);
-    const current = snapshot.data();
+    const current = acceptedInvitation(snapshot, targetUid);
+    if (current.notificationStatus === 'sent') {
+      return {state: 'sent'};
+    }
     if (
-      !snapshot.exists
-      || current.status !== 'accepted'
-      || current.acceptedUid !== targetUid
+      current.notificationStatus !== 'sending'
+      || current.notificationAttemptId !== attemptId
     ) {
-      throw new ProvisioningError(
-        'aborted',
-        'L’invitation a changé pendant la notification.',
-      );
+      return {state: 'in-progress'};
     }
     transaction.update(invitationRef, values);
+    return {state: values.notificationStatus};
   });
+}
+
+function acceptedInvitation(snapshot, targetUid) {
+  const current = snapshot.data();
+  if (
+    !snapshot.exists
+    || current.status !== 'accepted'
+    || current.acceptedUid !== targetUid
+  ) {
+    throw new ProvisioningError(
+      'aborted',
+      'L’invitation a changé pendant la notification.',
+    );
+  }
+  return current;
+}
+
+function hasActiveNotificationLease(invitation, now) {
+  if (
+    invitation.notificationStatus !== 'sending'
+    || typeof invitation.notificationAttemptId !== 'string'
+    || invitation.notificationAttemptId === ''
+  ) {
+    return false;
+  }
+  const leaseExpiresAt = asDate(invitation.notificationLeaseExpiresAt);
+  return leaseExpiresAt !== null && leaseExpiresAt > now;
+}
+
+function hasProvisionedAssignment(roleDocument, invitation) {
+  try {
+    const access = parseResponsibleAccess(roleDocument);
+    const requested = normalizeRequestedAssignment(invitation);
+    return access.active
+      && requested.roles.every((role) => access.roles.includes(role))
+      && requested.locationIds.every(
+        (locationId) => access.locationIds.includes(locationId),
+      );
+  } catch {
+    return false;
+  }
+}
+
+function asDate(value) {
+  if (value instanceof Date) return value;
+  if (value && typeof value.toDate === 'function') return value.toDate();
+  return null;
 }
 
 function emulatorCommitFailure(invitationId) {

@@ -98,6 +98,34 @@ test('transmits only a normalized message to the provider', async () => {
   assert.equal(Object.isFrozen(provider.messages[0]), true);
 });
 
+test('transmits the idempotency key separately to the fake provider', async () => {
+  const provider = new FakeNotificationProvider();
+  const key = 'admin-invitation:stable-digest:activation';
+  await new NotificationService({provider}).send(
+    validEmail(),
+    {idempotencyKey: key},
+  );
+  assert.equal(provider.deliveries.length, 1);
+  assert.equal(provider.deliveries[0].idempotencyKey, key);
+  assert.equal('idempotencyKey' in provider.deliveries[0].message, false);
+});
+
+for (const idempotencyKey of ['', 'bad key', 42, 'a'.repeat(257)]) {
+  test(`refuses invalid idempotency key ${JSON.stringify(idempotencyKey)}`, async () => {
+    const provider = new FakeNotificationProvider();
+    await assert.rejects(
+      new NotificationService({provider}).send(
+        validEmail(),
+        {idempotencyKey},
+      ),
+      (error) =>
+        error instanceof NotificationServiceError
+        && error.code === 'invalid-idempotency-key',
+    );
+    assert.equal(provider.deliveries.length, 0);
+  });
+}
+
 test('normalizes the fake provider success result', async () => {
   const service = new NotificationService({
     provider: new FakeNotificationProvider({
@@ -144,6 +172,8 @@ test('fake provider records messages without any network dependency', async () =
   await provider.send(createNotificationMessage(validEmail()));
   assert.equal(provider.messages.length, 1);
   assert.equal(provider.messages[0].subject, 'Votre accès MobSanté');
+  assert.equal(provider.deliveries.length, 1);
+  assert.equal(provider.deliveries[0].idempotencyKey, null);
 });
 
 test('fake provider simulates failure after recording the message', async () => {

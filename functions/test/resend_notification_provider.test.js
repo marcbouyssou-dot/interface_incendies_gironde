@@ -28,11 +28,14 @@ function fakeClient({
   failure,
 } = {}) {
   const calls = [];
+  const options = [];
   return {
     calls,
+    options,
     emails: {
-      async send(payload) {
+      async send(payload, requestOptions) {
         calls.push(payload);
+        options.push(requestOptions);
         if (failure) throw failure;
         return response;
       },
@@ -172,6 +175,15 @@ test('integrates with NotificationService normalized result', async () => {
     providerMessageId: 'resend-message-id',
     provider: 'resend',
   });
+});
+
+test('forwards the exact provider idempotency key through the Resend SDK', async () => {
+  const client = fakeClient();
+  const service = new NotificationService({provider: provider({client})});
+  const key = 'admin-invitation:stable-digest:activation';
+  await service.send(validMessage(), {idempotencyKey: key});
+  assert.deepEqual(client.options, [{idempotencyKey: key}]);
+  assert.equal('idempotencyKey' in client.calls[0], false);
 });
 
 test('refuses a successful provider response without an identifier', async () => {

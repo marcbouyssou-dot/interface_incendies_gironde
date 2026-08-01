@@ -17,6 +17,16 @@ import {
 } from 'firebase/functions';
 
 import {adminServices} from '../../src/index.js';
+import {
+  invitationNotificationIdempotencyKey,
+  NOTIFICATION_LEASE_DURATION_MS,
+} from '../../src/provision_admin_invitation.js';
+import {
+  NotificationService,
+} from '../../src/notifications/notification_service.js';
+import {
+  FakeNotificationProvider,
+} from '../../src/notifications/providers/fake_notification_provider.js';
 
 const projectId = 'demo-mobsante';
 const adminApp = initializeAdminApp({projectId}, 'provisioning-emulator-tests');
@@ -96,6 +106,16 @@ async function seedInvitation(id, overrides = {}) {
   const value = pendingInvitation(overrides);
   await db.collection('adminInvitations').doc(id).set(value);
   return value;
+}
+
+async function seedSiteManagerRole(uid) {
+  await db.collection('roles').doc(uid).set({
+    role: 'site_manager',
+    roles: ['site_manager'],
+    locationIds: ['merignac'],
+    active: true,
+    schemaVersion: 2,
+  });
 }
 
 async function coordinator(options = {}) {
@@ -262,6 +282,187 @@ test('provisioning transaction refuses a coordinator revoked after authorization
     (await db.collection('roles').doc(targetUid).get()).exists,
     false,
   );
+  assert.equal('notificationStatus' in unchangedInvitation, false);
+});
+
+test('real transaction grants exactly one notification reservation owner', async () => {
+  const invitationId = unique('notification-reservation-race');
+  const targetUid = unique('notification-target');
+  const reservedAt = new Date();
+  await seedInvitation(invitationId, {
+    status: 'accepted',
+    acceptedUid: targetUid,
+    notificationStatus: 'failed',
+  });
+  await seedSiteManagerRole(targetUid);
+  const services = adminServices({firestore: db, auth: adminAuth});
+  const reserve = (attemptId) => services.reserveNotificationDelivery({
+    invitationId,
+    targetUid,
+    attemptId,
+    reservedAt,
+    leaseExpiresAt: new Date(
+      reservedAt.getTime() + NOTIFICATION_LEASE_DURATION_MS,
+    ),
+  });
+  const attempts = ['attempt-one', 'attempt-two'];
+  const reservations = await Promise.all(attempts.map(reserve));
+  assert.deepEqual(
+    reservations.map((result) => result.state).sort(),
+    ['in-progress', 'reserved'],
+  );
+
+  const provider = new FakeNotificationProvider({
+    providerMessageId: 'reservation-message-id',
+  });
+  const service = new NotificationService({provider});
+  const winner = attempts[reservations.findIndex(
+    (result) => result.state === 'reserved',
+  )];
+  const notificationResult = await service.send({
+    channel: 'email',
+    recipient: 'responsable@example.test',
+    subject: 'Activation MobSanté',
+    text: 'Test Emulator sans réseau.',
+    metadata: {kind: 'admin-invitation'},
+  }, {
+    idempotencyKey: invitationNotificationIdempotencyKey(invitationId),
+  });
+  assert.equal(provider.deliveries.length, 1);
+  await services.markNotificationSent({
+    invitationId,
+    targetUid,
+    attemptId: winner,
+    provider: notificationResult.provider,
+    providerMessageId: notificationResult.providerMessageId,
+    sentAt: new Date(),
+  });
+  const sent = (
+    await db.collection('adminInvitations').doc(invitationId).get()
+  ).data();
+  assert.equal(sent.notificationStatus, 'sent');
+  assert.equal(sent.notificationProviderMessageId, 'reservation-message-id');
+  assert.equal('notificationAttemptId' in sent, false);
+  assert.equal('notificationLeaseExpiresAt' in sent, false);
+});
+
+test('notification reservation requires accepted invitation and assigned role', async () => {
+  const services = adminServices({firestore: db, auth: adminAuth});
+  const targetUid = unique('unassigned-notification-target');
+  const pendingId = unique('pending-notification-reservation');
+  await seedInvitation(pendingId);
+  await assert.rejects(
+    services.reserveNotificationDelivery({
+      invitationId: pendingId,
+      targetUid,
+      attemptId: 'pending-attempt',
+      reservedAt: new Date(),
+      leaseExpiresAt: new Date(Date.now() + NOTIFICATION_LEASE_DURATION_MS),
+    }),
+    (error) => error.code === 'aborted',
+  );
+  const acceptedId = unique('unassigned-notification-reservation');
+  await seedInvitation(acceptedId, {
+    status: 'accepted',
+    acceptedUid: targetUid,
+    notificationStatus: 'pending',
+  });
+  await assert.rejects(
+    services.reserveNotificationDelivery({
+      invitationId: acceptedId,
+      targetUid,
+      attemptId: 'unassigned-attempt',
+      reservedAt: new Date(),
+      leaseExpiresAt: new Date(Date.now() + NOTIFICATION_LEASE_DURATION_MS),
+    }),
+    (error) => error.code === 'aborted',
+  );
+  const unchanged = (
+    await db.collection('adminInvitations').doc(acceptedId).get()
+  ).data();
+  assert.equal(unchanged.notificationStatus, 'pending');
+  assert.equal('notificationAttemptId' in unchanged, false);
+});
+
+test('expired reservation is reclaimable and stale failure cannot overwrite sent', async () => {
+  const invitationId = unique('expired-notification-reservation');
+  const targetUid = unique('expired-notification-target');
+  const reservedAt = new Date(Date.now() - NOTIFICATION_LEASE_DURATION_MS - 1);
+  await seedInvitation(invitationId, {
+    status: 'accepted',
+    acceptedUid: targetUid,
+    notificationStatus: 'sending',
+    notificationAttemptId: 'abandoned-attempt',
+    notificationReservedAt: Timestamp.fromDate(reservedAt),
+    notificationLeaseExpiresAt: Timestamp.fromDate(
+      new Date(reservedAt.getTime() + NOTIFICATION_LEASE_DURATION_MS),
+    ),
+  });
+  await seedSiteManagerRole(targetUid);
+  const services = adminServices({firestore: db, auth: adminAuth});
+  const replacement = await services.reserveNotificationDelivery({
+    invitationId,
+    targetUid,
+    attemptId: 'replacement-attempt',
+    reservedAt: new Date(),
+    leaseExpiresAt: new Date(Date.now() + NOTIFICATION_LEASE_DURATION_MS),
+  });
+  assert.equal(replacement.state, 'reserved');
+  await services.markNotificationSent({
+    invitationId,
+    targetUid,
+    attemptId: 'replacement-attempt',
+    provider: 'fake',
+    providerMessageId: 'replacement-message-id',
+    sentAt: new Date(),
+  });
+  const staleFinalization = await services.markNotificationFailed({
+    invitationId,
+    targetUid,
+    attemptId: 'abandoned-attempt',
+    errorCode: 'late-failure',
+    failedAt: new Date(),
+  });
+  assert.equal(staleFinalization.state, 'sent');
+  const finalInvitation = (
+    await db.collection('adminInvitations').doc(invitationId).get()
+  ).data();
+  assert.equal(finalInvitation.notificationStatus, 'sent');
+  assert.equal(
+    finalInvitation.notificationProviderMessageId,
+    'replacement-message-id',
+  );
+  assert.equal('notificationErrorCode' in finalInvitation, false);
+});
+
+test('historical sent notification remains terminal without reservation fields', async () => {
+  const invitationId = unique('historical-sent-notification');
+  const targetUid = unique('historical-sent-target');
+  const sentAt = Timestamp.fromDate(new Date('2026-07-30T10:00:00Z'));
+  await seedInvitation(invitationId, {
+    status: 'accepted',
+    acceptedUid: targetUid,
+    notificationStatus: 'sent',
+    notificationSentAt: sentAt,
+    notificationProvider: 'fake',
+    notificationProviderMessageId: 'historical-message-id',
+  });
+  await seedSiteManagerRole(targetUid);
+  const services = adminServices({firestore: db, auth: adminAuth});
+  const reservation = await services.reserveNotificationDelivery({
+    invitationId,
+    targetUid,
+    attemptId: 'forbidden-attempt',
+    reservedAt: new Date(),
+    leaseExpiresAt: new Date(Date.now() + NOTIFICATION_LEASE_DURATION_MS),
+  });
+  assert.equal(reservation.state, 'sent');
+  const unchanged = (
+    await db.collection('adminInvitations').doc(invitationId).get()
+  ).data();
+  assert.equal(unchanged.notificationProviderMessageId, 'historical-message-id');
+  assert.equal(unchanged.notificationSentAt.toMillis(), sentAt.toMillis());
+  assert.equal('notificationAttemptId' in unchanged, false);
 });
 
 for (const [label, overrides, code] of [
@@ -725,6 +926,70 @@ test('second call creates neither a second account, role nor activation timestam
     second.notificationSentAt.toMillis(),
     first.notificationSentAt.toMillis(),
   );
+});
+
+test('concurrent callable calls on pending invitation keep one final delivery', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('concurrent-pending-notification');
+  const target = await adminAuth.createUser({email: targetEmail});
+  const invitationId = unique('concurrent-pending-notification');
+  await seedInvitation(invitationId, {email: targetEmail});
+
+  const results = await Promise.allSettled([
+    callable({invitationId}),
+    callable({invitationId}),
+  ]);
+  assert.ok(results.some((result) => result.status === 'fulfilled'));
+  const finalInvitation = (
+    await db.collection('adminInvitations').doc(invitationId).get()
+  ).data();
+  assert.equal(finalInvitation.status, 'accepted');
+  assert.equal(finalInvitation.acceptedUid, target.uid);
+  assert.equal(finalInvitation.notificationStatus, 'sent');
+  assert.equal(
+    finalInvitation.notificationProviderMessageId,
+    'emulator-message-id',
+  );
+  assert.equal('notificationAttemptId' in finalInvitation, false);
+  assert.equal('notificationLeaseExpiresAt' in finalInvitation, false);
+});
+
+test('concurrent retries on failed invitation keep one final delivery', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('concurrent-failed-notification');
+  const target = await adminAuth.createUser({email: targetEmail});
+  await db.collection('roles').doc(target.uid).set({
+    role: 'site_manager',
+    roles: ['site_manager'],
+    locationIds: ['merignac'],
+    active: true,
+    schemaVersion: 2,
+  });
+  const invitationId = unique('concurrent-failed-notification');
+  await seedInvitation(invitationId, {
+    email: targetEmail,
+    status: 'accepted',
+    acceptedUid: target.uid,
+    notificationStatus: 'failed',
+    notificationErrorCode: 'provider-failure',
+  });
+
+  const results = await Promise.all([
+    callable({invitationId}),
+    callable({invitationId}),
+  ]);
+  assert.ok(results.every((result) =>
+    new Set(['pending', 'sent']).has(result.data.emailDelivery)));
+  const finalInvitation = (
+    await db.collection('adminInvitations').doc(invitationId).get()
+  ).data();
+  assert.equal(finalInvitation.notificationStatus, 'sent');
+  assert.equal(
+    finalInvitation.notificationProviderMessageId,
+    'emulator-message-id',
+  );
+  assert.equal('notificationErrorCode' in finalInvitation, false);
+  assert.equal('notificationAttemptId' in finalInvitation, false);
 });
 
 test('notification failure preserves provisioning and retry sends once', async () => {

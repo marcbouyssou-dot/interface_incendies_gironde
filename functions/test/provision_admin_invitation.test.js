@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   buildActivationUrl,
   buildCustomActivationLink,
+  invitationNotificationIdempotencyKey,
+  NOTIFICATION_LEASE_DURATION_MS,
   ProvisioningError,
   provisionAdminInvitation,
 } from '../src/provision_admin_invitation.js';
@@ -62,6 +64,8 @@ function harness({
     commits: [],
     links: [],
     notifications: [],
+    notificationOptions: [],
+    notificationReservations: [],
     notificationSent: [],
     notificationFailed: [],
   };
@@ -121,27 +125,68 @@ function harness({
         notificationStatus: 'pending',
       };
     },
+    async reserveNotificationDelivery(value) {
+      if (state.invitation.notificationStatus === 'sent') {
+        return {state: 'sent'};
+      }
+      const activeLease = state.invitation.notificationStatus === 'sending'
+        && state.invitation.notificationAttemptId
+        && state.invitation.notificationLeaseExpiresAt > value.reservedAt;
+      if (activeLease) return {state: 'in-progress'};
+      state.notificationReservations.push(value);
+      state.invitation = {
+        ...state.invitation,
+        notificationStatus: 'sending',
+        notificationAttemptId: value.attemptId,
+        notificationReservedAt: value.reservedAt,
+        notificationLeaseExpiresAt: value.leaseExpiresAt,
+      };
+      delete state.invitation.notificationErrorCode;
+      delete state.invitation.notificationFailedAt;
+      return {state: 'reserved'};
+    },
     async markNotificationSent(value) {
       state.notificationSent.push(value);
+      if (state.invitation.notificationStatus === 'sent') {
+        return {state: 'sent'};
+      }
+      if (state.invitation.notificationAttemptId !== value.attemptId) {
+        return {state: 'in-progress'};
+      }
       state.invitation = {
         ...state.invitation,
         notificationStatus: 'sent',
         notificationProvider: value.provider,
         notificationProviderMessageId: value.providerMessageId,
       };
+      delete state.invitation.notificationAttemptId;
+      delete state.invitation.notificationReservedAt;
+      delete state.invitation.notificationLeaseExpiresAt;
+      return {state: 'sent'};
     },
     async markNotificationFailed(value) {
       state.notificationFailed.push(value);
+      if (state.invitation.notificationStatus === 'sent') {
+        return {state: 'sent'};
+      }
+      if (state.invitation.notificationAttemptId !== value.attemptId) {
+        return {state: 'in-progress'};
+      }
       state.invitation = {
         ...state.invitation,
         notificationStatus: 'failed',
         notificationErrorCode: value.errorCode,
       };
+      delete state.invitation.notificationAttemptId;
+      delete state.invitation.notificationReservedAt;
+      delete state.invitation.notificationLeaseExpiresAt;
+      return {state: 'failed'};
     },
   };
   const notificationService = {
-    async send(value) {
+    async send(value, options) {
       state.notifications.push(value);
+      state.notificationOptions.push(options);
       if (failNotification) {
         const error = new Error('simulated notification failure');
         error.code = 'provider-failure';
@@ -166,6 +211,7 @@ async function provision(setup = {}) {
     notificationService: value.notificationService,
     appUrl,
     now,
+    createNotificationAttemptId: () => 'attempt-a',
   });
   return {...value, result};
 }
@@ -564,12 +610,35 @@ test('concurrent provisioning never deletes an adopted new Auth account', async 
         notificationStatus: 'pending',
       });
     },
+    async reserveNotificationDelivery(value) {
+      const current = invitations.get(value.invitationId);
+      if (current.notificationStatus === 'sent') return {state: 'sent'};
+      if (
+        current.notificationStatus === 'sending'
+        && current.notificationLeaseExpiresAt > value.reservedAt
+      ) {
+        return {state: 'in-progress'};
+      }
+      invitations.set(value.invitationId, {
+        ...current,
+        notificationStatus: 'sending',
+        notificationAttemptId: value.attemptId,
+        notificationReservedAt: value.reservedAt,
+        notificationLeaseExpiresAt: value.leaseExpiresAt,
+      });
+      return {state: 'reserved'};
+    },
     async markNotificationSent(value) {
       const current = invitations.get(value.invitationId);
+      if (current.notificationStatus === 'sent') return {state: 'sent'};
+      if (current.notificationAttemptId !== value.attemptId) {
+        return {state: 'in-progress'};
+      }
       invitations.set(value.invitationId, {
         ...current,
         notificationStatus: 'sent',
       });
+      return {state: 'sent'};
     },
     async markNotificationFailed() {},
   };
@@ -935,7 +1004,373 @@ test('notification is sent once through the injected service', async () => {
     JSON.stringify(state.invitation).includes('Votre compte responsable'),
     false,
   );
+  assert.equal(
+    state.notificationOptions[0].idempotencyKey,
+    invitationNotificationIdempotencyKey('invitation-a'),
+  );
 });
+
+test('invitation idempotency key is stable, distinct and provider-compatible', () => {
+  assert.equal(
+    invitationNotificationIdempotencyKey('invitation-a'),
+    'admin-invitation:'
+      + '7f2bbb548dc956b1bde7d361dac54d8c1a0a261ba66f8b1fc5c486e2987a7d49'
+      + ':activation',
+  );
+  assert.equal(
+    invitationNotificationIdempotencyKey('invitation-a'),
+    invitationNotificationIdempotencyKey('invitation-a'),
+  );
+  assert.notEqual(
+    invitationNotificationIdempotencyKey('invitation-a'),
+    invitationNotificationIdempotencyKey('invitation-b'),
+  );
+  assert.match(
+    invitationNotificationIdempotencyKey('invitation-a'),
+    /^[A-Za-z0-9:_-]{1,256}$/,
+  );
+});
+
+test('two concurrent calls on an accepted failed invitation send once', async () => {
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      notificationStatus: 'failed',
+    }),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  let releaseFirstSend;
+  let firstSendStarted;
+  const started = new Promise((resolve) => {
+    firstSendStarted = resolve;
+  });
+  const released = new Promise((resolve) => {
+    releaseFirstSend = resolve;
+  });
+  value.notificationService.send = async (message, options) => {
+    value.state.notifications.push(message);
+    value.state.notificationOptions.push(options);
+    firstSendStarted();
+    await released;
+    return {
+      success: true,
+      provider: 'fake',
+      providerMessageId: 'concurrent-message-id',
+    };
+  };
+  const call = (attemptId) => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now,
+    createNotificationAttemptId: () => attemptId,
+  });
+
+  const first = call('attempt-first');
+  await started;
+  const second = await call('attempt-second');
+  assert.equal(second.emailDelivery, 'pending');
+  assert.equal(value.state.notifications.length, 1);
+  releaseFirstSend();
+  const firstResult = await first;
+  assert.equal(firstResult.emailDelivery, 'sent');
+  assert.equal(value.state.invitation.notificationStatus, 'sent');
+  assert.equal(value.state.notificationReservations.length, 1);
+});
+
+test('two concurrent calls on a pending invitation send once after role assignment', async () => {
+  const value = harness({
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  let releaseFirstSend;
+  let firstSendStarted;
+  const started = new Promise((resolve) => {
+    firstSendStarted = resolve;
+  });
+  const released = new Promise((resolve) => {
+    releaseFirstSend = resolve;
+  });
+  value.notificationService.send = async (message, options) => {
+    value.state.notifications.push(message);
+    value.state.notificationOptions.push(options);
+    firstSendStarted();
+    await released;
+    return {
+      success: true,
+      provider: 'fake',
+      providerMessageId: 'pending-concurrent-message-id',
+    };
+  };
+  const call = (attemptId) => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now,
+    createNotificationAttemptId: () => attemptId,
+  });
+  const first = call('pending-attempt-one');
+  const second = call('pending-attempt-two');
+  await started;
+  const secondResult = await second;
+  assert.equal(secondResult.emailDelivery, 'pending');
+  assert.equal(value.state.notifications.length, 1);
+  releaseFirstSend();
+  const firstResult = await first;
+  assert.equal(firstResult.emailDelivery, 'sent');
+  assert.equal(value.state.invitation.notificationStatus, 'sent');
+});
+
+test('two simultaneous reservations have exactly one owner', async () => {
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      notificationStatus: 'pending',
+    }),
+  });
+  const reserve = (attemptId) => value.services.reserveNotificationDelivery({
+    invitationId: 'invitation-a',
+    targetUid: 'existing-uid',
+    attemptId,
+    reservedAt: now,
+    leaseExpiresAt: new Date(now.getTime() + NOTIFICATION_LEASE_DURATION_MS),
+  });
+  const results = await Promise.all([
+    reserve('attempt-one'),
+    reserve('attempt-two'),
+  ]);
+  assert.deepEqual(
+    results.map((result) => result.state).sort(),
+    ['in-progress', 'reserved'],
+  );
+  assert.equal(value.state.notificationReservations.length, 1);
+});
+
+test('active notification lease skips provider delivery', async () => {
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      notificationStatus: 'sending',
+      notificationAttemptId: 'current-attempt',
+      notificationReservedAt: now,
+      notificationLeaseExpiresAt: new Date(
+        now.getTime() + NOTIFICATION_LEASE_DURATION_MS,
+      ),
+    }),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  const result = await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now,
+    createNotificationAttemptId: () => 'other-attempt',
+  });
+  assert.equal(result.emailDelivery, 'pending');
+  assert.equal(value.state.notifications.length, 0);
+  assert.equal(value.state.invitation.notificationAttemptId, 'current-attempt');
+});
+
+test('expired abandoned lease can be reclaimed', async () => {
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      notificationStatus: 'failed',
+    }),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  await value.services.reserveNotificationDelivery({
+    invitationId: 'invitation-a',
+    targetUid: 'existing-uid',
+    attemptId: 'abandoned-attempt',
+    reservedAt: now,
+    leaseExpiresAt: new Date(now.getTime() + NOTIFICATION_LEASE_DURATION_MS),
+  });
+
+  const result = await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now: new Date(now.getTime() + NOTIFICATION_LEASE_DURATION_MS + 1),
+    createNotificationAttemptId: () => 'replacement-attempt',
+  });
+  assert.equal(result.emailDelivery, 'sent');
+  assert.equal(value.state.notifications.length, 1);
+  assert.equal(value.state.notificationReservations.length, 2);
+  assert.equal(value.state.invitation.notificationStatus, 'sent');
+});
+
+test('only the current reservation owner can finalize success', async () => {
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      notificationStatus: 'pending',
+    }),
+  });
+  await value.services.reserveNotificationDelivery({
+    invitationId: 'invitation-a',
+    targetUid: 'existing-uid',
+    attemptId: 'old-attempt',
+    reservedAt: now,
+    leaseExpiresAt: new Date(now.getTime() + NOTIFICATION_LEASE_DURATION_MS),
+  });
+  const retryAt = new Date(now.getTime() + NOTIFICATION_LEASE_DURATION_MS + 1);
+  await value.services.reserveNotificationDelivery({
+    invitationId: 'invitation-a',
+    targetUid: 'existing-uid',
+    attemptId: 'current-attempt',
+    reservedAt: retryAt,
+    leaseExpiresAt: new Date(
+      retryAt.getTime() + NOTIFICATION_LEASE_DURATION_MS,
+    ),
+  });
+  const stale = await value.services.markNotificationSent({
+    invitationId: 'invitation-a',
+    targetUid: 'existing-uid',
+    attemptId: 'old-attempt',
+    provider: 'fake',
+    providerMessageId: 'stale-message-id',
+    sentAt: retryAt,
+  });
+  assert.equal(stale.state, 'in-progress');
+  assert.equal(value.state.invitation.notificationStatus, 'sending');
+  assert.equal(
+    value.state.invitation.notificationAttemptId,
+    'current-attempt',
+  );
+  await value.services.markNotificationSent({
+    invitationId: 'invitation-a',
+    targetUid: 'existing-uid',
+    attemptId: 'current-attempt',
+    provider: 'fake',
+    providerMessageId: 'current-message-id',
+    sentAt: retryAt,
+  });
+  assert.equal(value.state.invitation.notificationStatus, 'sent');
+  assert.equal(
+    value.state.invitation.notificationProviderMessageId,
+    'current-message-id',
+  );
+});
+
+test('late failure from an expired attempt cannot overwrite retry success', async () => {
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      notificationStatus: 'failed',
+    }),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  let rejectOldSend;
+  let oldSendStarted;
+  const started = new Promise((resolve) => {
+    oldSendStarted = resolve;
+  });
+  const oldSend = new Promise((resolve, reject) => {
+    rejectOldSend = reject;
+  });
+  value.notificationService.send = async (message, options) => {
+    value.state.notifications.push(message);
+    value.state.notificationOptions.push(options);
+    if (value.state.notifications.length === 1) {
+      oldSendStarted();
+      return oldSend;
+    }
+    return {
+      success: true,
+      provider: 'fake',
+      providerMessageId: 'retry-message-id',
+    };
+  };
+  const oldCall = provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now,
+    createNotificationAttemptId: () => 'old-attempt',
+  });
+  await started;
+  const retry = await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now: new Date(now.getTime() + NOTIFICATION_LEASE_DURATION_MS + 1),
+    createNotificationAttemptId: () => 'retry-attempt',
+  });
+  assert.equal(retry.emailDelivery, 'sent');
+  rejectOldSend(Object.assign(new Error('late provider failure'), {
+    code: 'provider-failure',
+  }));
+  await rejectsCode(() => oldCall, 'unavailable');
+  assert.equal(value.state.invitation.notificationStatus, 'sent');
+  assert.equal(
+    value.state.invitation.notificationProviderMessageId,
+    'retry-message-id',
+  );
+  assert.equal(value.state.notificationOptions.length, 2);
+  assert.equal(
+    value.state.notificationOptions[0].idempotencyKey,
+    value.state.notificationOptions[1].idempotencyKey,
+  );
+});
+
+for (const notificationStatus of [undefined, 'pending', 'failed']) {
+  test(`historical accepted invitation ${notificationStatus ?? 'without status'} is retryable`, async () => {
+    const invitationValue = invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      ...(notificationStatus === undefined ? {} : {notificationStatus}),
+    });
+    const {state, result} = await provision({
+      invitationValue,
+      user: {
+        uid: 'existing-uid',
+        email: 'responsable@example.fr',
+        disabled: false,
+      },
+    });
+    assert.equal(result.emailDelivery, 'sent');
+    assert.equal(state.notifications.length, 1);
+    assert.equal(state.invitation.notificationStatus, 'sent');
+  });
+}
 
 test('notification failure preserves provisioned account and role', async () => {
   const value = harness({failNotification: true});
@@ -962,6 +1397,31 @@ test('notification failure preserves provisioned account and role', async () => 
   assert.equal(
     JSON.stringify(value.state.invitation).includes('simulated'),
     false,
+  );
+});
+
+test('delivery finalization failure keeps the lease instead of marking failed', async () => {
+  const value = harness();
+  value.services.markNotificationSent = async () => {
+    throw new Error('firestore finalization unavailable');
+  };
+
+  await assert.rejects(() => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now,
+    createNotificationAttemptId: () => 'attempt-owner',
+  }));
+
+  assert.equal(value.state.notifications.length, 1);
+  assert.equal(value.state.notificationFailed.length, 0);
+  assert.equal(value.state.invitation.notificationStatus, 'sending');
+  assert.equal(
+    value.state.invitation.notificationAttemptId,
+    'attempt-owner',
   );
 });
 
@@ -995,6 +1455,10 @@ test('retry after notification failure sends without recreating account or role'
   assert.equal(retry.state.invitation.notificationStatus, 'sent');
   assert.equal(result.alreadyProvisioned, true);
   assert.equal(result.emailDelivery, 'sent');
+  assert.equal(
+    retry.state.notificationOptions[0].idempotencyKey,
+    first.state.notificationOptions[0].idempotencyKey,
+  );
 });
 
 test('captured logs and public result never expose activation secrets', async () => {

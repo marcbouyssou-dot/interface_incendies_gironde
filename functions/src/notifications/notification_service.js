@@ -14,10 +14,14 @@ export class NotificationService {
     this.provider = assertNotificationProvider(provider);
   }
 
-  async send(message) {
+  async send(message, options = {}) {
     const normalizedMessage = createNotificationMessage(message);
+    const normalizedOptions = normalizeSendOptions(options);
     try {
-      const result = await this.provider.send(normalizedMessage);
+      const result = await this.provider.send(
+        normalizedMessage,
+        normalizedOptions,
+      );
       const providerMessageId = result?.providerMessageId;
       if (
         typeof providerMessageId !== 'string'
@@ -42,4 +46,29 @@ export class NotificationService {
       );
     }
   }
+}
+
+function normalizeSendOptions(options) {
+  if (
+    options === null
+    || typeof options !== 'object'
+    || Array.isArray(options)
+  ) {
+    throw new NotificationServiceError(
+      'invalid-send-options',
+      'Les options d’envoi sont invalides.',
+    );
+  }
+  const idempotencyKey = options.idempotencyKey;
+  if (idempotencyKey === undefined) return Object.freeze({});
+  if (
+    typeof idempotencyKey !== 'string'
+    || !/^[A-Za-z0-9:_-]{1,256}$/.test(idempotencyKey)
+  ) {
+    throw new NotificationServiceError(
+      'invalid-idempotency-key',
+      'La clé d’idempotence est invalide.',
+    );
+  }
+  return Object.freeze({idempotencyKey});
 }
