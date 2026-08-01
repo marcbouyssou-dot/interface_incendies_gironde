@@ -8,6 +8,11 @@ import {
   normalizeAdminInvitationEmail,
 } from './admin_invitation_validation.js';
 import {
+  AdminInvitationManagementError,
+  invitationManagementMutation,
+  manageAdminInvitation as manageInvitation,
+} from './manage_admin_invitation.js';
+import {
   ProvisioningError,
   provisionAdminInvitation as provision,
 } from './provision_admin_invitation.js';
@@ -64,6 +69,17 @@ export const updateResponsibleAccess = onCall(
   })),
 );
 
+export const manageAdminInvitation = onCall(
+  {region: 'europe-west1'},
+  async (request) => adminInvitationManagementCallable(() => manageInvitation({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: adminInvitationManagementServices({
+      firestore: getFirestore(),
+    }),
+  })),
+);
+
 export const provisionAdminInvitation = onCall(
   {
     region: 'europe-west1',
@@ -87,6 +103,7 @@ export const provisionAdminInvitation = onCall(
       }
       return await provision({
         invitationId: request.data?.invitationId,
+        resend: request.data?.resend ?? false,
         callerUid: request.auth?.uid,
         appUrl: configuredAppUrl,
         notificationService: createServerNotificationService({
@@ -241,6 +258,8 @@ export function adminServices({
       attemptId,
       reservedAt,
       leaseExpiresAt,
+      forceResend,
+      activationLinkGeneratedAt,
     }) {
       const invitationRef = firestore
         .collection('adminInvitations')
@@ -261,7 +280,7 @@ export function adminServices({
             'Le rôle attendu n’est pas attribué.',
           );
         }
-        if (current.notificationStatus === 'sent') {
+        if (current.notificationStatus === 'sent' && !forceResend) {
           return {state: 'sent'};
         }
         if (hasActiveNotificationLease(current, reservedAt)) {
@@ -277,6 +296,7 @@ export function adminServices({
           notificationProviderMessageId: FieldValue.delete(),
           notificationErrorCode: FieldValue.delete(),
           notificationFailedAt: FieldValue.delete(),
+          ...(forceResend ? {activationLinkGeneratedAt} : {}),
         });
         return {state: 'reserved'};
       });
@@ -432,6 +452,58 @@ export function responsibleAccessAdministrationServices({firestore, auth}) {
   };
 }
 
+export function adminInvitationManagementServices({firestore}) {
+  return {
+    async commitAdminInvitationManagement({
+      callerUid,
+      invitationId,
+      action,
+      update,
+      expiresAt,
+      now,
+    }) {
+      return firestore.runTransaction(async (transaction) => {
+        const callerRef = firestore.collection('roles').doc(callerUid);
+        const invitationRef = firestore
+          .collection('adminInvitations')
+          .doc(invitationId);
+        const [callerSnapshot, invitationSnapshot] = await Promise.all([
+          transaction.get(callerRef),
+          transaction.get(invitationRef),
+        ]);
+        if (
+          !callerSnapshot.exists
+          || !hasActiveCoordinatorRole(callerSnapshot.data())
+        ) {
+          throw new AdminInvitationManagementError(
+            'permission-denied',
+            'Accès coordinateur actif requis.',
+          );
+        }
+        if (!invitationSnapshot.exists) {
+          throw new AdminInvitationManagementError(
+            'not-found',
+            'Invitation introuvable.',
+          );
+        }
+        const mutation = invitationManagementMutation({
+          invitation: invitationSnapshot.data(),
+          action,
+          update,
+          expiresAt,
+          now,
+        });
+        if (mutation.kind === 'delete') {
+          transaction.delete(invitationRef);
+        } else {
+          transaction.update(invitationRef, mutation.fields);
+        }
+        return mutation.result;
+      });
+    },
+  };
+}
+
 async function responsibleAccessCallable(action) {
   try {
     return await action();
@@ -445,6 +517,23 @@ async function responsibleAccessCallable(action) {
     throw new HttpsError(
       'internal',
       'La gestion de l’accès responsable a échoué.',
+    );
+  }
+}
+
+async function adminInvitationManagementCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof AdminInvitationManagementError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('ADMIN_INVITATION_MANAGEMENT_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'La gestion de l’invitation a échoué.',
     );
   }
 }

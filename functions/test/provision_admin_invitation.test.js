@@ -150,7 +150,10 @@ function harness({
       };
     },
     async reserveNotificationDelivery(value) {
-      if (state.invitation.notificationStatus === 'sent') {
+      if (
+        state.invitation.notificationStatus === 'sent'
+        && !value.forceResend
+      ) {
         return {state: 'sent'};
       }
       const activeLease = state.invitation.notificationStatus === 'sending'
@@ -164,6 +167,9 @@ function harness({
         notificationAttemptId: value.attemptId,
         notificationReservedAt: value.reservedAt,
         notificationLeaseExpiresAt: value.leaseExpiresAt,
+        ...(value.forceResend
+          ? {activationLinkGeneratedAt: value.activationLinkGeneratedAt}
+          : {}),
       };
       delete state.invitation.notificationErrorCode;
       delete state.invitation.notificationFailedAt;
@@ -1197,6 +1203,68 @@ test('invitation idempotency key is stable, distinct and provider-compatible', (
     invitationNotificationIdempotencyKey('invitation-a'),
     /^[A-Za-z0-9:_-]{1,256}$/,
   );
+  assert.notEqual(
+    invitationNotificationIdempotencyKey('invitation-a', 'attempt-a'),
+    invitationNotificationIdempotencyKey('invitation-a', 'attempt-b'),
+  );
+});
+
+test('resending an already prepared invitation keeps the uid and sends once', async () => {
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      notificationStatus: 'sent',
+      notificationSentAt: now,
+      notificationProvider: 'fake',
+      notificationProviderMessageId: 'old-message',
+    }),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+  const result = await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    resend: true,
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now: new Date(now.getTime() + 1),
+    createNotificationAttemptId: () => 'resend-attempt',
+  });
+
+  assert.equal(result.alreadyProvisioned, true);
+  assert.equal(result.emailDelivery, 'sent');
+  assert.equal(value.state.created.length, 0);
+  assert.equal(value.state.commits.length, 0);
+  assert.equal(value.state.user.uid, 'existing-uid');
+  assert.equal(value.state.links.length, 1);
+  assert.equal(value.state.notifications.length, 1);
+  assert.equal(value.state.notificationReservations[0].forceResend, true);
+  assert.equal(
+    value.state.notificationOptions[0].idempotencyKey,
+    invitationNotificationIdempotencyKey(
+      'invitation-a',
+      'resend-attempt',
+    ),
+  );
+});
+
+test('refuses a malformed resend flag before any Auth operation', async () => {
+  const value = harness();
+  await rejectsCode(() => provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    resend: 'yes',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now,
+  }), 'invalid-argument');
+  assert.equal(value.state.authLookups, 0);
 });
 
 test('two concurrent calls on an accepted failed invitation send once', async () => {

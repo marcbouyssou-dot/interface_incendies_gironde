@@ -24,6 +24,7 @@ export class ProvisioningError extends Error {
 
 export async function provisionAdminInvitation({
   invitationId,
+  resend = false,
   callerUid,
   services,
   notificationService,
@@ -33,6 +34,12 @@ export async function provisionAdminInvitation({
 }) {
   requireText(invitationId, 'invalid-argument', 'Invitation invalide.');
   requireText(callerUid, 'unauthenticated', 'Authentification requise.');
+  if (typeof resend !== 'boolean') {
+    throw new ProvisioningError(
+      'invalid-argument',
+      'La demande de renvoi est invalide.',
+    );
+  }
   const activationUrl = buildActivationUrl(appUrl);
 
   const callerRole = await services.getRole(callerUid);
@@ -55,7 +62,21 @@ export async function provisionAdminInvitation({
   }
   let alreadyProvisioned = invitation.status === 'accepted'
     && typeof invitation.acceptedUid === 'string';
-  if (alreadyProvisioned && invitation.notificationStatus === 'sent') {
+  if (
+    resend
+    && alreadyProvisioned
+    && invitation.expiresAt <= now
+  ) {
+    throw new ProvisioningError(
+      'failed-precondition',
+      'L’invitation a expiré.',
+    );
+  }
+  if (
+    !resend
+    && alreadyProvisioned
+    && invitation.notificationStatus === 'sent'
+  ) {
     return safeResult({
       alreadyProvisioned: true,
       emailDelivery: 'sent',
@@ -124,6 +145,8 @@ export async function provisionAdminInvitation({
       leaseExpiresAt: new Date(
         now.getTime() + NOTIFICATION_LEASE_DURATION_MS,
       ),
+      forceResend: resend,
+      activationLinkGeneratedAt: now,
     });
     if (reservation.state === 'sent') {
       return safeResult({
@@ -148,7 +171,12 @@ export async function provisionAdminInvitation({
     try {
       notificationResult = await notificationService.send(
         buildInvitationNotification({invitation, activationLink}),
-        {idempotencyKey: invitationNotificationIdempotencyKey(invitationId)},
+        {
+          idempotencyKey: invitationNotificationIdempotencyKey(
+            invitationId,
+            resend ? attemptId : null,
+          ),
+        },
       );
     } catch (error) {
       const errorCode = normalizedNotificationErrorCode(error);
@@ -196,10 +224,23 @@ export async function provisionAdminInvitation({
   });
 }
 
-export function invitationNotificationIdempotencyKey(invitationId) {
+export function invitationNotificationIdempotencyKey(
+  invitationId,
+  resendAttemptId = null,
+) {
   requireText(invitationId, 'invalid-argument', 'Invitation invalide.');
   const digest = createHash('sha256').update(invitationId).digest('hex');
-  return `admin-invitation:${digest}:activation`;
+  const base = `admin-invitation:${digest}:activation`;
+  if (resendAttemptId === null) return base;
+  requireText(
+    resendAttemptId,
+    'invalid-argument',
+    'La tentative de renvoi est invalide.',
+  );
+  const attemptDigest = createHash('sha256')
+    .update(resendAttemptId)
+    .digest('hex');
+  return `${base}:resend:${attemptDigest}`;
 }
 
 export function buildInvitationNotification({invitation, activationLink}) {

@@ -168,6 +168,43 @@ export function validateProvisionableAdminInvitation(raw, {now} = {}) {
   });
 }
 
+export function validateUnacceptedAdminInvitation(raw) {
+  if (!isPlainObject(raw)) throw invalidInvitation();
+  if (!new Set(['pending', 'cancelled', 'expired']).has(raw.status)) {
+    throw invalidInvitation();
+  }
+  if (raw.acceptedAt !== null) throw invalidInvitation();
+  const createdAt = requiredDate(raw.createdAt);
+  const expiresAt = requiredDate(raw.expiresAt);
+  if (expiresAt <= createdAt) throw invalidInvitation();
+  const invitation = validateProvisionableAdminInvitation(
+    {...raw, status: 'pending'},
+    {now: createdAt},
+  );
+  return immutableInvitation({...invitation, status: raw.status});
+}
+
+export function validateAdminInvitationUpdate(raw) {
+  if (!isPlainObject(raw)) throw invalidInvitation();
+  refuseUnknownFields(raw, ['displayName', 'role', 'locationIds']);
+  for (const field of ['displayName', 'role', 'locationIds']) {
+    if (!Object.hasOwn(raw, field)) throw invalidInvitation();
+  }
+  const displayName = requiredNonBlankText(raw.displayName);
+  let assignment;
+  try {
+    assignment = normalizeRequestedAssignment(raw);
+  } catch (error) {
+    if (!(error instanceof ResponsibleAccessError)) throw error;
+    throw invalidInvitation(error);
+  }
+  return Object.freeze({
+    displayName,
+    role: raw.role,
+    locationIds: Object.freeze([...assignment.locationIds]),
+  });
+}
+
 export function normalizeAdminInvitationEmail(value) {
   if (typeof value !== 'string') return null;
   return value
