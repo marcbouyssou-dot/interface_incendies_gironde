@@ -41,6 +41,7 @@ const NOTIFICATION_FIELDS = Object.freeze({
   ]),
 });
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const MAX_EMAIL_LENGTH = 255;
 const NOTIFICATION_ERROR_CODE_PATTERN = /^[a-z0-9_-]{1,64}$/i;
 const CANONICAL_EDGE_WHITESPACE_PATTERN =
   /^[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+|[\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+$/gu;
@@ -179,7 +180,10 @@ function validateEmail(value) {
     throw invalidInvitation();
   }
   const normalized = normalizeAdminInvitationEmail(value);
-  if (!EMAIL_PATTERN.test(normalized)) throw invalidInvitation();
+  if (
+    normalized.length > MAX_EMAIL_LENGTH
+    || !EMAIL_PATTERN.test(normalized)
+  ) throw invalidInvitation();
   return normalized;
 }
 

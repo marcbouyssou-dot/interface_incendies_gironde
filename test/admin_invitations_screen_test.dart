@@ -284,6 +284,34 @@ void main() {
     },
   );
 
+  testWidgets('form refuses an email beyond the Firebase Auth boundary', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await openInvitations(tester);
+    await tester.tap(find.byKey(const Key('invite-admin-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('invitation-display-name')),
+      'Responsable mobile',
+    );
+    final submitFinder = find.byKey(const Key('create-admin-invitation'));
+
+    await tester.enterText(
+      find.byKey(const Key('invitation-email')),
+      '${List.filled(243, 'a').join()}@example.com',
+    );
+    await tester.pump();
+    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+
+    await tester.enterText(
+      find.byKey(const Key('invitation-email')),
+      '${List.filled(244, 'a').join()}@example.com',
+    );
+    await tester.pump();
+    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+  });
+
   testWidgets(
     'invalid local scope never reaches repository and form stays reusable',
     (tester) async {

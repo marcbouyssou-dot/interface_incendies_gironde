@@ -160,6 +160,13 @@ for (const [email, expected] of Object.entries({
   });
 }
 
+test('refuses an email at the Firebase Auth 256-character boundary', () => {
+  const email = `${'a'.repeat(244)}@example.com`;
+  assert.equal(email.length, 256);
+
+  assertValidationError(() => validate(pending({email})));
+});
+
 for (const value of [...BLANK_TEXT_VECTORS, 42, false, null, {}, []]) {
   test(`refuses invalid displayName ${JSON.stringify(value)}`, () => {
     assertValidationError(() => validate(pending({displayName: value})));

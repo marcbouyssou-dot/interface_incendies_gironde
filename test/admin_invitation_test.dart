@@ -148,6 +148,25 @@ void main() {
     }
   });
 
+  test('invitation email respects the Firebase Auth length boundary', () {
+    AdminInvitationDraft valueWithEmail(String email) => AdminInvitationDraft(
+      email: email,
+      displayName: 'Responsable',
+      locationIds: const ['site-a'],
+      expiresAt: now.add(const Duration(days: 1)),
+    );
+    final accepted = '${List.filled(243, 'a').join()}@example.com';
+    final refused = '${List.filled(244, 'a').join()}@example.com';
+    expect(accepted.length, 255);
+    expect(refused.length, 256);
+
+    valueWithEmail(accepted).validate(now: now);
+    expect(
+      () => valueWithEmail(refused).validate(now: now),
+      throwsFormatException,
+    );
+  });
+
   test('coordinator invitation has no location restriction', () {
     final value = AdminInvitationDraft(
       email: 'coord@example.fr',

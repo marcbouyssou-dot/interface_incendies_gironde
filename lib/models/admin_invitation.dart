@@ -91,6 +91,7 @@ class AdminInvitationDraft {
   static const siteManagerRole = 'site_manager';
   static const coordinatorRole = 'coordinator';
   static const maxLocationIds = 65;
+  static const maxEmailLength = 255;
   static const _rulesListSeparator = '\u001f';
 
   final String email;
@@ -111,7 +112,7 @@ class AdminInvitationDraft {
   }
 
   void validate({required DateTime now}) {
-    if (!_emailPattern.hasMatch(email)) {
+    if (email.length > maxEmailLength || !_emailPattern.hasMatch(email)) {
       throw const FormatException('Adresse e-mail invalide.');
     }
     if (isBlankLocationId(displayName)) {

@@ -471,9 +471,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
 
   bool get _hasValidIdentity =>
       _nameController.text.trim().isNotEmpty &&
-      RegExp(
-        r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-      ).hasMatch(_emailController.text.trim());
+      _isValidInvitationEmail(_emailController.text);
 
   bool get _canSubmit => !_submitting && _hasValidIdentity;
 
@@ -520,8 +518,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 autocorrect: false,
                 decoration: const InputDecoration(labelText: 'E-mail'),
                 validator: (value) {
-                  final email = value?.trim() ?? '';
-                  return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)
+                  return _isValidInvitationEmail(value ?? '')
                       ? null
                       : 'Saisissez une adresse e-mail valide.';
                 },
@@ -623,6 +620,12 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
     if (error is FormatException) return error.message;
     return 'L’invitation n’a pas pu être créée. Réessayez.';
   }
+}
+
+bool _isValidInvitationEmail(String value) {
+  final email = value.trim();
+  return email.length <= AdminInvitationDraft.maxEmailLength &&
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
 }
 
 class _InvitationSubmitBar extends StatelessWidget {

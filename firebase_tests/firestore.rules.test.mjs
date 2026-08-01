@@ -1295,6 +1295,22 @@ test('admin invitations: malformed emails are refused', async () => {
       ),
     );
   }
+  const acceptedBoundaryEmail = `${'a'.repeat(243)}@example.com`;
+  const refusedBoundaryEmail = `${'a'.repeat(244)}@example.com`;
+  assert.equal(acceptedBoundaryEmail.length, 255);
+  assert.equal(refusedBoundaryEmail.length, 256);
+  await assertSucceeds(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/email-255'),
+      adminInvitation({email: ` ${acceptedBoundaryEmail} `}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/email-256'),
+      adminInvitation({email: refusedBoundaryEmail}),
+    ),
+  );
   for (const [index, email] of [
     'a@b.c',
     'user@example.com',

@@ -379,6 +379,11 @@ for (const [label, invitationValue, reason] of [
     'invalid-admin-invitation',
   ],
   [
+    'email beyond Firebase Auth boundary',
+    invitation({email: `${'a'.repeat(244)}@example.com`}),
+    'invalid-admin-invitation',
+  ],
+  [
     'unknown status',
     invitation({status: 'queued'}),
     'invalid-admin-invitation',
