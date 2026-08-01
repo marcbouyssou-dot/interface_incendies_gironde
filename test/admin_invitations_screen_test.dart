@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/admin_invitation.dart';
+import 'package:interface_incendies_gironde/models/responsible_account.dart';
 import 'package:interface_incendies_gironde/repositories/admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/admin_invitation_repository_scope.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
@@ -12,6 +13,7 @@ import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
+import 'package:interface_incendies_gironde/repositories/responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/admin_invitations_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 
@@ -34,6 +36,7 @@ void main() {
     WidgetTester tester, {
     ResponsibleAccess? access = coordinator,
     AdminInvitationRepository? invitationRepository,
+    ResponsibleAccessAdministrationRepository? accessRepository,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -42,6 +45,7 @@ void main() {
       responsibleAccess: access,
       adminInvitationRepository:
           invitationRepository ?? MockAdminInvitationRepository(),
+      responsibleAccessAdministrationRepository: accessRepository,
     );
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
@@ -77,6 +81,65 @@ void main() {
     expect(find.text('Aucune invitation pour le moment.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'responsible accounts recover after retry while invitations stay visible',
+    (tester) async {
+      final accessRepository = _FlakyResponsibleAccessRepository();
+      final invitationsRepository = MockAdminInvitationRepository(
+        initialInvitations: [
+          _invitation(
+            id: 'pending-visible',
+            status: AdminInvitationStatus.pending,
+            now: now,
+          ),
+        ],
+        now: () => now,
+      );
+      addTearDown(invitationsRepository.dispose);
+      await pumpApp(
+        tester,
+        invitationRepository: invitationsRepository,
+        accessRepository: accessRepository,
+      );
+      await openInvitations(tester);
+
+      expect(
+        find.byKey(const Key('invitation-card-pending-visible')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('responsible-accounts-section')));
+      await tester.pump();
+      accessRepository.failFirst();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Les accès responsables ne sont pas disponibles.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Réessayer'));
+      await tester.pumpAndSettle();
+
+      expect(accessRepository.calls, 2);
+      expect(
+        find.byKey(const Key('responsible-account-manager')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const Key('manage-responsible-manager')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(
+        find.byKey(const Key('invitation-card-pending-visible')),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    },
+  );
 
   testWidgets('invalid V2 access blocks invitation administration explicitly', (
     tester,
@@ -615,6 +678,37 @@ class _CountingInvitationRepository implements AdminInvitationRepository {
     emailDelivery: 'pending',
     alreadyProvisioned: false,
   );
+}
+
+class _FlakyResponsibleAccessRepository
+    implements ResponsibleAccessAdministrationRepository {
+  final Completer<List<ResponsibleAccount>> _first = Completer();
+  int calls = 0;
+
+  void failFirst() => _first.completeError(
+    const ResponsibleAccessAdministrationException('Échec callable contrôlé.'),
+  );
+
+  @override
+  Future<List<ResponsibleAccount>> listAccounts() {
+    calls += 1;
+    if (calls == 1) return _first.future;
+    return Future.value([
+      ResponsibleAccount(
+        access: ResponsibleAccess.v2(
+          uid: 'manager',
+          roles: const [ResponsibleRole.siteManager],
+          locationIds: const {'merignac'},
+          active: false,
+        ),
+        email: 'manager@example.test',
+      ),
+    ]);
+  }
+
+  @override
+  Future<ResponsibleAccount> updateAccess(ResponsibleAccessUpdate update) =>
+      throw UnimplementedError();
 }
 
 class _InvalidAccessRepository extends MockCoordinationRepository {

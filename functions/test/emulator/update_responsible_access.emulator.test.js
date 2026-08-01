@@ -97,6 +97,65 @@ test('active coordinator lists existing legacy accounts with safe identity', asy
   assert.equal(account.email, target.email);
   assert.equal(account.role, 'site_manager');
   assert.deepEqual(account.roles, ['site_manager']);
+  assert.equal(account.schemaVersion, 2);
+});
+
+test('listing isolates malformed and orphaned accounts in a serializable response', async () => {
+  const caller = await createUser(coordinatorRole());
+  const legacyCoordinator = await createUser(coordinatorRole(false));
+  const v2Manager = await createUser({
+    role: 'site_manager',
+    roles: ['site_manager'],
+    locationIds: ['langon'],
+    active: true,
+    schemaVersion: 2,
+  });
+  const cumulative = await createUser({
+    role: 'coordinator',
+    roles: ['coordinator', 'site_manager'],
+    locationIds: ['merignac'],
+    active: false,
+    schemaVersion: 2,
+  });
+  const identityMissingUid = unique('identity-missing');
+  await adminAuth.createUser({uid: identityMissingUid});
+  await db.collection('roles').doc(identityMissingUid).set(managerRole());
+  const orphanUid = unique('orphan');
+  await db.collection('roles').doc(orphanUid).set(managerRole(false));
+  const malformedUid = unique('malformed');
+  await db.collection('roles').doc(malformedUid).set({
+    role: 'site_manager',
+    roles: ['unknown'],
+    locationIds: [],
+    active: true,
+    schemaVersion: 2,
+  });
+
+  const response = await (await client(caller)).list();
+  const accounts = response.data.accounts;
+  const byUid = new Map(accounts.map((account) => [account.uid, account]));
+
+  assert.equal(byUid.get(legacyCoordinator.uid).schemaVersion, 2);
+  assert.deepEqual(byUid.get(legacyCoordinator.uid).roles, ['coordinator']);
+  assert.equal(byUid.get(legacyCoordinator.uid).active, false);
+  assert.deepEqual(byUid.get(v2Manager.uid).roles, ['site_manager']);
+  assert.deepEqual(byUid.get(cumulative.uid).roles, [
+    'coordinator',
+    'site_manager',
+  ]);
+  assert.equal(byUid.get(cumulative.uid).active, false);
+  assert.equal(byUid.get(identityMissingUid).displayName, null);
+  assert.equal(byUid.get(identityMissingUid).email, null);
+  assert.equal(byUid.get(orphanUid).displayName, null);
+  assert.equal(byUid.get(orphanUid).email, null);
+  assert.equal(byUid.has(malformedUid), false);
+  assert.deepEqual(
+    accounts.map((account) => account.uid),
+    accounts
+      .map((account) => account.uid)
+      .toSorted((left, right) => left.localeCompare(right)),
+  );
+  assert.equal(JSON.stringify(response.data).includes('undefined'), false);
 });
 
 test('legacy target is converted to strict V2 and metadata is preserved', async () => {

@@ -166,7 +166,7 @@ class _CoordinatorInvitationsContentState
       ),
     );
     if (!mounted || updated == null) return;
-    setState(() => _accounts = widget.accessRepository.listAccounts());
+    _reloadAccounts();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -176,6 +176,12 @@ class _CoordinatorInvitationsContentState
         ),
       ),
     );
+  }
+
+  void _reloadAccounts() {
+    setState(() {
+      _accounts = widget.accessRepository.listAccounts();
+    });
   }
 
   @override
@@ -225,12 +231,7 @@ class _CoordinatorInvitationsContentState
                           future: _accounts,
                           builder: (context, accountSnapshot) {
                             if (accountSnapshot.hasError) {
-                              return _AccessListError(
-                                onRetry: () => setState(
-                                  () => _accounts = widget.accessRepository
-                                      .listAccounts(),
-                                ),
-                              );
+                              return _AccessListError(onRetry: _reloadAccounts);
                             }
                             if (!accountSnapshot.hasData) {
                               return const Center(

@@ -141,6 +141,20 @@ test('safe account projection omits unsupported identity values', () => {
     roles: ['site_manager'],
     locationIds: ['merignac'],
     active: false,
-    schemaVersion: 1,
+    schemaVersion: 2,
   });
+});
+
+test('legacy account projection uses the strict V2 callable contract', () => {
+  const account = safeResponsibleAccount('legacy-manager', {
+    role: 'site_manager',
+    locationIds: ['merignac'],
+    active: true,
+  });
+
+  assert.deepEqual(account.roles, ['site_manager']);
+  assert.equal(account.role, 'site_manager');
+  assert.deepEqual(account.locationIds, ['merignac']);
+  assert.equal(account.active, true);
+  assert.equal(account.schemaVersion, 2);
 });

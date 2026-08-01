@@ -71,7 +71,10 @@ export function safeResponsibleAccount(uid, document, identity = {}) {
     roles: [...access.roles],
     locationIds: [...access.locationIds],
     active: access.active,
-    schemaVersion: access.schemaVersion,
+    // The callable always exposes one canonical transfer format. Returning
+    // `roles` with legacy schemaVersion 1 is ambiguous and is deliberately
+    // rejected by strict dual-read clients.
+    schemaVersion: 2,
   };
 }
 

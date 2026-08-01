@@ -68,6 +68,61 @@ void main() {
       expect(dataSource.listCalls, 1);
     });
 
+    test(
+      'parses canonical legacy and V2 projections with nullable identity',
+      () async {
+        final dataSource = _DataSource(
+          listResponse: {
+            'accounts': [
+              {
+                'uid': 'legacy-manager',
+                'displayName': null,
+                'email': null,
+                'role': ResponsibleRole.siteManager,
+                'roles': [ResponsibleRole.siteManager],
+                'locationIds': ['merignac'],
+                'active': false,
+                'schemaVersion': 2,
+                'updatedAt': '2026-08-01T12:00:00.000Z',
+              },
+              {
+                'uid': 'cumulative',
+                'displayName': 'Responsable cumulatif',
+                'email': 'cumulative@example.test',
+                'role': ResponsibleRole.coordinator,
+                'roles': [
+                  ResponsibleRole.coordinator,
+                  ResponsibleRole.siteManager,
+                ],
+                'locationIds': ['langon'],
+                'active': true,
+                'schemaVersion': 2,
+              },
+            ],
+          },
+        );
+        final repository = FirestoreResponsibleAccessAdministrationRepository(
+          dataSource: dataSource,
+        );
+
+        final accounts = await repository.listAccounts();
+
+        final legacy = accounts.firstWhere(
+          (account) => account.uid == 'legacy-manager',
+        );
+        final cumulative = accounts.firstWhere(
+          (account) => account.uid == 'cumulative',
+        );
+        expect(legacy.displayName, isNull);
+        expect(legacy.email, isNull);
+        expect(legacy.access.active, isFalse);
+        expect(legacy.access.isSiteManager, isFalse);
+        expect(legacy.access.roles, {ResponsibleRole.siteManager});
+        expect(cumulative.access.isCumulative, isTrue);
+        expect(cumulative.access.locationIds, {'langon'});
+      },
+    );
+
     test('forwards only the canonical update payload', () async {
       final dataSource = _DataSource(
         updateResponse: {'account': _accountMap(uid: 'target', active: false)},

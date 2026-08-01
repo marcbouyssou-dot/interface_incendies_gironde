@@ -419,7 +419,7 @@ export function responsibleAccessAdministrationServices({firestore, auth}) {
         } catch {
           return [];
         }
-      });
+      }).sort((left, right) => left.uid.localeCompare(right.uid));
       const identities = new Map();
       for (let start = 0; start < documents.length; start += 100) {
         const batch = documents.slice(start, start + 100);
