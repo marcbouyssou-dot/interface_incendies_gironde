@@ -31,6 +31,13 @@ import {
 import {
   createServerNotificationService,
 } from './notifications/create_notification_service.js';
+import {
+  adminLocationRecord,
+  listAdminLocations as listLocations,
+  LocationAdministrationError,
+  locationManagementMutation,
+  manageLocation as manageAdminLocation,
+} from './location_administration.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -78,6 +85,24 @@ export const manageAdminInvitation = onCall(
       firestore: getFirestore(),
     }),
   })),
+);
+
+export const listAdminLocations = onCall(
+  {region: 'europe-west1'},
+  async (request) => locationAdministrationCallable(() => listLocations({
+    callerUid: request.auth?.uid,
+    services: locationAdministrationServices({firestore: getFirestore()}),
+  })),
+);
+
+export const manageLocation = onCall(
+  {region: 'europe-west1'},
+  async (request) => locationAdministrationCallable(() =>
+    manageAdminLocation({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: locationAdministrationServices({firestore: getFirestore()}),
+    })),
 );
 
 export const provisionAdminInvitation = onCall(
@@ -504,6 +529,112 @@ export function adminInvitationManagementServices({firestore}) {
   };
 }
 
+export function locationAdministrationServices({firestore}) {
+  return {
+    async listAdminLocations({callerUid}) {
+      const [caller, locations, missions, roles, invitations] =
+        await Promise.all([
+          firestore.collection('roles').doc(callerUid).get(),
+          firestore.collection('locations').get(),
+          firestore.collection('missions').get(),
+          firestore.collection('roles').get(),
+          firestore.collection('adminInvitations').get(),
+        ]);
+      requireActiveCoordinator(caller);
+      const referencedIds = new Set();
+      const referencedNames = new Set();
+      for (const mission of missions.docs) {
+        const data = mission.data();
+        if (typeof data.locationId === 'string') {
+          referencedIds.add(data.locationId);
+        }
+        if (typeof data.place === 'string') referencedNames.add(data.place);
+      }
+      for (const snapshot of [roles, invitations]) {
+        for (const document of snapshot.docs) {
+          const locationIds = document.data().locationIds;
+          if (!Array.isArray(locationIds)) continue;
+          for (const id of locationIds) {
+            if (typeof id === 'string') referencedIds.add(id);
+          }
+        }
+      }
+      return locations.docs
+        .map((document) => adminLocationRecord(
+          document.id,
+          document.data(),
+          {
+            used: referencedIds.has(document.id)
+              || referencedNames.has(document.data().name),
+          },
+        ))
+        .sort((left, right) => left.name.localeCompare(right.name, 'fr'));
+    },
+
+    async commitLocationManagement({
+      callerUid,
+      action,
+      locationId,
+      data,
+    }) {
+      return firestore.runTransaction(async (transaction) => {
+        const callerRef = firestore.collection('roles').doc(callerUid);
+        const locationRef = firestore.collection('locations').doc(locationId);
+        const [caller, location] = await Promise.all([
+          transaction.get(callerRef),
+          transaction.get(locationRef),
+        ]);
+        requireActiveCoordinator(caller);
+        let used = false;
+        if (action === 'delete' && location.exists) {
+          const name = location.data().name;
+          const queries = [
+            firestore.collection('missions')
+              .where('locationId', '==', locationId).limit(1),
+            firestore.collection('roles')
+              .where('locationIds', 'array-contains', locationId).limit(1),
+            firestore.collection('adminInvitations')
+              .where('locationIds', 'array-contains', locationId).limit(1),
+          ];
+          if (typeof name === 'string' && name !== '') {
+            queries.push(
+              firestore.collection('missions').where('place', '==', name)
+                .limit(1),
+            );
+          }
+          const references = await Promise.all(
+            queries.map((query) => transaction.get(query)),
+          );
+          used = references.some((snapshot) => !snapshot.empty);
+        }
+        const mutation = locationManagementMutation({
+          action,
+          locationId,
+          data,
+          current: location.exists ? location.data() : null,
+          used,
+        });
+        if (mutation.kind === 'create') {
+          transaction.create(locationRef, mutation.fields);
+        } else if (mutation.kind === 'update') {
+          transaction.update(locationRef, mutation.fields);
+        } else {
+          transaction.delete(locationRef);
+        }
+        return {
+          action,
+          location: mutation.kind === 'delete'
+            ? null
+            : adminLocationRecord(
+              locationId,
+              {...(location.data() ?? {}), ...mutation.fields},
+            ),
+        };
+      });
+    },
+  };
+}
+
 async function responsibleAccessCallable(action) {
   try {
     return await action();
@@ -534,6 +665,29 @@ async function adminInvitationManagementCallable(action) {
     throw new HttpsError(
       'internal',
       'La gestion de l’invitation a échoué.',
+    );
+  }
+}
+
+async function locationAdministrationCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof LocationAdministrationError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('LOCATION_ADMINISTRATION_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError('internal', 'La gestion du lieu a échoué.');
+  }
+}
+
+function requireActiveCoordinator(snapshot) {
+  if (!snapshot.exists || !hasActiveCoordinatorRole(snapshot.data())) {
+    throw new LocationAdministrationError(
+      'permission-denied',
+      'Accès coordinateur actif requis.',
     );
   }
 }
