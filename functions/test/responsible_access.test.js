@@ -31,6 +31,13 @@ function assignment(role, locationIds = []) {
   return {role, locationIds};
 }
 
+function locations(start, count) {
+  return Array.from(
+    {length: count},
+    (_, index) => `site-${String(start + index).padStart(3, '0')}`,
+  );
+}
+
 function assertAccessError(action, code = 'malformed-role') {
   assert.throws(action, (error) => {
     assert.ok(error instanceof ResponsibleAccessError);
@@ -240,6 +247,63 @@ test('merged locations are sorted and deduplicated across assignments', () => {
     assignment('site_manager', ['bazas', 'merignac']),
   );
   assert.deepEqual(value.locationIds, ['bassens', 'bazas', 'merignac']);
+});
+
+test('merges 64 existing locations and one new location up to the limit', () => {
+  const value = mergeResponsibleAccess(
+    legacy('site_manager', locations(0, 64)),
+    assignment('site_manager', locations(64, 1)),
+  );
+  assert.equal(value.locationIds.length, 65);
+  assert.deepEqual(value.locationIds, locations(0, 65));
+});
+
+test('keeps 65 locations when the requested location already exists', () => {
+  const existingLocations = locations(0, 65);
+  const value = mergeResponsibleAccess(
+    legacy('site_manager', existingLocations),
+    assignment('site_manager', [existingLocations[32]]),
+  );
+  assert.deepEqual(value.locationIds, existingLocations);
+});
+
+test('refuses a final union of 66 locations with a stable error', () => {
+  assert.throws(
+    () => mergeResponsibleAccess(
+      legacy('site_manager', locations(0, 65)),
+      assignment('site_manager', locations(65, 1)),
+    ),
+    (error) => {
+      assert.ok(error instanceof ResponsibleAccessError);
+      assert.equal(
+        error.code,
+        'responsible-access-location-limit-exceeded',
+      );
+      assert.equal(
+        error.message,
+        'Le nombre maximal de centres autorisés est dépassé.',
+      );
+      return true;
+    },
+  );
+});
+
+test('accepts overlapping assignments whose final union has 65 locations', () => {
+  const value = mergeResponsibleAccess(
+    legacy('site_manager', locations(0, 40)),
+    assignment('site_manager', locations(35, 30)),
+  );
+  assert.deepEqual(value.locationIds, locations(0, 65));
+});
+
+test('refuses overlapping assignments whose final union has 66 locations', () => {
+  assertAccessError(
+    () => mergeResponsibleAccess(
+      legacy('site_manager', locations(0, 40)),
+      assignment('site_manager', locations(35, 31)),
+    ),
+    'responsible-access-location-limit-exceeded',
+  );
 });
 
 test('refuses additive attribution to an inactive account', () => {

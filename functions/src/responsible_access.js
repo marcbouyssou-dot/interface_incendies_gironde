@@ -65,6 +65,9 @@ export function mergeResponsibleAccess(existingDocument, assignment) {
     ...requested.locationIds,
   ]);
   const locationIds = [...locations].sort();
+  if (locationIds.length > MAX_LOCATION_IDS) {
+    throw locationLimitExceeded();
+  }
   const role = roles.includes(COORDINATOR) ? COORDINATOR : SITE_MANAGER;
   return Object.freeze({
     role,
@@ -191,5 +194,12 @@ function invalidAssignment() {
   return new ResponsibleAccessError(
     'invalid-assignment',
     'Le périmètre demandé est invalide.',
+  );
+}
+
+function locationLimitExceeded() {
+  return new ResponsibleAccessError(
+    'responsible-access-location-limit-exceeded',
+    'Le nombre maximal de centres autorisés est dépassé.',
   );
 }

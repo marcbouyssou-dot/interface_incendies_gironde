@@ -60,9 +60,7 @@ export async function provisionAdminInvitation({
     );
   }
 
-  const account = await getOrCreateUser({services, invitation});
-  const user = account.user;
-  const createdUser = account.created;
+  const user = await getOrCreateUser({services, invitation});
   if (user?.disabled === true) {
     throw new ProvisioningError(
       'failed-precondition',
@@ -78,7 +76,6 @@ export async function provisionAdminInvitation({
 
   let firebaseActionLink;
   let activationLink;
-  let provisioningCommitted = alreadyProvisioned;
   try {
     firebaseActionLink = await services.generatePasswordResetLink(
       invitation.email,
@@ -100,7 +97,6 @@ export async function provisionAdminInvitation({
           activationLinkGeneratedAt: now,
         },
       });
-      provisioningCommitted = true;
     }
 
     try {
@@ -133,9 +129,6 @@ export async function provisionAdminInvitation({
       );
     }
   } catch (error) {
-    if (createdUser && !provisioningCommitted) {
-      await compensateCreatedUser(services, user.uid);
-    }
     throw normalizedAccessError(error);
   } finally {
     firebaseActionLink = null;
@@ -290,39 +283,22 @@ function validateInvitationData(invitation) {
   }
 }
 
-async function compensateCreatedUser(services, uid) {
-  try {
-    await services.deleteUser(uid);
-  } catch {
-    // A retry reuses the account if compensation is unavailable.
-  }
-}
-
 async function getOrCreateUser({services, invitation}) {
   try {
-    return {
-      user: await services.getUserByEmail(invitation.email),
-      created: false,
-    };
+    return await services.getUserByEmail(invitation.email);
   } catch (error) {
     if (error?.code !== 'auth/user-not-found') throw error;
   }
   try {
-    return {
-      user: await services.createUser({
-        email: invitation.email,
-        displayName: invitation.displayName,
-        emailVerified: false,
-        disabled: false,
-      }),
-      created: true,
-    };
+    return await services.createUser({
+      email: invitation.email,
+      displayName: invitation.displayName,
+      emailVerified: false,
+      disabled: false,
+    });
   } catch (error) {
     if (error?.code !== 'auth/email-already-exists') throw error;
-    return {
-      user: await services.getUserByEmail(invitation.email),
-      created: false,
-    };
+    return await services.getUserByEmail(invitation.email);
   }
 }
 
@@ -339,6 +315,13 @@ function normalizedAccessError(error) {
     return new ProvisioningError(
       'invalid-argument',
       'L’attribution demandée est invalide.',
+      {cause: error},
+    );
+  }
+  if (error.code === 'responsible-access-location-limit-exceeded') {
+    return new ProvisioningError(
+      'failed-precondition',
+      'Le nombre maximal de centres autorisés est dépassé.',
       {cause: error},
     );
   }

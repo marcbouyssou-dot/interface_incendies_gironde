@@ -32,6 +32,13 @@ function email(prefix) {
   return `${unique(prefix)}@example.test`;
 }
 
+function locations(start, count) {
+  return Array.from(
+    {length: count},
+    (_, index) => `site-${String(start + index).padStart(3, '0')}`,
+  );
+}
+
 async function client({
   uid,
   role,
@@ -375,6 +382,68 @@ test('existing cumulative V2 role merges a new center idempotently', async () =>
   assert.deepEqual(role.locationIds, ['bassens', 'bazas']);
 });
 
+test('location union writes exactly 65 centers', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('limit-65');
+  const target = await adminAuth.createUser({email: targetEmail});
+  await db.collection('roles').doc(target.uid).set({
+    role: 'site_manager',
+    roles: ['site_manager'],
+    locationIds: locations(0, 64),
+    active: true,
+    schemaVersion: 2,
+  });
+  const id = unique('limit-65');
+  await seedInvitation(id, {
+    email: targetEmail,
+    locationIds: locations(64, 1),
+  });
+
+  await callable({invitationId: id});
+
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  const accepted = (
+    await db.collection('adminInvitations').doc(id).get()
+  ).data();
+  assert.deepEqual(role.locationIds, locations(0, 65));
+  assert.equal(accepted.status, 'accepted');
+  assert.equal(accepted.notificationStatus, 'sent');
+});
+
+test('location union refuses 66 centers without partial writes', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('limit-66');
+  const target = await adminAuth.createUser({email: targetEmail});
+  const existingLocations = locations(0, 65);
+  await db.collection('roles').doc(target.uid).set({
+    role: 'site_manager',
+    roles: ['site_manager'],
+    locationIds: existingLocations,
+    active: true,
+    schemaVersion: 2,
+  });
+  const id = unique('limit-66');
+  await seedInvitation(id, {
+    email: targetEmail,
+    locationIds: locations(65, 1),
+  });
+
+  await assertCallableCode(
+    () => callable({invitationId: id}),
+    'failed-precondition',
+  );
+
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  const pending = (
+    await db.collection('adminInvitations').doc(id).get()
+  ).data();
+  assert.deepEqual(role.locationIds, existingLocations);
+  assert.equal(pending.status, 'pending');
+  assert.equal('acceptedUid' in pending, false);
+  assert.equal('notificationStatus' in pending, false);
+  assert.equal((await adminAuth.getUser(target.uid)).uid, target.uid);
+});
+
 test('different invitations for the same role and center keep one canonical state', async () => {
   const callable = await coordinator();
   const targetEmail = email('repeated-assignment');
@@ -502,6 +571,82 @@ test('concurrent role invitations merge into a cumulative account', async () => 
   assert.deepEqual(role.locationIds, ['bazas']);
 });
 
+test('concurrent provisioning keeps an initially absent Auth account', async () => {
+  const callable = await coordinator();
+  const targetEmail = email('concurrent-new-auth');
+  const failedId = 'failure-concurrent';
+  const successfulId = unique('success-concurrent');
+  await Promise.all([
+    seedInvitation(failedId, {
+      email: targetEmail,
+      locationIds: ['bazas'],
+    }),
+    seedInvitation(successfulId, {
+      email: targetEmail,
+      locationIds: ['bassens'],
+    }),
+  ]);
+
+  const results = await Promise.allSettled([
+    callable({invitationId: failedId}),
+    callable({invitationId: successfulId}),
+  ]);
+  const fulfilled = results.filter((result) => result.status === 'fulfilled');
+  const rejected = results.filter((result) => result.status === 'rejected');
+  assert.equal(fulfilled.length, 1);
+  assert.equal(rejected.length, 1);
+  assert.equal(rejected[0].reason.code, 'functions/internal');
+
+  const target = await adminAuth.getUserByEmail(targetEmail);
+  const sameEmailAccounts = (await adminAuth.listUsers(1000)).users
+    .filter((user) => user.email === targetEmail);
+  assert.equal(sameEmailAccounts.length, 1);
+  const role = (await db.collection('roles').doc(target.uid).get()).data();
+  const failed = (
+    await db.collection('adminInvitations').doc(failedId).get()
+  ).data();
+  const successful = (
+    await db.collection('adminInvitations').doc(successfulId).get()
+  ).data();
+  assert.deepEqual(role.roles, ['site_manager']);
+  assert.deepEqual(role.locationIds, ['bassens']);
+  assert.equal(role.role, 'site_manager');
+  assert.equal(role.active, true);
+  assert.equal(role.schemaVersion, 2);
+  assert.equal(failed.status, 'pending');
+  assert.equal('acceptedUid' in failed, false);
+  assert.equal(successful.status, 'accepted');
+  assert.equal(successful.acceptedUid, target.uid);
+  assert.equal(successful.notificationStatus, 'sent');
+
+  const sentAt = successful.notificationSentAt.toMillis();
+  const repeatedSuccess = await callable({invitationId: successfulId});
+  const unchangedSuccess = (
+    await db.collection('adminInvitations').doc(successfulId).get()
+  ).data();
+  assert.equal(repeatedSuccess.data.alreadyProvisioned, true);
+  assert.equal(unchangedSuccess.notificationSentAt.toMillis(), sentAt);
+
+  await callable({invitationId: failedId});
+  const mergedRole = (
+    await db.collection('roles').doc(target.uid).get()
+  ).data();
+  const retried = (
+    await db.collection('adminInvitations').doc(failedId).get()
+  ).data();
+  assert.deepEqual(mergedRole.locationIds, ['bassens', 'bazas']);
+  assert.equal(retried.status, 'accepted');
+  assert.equal(retried.acceptedUid, target.uid);
+  assert.equal(retried.notificationStatus, 'sent');
+  const retriedSentAt = retried.notificationSentAt.toMillis();
+  await callable({invitationId: failedId});
+  const repeatedRetry = (
+    await db.collection('adminInvitations').doc(failedId).get()
+  ).data();
+  assert.equal(repeatedRetry.notificationSentAt.toMillis(), retriedSentAt);
+  assert.equal((await adminAuth.getUser(target.uid)).uid, target.uid);
+});
+
 test('disabled existing account is refused', async () => {
   const callable = await coordinator();
   const targetEmail = email('disabled');
@@ -569,17 +714,14 @@ test('notification failure preserves provisioning and retry sends once', async (
   assert.equal((await adminAuth.getUserByEmail(invitation.email)).uid, target.uid);
 });
 
-test('new Auth account is compensated when Firestore commit fails', async () => {
+test('new Auth account is preserved when Firestore commit fails', async () => {
   const callable = await coordinator();
   const invitation = await seedInvitation('failure-new');
   await assertCallableCode(
     () => callable({invitationId: 'failure-new'}),
     'internal',
   );
-  await assert.rejects(
-    () => adminAuth.getUserByEmail(invitation.email),
-    (error) => error.code === 'auth/user-not-found',
-  );
+  const preservedTarget = await adminAuth.getUserByEmail(invitation.email);
   const stored = (
     await db.collection('adminInvitations').doc('failure-new').get()
   ).data();
@@ -592,6 +734,7 @@ test('new Auth account is compensated when Firestore commit fails', async () => 
   const retriedInvitation = (
     await db.collection('adminInvitations').doc('failure-new').get()
   ).data();
+  assert.equal(retriedTarget.uid, preservedTarget.uid);
   assert.equal(retriedInvitation.acceptedUid, retriedTarget.uid);
 });
 

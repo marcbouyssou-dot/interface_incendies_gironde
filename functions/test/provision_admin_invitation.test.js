@@ -24,6 +24,13 @@ function invitation(overrides = {}) {
   };
 }
 
+function locations(start, count) {
+  return Array.from(
+    {length: count},
+    (_, index) => `site-${String(start + index).padStart(3, '0')}`,
+  );
+}
+
 function firebasePasswordResetLink(settings) {
   const url = new URL('https://test-project.firebaseapp.com/__/auth/action');
   url.searchParams.set('mode', 'resetPassword');
@@ -219,6 +226,7 @@ test('active coordinator provisions a new account and site manager role', async 
   assert.deepEqual(state.commits[0].role.locationIds, ['site-a', 'site-b']);
   assert.equal(state.commits[0].role.role, 'site_manager');
   assert.equal(state.commits[0].role.active, true);
+  assert.deepEqual(state.deleted, []);
   assert.equal(result.emailDelivery, 'sent');
   assert.equal(result.accountProvisioned, true);
   assert.equal(result.invitationStatus, 'accepted');
@@ -358,6 +366,63 @@ test('existing site manager receives coordinator without losing locations', asyn
   assert.deepEqual(state.role.locationIds, ['site-b']);
 });
 
+test('provisioning writes an exact final limit of 65 locations', async () => {
+  const existingLocations = locations(0, 64);
+  const {state} = await provision({
+    invitationValue: invitation({locationIds: locations(64, 1)}),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+    role: {
+      role: 'site_manager',
+      roles: ['site_manager'],
+      locationIds: existingLocations,
+      active: true,
+      schemaVersion: 2,
+    },
+  });
+  assert.deepEqual(state.role.locationIds, locations(0, 65));
+  assert.equal(state.commits.length, 1);
+  assert.equal(state.notifications.length, 1);
+});
+
+test('provisioning refuses 66 locations before writes or notification', async () => {
+  const existingRole = {
+    role: 'site_manager',
+    roles: ['site_manager'],
+    locationIds: locations(0, 65),
+    active: true,
+    schemaVersion: 2,
+  };
+  const value = harness({
+    invitationValue: invitation({locationIds: locations(65, 1)}),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+    role: existingRole,
+  });
+  await rejectsCode(
+    () => provisionAdminInvitation({
+      invitationId: 'invitation-a',
+      callerUid: 'coord',
+      services: value.services,
+      notificationService: value.notificationService,
+      appUrl,
+      now,
+    }),
+    'failed-precondition',
+  );
+  assert.deepEqual(value.state.role, existingRole);
+  assert.equal(value.state.invitation.status, 'pending');
+  assert.equal(value.state.commits.length, 0);
+  assert.equal(value.state.notifications.length, 0);
+  assert.deepEqual(value.state.deleted, []);
+});
+
 test('malformed existing role is refused without deleting existing Auth', async () => {
   const value = harness({
     user: {
@@ -419,6 +484,154 @@ test('concurrent Auth creation reuses the account created by the winner', async 
   assert.deepEqual(state.deleted, []);
 });
 
+test('concurrent provisioning never deletes an adopted new Auth account', async () => {
+  const targetEmail = 'concurrent@example.fr';
+  const invitations = new Map([
+    [
+      'invitation-failure',
+      invitation({email: targetEmail, locationIds: ['site-a']}),
+    ],
+    [
+      'invitation-success',
+      invitation({email: targetEmail, locationIds: ['site-b']}),
+    ],
+  ]);
+  const state = {
+    user: null,
+    role: null,
+    createAttempts: 0,
+    createdAccounts: 0,
+    deleted: [],
+    notifications: [],
+  };
+  let initialLookups = 0;
+  let releaseInitialLookups;
+  let transactionFailureInjected = false;
+  const initialLookupBarrier = new Promise((resolve) => {
+    releaseInitialLookups = resolve;
+  });
+  const services = {
+    async getRole(uid) {
+      return uid === 'coord'
+        ? {role: 'coordinator', active: true, locationIds: []}
+        : state.role;
+    },
+    async getInvitation(id) {
+      return invitations.get(id);
+    },
+    async getUserByEmail() {
+      if (state.user) return state.user;
+      initialLookups += 1;
+      if (initialLookups === 2) releaseInitialLookups();
+      await initialLookupBarrier;
+      if (state.user) return state.user;
+      const error = new Error('missing');
+      error.code = 'auth/user-not-found';
+      throw error;
+    },
+    async createUser(properties) {
+      state.createAttempts += 1;
+      if (state.user) {
+        const error = new Error('email already exists');
+        error.code = 'auth/email-already-exists';
+        throw error;
+      }
+      state.createdAccounts += 1;
+      state.user = {uid: 'concurrent-uid', ...properties};
+      return state.user;
+    },
+    async deleteUser(uid) {
+      state.deleted.push(uid);
+      state.user = null;
+    },
+    async generatePasswordResetLink(email, settings) {
+      return firebasePasswordResetLink(settings);
+    },
+    async commitProvisioning(value) {
+      if (
+        value.invitationId === 'invitation-failure'
+        && !transactionFailureInjected
+      ) {
+        transactionFailureInjected = true;
+        throw new Error('simulated transaction failure');
+      }
+      const current = invitations.get(value.invitationId);
+      state.role = mergeResponsibleAccess(state.role, current);
+      invitations.set(value.invitationId, {
+        ...current,
+        status: 'accepted',
+        acceptedUid: value.targetUid,
+        notificationStatus: 'pending',
+      });
+    },
+    async markNotificationSent(value) {
+      const current = invitations.get(value.invitationId);
+      invitations.set(value.invitationId, {
+        ...current,
+        notificationStatus: 'sent',
+      });
+    },
+    async markNotificationFailed() {},
+  };
+  const notificationService = {
+    async send(message) {
+      state.notifications.push(message);
+      return {
+        success: true,
+        provider: 'fake',
+        providerMessageId: `message-${state.notifications.length}`,
+      };
+    },
+  };
+  const call = (invitationId) => provisionAdminInvitation({
+    invitationId,
+    callerUid: 'coord',
+    services,
+    notificationService,
+    appUrl,
+    now,
+  });
+
+  const results = await Promise.allSettled([
+    call('invitation-failure'),
+    call('invitation-success'),
+  ]);
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1,
+  );
+  assert.equal(
+    results.filter((result) => result.status === 'rejected').length,
+    1,
+  );
+  assert.equal(state.createdAccounts, 1);
+  assert.equal(state.createAttempts, 2);
+  assert.equal(state.user.uid, 'concurrent-uid');
+  assert.deepEqual(state.deleted, []);
+  assert.equal(state.role.role, 'site_manager');
+  assert.deepEqual(state.role.roles, ['site_manager']);
+  assert.deepEqual(state.role.locationIds, ['site-b']);
+  assert.equal(state.role.active, true);
+  assert.equal(state.role.schemaVersion, 2);
+  assert.equal(
+    invitations.get('invitation-success').notificationStatus,
+    'sent',
+  );
+  assert.equal(invitations.get('invitation-failure').status, 'pending');
+  assert.equal(state.notifications.length, 1);
+
+  await call('invitation-failure');
+  assert.deepEqual(state.role.locationIds, ['site-a', 'site-b']);
+  assert.equal(
+    invitations.get('invitation-failure').notificationStatus,
+    'sent',
+  );
+  assert.equal(state.notifications.length, 2);
+  await call('invitation-failure');
+  assert.equal(state.notifications.length, 2);
+  assert.deepEqual(state.deleted, []);
+});
+
 test('disabled existing account is refused', async () => {
   const value = harness({
     user: {
@@ -440,7 +653,7 @@ test('disabled existing account is refused', async () => {
   );
 });
 
-test('Firestore failure compensates new Auth account and does not accept', async () => {
+test('Firestore failure preserves a new Auth account without accepting', async () => {
   const value = harness({failCommit: true});
   await assert.rejects(() => provisionAdminInvitation({
     invitationId: 'invitation-a',
@@ -450,13 +663,14 @@ test('Firestore failure compensates new Auth account and does not accept', async
     appUrl,
     now,
   }));
-  assert.deepEqual(value.state.deleted, ['created-uid']);
+  assert.deepEqual(value.state.deleted, []);
+  assert.equal(value.state.user.uid, 'created-uid');
   assert.equal(value.state.invitation.status, 'pending');
   assert.equal(value.state.commits.length, 0);
   assert.equal(value.state.notifications.length, 0);
 });
 
-test('activation-link failure compensates a newly created account', async () => {
+test('activation-link failure preserves a newly created account', async () => {
   const value = harness({failLink: true});
   await assert.rejects(() => provisionAdminInvitation({
     invitationId: 'invitation-a',
@@ -466,7 +680,8 @@ test('activation-link failure compensates a newly created account', async () => 
     appUrl,
     now,
   }));
-  assert.deepEqual(value.state.deleted, ['created-uid']);
+  assert.deepEqual(value.state.deleted, []);
+  assert.equal(value.state.user.uid, 'created-uid');
   assert.equal(value.state.invitation.status, 'pending');
   assert.equal(value.state.commits.length, 0);
   assert.equal(value.state.notifications.length, 0);
@@ -493,7 +708,7 @@ test('activation-link failure never deletes a pre-existing account', async () =>
   assert.equal(value.state.invitation.status, 'pending');
 });
 
-test('retry after a compensated failure provisions without duplicate state', async () => {
+test('retry after a transaction failure reuses the preserved Auth account', async () => {
   const value = harness({failCommit: true});
   await assert.rejects(() => provisionAdminInvitation({
     invitationId: 'invitation-a',
@@ -503,9 +718,13 @@ test('retry after a compensated failure provisions without duplicate state', asy
     appUrl,
     now,
   }));
-  assert.deepEqual(value.state.deleted, ['created-uid']);
+  assert.deepEqual(value.state.deleted, []);
+  assert.equal(value.state.user.uid, 'created-uid');
 
-  const retry = harness({invitationValue: value.state.invitation});
+  const retry = harness({
+    invitationValue: value.state.invitation,
+    user: value.state.user,
+  });
   const result = await provisionAdminInvitation({
     invitationId: 'invitation-a',
     callerUid: 'coord',
@@ -514,8 +733,9 @@ test('retry after a compensated failure provisions without duplicate state', asy
     appUrl,
     now,
   });
-  assert.equal(retry.state.created.length, 1);
+  assert.equal(retry.state.created.length, 0);
   assert.equal(retry.state.commits.length, 1);
+  assert.equal(retry.state.commits[0].targetUid, 'created-uid');
   assert.equal(result.invitationStatus, 'accepted');
 });
 
@@ -643,7 +863,8 @@ for (const [label, generatedPasswordResetLink] of [
     );
     assert.equal(value.state.notifications.length, 0);
     assert.equal(value.state.commits.length, 0);
-    assert.deepEqual(value.state.deleted, ['created-uid']);
+    assert.deepEqual(value.state.deleted, []);
+    assert.equal(value.state.user.uid, 'created-uid');
   });
 }
 

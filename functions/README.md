@@ -40,8 +40,10 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
 - Un rôle inactif ou malformé bloque l’attribution sans mutation ni
   réactivation implicite.
 - Si Firestore échoue après la création d’un nouveau compte Auth, la Function
-  tente de supprimer uniquement ce compte nouvellement créé. Un compte
-  préexistant n’est jamais supprimé.
+  conserve ce compte sans rôle. Ce provisionnement incomplet reste non
+  privilégié et peut être repris de manière idempotente. Aucun compte Auth
+  n’est supprimé automatiquement, afin de ne jamais supprimer un compte adopté
+  en parallèle.
 - L’invitation reste `pending` tant que la transaction finale n’a pas réussi.
 - Un échec d’envoi après cette transaction conserve le compte et le rôle,
   marque `notificationStatus: failed` avec un code normalisé, puis retourne une
@@ -50,13 +52,14 @@ journalisé. Seuls les timestamps de provisionnement sont conservés.
 ## Concurrence et propriété des responsabilités
 
 Le cœur métier conserve la validation de l’appelant, le cycle Auth, le lien
-d’activation, l’idempotence, la notification et la compensation. Le module pur
+d’activation, l’idempotence et la notification. Le module pur
 `responsible_access.js` est l’unique source serveur pour parser les formats
 legacy/V2 et calculer une fusion canonique. L’adaptateur Admin SDK dans
 `index.js` exécute cette fusion dans la transaction qui relit simultanément
 l’invitation et le rôle.
 
-Les retries natifs des transactions Firestore empêchent deux invitations
+La fusion refuse toute union finale de plus de 65 centres avant l’écriture. Les
+retries natifs des transactions Firestore empêchent deux invitations
 concurrentes de perdre un rôle ou un centre. Une course de création Auth sur le
 même e-mail réutilise le compte créé par l’appel gagnant. Les métadonnées
 `createdAt` et `createdBy`, ainsi que les champs historiques compatibles, sont

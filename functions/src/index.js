@@ -105,7 +105,6 @@ export function adminServices({
     },
     getUserByEmail: (email) => auth.getUserByEmail(email),
     createUser: (properties) => auth.createUser(properties),
-    deleteUser: (uid) => auth.deleteUser(uid),
     generatePasswordResetLink: (email, settings) =>
       auth.generatePasswordResetLink(email, settings),
     async commitProvisioning({
