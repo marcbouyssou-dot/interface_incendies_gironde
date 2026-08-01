@@ -30,11 +30,18 @@ service cloud.firestore {
         && values.size() > 0;
     }
 
+    function hasNoBlankLocationIds(values) {
+      return !values
+        .join('\u001f')
+        .matches('(^|.*\u001f)\\s*(\u001f.*|$)');
+    }
+
     function hasValidInvitationScope(invitation) {
       return 'locationIds' in invitation
         && (
           (invitation.role == 'site_manager'
-            && validLocationIds(invitation.locationIds))
+            && validLocationIds(invitation.locationIds)
+            && hasNoBlankLocationIds(invitation.locationIds))
           || (invitation.role == 'coordinator'
             && invitation.locationIds == [])
         );

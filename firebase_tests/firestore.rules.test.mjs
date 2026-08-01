@@ -1311,6 +1311,7 @@ test('admin invitations: non-list locationIds is refused', async () => {
 
 for (const [label, locationIds] of [
   ['empty-location', ['']],
+  ['blank-location', ['   ']],
   ['non-string-location', ['site-a', 42]],
   ['duplicate-location', ['site-a', 'site-a']],
   ['wildcard-location', ['*']],

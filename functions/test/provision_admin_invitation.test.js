@@ -308,6 +308,28 @@ test('unknown invitation is refused', async () => {
   );
 });
 
+test('blank invitation location is refused before Auth or Firestore writes', async () => {
+  const value = harness({
+    invitationValue: invitation({locationIds: ['   ']}),
+  });
+
+  await rejectsCode(
+    () => provisionAdminInvitation({
+      invitationId: 'invitation-a',
+      callerUid: 'coord',
+      services: value.services,
+      notificationService: value.notificationService,
+      appUrl,
+      now,
+    }),
+    'invalid-argument',
+  );
+
+  assert.equal(value.state.created.length, 0);
+  assert.equal(value.state.commits.length, 0);
+  assert.equal(value.state.notifications.length, 0);
+});
+
 for (const [label, value] of [
   ['expired', invitation({expiresAt: new Date('2026-07-29T10:00:00Z')})],
   ['cancelled', invitation({status: 'cancelled'})],
