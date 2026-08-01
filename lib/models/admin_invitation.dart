@@ -80,12 +80,11 @@ class AdminInvitation {
 class AdminInvitationDraft {
   AdminInvitationDraft({
     required String email,
-    required String displayName,
+    required this.displayName,
     required Iterable<Object?> locationIds,
     required this.expiresAt,
     Object? role = siteManagerRole,
   }) : email = email.trim().toLowerCase(),
-       displayName = displayName.trim(),
        _role = role,
        _locationIds = List<Object?>.unmodifiable(locationIds);
 
@@ -115,7 +114,7 @@ class AdminInvitationDraft {
     if (!_emailPattern.hasMatch(email)) {
       throw const FormatException('Adresse e-mail invalide.');
     }
-    if (displayName.isEmpty) {
+    if (isBlankLocationId(displayName)) {
       throw const FormatException('Le nom du responsable est obligatoire.');
     }
     if (_role != siteManagerRole && _role != coordinatorRole) {

@@ -1284,6 +1284,9 @@ test('admin invitations: malformed emails are refused', async () => {
     '@example.fr',
     'a@example',
     'a b@example.fr',
+    'user@example .com',
+    'user@@example.com',
+    'user@',
   ].entries()) {
     await assertFails(
       setDoc(
@@ -1292,12 +1295,30 @@ test('admin invitations: malformed emails are refused', async () => {
       ),
     );
   }
-  await assertSucceeds(
-    setDoc(
-      doc(db('coord'), 'adminInvitations/email-with-canonical-edges'),
-      adminInvitation({email: ' RESPONSABLE@EXAMPLE.FR '}),
-    ),
-  );
+  for (const [index, email] of [
+    'a@b.c',
+    'user@example.com',
+    ' user@example.com',
+    'user@example.com ',
+    ' user@example.com ',
+    'user..name@example.com',
+    'user+tag@example.com',
+    'USER@example.com',
+    'utilisateur@exemple.fr',
+  ].entries()) {
+    const idPrefix = 'valid-email-';
+    const invitationId = `${idPrefix}${index}`;
+    await assertSucceeds(
+      setDoc(
+        doc(db('coord'), `adminInvitations/${invitationId}`),
+        adminInvitation({email}),
+      ),
+    );
+    const snapshot = await assertSucceeds(
+      getDoc(doc(db('coord'), `adminInvitations/${invitationId}`)),
+    );
+    assert.equal(snapshot.data().email, email);
+  }
 });
 
 test('admin invitations: every canonical Unicode blank display name is refused', async () => {
@@ -1309,6 +1330,28 @@ test('admin invitations: every canonical Unicode blank display name is refused',
         adminInvitation({displayName}),
       ),
     );
+  }
+});
+
+test('admin invitations: valid display names are preserved exactly', async () => {
+  await seed();
+  for (const [index, displayName] of [
+    ' Marc ',
+    'Marc',
+    'Marc Bouyssou',
+    '👨‍⚕️ Marc',
+  ].entries()) {
+    const invitationId = `valid-display-name-${index}`;
+    await assertSucceeds(
+      setDoc(
+        doc(db('coord'), `adminInvitations/${invitationId}`),
+        adminInvitation({displayName}),
+      ),
+    );
+    const snapshot = await assertSucceeds(
+      getDoc(doc(db('coord'), `adminInvitations/${invitationId}`)),
+    );
+    assert.equal(snapshot.data().displayName, displayName);
   }
 });
 

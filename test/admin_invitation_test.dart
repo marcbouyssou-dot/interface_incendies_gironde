@@ -50,7 +50,7 @@ void main() {
     value.validate(now: now);
 
     expect(value.email, 'responsable@exemple.fr');
-    expect(value.displayName, 'Camille Martin');
+    expect(value.displayName, ' Camille Martin ');
     expect(value.role, 'site_manager');
     expect(value.locationIds, unorderedEquals(['site-a', 'site-b']));
     expect(
@@ -77,6 +77,9 @@ void main() {
         '@example.fr',
         'a@example',
         'a b@example.fr',
+        'user@example .com',
+        'user@@example.com',
+        'user@',
       ]) {
         expect(
           () => AdminInvitationDraft(
@@ -101,6 +104,49 @@ void main() {
       }
     },
   );
+
+  test('invitation draft preserves valid display names exactly', () {
+    for (final displayName in <String>[
+      ' Marc ',
+      'Marc',
+      'Marc Bouyssou',
+      '👨‍⚕️ Marc',
+    ]) {
+      final value = AdminInvitationDraft(
+        email: 'responsable@example.fr',
+        displayName: displayName,
+        locationIds: const ['site-a'],
+        expiresAt: now.add(const Duration(days: 1)),
+      );
+
+      value.validate(now: now);
+      expect(value.displayName, displayName);
+    }
+  });
+
+  test('invitation email contract stays minimal and deterministic', () {
+    for (final entry in <String, String>{
+      'a@b.c': 'a@b.c',
+      'user@example.com': 'user@example.com',
+      ' user@example.com': 'user@example.com',
+      'user@example.com ': 'user@example.com',
+      ' user@example.com ': 'user@example.com',
+      'user..name@example.com': 'user..name@example.com',
+      'user+tag@example.com': 'user+tag@example.com',
+      'USER@example.com': 'user@example.com',
+      'utilisateur@exemple.fr': 'utilisateur@exemple.fr',
+    }.entries) {
+      final value = AdminInvitationDraft(
+        email: entry.key,
+        displayName: 'Responsable',
+        locationIds: const ['site-a'],
+        expiresAt: now.add(const Duration(days: 1)),
+      );
+
+      value.validate(now: now);
+      expect(value.email, entry.value);
+    }
+  });
 
   test('coordinator invitation has no location restriction', () {
     final value = AdminInvitationDraft(

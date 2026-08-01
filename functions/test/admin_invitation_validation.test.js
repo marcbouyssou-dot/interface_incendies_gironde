@@ -129,9 +129,34 @@ for (const value of [...BLANK_TEXT_VECTORS, 42, false, null, {}, []]) {
   });
 }
 
-for (const value of ['invalid', 'a@b', '@example.fr', 'a@example']) {
+for (const value of [
+  'invalid',
+  'a@b',
+  '@example.fr',
+  'a@example',
+  'user name@example.com',
+  'user@example .com',
+  'user@@example.com',
+  'user@',
+]) {
   test(`refuses malformed email ${value}`, () => {
     assertValidationError(() => validate(pending({email: value})));
+  });
+}
+
+for (const [email, expected] of Object.entries({
+  'a@b.c': 'a@b.c',
+  'user@example.com': 'user@example.com',
+  ' user@example.com': 'user@example.com',
+  'user@example.com ': 'user@example.com',
+  ' user@example.com ': 'user@example.com',
+  'user..name@example.com': 'user..name@example.com',
+  'user+tag@example.com': 'user+tag@example.com',
+  'USER@example.com': 'user@example.com',
+  'utilisateur@exemple.fr': 'utilisateur@exemple.fr',
+})) {
+  test(`accepts and normalizes historical email ${JSON.stringify(email)}`, () => {
+    assert.equal(validate(pending({email})).email, expected);
   });
 }
 
@@ -145,6 +170,17 @@ test('preserves accepted displayName characters exactly', () => {
   const displayName = '  Élodie\u0000 Martin  ';
   assert.equal(validate(pending({displayName})).displayName, displayName);
 });
+
+for (const displayName of [
+  ' Marc ',
+  'Marc',
+  'Marc Bouyssou',
+  '👨‍⚕️ Marc',
+]) {
+  test(`preserves valid displayName ${JSON.stringify(displayName)}`, () => {
+    assert.equal(validate(pending({displayName})).displayName, displayName);
+  });
+}
 
 for (const value of [...BLANK_TEXT_VECTORS, 42, false, null, {}, []]) {
   test(`refuses invalid createdBy ${JSON.stringify(value)}`, () => {

@@ -156,7 +156,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('form normalizes and creates a site manager invitation', (
+  testWidgets('form normalizes email and preserves the responsible name', (
     tester,
   ) async {
     final invitationsRepository = MockAdminInvitationRepository(now: () => now);
@@ -194,7 +194,7 @@ void main() {
 
     final created =
         (await invitationsRepository.watchInvitations().first).single;
-    expect(created.displayName, 'Camille Martin');
+    expect(created.displayName, '  Camille Martin  ');
     expect(created.email, 'camille@exemple.fr');
     expect(created.role, AdminInvitationDraft.siteManagerRole);
     expect(created.locationIds, {location.id});
