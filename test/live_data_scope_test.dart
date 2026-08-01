@@ -83,6 +83,15 @@ void main() {
         'invalid V2 scope',
       );
 
+      const initial = ResponsibleAccess(
+        uid: 'initial-coordinator',
+        role: 'coordinator',
+        locationIds: {'*'},
+        active: true,
+      );
+      repository.emit(initial);
+      await Future<void>.delayed(Duration.zero);
+
       repository.emitError(invalidAccess);
       await Future<void>.delayed(Duration.zero);
 
@@ -95,6 +104,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(repository.factories, 1);
+      expect(firstValues, [initial]);
       expect(firstErrors, [invalidAccess]);
       expect(replayedErrors, [invalidAccess]);
       expect(replayedValues, isEmpty);
@@ -108,7 +118,7 @@ void main() {
       repository.emit(recovered);
       await Future<void>.delayed(Duration.zero);
 
-      expect(firstValues, [recovered]);
+      expect(firstValues, [initial, recovered]);
       expect(replayedValues, [recovered]);
 
       await firstSubscription.cancel();

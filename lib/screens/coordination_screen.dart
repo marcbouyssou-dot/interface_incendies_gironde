@@ -65,9 +65,15 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
               StreamBuilder<ResponsibleAccess?>(
                 stream: _responsibleAccess,
                 builder: (context, accessSnapshot) {
-                  if (accessSnapshot.hasError &&
-                      isInvalidResponsibleAccessError(accessSnapshot.error)) {
-                    return const InvalidResponsibleAccessState();
+                  if (accessSnapshot.hasError) {
+                    if (isInvalidResponsibleAccessError(accessSnapshot.error)) {
+                      return const InvalidResponsibleAccessState();
+                    }
+                    return const _ResponsibleAccessUnavailableState();
+                  }
+                  if (accessSnapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
                   }
                   return _buildContent(
                     missionsSnapshot.data!,
@@ -237,6 +243,56 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
   }
 }
 
+class _ResponsibleAccessUnavailableState extends StatelessWidget {
+  const _ResponsibleAccessUnavailableState();
+
+  @override
+  Widget build(BuildContext context) {
+    return PageContainer(
+      child: ListView(
+        key: const Key('responsible-access-unavailable-state'),
+        padding: const EdgeInsets.fromLTRB(20, 42, 20, 32),
+        children: [
+          const PageHeader(
+            eyebrow: 'Accès responsable',
+            title: 'Accès temporairement indisponible',
+            subtitle:
+                'Nous ne pouvons pas vérifier vos droits d’accès pour le '
+                'moment.',
+          ),
+          const SizedBox(height: 22),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.lock_clock_outlined,
+                    color: AppColors.orange,
+                    size: 34,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Par sécurité, aucun accès privilégié n’est affiché.',
+                    key: const Key('responsible-access-unavailable-message'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Réessayez dans quelques instants.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatusMetric extends StatelessWidget {
   const _StatusMetric({
     required this.label,
@@ -354,9 +410,14 @@ class _ResponsibleMissionActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (access == null ||
+    final currentAccess = access;
+    final locationId = need.locationId;
+    if (currentAccess == null ||
+        !currentAccess.hasPrivilegedAccess ||
+        (currentAccess.isLocationRestricted &&
+            (locationId == null || !currentAccess.canManage(locationId))) ||
         need.createdBy == null ||
-        need.createdBy != access!.uid ||
+        need.createdBy != currentAccess.uid ||
         !need.isActive ||
         need.isCancelled) {
       return const SizedBox.shrink();
