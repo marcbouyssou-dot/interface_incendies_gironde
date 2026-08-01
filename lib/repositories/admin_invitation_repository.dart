@@ -9,7 +9,19 @@ abstract interface class AdminInvitationRepository {
 
   Future<void> cancelInvitation(String invitationId);
 
-  Future<AdminProvisioningResult> provisionInvitation(String invitationId);
+  Future<AdminInvitation> updateInvitation(
+    String invitationId,
+    AdminInvitationUpdate update,
+  );
+
+  Future<void> reactivateInvitation(String invitationId, DateTime expiresAt);
+
+  Future<void> deleteInvitation(String invitationId);
+
+  Future<AdminProvisioningResult> provisionInvitation(
+    String invitationId, {
+    bool resend = false,
+  });
 }
 
 class AdminProvisioningResult {

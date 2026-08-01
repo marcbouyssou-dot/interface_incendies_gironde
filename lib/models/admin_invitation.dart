@@ -47,11 +47,17 @@ class AdminInvitation {
   final DateTime? activationLinkGeneratedAt;
 
   bool get isPending => status == AdminInvitationStatus.pending;
+  bool get isUnused =>
+      acceptedAt == null && status != AdminInvitationStatus.accepted;
   bool get isExpired =>
       status == AdminInvitationStatus.expired ||
       (isPending && !expiresAt.isAfter(DateTime.now()));
 
   AdminInvitation copyWith({
+    String? displayName,
+    String? role,
+    Set<String>? locationIds,
+    DateTime? expiresAt,
     AdminInvitationStatus? status,
     DateTime? acceptedAt,
     String? acceptedUid,
@@ -61,12 +67,12 @@ class AdminInvitation {
     return AdminInvitation(
       id: id,
       email: email,
-      displayName: displayName,
-      role: role,
-      locationIds: locationIds,
+      displayName: displayName ?? this.displayName,
+      role: role ?? this.role,
+      locationIds: locationIds ?? this.locationIds,
       createdBy: createdBy,
       createdAt: createdAt,
-      expiresAt: expiresAt,
+      expiresAt: expiresAt ?? this.expiresAt,
       status: status ?? this.status,
       acceptedAt: acceptedAt ?? this.acceptedAt,
       acceptedUid: acceptedUid ?? this.acceptedUid,
@@ -115,44 +121,87 @@ class AdminInvitationDraft {
     if (email.length > maxEmailLength || !_emailPattern.hasMatch(email)) {
       throw const FormatException('Adresse e-mail invalide.');
     }
-    if (isBlankLocationId(displayName)) {
-      throw const FormatException('Le nom du responsable est obligatoire.');
-    }
-    if (_role != siteManagerRole && _role != coordinatorRole) {
-      throw _invalidRole;
-    }
-    if (_locationIds.length > maxLocationIds) {
-      throw const FormatException(
-        'Une invitation ne peut contenir plus de 65 centres.',
-      );
-    }
-    if (_locationIds.any((id) => id is! String)) throw _invalidLocations;
-    final locations = _locationIds.cast<String>();
-    if (locations.any(
-      (id) =>
-          id.isEmpty ||
-          isBlankLocationId(id) ||
-          id == '*' ||
-          id.contains(_rulesListSeparator),
-    )) {
-      throw _invalidLocations;
-    }
-    if (locations.toSet().length != locations.length) {
-      throw _invalidLocations;
-    }
-    if (_role == siteManagerRole && locations.isEmpty) {
-      throw const FormatException(
-        'Un responsable de site doit être associé à au moins un centre.',
-      );
-    }
-    if (_role == coordinatorRole && locations.isNotEmpty) {
-      throw const FormatException(
-        'Un coordinateur ne doit pas être limité à des centres.',
-      );
-    }
+    _validateInvitationAssignment(
+      displayName: displayName,
+      role: _role,
+      locationIds: _locationIds,
+    );
     if (!expiresAt.isAfter(now)) {
       throw const FormatException('La date d’expiration doit être future.');
     }
+  }
+}
+
+class AdminInvitationUpdate {
+  AdminInvitationUpdate({
+    required this.displayName,
+    required Object? role,
+    required Iterable<Object?> locationIds,
+  }) : _role = role,
+       _locationIds = List<Object?>.unmodifiable(locationIds);
+
+  final String displayName;
+  final Object? _role;
+  final List<Object?> _locationIds;
+
+  String get role {
+    final value = _role;
+    if (value is! String) throw _invalidRole;
+    return value;
+  }
+
+  List<String> get locationIds {
+    if (_locationIds.any((id) => id is! String)) throw _invalidLocations;
+    return List<String>.unmodifiable(_locationIds.cast<String>());
+  }
+
+  void validate() => _validateInvitationAssignment(
+    displayName: displayName,
+    role: _role,
+    locationIds: _locationIds,
+  );
+}
+
+void _validateInvitationAssignment({
+  required String displayName,
+  required Object? role,
+  required List<Object?> locationIds,
+}) {
+  if (isBlankLocationId(displayName)) {
+    throw const FormatException('Le nom du responsable est obligatoire.');
+  }
+  if (role != AdminInvitationDraft.siteManagerRole &&
+      role != AdminInvitationDraft.coordinatorRole) {
+    throw _invalidRole;
+  }
+  if (locationIds.length > AdminInvitationDraft.maxLocationIds) {
+    throw const FormatException(
+      'Une invitation ne peut contenir plus de 65 centres.',
+    );
+  }
+  if (locationIds.any((id) => id is! String)) throw _invalidLocations;
+  final locations = locationIds.cast<String>();
+  if (locations.any(
+    (id) =>
+        id.isEmpty ||
+        isBlankLocationId(id) ||
+        id == '*' ||
+        id.contains(AdminInvitationDraft._rulesListSeparator),
+  )) {
+    throw _invalidLocations;
+  }
+  if (locations.toSet().length != locations.length) {
+    throw _invalidLocations;
+  }
+  if (role == AdminInvitationDraft.siteManagerRole && locations.isEmpty) {
+    throw const FormatException(
+      'Un responsable de site doit être associé à au moins un centre.',
+    );
+  }
+  if (role == AdminInvitationDraft.coordinatorRole && locations.isNotEmpty) {
+    throw const FormatException(
+      'Un coordinateur ne doit pas être limité à des centres.',
+    );
   }
 }
 

@@ -171,7 +171,7 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
-  testWidgets('list renders all statuses and unavailable locations', (
+  testWidgets('list hides accepted invitations and renders unused statuses', (
     tester,
   ) async {
     final invitations = [
@@ -206,7 +206,7 @@ void main() {
     await openInvitations(tester);
 
     expect(find.text('En attente'), findsOneWidget);
-    expect(find.text('Compte préparé'), findsOneWidget);
+    expect(find.byKey(const Key('invitation-card-accepted')), findsNothing);
     await tester.scrollUntilVisible(
       find.byKey(const Key('invitation-card-cancelled')),
       250,
@@ -214,7 +214,7 @@ void main() {
     );
     expect(find.text('Expirée'), findsOneWidget);
     expect(find.text('Annulée'), findsOneWidget);
-    expect(find.text('Préparer le compte'), findsOneWidget);
+    expect(find.text('Renvoyer'), findsOneWidget);
     expect(find.text('Lieu indisponible'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -545,7 +545,175 @@ void main() {
     expect(find.byKey(const Key('cancel-invitation-pending')), findsNothing);
   });
 
-  testWidgets('provisioning confirms immediate activation email delivery', (
+  testWidgets(
+    'pending and cancelled cards expose only their lifecycle actions',
+    (tester) async {
+      final repository = MockAdminInvitationRepository(
+        initialInvitations: [
+          _invitation(
+            id: 'pending',
+            status: AdminInvitationStatus.pending,
+            now: now,
+          ),
+          _invitation(
+            id: 'cancelled',
+            status: AdminInvitationStatus.cancelled,
+            now: now,
+          ),
+        ],
+        now: () => now,
+      );
+      addTearDown(repository.dispose);
+      await pumpApp(tester, invitationRepository: repository);
+      await openInvitations(tester);
+
+      expect(find.byKey(const Key('edit-invitation-pending')), findsOneWidget);
+      expect(
+        find.byKey(const Key('cancel-invitation-pending')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('resend-invitation-pending')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('delete-invitation-pending')),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('invitation-card-cancelled')),
+        250,
+        scrollable: _scrollableInside(const Key('admin-invitations-list')),
+      );
+      expect(
+        find.byKey(const Key('reactivate-invitation-cancelled')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('edit-invitation-cancelled')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('delete-invitation-cancelled')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('resend-invitation-cancelled')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('cancelled invitation can be reactivated with a new expiration', (
+    tester,
+  ) async {
+    final repository = MockAdminInvitationRepository(
+      initialInvitations: [
+        _invitation(
+          id: 'cancelled',
+          status: AdminInvitationStatus.cancelled,
+          now: now,
+        ),
+      ],
+      now: () => now,
+    );
+    addTearDown(repository.dispose);
+    await pumpApp(tester, invitationRepository: repository);
+    await openInvitations(tester);
+    await tester.tap(find.byKey(const Key('reactivate-invitation-cancelled')));
+    await tester.pumpAndSettle();
+    expect(find.text('Réactiver cette invitation ?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-reactivate-invitation')));
+    await tester.pumpAndSettle();
+
+    final reactivated = await repository.getInvitation('cancelled');
+    expect(reactivated?.status, AdminInvitationStatus.pending);
+    expect(reactivated?.expiresAt.isAfter(now), isTrue);
+    expect(find.text('Invitation réactivée.'), findsOneWidget);
+  });
+
+  testWidgets('unused invitation can be edited without changing its email', (
+    tester,
+  ) async {
+    final repository = MockAdminInvitationRepository(
+      initialInvitations: [
+        _invitation(
+          id: 'cancelled',
+          status: AdminInvitationStatus.cancelled,
+          now: now,
+        ),
+      ],
+      now: () => now,
+    );
+    addTearDown(repository.dispose);
+    await pumpApp(tester, invitationRepository: repository);
+    await openInvitations(tester);
+    await tester.tap(find.byKey(const Key('edit-invitation-cancelled')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Modifier l’invitation'), findsOneWidget);
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: find.byKey(const Key('invitation-email')),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .readOnly,
+      isTrue,
+    );
+    await tester.enterText(
+      find.byKey(const Key('invitation-display-name')),
+      'Responsable modifié',
+    );
+    await tester.tap(find.byKey(const Key('invitation-role')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-admin-invitation')));
+    await tester.pumpAndSettle();
+
+    final updated = await repository.getInvitation('cancelled');
+    expect(updated?.email, 'cancelled@example.fr');
+    expect(updated?.displayName, 'Responsable modifié');
+    expect(updated?.role, AdminInvitationDraft.coordinatorRole);
+    expect(updated?.locationIds, isEmpty);
+    expect(updated?.status, AdminInvitationStatus.cancelled);
+  });
+
+  testWidgets('unused invitation deletion requires irreversible confirmation', (
+    tester,
+  ) async {
+    final repository = MockAdminInvitationRepository(
+      initialInvitations: [
+        _invitation(
+          id: 'pending',
+          status: AdminInvitationStatus.pending,
+          now: now,
+        ),
+      ],
+      now: () => now,
+    );
+    addTearDown(repository.dispose);
+    await pumpApp(tester, invitationRepository: repository);
+    await openInvitations(tester);
+    await tester.tap(find.byKey(const Key('delete-invitation-pending')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Supprimer définitivement cette invitation ?'),
+      findsOneWidget,
+    );
+    expect(find.text('Cette opération est irréversible.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-delete-invitation')));
+    await tester.pumpAndSettle();
+
+    expect(await repository.getInvitation('pending'), isNull);
+    expect(find.text('Invitation supprimée.'), findsOneWidget);
+  });
+
+  testWidgets('resend confirms immediate activation email delivery', (
     tester,
   ) async {
     final repository = _ProvisionInvitationRepository(
@@ -558,34 +726,31 @@ void main() {
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
 
-    await tester.tap(find.byKey(const Key('provision-invitation-pending')));
+    await tester.tap(find.byKey(const Key('resend-invitation-pending')));
     await tester.pumpAndSettle();
-    expect(find.text('Préparer ce compte ?'), findsOneWidget);
+    expect(find.text('Renvoyer l’e-mail d’activation ?'), findsOneWidget);
     expect(
-      find.textContaining('envoie immédiatement l’e-mail d’activation'),
+      find.textContaining('envoie un nouveau lien d’activation'),
       findsOneWidget,
     );
-    expect(find.textContaining('Aucun e-mail ne sera envoyé'), findsNothing);
-    expect(find.textContaining('idempotente'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('confirm-provision-invitation')));
+    expect(find.textContaining('même identifiant'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm-resend-invitation')));
     await tester.pump();
 
     expect(repository.calls, 1);
-    expect(find.text('Préparation…'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('provision-invitation-pending')));
+    expect(repository.resend, isTrue);
+    expect(find.text('Envoi…'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('resend-invitation-pending')));
     expect(repository.calls, 1);
 
     repository.complete();
     await tester.pumpAndSettle();
-    expect(
-      find.text('Compte préparé et e-mail d’activation envoyé.'),
-      findsOneWidget,
-    );
+    expect(find.text('E-mail d’activation envoyé.'), findsOneWidget);
     expect(find.textContaining('compte activé'), findsNothing);
     expect(find.textContaining('Compte activé'), findsNothing);
   });
 
-  testWidgets('provisioning error is explicit and keeps the pending action', (
+  testWidgets('resend error is explicit and keeps the pending action', (
     tester,
   ) async {
     final repository = _ProvisionInvitationRepository(
@@ -597,21 +762,18 @@ void main() {
     );
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
-    await tester.tap(find.byKey(const Key('provision-invitation-pending')));
+    await tester.tap(find.byKey(const Key('resend-invitation-pending')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-provision-invitation')));
+    await tester.tap(find.byKey(const Key('confirm-resend-invitation')));
     await tester.pump();
     repository.fail();
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Le compte n’a pas pu être préparé. Réessayez.'),
+      find.text('L’e-mail d’activation n’a pas pu être envoyé.'),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const Key('provision-invitation-pending')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('resend-invitation-pending')), findsOneWidget);
   });
 
   testWidgets('invitation listener is stable across rebuilds', (tester) async {
@@ -672,12 +834,28 @@ class _CountingInvitationRepository implements AdminInvitationRepository {
 
   @override
   Future<AdminProvisioningResult> provisionInvitation(
-    String invitationId,
-  ) async => const AdminProvisioningResult(
+    String invitationId, {
+    bool resend = false,
+  }) async => const AdminProvisioningResult(
     accountProvisioned: true,
     emailDelivery: 'pending',
     alreadyProvisioned: false,
   );
+
+  @override
+  Future<void> deleteInvitation(String invitationId) async {}
+
+  @override
+  Future<void> reactivateInvitation(
+    String invitationId,
+    DateTime expiresAt,
+  ) async {}
+
+  @override
+  Future<AdminInvitation> updateInvitation(
+    String invitationId,
+    AdminInvitationUpdate update,
+  ) => throw UnimplementedError();
 }
 
 class _FlakyResponsibleAccessRepository
@@ -728,6 +906,7 @@ class _ProvisionInvitationRepository implements AdminInvitationRepository {
   final AdminInvitation invitation;
   final Completer<AdminProvisioningResult> _completer = Completer();
   int calls = 0;
+  bool? resend;
 
   void complete() => _completer.complete(
     const AdminProvisioningResult(
@@ -744,8 +923,12 @@ class _ProvisionInvitationRepository implements AdminInvitationRepository {
       Stream.value([invitation]);
 
   @override
-  Future<AdminProvisioningResult> provisionInvitation(String invitationId) {
+  Future<AdminProvisioningResult> provisionInvitation(
+    String invitationId, {
+    bool resend = false,
+  }) {
     calls++;
+    this.resend = resend;
     return _completer.future;
   }
 
@@ -759,6 +942,21 @@ class _ProvisionInvitationRepository implements AdminInvitationRepository {
   @override
   Future<AdminInvitation?> getInvitation(String invitationId) async =>
       invitation;
+
+  @override
+  Future<void> deleteInvitation(String invitationId) async {}
+
+  @override
+  Future<void> reactivateInvitation(
+    String invitationId,
+    DateTime expiresAt,
+  ) async {}
+
+  @override
+  Future<AdminInvitation> updateInvitation(
+    String invitationId,
+    AdminInvitationUpdate update,
+  ) => throw UnimplementedError();
 }
 
 class _CreateInvitationRepository implements AdminInvitationRepository {
@@ -800,6 +998,23 @@ class _CreateInvitationRepository implements AdminInvitationRepository {
   Future<AdminInvitation?> getInvitation(String invitationId) async => null;
 
   @override
-  Future<AdminProvisioningResult> provisionInvitation(String invitationId) =>
-      throw UnimplementedError();
+  Future<AdminProvisioningResult> provisionInvitation(
+    String invitationId, {
+    bool resend = false,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> deleteInvitation(String invitationId) async {}
+
+  @override
+  Future<void> reactivateInvitation(
+    String invitationId,
+    DateTime expiresAt,
+  ) async {}
+
+  @override
+  Future<AdminInvitation> updateInvitation(
+    String invitationId,
+    AdminInvitationUpdate update,
+  ) => throw UnimplementedError();
 }

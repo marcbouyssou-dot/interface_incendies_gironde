@@ -202,6 +202,9 @@ class _CoordinatorInvitationsContentState
         return StreamBuilder<List<AdminInvitation>>(
           stream: _invitations,
           builder: (context, snapshot) {
+            final invitations = snapshot.data
+                ?.where((invitation) => invitation.isUnused)
+                .toList(growable: false);
             return PageContainer(
               child: ListView(
                 key: const Key('admin-invitations-list'),
@@ -273,17 +276,20 @@ class _CoordinatorInvitationsContentState
                     )
                   else if (!snapshot.hasData)
                     const Center(child: CircularProgressIndicator())
-                  else if (snapshot.data!.isEmpty)
+                  else if (invitations!.isEmpty)
                     const _EmptyInvitations()
                   else
-                    ...snapshot.data!.map(
+                    ...invitations.map(
                       (invitation) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _InvitationCard(
                           invitation: invitation,
                           locationsById: locationsById,
+                          onEdit: () => _edit(invitation, locations),
                           onCancel: () => _cancel(invitation),
-                          onProvision: () => _provision(invitation),
+                          onReactivate: () => _reactivate(invitation),
+                          onResend: () => _resend(invitation),
+                          onDelete: () => _delete(invitation),
                           provisioning: _provisioningIds.contains(
                             invitation.id,
                           ),
@@ -297,6 +303,25 @@ class _CoordinatorInvitationsContentState
         );
       },
     );
+  }
+
+  Future<void> _edit(
+    AdminInvitation invitation,
+    List<ResponsePlace> locations,
+  ) async {
+    final updated = await Navigator.of(context).push<AdminInvitation>(
+      MaterialPageRoute(
+        builder: (_) => AdminInvitationFormScreen(
+          repository: widget.repository,
+          locations: locations,
+          invitation: invitation,
+        ),
+      ),
+    );
+    if (!mounted || updated == null) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Invitation mise à jour.')));
   }
 
   Future<void> _cancel(AdminInvitation invitation) async {
@@ -322,6 +347,10 @@ class _CoordinatorInvitationsContentState
     if (confirmed != true) return;
     try {
       await widget.repository.cancelInvitation(invitation.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invitation annulée.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -332,18 +361,106 @@ class _CoordinatorInvitationsContentState
     }
   }
 
-  final Set<String> _provisioningIds = {};
+  Future<void> _reactivate(AdminInvitation invitation) async {
+    var expirationDays = 7;
+    final selectedDays = await showDialog<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Réactiver cette invitation ?'),
+          content: DropdownButtonFormField<int>(
+            key: const Key('reactivate-expiration'),
+            initialValue: expirationDays,
+            decoration: const InputDecoration(labelText: 'Nouvelle validité'),
+            items: const [
+              DropdownMenuItem(value: 1, child: Text('24 heures')),
+              DropdownMenuItem(value: 7, child: Text('7 jours')),
+              DropdownMenuItem(value: 14, child: Text('14 jours')),
+            ],
+            onChanged: (value) =>
+                setDialogState(() => expirationDays = value ?? 7),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Retour'),
+            ),
+            FilledButton(
+              key: const Key('confirm-reactivate-invitation'),
+              onPressed: () => Navigator.pop(context, expirationDays),
+              child: const Text('Réactiver'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selectedDays == null) return;
+    try {
+      await widget.repository.reactivateInvitation(
+        invitation.id,
+        DateTime.now().add(Duration(days: selectedDays)),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invitation réactivée.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('L’invitation n’a pas pu être réactivée. Réessayez.'),
+        ),
+      );
+    }
+  }
 
-  Future<void> _provision(AdminInvitation invitation) async {
+  Future<void> _delete(AdminInvitation invitation) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Préparer ce compte ?'),
+        title: const Text('Supprimer définitivement cette invitation ?'),
+        content: const Text('Cette opération est irréversible.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Conserver'),
+          ),
+          FilledButton(
+            key: const Key('confirm-delete-invitation'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer définitivement'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.repository.deleteInvitation(invitation.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Invitation supprimée.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('L’invitation n’a pas pu être supprimée. Réessayez.'),
+        ),
+      );
+    }
+  }
+
+  final Set<String> _provisioningIds = {};
+
+  Future<void> _resend(AdminInvitation invitation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Renvoyer l’e-mail d’activation ?'),
         content: const Text(
-          'Cette action prépare le compte responsable et envoie immédiatement '
-          'l’e-mail d’activation.\n\n'
-          'L’action est idempotente : un compte déjà préparé ne sera pas '
-          'recréé.',
+          'Cette action prépare ou réutilise le compte responsable, puis '
+          'envoie un nouveau lien d’activation.\n\n'
+          'Un compte déjà préparé conserve le même identifiant.',
         ),
         actions: [
           TextButton(
@@ -351,9 +468,9 @@ class _CoordinatorInvitationsContentState
             child: const Text('Retour'),
           ),
           FilledButton(
-            key: const Key('confirm-provision-invitation'),
+            key: const Key('confirm-resend-invitation'),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Préparer le compte'),
+            child: const Text('Renvoyer'),
           ),
         ],
       ),
@@ -361,18 +478,16 @@ class _CoordinatorInvitationsContentState
     if (confirmed != true || _provisioningIds.contains(invitation.id)) return;
     setState(() => _provisioningIds.add(invitation.id));
     try {
-      await widget.repository.provisionInvitation(invitation.id);
+      await widget.repository.provisionInvitation(invitation.id, resend: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Compte préparé et e-mail d’activation envoyé.'),
-        ),
+        const SnackBar(content: Text('E-mail d’activation envoyé.')),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Le compte n’a pas pu être préparé. Réessayez.'),
+          content: Text('L’e-mail d’activation n’a pas pu être envoyé.'),
         ),
       );
     } finally {
@@ -521,15 +636,21 @@ class _InvitationCard extends StatelessWidget {
   const _InvitationCard({
     required this.invitation,
     required this.locationsById,
+    required this.onEdit,
     required this.onCancel,
-    required this.onProvision,
+    required this.onReactivate,
+    required this.onResend,
+    required this.onDelete,
     required this.provisioning,
   });
 
   final AdminInvitation invitation;
   final Map<String, ResponsePlace> locationsById;
+  final VoidCallback onEdit;
   final VoidCallback onCancel;
-  final VoidCallback onProvision;
+  final VoidCallback onReactivate;
+  final VoidCallback onResend;
+  final VoidCallback onDelete;
   final bool provisioning;
 
   @override
@@ -592,16 +713,46 @@ class _InvitationCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   FilledButton(
-                    key: Key('provision-invitation-${invitation.id}'),
-                    onPressed: provisioning ? null : onProvision,
-                    child: Text(
-                      provisioning ? 'Préparation…' : 'Préparer le compte',
-                    ),
+                    key: Key('resend-invitation-${invitation.id}'),
+                    onPressed: provisioning ? null : onResend,
+                    child: Text(provisioning ? 'Envoi…' : 'Renvoyer'),
+                  ),
+                  TextButton(
+                    key: Key('edit-invitation-${invitation.id}'),
+                    onPressed: provisioning ? null : onEdit,
+                    child: const Text('Modifier'),
                   ),
                   TextButton(
                     key: Key('cancel-invitation-${invitation.id}'),
                     onPressed: provisioning ? null : onCancel,
                     child: const Text('Annuler'),
+                  ),
+                  TextButton(
+                    key: Key('delete-invitation-${invitation.id}'),
+                    onPressed: provisioning ? null : onDelete,
+                    child: const Text('Supprimer'),
+                  ),
+                ],
+              ),
+            ] else if (effectiveStatus == AdminInvitationStatus.cancelled) ...[
+              const SizedBox(height: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton(
+                    key: Key('reactivate-invitation-${invitation.id}'),
+                    onPressed: onReactivate,
+                    child: const Text('Réactiver'),
+                  ),
+                  TextButton(
+                    key: Key('edit-invitation-${invitation.id}'),
+                    onPressed: onEdit,
+                    child: const Text('Modifier'),
+                  ),
+                  TextButton(
+                    key: Key('delete-invitation-${invitation.id}'),
+                    onPressed: onDelete,
+                    child: const Text('Supprimer'),
                   ),
                 ],
               ),
@@ -685,10 +836,12 @@ class AdminInvitationFormScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.locations,
+    this.invitation,
   });
 
   final AdminInvitationRepository repository;
   final List<ResponsePlace> locations;
+  final AdminInvitation? invitation;
 
   @override
   State<AdminInvitationFormScreen> createState() =>
@@ -700,7 +853,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final Set<String> _selectedLocations = {};
-  String _role = AdminInvitationDraft.siteManagerRole;
+  late String _role;
   int _expirationDays = 7;
   bool _submitting = false;
 
@@ -709,6 +862,18 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
       _isValidInvitationEmail(_emailController.text);
 
   bool get _canSubmit => !_submitting && _hasValidIdentity;
+
+  bool get _isEditing => widget.invitation != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final invitation = widget.invitation;
+    _nameController.text = invitation?.displayName ?? '';
+    _emailController.text = invitation?.email ?? '';
+    _role = invitation?.role ?? AdminInvitationDraft.siteManagerRole;
+    _selectedLocations.addAll(invitation?.locationIds ?? const {});
+  }
 
   @override
   void dispose() {
@@ -720,11 +885,16 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Inviter un responsable')),
+      appBar: AppBar(
+        title: Text(
+          _isEditing ? 'Modifier l’invitation' : 'Inviter un responsable',
+        ),
+      ),
       bottomNavigationBar: _InvitationSubmitBar(
         submitting: _submitting,
         enabled: _canSubmit,
         onSubmit: _submit,
+        editing: _isEditing,
       ),
       body: PageContainer(
         child: Form(
@@ -751,6 +921,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
+                readOnly: _isEditing,
                 decoration: const InputDecoration(labelText: 'E-mail'),
                 validator: (value) {
                   return _isValidInvitationEmail(value ?? '')
@@ -782,19 +953,21 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                   }
                 }),
               ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<int>(
-                key: const Key('invitation-expiration'),
-                initialValue: _expirationDays,
-                decoration: const InputDecoration(labelText: 'Validité'),
-                items: const [
-                  DropdownMenuItem(value: 1, child: Text('24 heures')),
-                  DropdownMenuItem(value: 7, child: Text('7 jours')),
-                  DropdownMenuItem(value: 14, child: Text('14 jours')),
-                ],
-                onChanged: (value) =>
-                    setState(() => _expirationDays = value ?? 7),
-              ),
+              if (!_isEditing) ...[
+                const SizedBox(height: 14),
+                DropdownButtonFormField<int>(
+                  key: const Key('invitation-expiration'),
+                  initialValue: _expirationDays,
+                  decoration: const InputDecoration(labelText: 'Validité'),
+                  items: const [
+                    DropdownMenuItem(value: 1, child: Text('24 heures')),
+                    DropdownMenuItem(value: 7, child: Text('7 jours')),
+                    DropdownMenuItem(value: 14, child: Text('14 jours')),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _expirationDays = value ?? 7),
+                ),
+              ],
               if (_role == AdminInvitationDraft.siteManagerRole) ...[
                 const SizedBox(height: 22),
                 const SectionTitle(title: 'Centres autorisés'),
@@ -820,6 +993,10 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   Future<void> _submit() async {
     if (_submitting) return;
     if (_formKey.currentState?.validate() != true) return;
+    if (_isEditing) {
+      await _submitUpdate();
+      return;
+    }
     final now = DateTime.now();
     late final AdminInvitationDraft draft;
     try {
@@ -851,6 +1028,44 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
     }
   }
 
+  Future<void> _submitUpdate() async {
+    late final AdminInvitationUpdate update;
+    try {
+      update = AdminInvitationUpdate(
+        displayName: _nameController.text,
+        role: _role,
+        locationIds: _selectedLocations,
+      );
+      update.validate();
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_messageFor(error))));
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      final updated = await widget.repository.updateInvitation(
+        widget.invitation!.id,
+        update,
+      );
+      if (mounted) Navigator.pop(context, updated);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is FormatException
+                ? error.message
+                : 'L’invitation n’a pas pu être modifiée. Réessayez.',
+          ),
+        ),
+      );
+    }
+  }
+
   String _messageFor(Object error) {
     if (error is FormatException) return error.message;
     return 'L’invitation n’a pas pu être créée. Réessayez.';
@@ -868,11 +1083,13 @@ class _InvitationSubmitBar extends StatelessWidget {
     required this.submitting,
     required this.enabled,
     required this.onSubmit,
+    required this.editing,
   });
 
   final bool submitting;
   final bool enabled;
   final VoidCallback onSubmit;
+  final bool editing;
 
   @override
   Widget build(BuildContext context) {
@@ -891,7 +1108,9 @@ class _InvitationSubmitBar extends StatelessWidget {
           child: SizedBox(
             height: 56,
             child: FilledButton.icon(
-              key: const Key('create-admin-invitation'),
+              key: Key(
+                editing ? 'save-admin-invitation' : 'create-admin-invitation',
+              ),
               onPressed: enabled ? onSubmit : null,
               icon: submitting
                   ? const SizedBox.square(
@@ -902,7 +1121,11 @@ class _InvitationSubmitBar extends StatelessWidget {
                       ),
                     )
                   : const Icon(Icons.send_rounded),
-              label: Text(submitting ? 'Création…' : 'Créer l’invitation'),
+              label: Text(
+                submitting
+                    ? (editing ? 'Enregistrement…' : 'Création…')
+                    : (editing ? 'Enregistrer' : 'Créer l’invitation'),
+              ),
             ),
           ),
         ),

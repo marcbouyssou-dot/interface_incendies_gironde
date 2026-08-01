@@ -69,12 +69,75 @@ class MockAdminInvitationRepository implements AdminInvitationRepository {
   }
 
   @override
-  Future<AdminProvisioningResult> provisionInvitation(
+  Future<AdminInvitation> updateInvitation(
     String invitationId,
+    AdminInvitationUpdate update,
+  ) async {
+    update.validate();
+    final invitation = _invitations[invitationId];
+    if (invitation == null) throw StateError('Invitation introuvable.');
+    if (invitation.acceptedAt != null ||
+        !{
+          AdminInvitationStatus.pending,
+          AdminInvitationStatus.cancelled,
+        }.contains(invitation.status)) {
+      throw StateError('Cette invitation ne peut plus être modifiée.');
+    }
+    final updated = invitation.copyWith(
+      displayName: update.displayName,
+      role: update.role,
+      locationIds: Set<String>.unmodifiable(update.locationIds),
+    );
+    _invitations[invitationId] = updated;
+    _emit();
+    return updated;
+  }
+
+  @override
+  Future<void> reactivateInvitation(
+    String invitationId,
+    DateTime expiresAt,
   ) async {
     final invitation = _invitations[invitationId];
     if (invitation == null) throw StateError('Invitation introuvable.');
+    if (invitation.acceptedAt != null ||
+        invitation.status != AdminInvitationStatus.cancelled ||
+        !expiresAt.isAfter(_now())) {
+      throw StateError('Cette invitation ne peut pas être réactivée.');
+    }
+    _invitations[invitationId] = invitation.copyWith(
+      status: AdminInvitationStatus.pending,
+      expiresAt: expiresAt,
+    );
+    _emit();
+  }
+
+  @override
+  Future<void> deleteInvitation(String invitationId) async {
+    final invitation = _invitations[invitationId];
+    if (invitation == null) throw StateError('Invitation introuvable.');
+    if (!invitation.isUnused) {
+      throw StateError('Cette invitation ne peut pas être supprimée.');
+    }
+    _invitations.remove(invitationId);
+    _emit();
+  }
+
+  @override
+  Future<AdminProvisioningResult> provisionInvitation(
+    String invitationId, {
+    bool resend = false,
+  }) async {
+    final invitation = _invitations[invitationId];
+    if (invitation == null) throw StateError('Invitation introuvable.');
     if (invitation.status == AdminInvitationStatus.accepted) {
+      if (resend) {
+        final resentAt = _now();
+        _invitations[invitationId] = invitation.copyWith(
+          activationLinkGeneratedAt: resentAt,
+        );
+        _emit();
+      }
       return const AdminProvisioningResult(
         accountProvisioned: true,
         emailDelivery: 'pending',
@@ -105,7 +168,9 @@ class MockAdminInvitationRepository implements AdminInvitationRepository {
   void _emit() => _updates.add(_sortedInvitations());
 
   List<AdminInvitation> _sortedInvitations() {
-    final result = _invitations.values.toList();
+    final result = _invitations.values
+        .where((invitation) => invitation.isUnused)
+        .toList();
     result.sort((left, right) => right.createdAt.compareTo(left.createdAt));
     return result;
   }

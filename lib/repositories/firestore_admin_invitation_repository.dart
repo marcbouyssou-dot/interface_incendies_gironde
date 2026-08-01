@@ -23,7 +23,12 @@ abstract interface class AdminInvitationFirestoreDataSource {
 
   Future<void> updateDocument(String id, Map<String, Object?> data);
 
-  Future<Map<String, dynamic>> provisionInvitation(String id);
+  Future<Map<String, dynamic>> manageInvitation(Map<String, Object?> data);
+
+  Future<Map<String, dynamic>> provisionInvitation(
+    String id, {
+    bool resend = false,
+  });
 }
 
 class AdminInvitationDocument {
@@ -102,10 +107,27 @@ class FirestoreAdminInvitationDataSource
   }
 
   @override
-  Future<Map<String, dynamic>> provisionInvitation(String id) async {
+  Future<Map<String, dynamic>> manageInvitation(
+    Map<String, Object?> data,
+  ) async {
+    final result = await functions
+        .httpsCallable('manageAdminInvitation')
+        .call<Object?>(data);
+    final response = result.data;
+    if (response is! Map) {
+      throw StateError('Réponse de gestion d’invitation invalide.');
+    }
+    return Map<String, dynamic>.from(response);
+  }
+
+  @override
+  Future<Map<String, dynamic>> provisionInvitation(
+    String id, {
+    bool resend = false,
+  }) async {
     final result = await functions
         .httpsCallable('provisionAdminInvitation')
-        .call<Object?>({'invitationId': id});
+        .call<Object?>({'invitationId': id, 'resend': resend});
     final data = result.data;
     if (data is! Map) {
       throw StateError('Réponse de provisionnement invalide.');
@@ -136,7 +158,10 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
   @override
   Stream<List<AdminInvitation>> watchInvitations() {
     return _dataSource.watchDocuments().map((documents) {
-      final invitations = documents.map(_fromDocument).toList();
+      final invitations = documents
+          .map(_fromDocument)
+          .where((invitation) => invitation.isUnused)
+          .toList();
       invitations.sort(
         (left, right) => right.createdAt.compareTo(left.createdAt),
       );
@@ -185,23 +210,74 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
   @override
   Future<void> cancelInvitation(String invitationId) async {
     await _requireCoordinator();
+    await _dataSource.manageInvitation({
+      'invitationId': invitationId,
+      'action': 'cancel',
+    });
+  }
+
+  @override
+  Future<AdminInvitation> updateInvitation(
+    String invitationId,
+    AdminInvitationUpdate update,
+  ) async {
+    update.validate();
+    await _requireCoordinator();
     final document = await _dataSource.getDocument(invitationId);
     if (document == null) throw StateError('Invitation introuvable.');
-    final invitation = _fromDocument(document);
-    if (!invitation.isPending) {
-      throw StateError('Seule une invitation en attente peut être annulée.');
+    final current = _fromDocument(document);
+    final locationIds = update.locationIds;
+    await _dataSource.manageInvitation({
+      'invitationId': invitationId,
+      'action': 'update',
+      'displayName': update.displayName,
+      'role': update.role,
+      'locationIds': locationIds,
+    });
+    return current.copyWith(
+      displayName: update.displayName,
+      role: update.role,
+      locationIds: Set<String>.unmodifiable(locationIds),
+    );
+  }
+
+  @override
+  Future<void> reactivateInvitation(
+    String invitationId,
+    DateTime expiresAt,
+  ) async {
+    if (!expiresAt.isAfter(_now())) {
+      throw const FormatException(
+        'La nouvelle date d’expiration doit être future.',
+      );
     }
-    await _dataSource.updateDocument(invitationId, {
-      'status': AdminInvitationStatus.cancelled.firestoreValue,
+    await _requireCoordinator();
+    await _dataSource.manageInvitation({
+      'invitationId': invitationId,
+      'action': 'reactivate',
+      'expiresAtMillis': expiresAt.millisecondsSinceEpoch,
+    });
+  }
+
+  @override
+  Future<void> deleteInvitation(String invitationId) async {
+    await _requireCoordinator();
+    await _dataSource.manageInvitation({
+      'invitationId': invitationId,
+      'action': 'delete',
     });
   }
 
   @override
   Future<AdminProvisioningResult> provisionInvitation(
-    String invitationId,
-  ) async {
+    String invitationId, {
+    bool resend = false,
+  }) async {
     await _requireCoordinator();
-    final data = await _dataSource.provisionInvitation(invitationId);
+    final data = await _dataSource.provisionInvitation(
+      invitationId,
+      resend: resend,
+    );
     return AdminProvisioningResult(
       accountProvisioned: data['accountProvisioned'] == true,
       emailDelivery: data['emailDelivery'] as String? ?? 'pending',

@@ -597,6 +597,121 @@ void main() {
     },
   );
 
+  test(
+    'mock repository manages the complete unused invitation lifecycle',
+    () async {
+      final repository = MockAdminInvitationRepository(now: () => now);
+      addTearDown(repository.dispose);
+      final created = await repository.createInvitation(draft());
+      final originalEmail = created.email;
+      final originalCreatedAt = created.createdAt;
+
+      final updated = await repository.updateInvitation(
+        created.id,
+        AdminInvitationUpdate(
+          displayName: 'Coordination mise à jour',
+          role: AdminInvitationDraft.coordinatorRole,
+          locationIds: const [],
+        ),
+      );
+      expect(updated.email, originalEmail);
+      expect(updated.createdAt, originalCreatedAt);
+      expect(updated.role, AdminInvitationDraft.coordinatorRole);
+
+      await repository.cancelInvitation(created.id);
+      final newExpiration = now.add(const Duration(days: 14));
+      await repository.reactivateInvitation(created.id, newExpiration);
+      expect(
+        (await repository.getInvitation(created.id))?.status,
+        AdminInvitationStatus.pending,
+      );
+      expect(
+        (await repository.getInvitation(created.id))?.expiresAt,
+        newExpiration,
+      );
+
+      await repository.deleteInvitation(created.id);
+      expect(await repository.getInvitation(created.id), isNull);
+    },
+  );
+
+  test(
+    'accepted invitations are hidden and cannot be managed as unused',
+    () async {
+      final accepted = AdminInvitation(
+        id: 'accepted',
+        email: 'accepted@example.fr',
+        displayName: 'Compte préparé',
+        role: AdminInvitationDraft.siteManagerRole,
+        locationIds: const {'site-a'},
+        createdBy: 'coord',
+        createdAt: now,
+        expiresAt: now.add(const Duration(days: 7)),
+        status: AdminInvitationStatus.accepted,
+        acceptedAt: now,
+      );
+      final repository = MockAdminInvitationRepository(
+        initialInvitations: [accepted],
+        now: () => now,
+      );
+      addTearDown(repository.dispose);
+
+      expect(await repository.watchInvitations().first, isEmpty);
+      await expectLater(
+        repository.deleteInvitation(accepted.id),
+        throwsStateError,
+      );
+      await expectLater(
+        repository.updateInvitation(
+          accepted.id,
+          AdminInvitationUpdate(
+            displayName: 'Interdit',
+            role: AdminInvitationDraft.coordinatorRole,
+            locationIds: const [],
+          ),
+        ),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'firestore repository delegates management and resend callables',
+    () async {
+      final source = _FakeInvitationDataSource(now: now)
+        ..documents.add(
+          AdminInvitationDocument(
+            id: 'existing',
+            data: _invitationData(now: now),
+          ),
+        );
+      final repository = FirestoreAdminInvitationRepository(
+        dataSource: source,
+        now: () => now,
+      );
+
+      await repository.updateInvitation(
+        'existing',
+        AdminInvitationUpdate(
+          displayName: 'Nouveau nom',
+          role: AdminInvitationDraft.coordinatorRole,
+          locationIds: const [],
+        ),
+      );
+      expect(source.documents.single.data['email'], 'responsable@example.fr');
+      expect(source.documents.single.data['displayName'], 'Nouveau nom');
+      await repository.cancelInvitation('existing');
+      await repository.reactivateInvitation(
+        'existing',
+        now.add(const Duration(days: 14)),
+      );
+      await repository.provisionInvitation('existing', resend: true);
+      expect(source.provisionedAsResend, isTrue);
+      await repository.deleteInvitation('existing');
+      expect(source.documents, isEmpty);
+    },
+  );
+
   test('firestore repository delegates provisioning to the callable', () async {
     final source = _FakeInvitationDataSource(now: now);
     final repository = FirestoreAdminInvitationRepository(
@@ -640,6 +755,7 @@ class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
   int roleReads = 0;
   Map<String, Object?>? lastUpdate;
   String? provisionedInvitationId;
+  bool? provisionedAsResend;
 
   @override
   String? get currentUserId => 'coord';
@@ -686,8 +802,48 @@ class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
   }
 
   @override
-  Future<Map<String, dynamic>> provisionInvitation(String id) async {
+  Future<Map<String, dynamic>> manageInvitation(
+    Map<String, Object?> data,
+  ) async {
+    final id = data['invitationId']! as String;
+    final action = data['action'];
+    final update = switch (action) {
+      'cancel' => <String, Object?>{'status': 'cancelled'},
+      'reactivate' => <String, Object?>{
+        'status': 'pending',
+        'expiresAt': DateTime.fromMillisecondsSinceEpoch(
+          data['expiresAtMillis']! as int,
+        ),
+      },
+      'update' => <String, Object?>{
+        'displayName': data['displayName'],
+        'role': data['role'],
+        'locationIds': data['locationIds'],
+      },
+      'delete' => const <String, Object?>{},
+      _ => throw StateError('Action inattendue.'),
+    };
+    lastUpdate = update;
+    final index = documents.indexWhere((document) => document.id == id);
+    if (action == 'delete') {
+      documents.removeAt(index);
+      return {'deleted': true};
+    }
+    final existing = documents[index];
+    documents[index] = AdminInvitationDocument(
+      id: id,
+      data: {...existing.data, ...update},
+    );
+    return {'status': documents[index].data['status'] ?? 'pending'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> provisionInvitation(
+    String id, {
+    bool resend = false,
+  }) async {
     provisionedInvitationId = id;
+    provisionedAsResend = resend;
     return {
       'accountProvisioned': true,
       'emailDelivery': 'pending',
