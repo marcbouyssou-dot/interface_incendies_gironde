@@ -125,6 +125,62 @@ class InvalidResponsibleAccessState extends StatelessWidget {
   }
 }
 
+class CriticalDataUnavailableState extends StatelessWidget {
+  const CriticalDataUnavailableState({
+    super.key,
+    required this.stateKey,
+    required this.eyebrow,
+    required this.title,
+    required this.message,
+    required this.safetyMessage,
+  });
+
+  final Key stateKey;
+  final String eyebrow;
+  final String title;
+  final String message;
+  final String safetyMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return PageContainer(
+      child: ListView(
+        key: stateKey,
+        padding: const EdgeInsets.fromLTRB(20, 42, 20, 32),
+        children: [
+          PageHeader(eyebrow: eyebrow, title: title, subtitle: message),
+          const SizedBox(height: 22),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.cloud_off_outlined,
+                    color: AppColors.orange,
+                    size: 34,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    safetyMessage,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Réessayez dans quelques instants.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SectionTitle extends StatelessWidget {
   const SectionTitle({super.key, required this.title, this.action});
   final String title;

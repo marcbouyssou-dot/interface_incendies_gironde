@@ -53,35 +53,64 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<CoordinationNeed>>(
-      stream: _missions,
-      builder: (context, missionsSnapshot) {
-        if (!missionsSnapshot.hasData) {
+    return StreamBuilder<ResponsibleAccess?>(
+      stream: _responsibleAccess,
+      builder: (context, accessSnapshot) {
+        if (accessSnapshot.hasError) {
+          if (isInvalidResponsibleAccessError(accessSnapshot.error)) {
+            return const InvalidResponsibleAccessState();
+          }
+          return const _ResponsibleAccessUnavailableState();
+        }
+        if (accessSnapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        return StreamBuilder<List<ResponsePlace>>(
-          stream: _locations,
-          builder: (context, locationsSnapshot) =>
-              StreamBuilder<ResponsibleAccess?>(
-                stream: _responsibleAccess,
-                builder: (context, accessSnapshot) {
-                  if (accessSnapshot.hasError) {
-                    if (isInvalidResponsibleAccessError(accessSnapshot.error)) {
-                      return const InvalidResponsibleAccessState();
-                    }
-                    return const _ResponsibleAccessUnavailableState();
-                  }
-                  if (accessSnapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  return _buildContent(
-                    missionsSnapshot.data!,
-                    locationsSnapshot.data ?? const <ResponsePlace>[],
-                    accessSnapshot.data,
+        return StreamBuilder<List<CoordinationNeed>>(
+          stream: _missions,
+          builder: (context, missionsSnapshot) {
+            if (missionsSnapshot.hasError) {
+              return const CriticalDataUnavailableState(
+                stateKey: Key('situation-missions-unavailable-state'),
+                eyebrow: 'Situation',
+                title: 'Situation temporairement indisponible',
+                message:
+                    'Nous ne pouvons pas charger les besoins et missions '
+                    'pour le moment.',
+                safetyMessage:
+                    'Les dernières données reçues ne sont pas affichées afin '
+                    'd’éviter toute information périmée.',
+              );
+            }
+            if (!missionsSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return StreamBuilder<List<ResponsePlace>>(
+              stream: _locations,
+              builder: (context, locationsSnapshot) {
+                if (locationsSnapshot.hasError) {
+                  return const CriticalDataUnavailableState(
+                    stateKey: Key('situation-locations-unavailable-state'),
+                    eyebrow: 'Situation',
+                    title: 'Informations des centres indisponibles',
+                    message:
+                        'Nous ne pouvons pas charger les informations des '
+                        'centres pour le moment.',
+                    safetyMessage:
+                        'Par sécurité, les données associées aux lieux ne '
+                        'sont pas affichées.',
                   );
-                },
-              ),
+                }
+                if (!locationsSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return _buildContent(
+                  missionsSnapshot.data!,
+                  locationsSnapshot.data!,
+                  accessSnapshot.data,
+                );
+              },
+            );
+          },
         );
       },
     );

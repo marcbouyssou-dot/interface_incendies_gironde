@@ -38,6 +38,19 @@ class _PlacesScreenState extends State<PlacesScreen> {
     return StreamBuilder<List<ResponsePlace>>(
       stream: _locations,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const CriticalDataUnavailableState(
+            stateKey: Key('places-unavailable-state'),
+            eyebrow: 'Lieux',
+            title: 'Informations des centres indisponibles',
+            message:
+                'Nous ne pouvons pas charger les informations des centres '
+                'pour le moment.',
+            safetyMessage:
+                'Les dernières données reçues ne sont pas affichées afin '
+                'd’éviter toute information périmée.',
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }

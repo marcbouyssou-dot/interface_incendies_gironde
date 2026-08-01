@@ -37,15 +37,41 @@ class _SlotsScreenState extends State<SlotsScreen> {
     return StreamBuilder<List<CoordinationNeed>>(
       stream: _missions,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const CriticalDataUnavailableState(
+            stateKey: Key('missions-unavailable-state'),
+            eyebrow: 'Missions',
+            title: 'Missions temporairement indisponibles',
+            message: 'Nous ne pouvons pas charger les missions pour le moment.',
+            safetyMessage:
+                'Les dernières missions reçues ne sont pas affichées afin '
+                'd’éviter toute information périmée.',
+          );
+        }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
         return StreamBuilder<List<ResponsePlace>>(
           stream: _locations,
-          builder: (context, locationsSnapshot) => _buildContent(
-            snapshot.data!,
-            locationsSnapshot.data ?? const <ResponsePlace>[],
-          ),
+          builder: (context, locationsSnapshot) {
+            if (locationsSnapshot.hasError) {
+              return const CriticalDataUnavailableState(
+                stateKey: Key('mission-locations-unavailable-state'),
+                eyebrow: 'Missions',
+                title: 'Informations des centres indisponibles',
+                message:
+                    'Nous ne pouvons pas charger les informations des centres '
+                    'pour le moment.',
+                safetyMessage:
+                    'Les missions associées aux lieux ne sont pas affichées '
+                    'afin d’éviter toute information périmée.',
+              );
+            }
+            if (!locationsSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return _buildContent(snapshot.data!, locationsSnapshot.data!);
+          },
         );
       },
     );

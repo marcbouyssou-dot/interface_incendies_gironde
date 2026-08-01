@@ -99,12 +99,37 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
             initialMessage: 'Votre compte responsable est inactif.',
           );
         }
-        return _buildForm(context, access);
+        return StreamBuilder<List<ResponsePlace>>(
+          stream: _locations,
+          builder: (context, locationsSnapshot) {
+            if (locationsSnapshot.hasError) {
+              return const CriticalDataUnavailableState(
+                stateKey: Key('create-need-locations-unavailable-state'),
+                eyebrow: 'Nouvelle mission',
+                title: 'Informations des centres indisponibles',
+                message:
+                    'Nous ne pouvons pas charger les lieux d’intervention '
+                    'pour le moment.',
+                safetyMessage:
+                    'La création d’un besoin est suspendue afin d’éviter '
+                    'd’utiliser des informations périmées.',
+              );
+            }
+            if (!locationsSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return _buildForm(context, access, locationsSnapshot.data!);
+          },
+        );
       },
     );
   }
 
-  Widget _buildForm(BuildContext context, ResponsibleAccess access) {
+  Widget _buildForm(
+    BuildContext context,
+    ResponsibleAccess access,
+    List<ResponsePlace> locations,
+  ) {
     if (_publishedMission != null) {
       return _MissionPublishedView(
         mission: _publishedMission!,
@@ -141,7 +166,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                 children: [
                   _LocationInput(
                     access: access,
-                    locations: _locations!,
+                    locations: locations,
                     selectedLocation: _selectedLocation,
                     enabled: !_publishing,
                     onSelected: (location) {
@@ -669,68 +694,53 @@ class _LocationInput extends StatelessWidget {
   });
 
   final ResponsibleAccess access;
-  final Stream<List<ResponsePlace>> locations;
+  final List<ResponsePlace> locations;
   final ResponsePlace? selectedLocation;
   final bool enabled;
   final ValueChanged<ResponsePlace?> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<ResponsePlace>>(
-      stream: locations,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final available = snapshot.data!
-            .where((location) => location.isOperational)
-            .toList(growable: false);
-        if (access.singleManagedLocationId != null) {
-          return _buildLockedLocation(context, available);
-        }
-        final selectable = access.isLocationRestricted
-            ? available
-                  .where((location) => access.locationIds.contains(location.id))
-                  .toList(growable: false)
-            : available;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _FieldLabel('Lieu d’intervention'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              key: const Key('mission-location'),
-              isExpanded: true,
-              initialValue:
-                  selectable.any(
-                    (location) => location.id == selectedLocation?.id,
-                  )
-                  ? selectedLocation?.id
-                  : null,
-              hint: const Text('Choisir un lieu'),
-              items: selectable
-                  .map(
-                    (location) => DropdownMenuItem(
-                      value: location.id,
-                      child: Text(
-                        location.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: enabled
-                  ? (id) => onSelected(
-                      selectable
-                          .where((location) => location.id == id)
-                          .firstOrNull,
-                    )
-                  : null,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded),
-            ),
-          ],
-        );
-      },
+    final available = locations
+        .where((location) => location.isOperational)
+        .toList(growable: false);
+    if (access.singleManagedLocationId != null) {
+      return _buildLockedLocation(context, available);
+    }
+    final selectable = access.isLocationRestricted
+        ? available
+              .where((location) => access.locationIds.contains(location.id))
+              .toList(growable: false)
+        : available;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _FieldLabel('Lieu d’intervention'),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          key: const Key('mission-location'),
+          isExpanded: true,
+          initialValue:
+              selectable.any((location) => location.id == selectedLocation?.id)
+              ? selectedLocation?.id
+              : null,
+          hint: const Text('Choisir un lieu'),
+          items: selectable
+              .map(
+                (location) => DropdownMenuItem(
+                  value: location.id,
+                  child: Text(location.name, overflow: TextOverflow.ellipsis),
+                ),
+              )
+              .toList(),
+          onChanged: enabled
+              ? (id) => onSelected(
+                  selectable.where((location) => location.id == id).firstOrNull,
+                )
+              : null,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+        ),
+      ],
     );
   }
 

@@ -23,9 +23,23 @@ class LocationDetailScreen extends StatelessWidget {
         child: StreamBuilder<List<CoordinationNeed>>(
           stream: missions ?? Stream.value(const <CoordinationNeed>[]),
           builder: (context, snapshot) {
-            final activeMissions = _activeMissions(
-              snapshot.data ?? const <CoordinationNeed>[],
-            );
+            if (snapshot.hasError) {
+              return const CriticalDataUnavailableState(
+                stateKey: Key('location-missions-unavailable-state'),
+                eyebrow: 'Fiche du lieu',
+                title: 'Missions temporairement indisponibles',
+                message:
+                    'Nous ne pouvons pas charger les besoins de ce lieu pour '
+                    'le moment.',
+                safetyMessage:
+                    'Les anciennes missions ne sont pas affichées afin '
+                    'd’éviter toute information périmée.',
+              );
+            }
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final activeMissions = _activeMissions(snapshot.data!);
             return ListView(
               key: const Key('location-detail-screen'),
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),

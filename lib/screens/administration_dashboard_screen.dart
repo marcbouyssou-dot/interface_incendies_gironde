@@ -83,13 +83,34 @@ class _AdministrationDashboardScreenState
             onSignOut: _repository!.signOutResponsible,
           );
         }
-        return _AdministrationDashboard(
-          access: access,
-          locations: _locations!,
-          liveData: _liveData!,
-          onViewMission: widget.onViewMission,
-          onOpenStatistics: widget.onOpenStatistics,
-          onSignOut: _repository!.signOutResponsible,
+        return StreamBuilder<List<ResponsePlace>>(
+          stream: _locations,
+          builder: (context, locationsSnapshot) {
+            if (locationsSnapshot.hasError) {
+              return const CriticalDataUnavailableState(
+                stateKey: Key('administration-locations-unavailable-state'),
+                eyebrow: 'Administration',
+                title: 'Informations des centres indisponibles',
+                message:
+                    'Nous ne pouvons pas charger les informations des centres '
+                    'pour le moment.',
+                safetyMessage:
+                    'Les actions liées aux centres sont suspendues afin '
+                    'd’éviter toute utilisation de données périmées.',
+              );
+            }
+            if (!locationsSnapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return _AdministrationDashboard(
+              access: access,
+              locations: locationsSnapshot.data!,
+              liveData: _liveData!,
+              onViewMission: widget.onViewMission,
+              onOpenStatistics: widget.onOpenStatistics,
+              onSignOut: _repository!.signOutResponsible,
+            );
+          },
         );
       },
     );
@@ -107,7 +128,7 @@ class _AdministrationDashboard extends StatelessWidget {
   });
 
   final ResponsibleAccess access;
-  final Stream<List<ResponsePlace>> locations;
+  final List<ResponsePlace> locations;
   final LiveCoordinationData liveData;
   final VoidCallback onViewMission;
   final VoidCallback onOpenStatistics;
@@ -205,7 +226,7 @@ class _ResponsibleScopeCard extends StatelessWidget {
   const _ResponsibleScopeCard({required this.access, required this.locations});
 
   final ResponsibleAccess access;
-  final Stream<List<ResponsePlace>> locations;
+  final List<ResponsePlace> locations;
 
   @override
   Widget build(BuildContext context) {
@@ -238,15 +259,12 @@ class _ResponsibleScopeCard extends StatelessWidget {
                       ),
                     )
                   else
-                    StreamBuilder<List<ResponsePlace>>(
-                      stream: locations,
-                      builder: (context, snapshot) => Text(
-                        _siteManagerScope(snapshot.data),
-                        key: const Key('responsible-scope-label'),
-                        style: const TextStyle(
-                          color: AppColors.navy,
-                          fontWeight: FontWeight.w800,
-                        ),
+                    Text(
+                      _siteManagerScope(locations),
+                      key: const Key('responsible-scope-label'),
+                      style: const TextStyle(
+                        color: AppColors.navy,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                 ],
@@ -258,13 +276,13 @@ class _ResponsibleScopeCard extends StatelessWidget {
     );
   }
 
-  String _siteManagerScope(List<ResponsePlace>? values) {
+  String _siteManagerScope(List<ResponsePlace> values) {
     if (access.locationIds.length != 1) {
       return '${access.locationIds.length} centres autorisés';
     }
     final id = access.locationIds.single;
     final location = values
-        ?.where((candidate) => candidate.id == id)
+        .where((candidate) => candidate.id == id)
         .firstOrNull;
     return location?.name ?? '1 centre autorisé';
   }

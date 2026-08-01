@@ -64,8 +64,9 @@ void main() {
   }
 
   Future<void> pumpAccessUpdate(WidgetTester tester) async {
-    await tester.pump();
-    await tester.pump();
+    for (var index = 0; index < 6; index++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
   }
 
   testWidgets('initial generic access error fails closed without spinner', (
@@ -255,7 +256,273 @@ void main() {
       expectNoPrivilegedSituationContent();
     },
   );
+
+  Future<_ControlledSituationDataRepository> pumpDataSituation(
+    WidgetTester tester, {
+    required ResponsibleAccess? access,
+    Object? missionError,
+    Object? locationError,
+  }) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _ControlledSituationDataRepository();
+    addTearDown(repository.disposeControllers);
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pump();
+    if (missionError == null) {
+      repository.emitMissions([
+        _situationMission('old', 'Ancienne mission', createdBy: access?.uid),
+      ]);
+    } else {
+      repository.emitMissionsError(missionError);
+    }
+    await tester.pump();
+    if (locationError == null) {
+      repository.emitLocations([_situationLocation('Ancien centre')]);
+    } else {
+      repository.emitLocationsError(locationError);
+    }
+    await tester.pump();
+    await tester.tap(find.text('Situation').last);
+    await tester.pump();
+    repository.emitAccess(access);
+    await pumpAccessUpdate(tester);
+    return repository;
+  }
+
+  void expectNoStaleSituation() {
+    expect(find.text('Ancienne mission'), findsNothing);
+    expect(find.text('Ancien centre'), findsNothing);
+    expect(find.text('COUVERTURE'), findsNothing);
+    expect(find.text('Annuler ce besoin'), findsNothing);
+    expect(
+      find.byKey(const Key('engagement-menu-old_volunteer')),
+      findsNothing,
+    );
+  }
+
+  testWidgets('initial mission error replaces the spinner with a safe state', (
+    tester,
+  ) async {
+    await pumpDataSituation(
+      tester,
+      access: coordinator,
+      missionError: StateError('missions unavailable'),
+    );
+
+    expect(find.text('Situation temporairement indisponible'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expectNoStaleSituation();
+  });
+
+  testWidgets('mission error clears old data and a new value recovers', (
+    tester,
+  ) async {
+    final repository = await pumpDataSituation(tester, access: coordinator);
+    expect(find.text('Ancienne mission'), findsOneWidget);
+    expect(find.text('Annuler ce besoin'), findsOneWidget);
+
+    repository.emitMissionsError(StateError('missions unavailable'));
+    await pumpAccessUpdate(tester);
+
+    expect(find.text('Situation temporairement indisponible'), findsOneWidget);
+    expectNoStaleSituation();
+
+    repository.emitMissions([_situationMission('new', 'Nouvelle mission')]);
+    await pumpAccessUpdate(tester);
+
+    expect(find.text('Situation temporairement indisponible'), findsNothing);
+    expect(find.text('Nouvelle mission'), findsOneWidget);
+    expect(find.text('Ancienne mission'), findsNothing);
+  });
+
+  testWidgets('initial location error has an explicit closed state', (
+    tester,
+  ) async {
+    await pumpDataSituation(
+      tester,
+      access: coordinator,
+      locationError: StateError('locations unavailable'),
+    );
+
+    expect(find.text('Informations des centres indisponibles'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expectNoStaleSituation();
+  });
+
+  testWidgets('location error clears old data and a new value recovers', (
+    tester,
+  ) async {
+    final repository = await pumpDataSituation(tester, access: coordinator);
+    expect(find.text('Caserne SDIS'), findsOneWidget);
+
+    repository.emitLocationsError(StateError('locations unavailable'));
+    await pumpAccessUpdate(tester);
+
+    expect(find.text('Informations des centres indisponibles'), findsOneWidget);
+    expect(find.text('Caserne SDIS'), findsNothing);
+    expectNoStaleSituation();
+
+    repository.emitLocations([
+      _situationLocation('Centre actualisé', type: ResponsePlaceType.redCross),
+    ]);
+    await pumpAccessUpdate(tester);
+
+    expect(find.text('Informations des centres indisponibles'), findsNothing);
+    expect(find.text('Croix-Rouge'), findsOneWidget);
+    expect(find.text('Caserne SDIS'), findsNothing);
+  });
+
+  testWidgets('simultaneous data errors deterministically prefer missions', (
+    tester,
+  ) async {
+    await pumpDataSituation(
+      tester,
+      access: coordinator,
+      missionError: StateError('missions unavailable'),
+      locationError: StateError('locations unavailable'),
+    );
+
+    expect(find.text('Situation temporairement indisponible'), findsOneWidget);
+    expect(find.text('Informations des centres indisponibles'), findsNothing);
+    expectNoStaleSituation();
+  });
+
+  testWidgets('mission error remains closed across tabs and then recovers', (
+    tester,
+  ) async {
+    final repository = await pumpDataSituation(tester, access: coordinator);
+    repository.emitMissionsError(StateError('missions unavailable'));
+    await pumpAccessUpdate(tester);
+
+    await tester.tap(find.text('Plus').last);
+    await tester.pump();
+    await tester.tap(find.text('Situation').last);
+    await tester.pump();
+
+    expect(find.text('Situation temporairement indisponible'), findsOneWidget);
+    expectNoStaleSituation();
+
+    repository.emitMissions([_situationMission('new', 'Nouvelle mission')]);
+    await pumpAccessUpdate(tester);
+    expect(find.text('Nouvelle mission'), findsOneWidget);
+  });
+
+  testWidgets('coordinator and manager actions disappear on data errors', (
+    tester,
+  ) async {
+    final coordinatorRepository = await pumpDataSituation(
+      tester,
+      access: coordinator,
+    );
+    expect(find.text('Annuler ce besoin'), findsOneWidget);
+    coordinatorRepository.emitMissionsError(StateError('missions unavailable'));
+    await pumpAccessUpdate(tester);
+    expectNoStaleSituation();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    final managerRepository = await pumpDataSituation(tester, access: manager);
+    expect(find.text('Annuler ce besoin'), findsOneWidget);
+    managerRepository.emitLocationsError(StateError('locations unavailable'));
+    await pumpAccessUpdate(tester);
+    expectNoStaleSituation();
+
+    managerRepository.emitLocations([
+      _situationLocation('Centre manager actualisé'),
+    ]);
+    await pumpAccessUpdate(tester);
+    expect(find.text('Annuler ce besoin'), findsOneWidget);
+    expect(find.text('Ancien centre'), findsNothing);
+  });
+
+  testWidgets('revocation and sign-out stay closed with data errors', (
+    tester,
+  ) async {
+    final repository = await pumpDataSituation(tester, access: coordinator);
+    repository.emitAccess(
+      const ResponsibleAccess(
+        uid: 'coordinator',
+        role: 'coordinator',
+        locationIds: {'*'},
+        active: false,
+      ),
+    );
+    repository.emitMissionsError(StateError('missions unavailable'));
+    await pumpAccessUpdate(tester);
+    expectNoStaleSituation();
+
+    repository.emitAccess(null);
+    repository.emitLocationsError(StateError('locations unavailable'));
+    await pumpAccessUpdate(tester);
+    expectNoStaleSituation();
+  });
+
+  testWidgets(
+    'site manager scope loss combined with a location error is safe',
+    (tester) async {
+      final repository = await pumpDataSituation(tester, access: manager);
+      expect(find.text('Annuler ce besoin'), findsOneWidget);
+
+      repository.emitAccess(
+        const ResponsibleAccess(
+          uid: 'manager',
+          role: 'site_manager',
+          locationIds: {'other-site'},
+          active: true,
+        ),
+      );
+      repository.emitLocationsError(StateError('locations unavailable'));
+      await pumpAccessUpdate(tester);
+
+      expect(
+        find.text('Informations des centres indisponibles'),
+        findsOneWidget,
+      );
+      expectNoStaleSituation();
+
+      repository.emitLocations([
+        _situationLocation('Centre non autorisé actualisé'),
+      ]);
+      await pumpAccessUpdate(tester);
+
+      expect(find.text('Informations des centres indisponibles'), findsNothing);
+      expect(find.text('Ancienne mission'), findsNothing);
+      expect(find.text('Annuler ce besoin'), findsNothing);
+    },
+  );
 }
+
+CoordinationNeed _situationMission(
+  String id,
+  String place, {
+  String? createdBy = 'coordinator',
+}) => CoordinationNeed(
+  id: id,
+  locationId: 'site-a',
+  place: place,
+  group: TerritorialGroup.medoc,
+  date: 'Aujourd’hui',
+  time: '08:00 — 12:00',
+  requiredPhysiotherapists: 2,
+  registeredPhysiotherapists: 0,
+  requiredPodiatrists: 0,
+  registeredPodiatrists: 0,
+  equipment: const [],
+  createdBy: createdBy,
+);
+
+ResponsePlace _situationLocation(
+  String name, {
+  ResponsePlaceType type = ResponsePlaceType.sdisStation,
+}) => ResponsePlace(
+  id: 'site-a',
+  name: name,
+  type: type,
+  group: TerritorialGroup.medoc,
+  activeNeeds: 1,
+);
 
 class _ControlledSituationRepository extends MockCoordinationRepository {
   _ControlledSituationRepository({
@@ -315,4 +582,41 @@ class _ControlledSituationRepository extends MockCoordinationRepository {
   void emitError(Object error) => _access.addError(error, StackTrace.current);
 
   Future<void> disposeAccess() => _access.close();
+}
+
+class _ControlledSituationDataRepository extends MockCoordinationRepository {
+  final _missions = StreamController<List<CoordinationNeed>>.broadcast(
+    sync: true,
+  );
+  final _locations = StreamController<List<ResponsePlace>>.broadcast(
+    sync: true,
+  );
+  final _access = StreamController<ResponsibleAccess?>.broadcast(sync: true);
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissions() => _missions.stream;
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() => _locations.stream;
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() => _access.stream;
+
+  void emitMissions(List<CoordinationNeed> value) => _missions.add(value);
+
+  void emitMissionsError(Object error) =>
+      _missions.addError(error, StackTrace.current);
+
+  void emitLocations(List<ResponsePlace> value) => _locations.add(value);
+
+  void emitLocationsError(Object error) =>
+      _locations.addError(error, StackTrace.current);
+
+  void emitAccess(ResponsibleAccess? value) => _access.add(value);
+
+  Future<void> disposeControllers() async {
+    await _missions.close();
+    await _locations.close();
+    await _access.close();
+  }
 }

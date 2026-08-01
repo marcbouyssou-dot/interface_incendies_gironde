@@ -127,7 +127,119 @@ void main() {
       await repository.disposeController();
     },
   );
+
+  test('mission errors are replayed and cleared after recovery', () async {
+    final repository = _ControlledDataRepository();
+    final data = LiveCoordinationData(repository);
+    final firstValues = <List<CoordinationNeed>>[];
+    final firstErrors = <Object>[];
+    final firstSubscription = data.watchMissions().listen(
+      firstValues.add,
+      onError: firstErrors.add,
+    );
+
+    repository.emitMissions([_mission('old-mission', 'Ancienne mission')]);
+    await Future<void>.delayed(Duration.zero);
+    final error = StateError('missions unavailable');
+    repository.emitMissionsError(error);
+    await Future<void>.delayed(Duration.zero);
+
+    final replayedValues = <List<CoordinationNeed>>[];
+    final replayedErrors = <Object>[];
+    final secondSubscription = data.watchMissions().listen(
+      replayedValues.add,
+      onError: replayedErrors.add,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.missionFactories, 1);
+    expect(firstValues.single.single.id, 'old-mission');
+    expect(firstErrors, [error]);
+    expect(replayedValues, isEmpty);
+    expect(replayedErrors, [error]);
+
+    repository.emitMissions([_mission('new-mission', 'Nouvelle mission')]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(firstValues.last.single.id, 'new-mission');
+    expect(replayedValues.single.single.id, 'new-mission');
+
+    await firstSubscription.cancel();
+    await secondSubscription.cancel();
+    await data.dispose();
+    await repository.disposeControllers();
+  });
+
+  test('location errors stay independent and recover with new data', () async {
+    final repository = _ControlledDataRepository();
+    final data = LiveCoordinationData(repository);
+    final missionValues = <List<CoordinationNeed>>[];
+    final locationValues = <List<ResponsePlace>>[];
+    final locationErrors = <Object>[];
+    final missionSubscription = data.watchMissions().listen(missionValues.add);
+    final locationSubscription = data.watchLocations().listen(
+      locationValues.add,
+      onError: locationErrors.add,
+    );
+
+    repository.emitMissions([_mission('mission-a', 'Mission A')]);
+    repository.emitLocations([_location('site-a', 'Ancien centre')]);
+    await Future<void>.delayed(Duration.zero);
+    final error = StateError('locations unavailable');
+    repository.emitLocationsError(error);
+    await Future<void>.delayed(Duration.zero);
+
+    final replayedValues = <List<ResponsePlace>>[];
+    final replayedErrors = <Object>[];
+    final replayedSubscription = data.watchLocations().listen(
+      replayedValues.add,
+      onError: replayedErrors.add,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(repository.locationFactories, 1);
+    expect(locationValues.single.single.name, 'Ancien centre');
+    expect(locationErrors, [error]);
+    expect(replayedValues, isEmpty);
+    expect(replayedErrors, [error]);
+    expect(missionValues.single.single.id, 'mission-a');
+
+    repository.emitLocations([_location('site-a', 'Nouveau centre')]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(locationValues.last.single.name, 'Nouveau centre');
+    expect(replayedValues.single.single.name, 'Nouveau centre');
+    expect(missionValues, hasLength(1));
+
+    await missionSubscription.cancel();
+    await locationSubscription.cancel();
+    await replayedSubscription.cancel();
+    await data.dispose();
+    await repository.disposeControllers();
+  });
 }
+
+CoordinationNeed _mission(String id, String place) => CoordinationNeed(
+  id: id,
+  locationId: 'site-a',
+  place: place,
+  group: TerritorialGroup.medoc,
+  date: 'Aujourd’hui',
+  time: '08:00 — 12:00',
+  requiredPhysiotherapists: 1,
+  registeredPhysiotherapists: 0,
+  requiredPodiatrists: 0,
+  registeredPodiatrists: 0,
+  equipment: const [],
+);
+
+ResponsePlace _location(String id, String name) => ResponsePlace(
+  id: id,
+  name: name,
+  type: ResponsePlaceType.sdisStation,
+  group: TerritorialGroup.medoc,
+  activeNeeds: 1,
+);
 
 class _ControlledEngagementRepository extends MockCoordinationRepository {
   final Map<String, StreamController<EngagementInfo?>> _controllers = {};
@@ -172,4 +284,42 @@ class _ControlledAccessRepository extends MockCoordinationRepository {
   void emitError(Object error) => _controller.addError(error);
 
   Future<void> disposeController() => _controller.close();
+}
+
+class _ControlledDataRepository extends MockCoordinationRepository {
+  final _missions = StreamController<List<CoordinationNeed>>.broadcast(
+    sync: true,
+  );
+  final _locations = StreamController<List<ResponsePlace>>.broadcast(
+    sync: true,
+  );
+  int missionFactories = 0;
+  int locationFactories = 0;
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissions() {
+    missionFactories++;
+    return _missions.stream;
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    locationFactories++;
+    return _locations.stream;
+  }
+
+  void emitMissions(List<CoordinationNeed> value) => _missions.add(value);
+
+  void emitMissionsError(Object error) =>
+      _missions.addError(error, StackTrace.current);
+
+  void emitLocations(List<ResponsePlace> value) => _locations.add(value);
+
+  void emitLocationsError(Object error) =>
+      _locations.addError(error, StackTrace.current);
+
+  Future<void> disposeControllers() async {
+    await _missions.close();
+    await _locations.close();
+  }
 }
