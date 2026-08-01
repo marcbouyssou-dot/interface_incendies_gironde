@@ -1,0 +1,254 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  MissionUpdateError,
+  missionUpdateMutation,
+  updateMission,
+  validateMissionUpdateRequest,
+} from '../src/update_mission.js';
+
+const professions = [
+  'physiotherapist',
+  'podiatrist',
+  'physician',
+  'nurse',
+  'other_health_professional',
+];
+
+function quotas(overrides = {}) {
+  return Object.fromEntries(
+    professions.map((profession) => [profession, overrides[profession] ?? 0]),
+  );
+}
+
+function request(overrides = {}) {
+  return {
+    missionId: 'mission-1',
+    locationId: 'location-b',
+    startAtMillis: Date.UTC(2026, 7, 3, 8),
+    endAtMillis: Date.UTC(2026, 7, 3, 12),
+    requiredByProfession: quotas({physiotherapist: 2, podiatrist: 1}),
+    equipment: ['Tables'],
+    details: 'Accès nord',
+    ...overrides,
+  };
+}
+
+function role({roles = ['coordinator'], locationIds = [], active = true} = {}) {
+  return {
+    role: roles.includes('coordinator') ? 'coordinator' : 'site_manager',
+    roles,
+    locationIds,
+    active,
+    schemaVersion: 2,
+  };
+}
+
+function mission(overrides = {}) {
+  return {
+    id: 'mission-1',
+    locationId: 'location-a',
+    registeredByProfession: quotas({physiotherapist: 1}),
+    registeredMk: 1,
+    registeredPp: 0,
+    isActive: true,
+    status: 'toComplete',
+    createdAt: 'preserved',
+    createdBy: 'creator',
+    ...overrides,
+  };
+}
+
+function destination(overrides = {}) {
+  return {
+    name: 'Centre B',
+    group: 'medoc',
+    active: true,
+    isOperational: true,
+    ...overrides,
+  };
+}
+
+function mutation(overrides = {}) {
+  return missionUpdateMutation({
+    request: validateMissionUpdateRequest(
+      overrides.request ?? request(),
+    ),
+    mission: Object.hasOwn(overrides, 'mission')
+      ? overrides.mission
+      : mission(),
+    destination: Object.hasOwn(overrides, 'destination')
+      ? overrides.destination
+      : destination(),
+    callerRole: Object.hasOwn(overrides, 'callerRole')
+      ? overrides.callerRole
+      : role(),
+    engagements: Object.hasOwn(overrides, 'engagements')
+      ? overrides.engagements
+      : [],
+    serverTimestamp: 'server-time',
+    timestampFromMillis: (value) => `timestamp:${value}`,
+  });
+}
+
+function assertCode(action, code) {
+  assert.throws(action, (error) => {
+    assert.ok(error instanceof MissionUpdateError);
+    assert.equal(error.code, code);
+    return true;
+  });
+}
+
+test('strict request validation accepts the five canonical quotas', () => {
+  const value = validateMissionUpdateRequest(request());
+  assert.deepEqual(value.requiredByProfession, quotas({
+    physiotherapist: 2,
+    podiatrist: 1,
+  }));
+  assert.equal(value.details, 'Accès nord');
+  assert.ok(Object.isFrozen(value));
+});
+
+test('strict request validation refuses malformed schedules and payloads', () => {
+  for (const value of [
+    {...request(), unknown: true},
+    request({endAtMillis: request().startAtMillis}),
+    request({requiredByProfession: {physiotherapist: 1}}),
+    request({requiredByProfession: quotas({physiotherapist: -1})}),
+    request({requiredByProfession: quotas()}),
+    request({equipment: ['Tables', 'Tables']}),
+  ]) {
+    assertCode(() => validateMissionUpdateRequest(value), 'invalid-argument');
+  }
+});
+
+test('coordinator update preserves counters and only returns editable fields', () => {
+  const value = mutation();
+  assert.equal(value.fields.locationId, 'location-b');
+  assert.equal(value.fields.locationName, 'Centre B');
+  assert.equal(value.fields.registeredMk, 1);
+  assert.equal(value.fields.registeredByProfession.physiotherapist, 1);
+  assert.equal(value.fields.status, 'critical');
+  assert.equal(value.fields.updatedAt, 'server-time');
+  for (const protectedField of ['id', 'createdAt', 'createdBy', 'isActive']) {
+    assert.equal(Object.hasOwn(value.fields, protectedField), false);
+  }
+});
+
+test('site manager must manage both current and destination locations', () => {
+  const manager = role({
+    roles: ['site_manager'],
+    locationIds: ['location-a', 'location-b'],
+  });
+  assert.equal(mutation({callerRole: manager}).fields.locationId, 'location-b');
+  for (const locationIds of [['location-a'], ['location-b']]) {
+    assertCode(
+      () => mutation({
+        callerRole: role({roles: ['site_manager'], locationIds}),
+      }),
+      'permission-denied',
+    );
+  }
+});
+
+test('inactive and malformed roles are denied without mutation', () => {
+  assertCode(() => mutation({callerRole: role({active: false})}),
+    'permission-denied');
+  assertCode(() => mutation({
+    callerRole: {
+      role: 'coordinator',
+      roles: ['coordinator'],
+      active: true,
+      schemaVersion: 2,
+    },
+  }), 'permission-denied');
+  assertCode(() => mutation({callerRole: null}), 'permission-denied');
+});
+
+test('missing mission and inactive destination are refused', () => {
+  assertCode(() => mutation({mission: null}), 'not-found');
+  assertCode(
+    () => mutation({destination: destination({active: false})}),
+    'failed-precondition',
+  );
+  assertCode(
+    () => mutation({destination: destination({isOperational: false})}),
+    'failed-precondition',
+  );
+});
+
+test('an inactive historical location can remain but cannot be a destination', () => {
+  const historical = destination({active: false, isOperational: false});
+  const unchanged = mutation({
+    request: request({locationId: 'location-a'}),
+    destination: historical,
+  });
+  assert.equal(unchanged.fields.locationId, 'location-a');
+  assertCode(
+    () => mutation({destination: historical}),
+    'failed-precondition',
+  );
+});
+
+test('quota cannot fall below counters or confirmed engagements', () => {
+  const tooLow = request({
+    requiredByProfession: quotas({physiotherapist: 1}),
+  });
+  assertCode(
+    () => mutation({
+      request: tooLow,
+      mission: mission({
+        registeredByProfession: quotas({physiotherapist: 2}),
+        registeredMk: 2,
+      }),
+    }),
+    'failed-precondition',
+  );
+  assertCode(
+    () => mutation({
+      request: tooLow,
+      engagements: [
+        {profession: 'mk', status: 'confirmed'},
+        {profession: 'physiotherapist'},
+      ],
+    }),
+    'failed-precondition',
+  );
+});
+
+test('cumulative coordinator remains global and legacy counters are preserved', () => {
+  const value = mutation({
+    callerRole: role({
+      roles: ['coordinator', 'site_manager'],
+      locationIds: ['location-a'],
+    }),
+    mission: mission({
+      registeredByProfession: undefined,
+      registeredMk: 1,
+      registeredPp: 1,
+    }),
+  });
+  assert.equal(value.fields.registeredMk, 1);
+  assert.equal(value.fields.registeredPp, 1);
+});
+
+test('public operation validates before delegating and preserves service result', async () => {
+  let received;
+  const result = await updateMission({
+    callerUid: 'coordinator',
+    data: request(),
+    services: {
+      async commitMissionUpdate(value) {
+        received = value;
+        return {missionId: value.missionId};
+      },
+    },
+  });
+  assert.equal(received.callerUid, 'coordinator');
+  assert.deepEqual(result, {missionId: 'mission-1'});
+  await assert.rejects(
+    () => updateMission({callerUid: null, data: request(), services: {}}),
+    (error) => error.code === 'unauthenticated',
+  );
+});

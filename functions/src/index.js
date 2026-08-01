@@ -38,6 +38,11 @@ import {
   locationManagementMutation,
   manageLocation as manageAdminLocation,
 } from './location_administration.js';
+import {
+  MissionUpdateError,
+  missionUpdateMutation,
+  updateMission as updateExistingMission,
+} from './update_mission.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -103,6 +108,15 @@ export const manageLocation = onCall(
       data: request.data,
       services: locationAdministrationServices({firestore: getFirestore()}),
     })),
+);
+
+export const updateMission = onCall(
+  {region: 'europe-west1'},
+  async (request) => missionUpdateCallable(() => updateExistingMission({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: missionUpdateServices({firestore: getFirestore()}),
+  })),
 );
 
 export const provisionAdminInvitation = onCall(
@@ -635,6 +649,40 @@ export function locationAdministrationServices({firestore}) {
   };
 }
 
+export function missionUpdateServices({firestore}) {
+  return {
+    async commitMissionUpdate({callerUid, missionId, ...request}) {
+      return firestore.runTransaction(async (transaction) => {
+        const callerRef = firestore.collection('roles').doc(callerUid);
+        const missionRef = firestore.collection('missions').doc(missionId);
+        const destinationRef = firestore
+          .collection('locations')
+          .doc(request.locationId);
+        const engagementsQuery = firestore
+          .collection('engagements')
+          .where('missionId', '==', missionId);
+        const [caller, mission, destination, engagements] = await Promise.all([
+          transaction.get(callerRef),
+          transaction.get(missionRef),
+          transaction.get(destinationRef),
+          transaction.get(engagementsQuery),
+        ]);
+        const mutation = missionUpdateMutation({
+          request: {missionId, ...request},
+          mission: mission.exists ? mission.data() : null,
+          destination: destination.exists ? destination.data() : null,
+          callerRole: caller.exists ? caller.data() : null,
+          engagements: engagements.docs.map((document) => document.data()),
+          serverTimestamp: FieldValue.serverTimestamp(),
+          timestampFromMillis: (value) => new Date(value),
+        });
+        transaction.update(missionRef, mutation.fields);
+        return {missionId};
+      });
+    },
+  };
+}
+
 async function responsibleAccessCallable(action) {
   try {
     return await action();
@@ -680,6 +728,20 @@ async function locationAdministrationCallable(action) {
       type: error?.constructor?.name ?? 'Unknown',
     });
     throw new HttpsError('internal', 'La gestion du lieu a échoué.');
+  }
+}
+
+async function missionUpdateCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof MissionUpdateError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('MISSION_UPDATE_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError('internal', 'La mission n’a pas pu être mise à jour.');
   }
 }
 
