@@ -1257,6 +1257,133 @@ test('admin invitations: protected creation fields are enforced', async () => {
   );
 });
 
+test('admin invitations: multiple and exactly 65 locations are allowed', async () => {
+  await seed();
+  await assertSucceeds(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/multiple-locations'),
+      adminInvitation({locationIds: ['site-a', 'site-b']}),
+    ),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/sixty-five-locations'),
+      adminInvitation({
+        locationIds: Array.from({length: 65}, (_, index) => `site-${index}`),
+      }),
+    ),
+  );
+});
+
+test('admin invitations: more than 65 locations are refused', async () => {
+  await seed();
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/sixty-six-locations'),
+      adminInvitation({
+        locationIds: Array.from({length: 66}, (_, index) => `site-${index}`),
+      }),
+    ),
+  );
+});
+
+test('admin invitations: missing locationIds is refused', async () => {
+  await seed();
+  const invitation = adminInvitation();
+  delete invitation.locationIds;
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/missing-locations'),
+      invitation,
+    ),
+  );
+});
+
+test('admin invitations: non-list locationIds is refused', async () => {
+  await seed();
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/non-list-locations'),
+      adminInvitation({locationIds: 'site-a'}),
+    ),
+  );
+});
+
+for (const [label, locationIds] of [
+  ['empty-location', ['']],
+  ['non-string-location', ['site-a', 42]],
+  ['duplicate-location', ['site-a', 'site-a']],
+  ['wildcard-location', ['*']],
+  ['separator-location', ['site-a\u001fsite-b']],
+]) {
+  test(`admin invitations: ${label} is refused`, async () => {
+    await seed();
+    await assertFails(
+      setDoc(
+        doc(db('coord'), `adminInvitations/${label}`),
+        adminInvitation({locationIds}),
+      ),
+    );
+  });
+}
+
+test('admin invitations: role and location scope remain coherent', async () => {
+  await seed();
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/coordinator-scoped'),
+      adminInvitation({role: 'coordinator', locationIds: ['site-a']}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/manager-empty'),
+      adminInvitation({locationIds: []}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/unknown-role'),
+      adminInvitation({role: 'administrator', locationIds: []}),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/unsupported-cumulative-role'),
+      adminInvitation({
+        roles: ['coordinator', 'site_manager'],
+        locationIds: ['site-a'],
+      }),
+    ),
+  );
+});
+
+test('admin invitations: role and locations cannot be mutated later', async () => {
+  await seed();
+  const reference = 'adminInvitations/immutable-scope';
+  await assertSucceeds(
+    setDoc(doc(db('coord'), reference), adminInvitation()),
+  );
+  await assertFails(
+    updateDoc(doc(db('coord'), reference), {
+      status: 'cancelled',
+      locationIds: ['site-b'],
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(db('coord'), reference), {
+      status: 'cancelled',
+      role: 'coordinator',
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(db('coord'), reference), {
+      status: 'cancelled',
+      unexpected: true,
+    }),
+  );
+});
+
 test('admin invitations: client cannot accept, mutate identity or delete', async () => {
   await seed();
   const reference = 'adminInvitations/invitation-a';

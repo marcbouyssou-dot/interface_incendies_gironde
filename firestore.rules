@@ -30,6 +30,16 @@ service cloud.firestore {
         && values.size() > 0;
     }
 
+    function hasValidInvitationScope(invitation) {
+      return 'locationIds' in invitation
+        && (
+          (invitation.role == 'site_manager'
+            && validLocationIds(invitation.locationIds))
+          || (invitation.role == 'coordinator'
+            && invitation.locationIds == [])
+        );
+    }
+
     function isLegacyRoleDocument(role) {
       return !('roles' in role)
         && !('schemaVersion' in role)
@@ -730,13 +740,7 @@ service cloud.firestore {
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() > 0
         && request.resource.data.role in ['site_manager', 'coordinator']
-        && request.resource.data.locationIds is list
-        && (
-          (request.resource.data.role == 'site_manager'
-            && request.resource.data.locationIds.size() > 0)
-          || (request.resource.data.role == 'coordinator'
-            && request.resource.data.locationIds.size() == 0)
-        )
+        && hasValidInvitationScope(request.resource.data)
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.expiresAt is timestamp
