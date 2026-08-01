@@ -7,6 +7,13 @@ import {
   ResponsibleAccessError,
 } from '../src/responsible_access.js';
 
+const BLANK_LOCATION_ID_VECTORS = [
+  '\u0009', '\u000A', '\u000B', '\u000C', '\u000D', '\u0020', '\u0085',
+  '\u00A0', '\u1680', '\u2000', '\u2001', '\u2002', '\u2003', '\u2004',
+  '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200A', '\u2028',
+  '\u2029', '\u202F', '\u205F', '\u3000', '\uFEFF',
+];
+
 function legacy(role, locationIds, overrides = {}) {
   return {
     role,
@@ -155,7 +162,10 @@ for (const [label, document] of [
 }
 
 test('refuses whitespace-only legacy, V2 and requested locations', () => {
-  for (const locationId of [' ', '   ', '\t', '\n', '\r', '\t \n']) {
+  for (const locationId of [
+    ...BLANK_LOCATION_ID_VECTORS,
+    '\u0009\u0020\u000A',
+  ]) {
     assertAccessError(() => parseResponsibleAccess(
       legacy('site_manager', [locationId]),
     ));
@@ -173,7 +183,12 @@ test('refuses whitespace-only legacy, V2 and requested locations', () => {
 });
 
 test('preserves peripheral spaces, internal spaces and partial wildcard', () => {
-  const locationIds = [' bazas', 'bazas ', ' bazas ', 'ba zas', 'bazas*'];
+  const locationIds = [
+    ' bazas', 'bazas ', ' bazas ', 'ba zas', 'bazas', 'Bazas', 'bazas*',
+    '\u00A0bazas', 'bazas\u0085',
+    '\u0000', '\u001E', '\u007F', String.raw`\u001F`,
+    '\u00E9', 'e\u0301', '\u2217', ' * ',
+  ];
 
   const access = parseResponsibleAccess(v2(['site_manager'], locationIds));
   const legacyAccess = parseResponsibleAccess(

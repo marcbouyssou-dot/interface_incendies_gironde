@@ -21,6 +21,12 @@ import {readFileSync} from 'node:fs';
 
 let env;
 const projectId = 'demo-interface-recup';
+const blankLocationIdVectors = [
+  '\u0009', '\u000A', '\u000B', '\u000C', '\u000D', '\u0020', '\u0085',
+  '\u00A0', '\u1680', '\u2000', '\u2001', '\u2002', '\u2003', '\u2004',
+  '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200A', '\u2028',
+  '\u2029', '\u202F', '\u205F', '\u3000', '\uFEFF',
+];
 
 before(async () => {
   env = await initializeTestEnvironment({
@@ -1333,13 +1339,31 @@ for (const [label, locationIds] of [
   });
 }
 
+test('admin invitations: every canonical Unicode blank is refused', async () => {
+  await seed();
+  for (const [index, locationId] of blankLocationIdVectors.entries()) {
+    await assertFails(
+      setDoc(
+        doc(db('coord'), `adminInvitations/unicode-blank-${index}`),
+        adminInvitation({locationIds: [locationId]}),
+      ),
+    );
+  }
+});
+
 test('admin invitations: peripheral spaces and partial wildcard are preserved', async () => {
   await seed();
   await assertSucceeds(
     setDoc(
       doc(db('coord'), 'adminInvitations/peripheral-spaces'),
       adminInvitation({
-        locationIds: [' site-a', 'site-a ', ' site-a ', 'site a', 'site-a*'],
+        locationIds: [
+          ' site-a', 'site-a ', ' site-a ', 'site a', 'site-a', 'Site-a',
+          'site-a*',
+          '\u00A0site-a', 'site-a\u0085',
+          '\u0000', '\u001E', '\u007F', String.raw`\u001F`,
+          '\u00E9', 'e\u0301', '\u2217', ' * ',
+        ],
       }),
     ),
   );
@@ -1451,6 +1475,10 @@ test('roles dual-read: invalid and inactive legacy documents deny access', async
   await seed({mission: false});
   const cases = [
     ['legacy-empty-manager', legacyRole('site_manager', [])],
+    ...blankLocationIdVectors.map((locationId, index) => [
+      `legacy-unicode-blank-${index}`,
+      legacyRole('site_manager', [locationId]),
+    ]),
     ['legacy-space-manager', legacyRole('site_manager', [' '])],
     ['legacy-blank-manager', legacyRole('site_manager', ['   '])],
     ['legacy-tab-manager', legacyRole('site_manager', ['\t'])],
@@ -1554,6 +1582,10 @@ test('roles dual-read: invalid V2 fields and scopes deny all privilege', async (
       'v2-location-duplicate',
       v2Role(['site_manager'], ['site-a', 'site-a']),
     ],
+    ...blankLocationIdVectors.map((locationId, index) => [
+      `v2-location-unicode-blank-${index}`,
+      v2Role(['site_manager'], [locationId]),
+    ]),
     ['v2-location-space', v2Role(['site_manager'], [' '])],
     ['v2-location-blank', v2Role(['site_manager'], ['   '])],
     ['v2-location-tab', v2Role(['site_manager'], ['\t'])],
@@ -1577,7 +1609,12 @@ test('roles dual-read: invalid V2 fields and scopes deny all privilege', async (
 
 test('roles dual-read: peripheral spaces and partial wildcard stay exact', async () => {
   await seed({mission: false});
-  const locationIds = [' site-a', 'site-a ', ' site-a ', 'site a', 'site-a*'];
+  const locationIds = [
+    ' site-a', 'site-a ', ' site-a ', 'site a', 'site-a', 'Site-a', 'site-a*',
+    '\u00A0site-a', 'site-a\u0085',
+    '\u0000', '\u001E', '\u007F', String.raw`\u001F`,
+    '\u00E9', 'e\u0301', '\u2217', ' * ',
+  ];
 
   for (const [index, locationId] of locationIds.entries()) {
     await env.withSecurityRulesDisabled(async (context) => {

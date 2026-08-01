@@ -13,6 +13,12 @@ import {mergeResponsibleAccess} from '../src/responsible_access.js';
 
 const now = new Date('2026-07-30T10:00:00.000Z');
 const appUrl = 'http://127.0.0.1:5000';
+const BLANK_LOCATION_ID_VECTORS = [
+  '\u0009', '\u000A', '\u000B', '\u000C', '\u000D', '\u0020', '\u0085',
+  '\u00A0', '\u1680', '\u2000', '\u2001', '\u2002', '\u2003', '\u2004',
+  '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200A', '\u2028',
+  '\u2029', '\u202F', '\u205F', '\u3000', '\uFEFF',
+];
 
 function invitation(overrides = {}) {
   return {
@@ -309,7 +315,10 @@ test('unknown invitation is refused', async () => {
 });
 
 test('blank invitation location is refused before Auth or Firestore writes', async () => {
-  for (const locationId of [' ', '   ', '\t', '\n', '\r', '\t \n']) {
+  for (const locationId of [
+    ...BLANK_LOCATION_ID_VECTORS,
+    '\u0009\u0020\u000A',
+  ]) {
     const value = harness({
       invitationValue: invitation({locationIds: [locationId]}),
     });
@@ -333,7 +342,12 @@ test('blank invitation location is refused before Auth or Firestore writes', asy
 });
 
 test('peripheral spaces and partial wildcard stay exact during provisioning', async () => {
-  const locationIds = [' bazas', 'bazas ', ' bazas ', 'ba zas', 'bazas*'];
+  const locationIds = [
+    ' bazas', 'bazas ', ' bazas ', 'ba zas', 'bazas', 'Bazas', 'bazas*',
+    '\u00A0bazas', 'bazas\u0085',
+    '\u0000', '\u001E', '\u007F', String.raw`\u001F`,
+    '\u00E9', 'e\u0301', '\u2217', ' * ',
+  ];
 
   const {state} = await provision({
     invitationValue: invitation({locationIds}),

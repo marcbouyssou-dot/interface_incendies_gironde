@@ -1,5 +1,7 @@
 import 'dart:collection';
 
+import 'location_id_policy.dart';
+
 abstract final class ResponsibleRole {
   static const coordinator = 'coordinator';
   static const siteManager = 'site_manager';
@@ -190,7 +192,7 @@ abstract final class ResponsibleAccessParser {
       );
     }
     final values = raw.cast<String>();
-    if (values.any((value) => value.trim().isEmpty) ||
+    if (values.any(isBlankLocationId) ||
         (required && values.contains('*')) ||
         values.any((value) => value.contains(_rulesListSeparator)) ||
         values.toSet().length != values.length) {

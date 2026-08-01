@@ -1,3 +1,5 @@
+import 'location_id_policy.dart';
+
 enum AdminInvitationStatus { pending, accepted, expired, cancelled }
 
 extension AdminInvitationStatusValue on AdminInvitationStatus {
@@ -129,7 +131,7 @@ class AdminInvitationDraft {
     if (locations.any(
       (id) =>
           id.isEmpty ||
-          id.trim().isEmpty ||
+          isBlankLocationId(id) ||
           id == '*' ||
           id.contains(_rulesListSeparator),
     )) {

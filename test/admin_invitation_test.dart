@@ -6,6 +6,35 @@ import 'package:interface_incendies_gironde/models/responsible_access.dart';
 import 'package:interface_incendies_gironde/repositories/firestore_admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
 
+const _blankLocationIdVectors = <String>[
+  '\u0009',
+  '\u000A',
+  '\u000B',
+  '\u000C',
+  '\u000D',
+  '\u0020',
+  '\u0085',
+  '\u00A0',
+  '\u1680',
+  '\u2000',
+  '\u2001',
+  '\u2002',
+  '\u2003',
+  '\u2004',
+  '\u2005',
+  '\u2006',
+  '\u2007',
+  '\u2008',
+  '\u2009',
+  '\u200A',
+  '\u2028',
+  '\u2029',
+  '\u202F',
+  '\u205F',
+  '\u3000',
+  '\uFEFF',
+];
+
 void main() {
   final now = DateTime.utc(2026, 7, 30, 10);
 
@@ -127,11 +156,7 @@ void main() {
 
     for (final invalidLocations in <List<Object?>>[
       [''],
-      [' '],
-      ['   '],
-      ['\t'],
-      ['\n'],
-      ['\r'],
+      for (final value in _blankLocationIdVectors) [value],
       ['\t \n'],
       ['site-a', 'site-a'],
       ['*'],
@@ -160,7 +185,19 @@ void main() {
           'bazas ',
           ' bazas ',
           'ba zas',
+          'bazas',
+          'Bazas',
           'bazas*',
+          '\u00a0bazas',
+          'bazas\u0085',
+          '\u0000',
+          '\u001e',
+          '\u007f',
+          r'\u001F',
+          '\u00e9',
+          'e\u0301',
+          '\u2217',
+          ' * ',
         ];
         final draft = scopedDraft(locationIds: locations);
 

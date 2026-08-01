@@ -327,18 +327,6 @@ function validateInvitationData(invitation) {
   if (!ALLOWED_ROLES.has(invitation.role)) {
     throw new ProvisioningError('invalid-argument', 'Rôle invalide.');
   }
-  if (
-    Array.isArray(invitation.locationIds)
-    && invitation.locationIds.some(
-      (locationId) => typeof locationId === 'string'
-        && locationId.trim() === '',
-    )
-  ) {
-    throw new ProvisioningError(
-      'invalid-argument',
-      'Périmètre de centres incohérent.',
-    );
-  }
   try {
     const assignment = normalizeRequestedAssignment(invitation);
     invitation.locationIds = [...assignment.locationIds];
