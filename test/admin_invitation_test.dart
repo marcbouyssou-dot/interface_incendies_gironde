@@ -68,6 +68,40 @@ void main() {
     );
   });
 
+  test(
+    'invitation draft refuses malformed emails and canonical blank names',
+    () {
+      for (final email in <String>[
+        'invalid',
+        'a@b',
+        '@example.fr',
+        'a@example',
+        'a b@example.fr',
+      ]) {
+        expect(
+          () => AdminInvitationDraft(
+            email: email,
+            displayName: 'Responsable',
+            locationIds: const ['site-a'],
+            expiresAt: now.add(const Duration(days: 1)),
+          ).validate(now: now),
+          throwsFormatException,
+        );
+      }
+      for (final displayName in <String>['', ..._blankLocationIdVectors]) {
+        expect(
+          () => AdminInvitationDraft(
+            email: 'responsable@example.fr',
+            displayName: displayName,
+            locationIds: const ['site-a'],
+            expiresAt: now.add(const Duration(days: 1)),
+          ).validate(now: now),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+
   test('coordinator invitation has no location restriction', () {
     final value = AdminInvitationDraft(
       email: 'coord@example.fr',

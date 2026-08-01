@@ -1354,6 +1354,45 @@ test('active notification lease skips provider delivery', async () => {
   assert.equal(value.state.invitation.notificationAttemptId, 'current-attempt');
 });
 
+test('notification lease is reclaimable exactly at its expiration boundary', async () => {
+  const leaseStartedAt = new Date(
+    now.getTime() - NOTIFICATION_LEASE_DURATION_MS,
+  );
+  const value = harness({
+    invitationValue: invitation({
+      status: 'accepted',
+      acceptedUid: 'existing-uid',
+      acceptedAt: leaseStartedAt,
+      provisionedAt: leaseStartedAt,
+      activationLinkGeneratedAt: leaseStartedAt,
+      notificationStatus: 'sending',
+      notificationAttemptId: 'expired-at-boundary',
+      notificationReservedAt: leaseStartedAt,
+      notificationLeaseExpiresAt: now,
+    }),
+    user: {
+      uid: 'existing-uid',
+      email: 'responsable@example.fr',
+      disabled: false,
+    },
+  });
+
+  const result = await provisionAdminInvitation({
+    invitationId: 'invitation-a',
+    callerUid: 'coord',
+    services: value.services,
+    notificationService: value.notificationService,
+    appUrl,
+    now,
+    createNotificationAttemptId: () => 'boundary-replacement',
+  });
+
+  assert.equal(result.emailDelivery, 'sent');
+  assert.equal(value.state.notifications.length, 1);
+  assert.equal(value.state.notificationReservations.length, 1);
+  assert.equal(value.state.invitation.notificationStatus, 'sent');
+});
+
 test('expired abandoned lease can be reclaimed', async () => {
   const value = harness({
     invitationValue: invitation({

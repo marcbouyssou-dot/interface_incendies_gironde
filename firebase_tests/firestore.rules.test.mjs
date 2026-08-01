@@ -1276,6 +1276,42 @@ test('admin invitations: protected creation fields are enforced', async () => {
   );
 });
 
+test('admin invitations: malformed emails are refused', async () => {
+  await seed();
+  for (const [index, email] of [
+    'invalid',
+    'a@b',
+    '@example.fr',
+    'a@example',
+    'a b@example.fr',
+  ].entries()) {
+    await assertFails(
+      setDoc(
+        doc(db('coord'), `adminInvitations/invalid-email-${index}`),
+        adminInvitation({email}),
+      ),
+    );
+  }
+  await assertSucceeds(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/email-with-canonical-edges'),
+      adminInvitation({email: ' RESPONSABLE@EXAMPLE.FR '}),
+    ),
+  );
+});
+
+test('admin invitations: every canonical Unicode blank display name is refused', async () => {
+  await seed();
+  for (const [index, displayName] of blankLocationIdVectors.entries()) {
+    await assertFails(
+      setDoc(
+        doc(db('coord'), `adminInvitations/blank-display-name-${index}`),
+        adminInvitation({displayName}),
+      ),
+    );
+  }
+});
+
 test('admin invitations: multiple and exactly 65 locations are allowed', async () => {
   await seed();
   await assertSucceeds(
