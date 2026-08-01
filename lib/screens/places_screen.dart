@@ -133,6 +133,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                       child: LocationDetailScreen(
                         location: visiblePlaces[index],
                         missions: _missions,
+                        locations: _locations,
                       ),
                     ),
                   ),

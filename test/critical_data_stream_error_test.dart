@@ -143,6 +143,77 @@ void main() {
     },
   );
 
+  testWidgets(
+    'location detail clears its location after a location stream error',
+    (tester) async {
+      final repository = await pumpScreen(tester, const PlacesScreen());
+      repository.emitLocations([_location('Ancien centre')]);
+      await pumpEvents(tester);
+
+      await tester.tap(find.byKey(const Key('place-card-site-a')));
+      await tester.pump(const Duration(milliseconds: 400));
+      repository.emitMissions(const []);
+      await pumpEvents(tester);
+
+      expect(find.text('Ancien centre'), findsWidgets);
+
+      repository.emitLocationsError(StateError('locations unavailable'));
+      await pumpEvents(tester);
+
+      expect(
+        find.byKey(const Key('location-detail-location-unavailable-state')),
+        findsOneWidget,
+      );
+      expect(find.text('Ancien centre'), findsNothing);
+
+      repository.emitLocations([_location('Nouveau centre')]);
+      await pumpEvents(tester);
+
+      expect(
+        find.byKey(const Key('location-detail-location-unavailable-state')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('location-detail-location-missing-state')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('location-detail-screen')), findsOneWidget);
+      expect(find.text('Nouveau centre'), findsWidgets);
+      expect(find.text('Ancien centre'), findsNothing);
+
+      repository.emitMissionsError(StateError('missions unavailable'));
+      await pumpEvents(tester);
+      expect(
+        find.byKey(const Key('location-missions-unavailable-state')),
+        findsOneWidget,
+      );
+      expect(find.text('Nouveau centre'), findsNothing);
+
+      repository.emitLocationsError(StateError('locations unavailable'));
+      await pumpEvents(tester);
+      expect(
+        find.byKey(const Key('location-detail-location-unavailable-state')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('location-missions-unavailable-state')),
+        findsNothing,
+      );
+
+      repository.emitLocations([_location('Centre récupéré')]);
+      await pumpEvents(tester);
+      expect(
+        find.byKey(const Key('location-missions-unavailable-state')),
+        findsOneWidget,
+      );
+      expect(find.text('Centre récupéré'), findsNothing);
+
+      repository.emitMissions(const []);
+      await pumpEvents(tester);
+      expect(find.text('Centre récupéré'), findsWidgets);
+    },
+  );
+
   testWidgets('create form removes location actions on a location error', (
     tester,
   ) async {
