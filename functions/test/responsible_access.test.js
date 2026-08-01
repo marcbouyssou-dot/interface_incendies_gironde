@@ -154,6 +154,41 @@ for (const [label, document] of [
   });
 }
 
+test('refuses whitespace-only legacy, V2 and requested locations', () => {
+  for (const locationId of [' ', '   ', '\t', '\n', '\r', '\t \n']) {
+    assertAccessError(() => parseResponsibleAccess(
+      legacy('site_manager', [locationId]),
+    ));
+    assertAccessError(() => parseResponsibleAccess(
+      v2(['site_manager'], [locationId]),
+    ));
+    assertAccessError(
+      () => mergeResponsibleAccess(
+        null,
+        assignment('site_manager', [locationId]),
+      ),
+      'invalid-assignment',
+    );
+  }
+});
+
+test('preserves peripheral spaces, internal spaces and partial wildcard', () => {
+  const locationIds = [' bazas', 'bazas ', ' bazas ', 'ba zas', 'bazas*'];
+
+  const access = parseResponsibleAccess(v2(['site_manager'], locationIds));
+  const legacyAccess = parseResponsibleAccess(
+    legacy('site_manager', locationIds),
+  );
+  const merged = mergeResponsibleAccess(
+    null,
+    assignment('site_manager', locationIds),
+  );
+
+  assert.deepEqual(access.locationIds, [...locationIds].sort());
+  assert.deepEqual(legacyAccess.locationIds, [...locationIds].sort());
+  assert.deepEqual(merged.locationIds, [...locationIds].sort());
+});
+
 test('creates a canonical coordinator role from no role', () => {
   assert.deepEqual(
     mergeResponsibleAccess(null, assignment('coordinator')),

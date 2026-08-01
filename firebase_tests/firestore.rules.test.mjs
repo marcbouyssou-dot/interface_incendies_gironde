@@ -1311,7 +1311,12 @@ test('admin invitations: non-list locationIds is refused', async () => {
 
 for (const [label, locationIds] of [
   ['empty-location', ['']],
+  ['single-space-location', [' ']],
   ['blank-location', ['   ']],
+  ['tab-location', ['\t']],
+  ['newline-location', ['\n']],
+  ['carriage-return-location', ['\r']],
+  ['mixed-whitespace-location', ['\t \n']],
   ['non-string-location', ['site-a', 42]],
   ['duplicate-location', ['site-a', 'site-a']],
   ['wildcard-location', ['*']],
@@ -1327,6 +1332,18 @@ for (const [label, locationIds] of [
     );
   });
 }
+
+test('admin invitations: peripheral spaces and partial wildcard are preserved', async () => {
+  await seed();
+  await assertSucceeds(
+    setDoc(
+      doc(db('coord'), 'adminInvitations/peripheral-spaces'),
+      adminInvitation({
+        locationIds: [' site-a', 'site-a ', ' site-a ', 'site a', 'site-a*'],
+      }),
+    ),
+  );
+});
 
 test('admin invitations: role and location scope remain coherent', async () => {
   await seed();
@@ -1434,6 +1451,12 @@ test('roles dual-read: invalid and inactive legacy documents deny access', async
   await seed({mission: false});
   const cases = [
     ['legacy-empty-manager', legacyRole('site_manager', [])],
+    ['legacy-space-manager', legacyRole('site_manager', [' '])],
+    ['legacy-blank-manager', legacyRole('site_manager', ['   '])],
+    ['legacy-tab-manager', legacyRole('site_manager', ['\t'])],
+    ['legacy-newline-manager', legacyRole('site_manager', ['\n'])],
+    ['legacy-carriage-return-manager', legacyRole('site_manager', ['\r'])],
+    ['legacy-mixed-whitespace-manager', legacyRole('site_manager', ['\t \n'])],
     ['legacy-wildcard-manager', legacyRole('site_manager', ['*'])],
     ['legacy-unknown', legacyRole('administrator', [])],
     ['legacy-inactive', legacyRole('coordinator', ['*'], false)],
@@ -1531,6 +1554,12 @@ test('roles dual-read: invalid V2 fields and scopes deny all privilege', async (
       'v2-location-duplicate',
       v2Role(['site_manager'], ['site-a', 'site-a']),
     ],
+    ['v2-location-space', v2Role(['site_manager'], [' '])],
+    ['v2-location-blank', v2Role(['site_manager'], ['   '])],
+    ['v2-location-tab', v2Role(['site_manager'], ['\t'])],
+    ['v2-location-newline', v2Role(['site_manager'], ['\n'])],
+    ['v2-location-carriage-return', v2Role(['site_manager'], ['\r'])],
+    ['v2-location-mixed-whitespace', v2Role(['site_manager'], ['\t \n'])],
     ['v2-wildcard', v2Role(['site_manager'], ['*'])],
     ['v2-coordinator-scoped', v2Role(['coordinator'], ['site-a'])],
     ['v2-manager-empty', v2Role(['site_manager'], [])],
@@ -1543,6 +1572,37 @@ test('roles dual-read: invalid V2 fields and scopes deny all privilege', async (
   for (const [uid, roleData] of cases) {
     await seedRole(uid, roleData);
     await assertFails(createMissionFor(uid, `mission-${uid}`));
+  }
+});
+
+test('roles dual-read: peripheral spaces and partial wildcard stay exact', async () => {
+  await seed({mission: false});
+  const locationIds = [' site-a', 'site-a ', ' site-a ', 'site a', 'site-a*'];
+
+  for (const [index, locationId] of locationIds.entries()) {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `locations/${locationId}`), {
+        id: locationId,
+        name: locationId,
+        group: 'medoc',
+        type: 'sdisStation',
+        isActive: true,
+      });
+    });
+    const v2Uid = `v2-exact-location-${index}`;
+    const legacyUid = `legacy-exact-location-${index}`;
+    await seedRole(v2Uid, v2Role(['site_manager'], [locationId]));
+    await seedRole(legacyUid, legacyRole('site_manager', [locationId]));
+    await assertSucceeds(
+      createMissionFor(v2Uid, `mission-v2-exact-location-${index}`, locationId),
+    );
+    await assertSucceeds(
+      createMissionFor(
+        legacyUid,
+        `mission-legacy-exact-location-${index}`,
+        locationId,
+      ),
+    );
   }
 });
 

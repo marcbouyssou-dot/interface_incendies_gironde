@@ -127,7 +127,12 @@ void main() {
 
     for (final invalidLocations in <List<Object?>>[
       [''],
+      [' '],
       ['   '],
+      ['\t'],
+      ['\n'],
+      ['\r'],
+      ['\t \n'],
       ['site-a', 'site-a'],
       ['*'],
       ['site-a\u001fsite-b'],
@@ -146,6 +151,24 @@ void main() {
         );
       });
     }
+
+    test(
+      'preserves peripheral spaces, internal spaces and partial wildcard',
+      () {
+        final locations = <Object?>[
+          ' bazas',
+          'bazas ',
+          ' bazas ',
+          'ba zas',
+          'bazas*',
+        ];
+        final draft = scopedDraft(locationIds: locations);
+
+        draft.validate(now: now);
+
+        expect(draft.locationIds, locations);
+      },
+    );
 
     for (final invalidRole in <Object?>[
       '',

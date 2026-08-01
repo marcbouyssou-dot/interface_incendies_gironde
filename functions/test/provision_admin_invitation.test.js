@@ -309,25 +309,37 @@ test('unknown invitation is refused', async () => {
 });
 
 test('blank invitation location is refused before Auth or Firestore writes', async () => {
-  const value = harness({
-    invitationValue: invitation({locationIds: ['   ']}),
+  for (const locationId of [' ', '   ', '\t', '\n', '\r', '\t \n']) {
+    const value = harness({
+      invitationValue: invitation({locationIds: [locationId]}),
+    });
+
+    await rejectsCode(
+      () => provisionAdminInvitation({
+        invitationId: 'invitation-a',
+        callerUid: 'coord',
+        services: value.services,
+        notificationService: value.notificationService,
+        appUrl,
+        now,
+      }),
+      'invalid-argument',
+    );
+
+    assert.equal(value.state.created.length, 0);
+    assert.equal(value.state.commits.length, 0);
+    assert.equal(value.state.notifications.length, 0);
+  }
+});
+
+test('peripheral spaces and partial wildcard stay exact during provisioning', async () => {
+  const locationIds = [' bazas', 'bazas ', ' bazas ', 'ba zas', 'bazas*'];
+
+  const {state} = await provision({
+    invitationValue: invitation({locationIds}),
   });
 
-  await rejectsCode(
-    () => provisionAdminInvitation({
-      invitationId: 'invitation-a',
-      callerUid: 'coord',
-      services: value.services,
-      notificationService: value.notificationService,
-      appUrl,
-      now,
-    }),
-    'invalid-argument',
-  );
-
-  assert.equal(value.state.created.length, 0);
-  assert.equal(value.state.commits.length, 0);
-  assert.equal(value.state.notifications.length, 0);
+  assert.deepEqual(state.commits[0].role.locationIds, [...locationIds].sort());
 });
 
 for (const [label, value] of [

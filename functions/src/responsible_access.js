@@ -147,7 +147,7 @@ function normalizeLocationIds(value, errorFactory = malformedRole) {
   }
   if (value.some((item) =>
     typeof item !== 'string'
-    || item === ''
+    || item.trim() === ''
     || item === '*'
     || item.includes(RULES_LIST_SEPARATOR))) {
     throw errorFactory();

@@ -23,25 +23,25 @@ service cloud.firestore {
         && !('\u001f' in values);
     }
 
-    function validLocationIds(values) {
-      return hasOnlyStringLocationIds(values)
-        && !('*' in values)
-        && values.toSet().size() == values.size()
-        && values.size() > 0;
-    }
-
     function hasNoBlankLocationIds(values) {
       return !values
         .join('\u001f')
         .matches('(^|.*\u001f)\\s*(\u001f.*|$)');
     }
 
+    function validLocationIds(values) {
+      return hasOnlyStringLocationIds(values)
+        && hasNoBlankLocationIds(values)
+        && !('*' in values)
+        && values.toSet().size() == values.size()
+        && values.size() > 0;
+    }
+
     function hasValidInvitationScope(invitation) {
       return 'locationIds' in invitation
         && (
           (invitation.role == 'site_manager'
-            && validLocationIds(invitation.locationIds)
-            && hasNoBlankLocationIds(invitation.locationIds))
+            && validLocationIds(invitation.locationIds))
           || (invitation.role == 'coordinator'
             && invitation.locationIds == [])
         );

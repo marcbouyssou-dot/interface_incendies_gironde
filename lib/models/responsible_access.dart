@@ -190,7 +190,7 @@ abstract final class ResponsibleAccessParser {
       );
     }
     final values = raw.cast<String>();
-    if (values.any((value) => value.isEmpty) ||
+    if (values.any((value) => value.trim().isEmpty) ||
         (required && values.contains('*')) ||
         values.any((value) => value.contains(_rulesListSeparator)) ||
         values.toSet().length != values.length) {

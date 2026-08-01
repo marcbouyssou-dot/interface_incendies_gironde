@@ -73,11 +73,20 @@ void main() {
       expect(access.singleManagedLocationId, isNull);
     });
 
-    test('site manager with an empty scope is refused', () {
+    test('site manager with an empty or blank scope is refused', () {
       expect(
         () => parse(legacy(role: 'site_manager')),
         failsWith(ResponsibleAccessFormatError.invalidLegacyLocations),
       );
+      for (final locationIds in <Object?>[
+        const ['   '],
+        const ['\t \n'],
+      ]) {
+        expect(
+          () => parse(legacy(role: 'site_manager', locationIds: locationIds)),
+          failsWith(ResponsibleAccessFormatError.invalidLocationIds),
+        );
+      }
     });
 
     test('site manager with wildcard scope is refused', () {
@@ -182,10 +191,16 @@ void main() {
     });
 
     test(
-      'empty, duplicate, wildcard and separator location ids are refused',
+      'empty, blank, duplicate, wildcard and separator location ids are refused',
       () {
         for (final invalidLocations in <Object?>[
           const [''],
+          const [' '],
+          const ['   '],
+          const ['\t'],
+          const ['\n'],
+          const ['\r'],
+          const ['\t \n'],
           const ['bazas', 'bazas'],
           const ['*'],
           const ['bazas\u001fother'],
@@ -203,6 +218,23 @@ void main() {
         }
       },
     );
+
+    test('peripheral spaces and a partial wildcard are preserved', () {
+      const locationIds = {' bazas', 'bazas ', ' bazas ', 'ba zas', 'bazas*'};
+      final access = parse(
+        v2(
+          role: 'site_manager',
+          roles: const ['site_manager'],
+          locationIds: locationIds.toList(),
+        ),
+      );
+      final legacyAccess = parse(
+        legacy(role: 'site_manager', locationIds: locationIds.toList()),
+      );
+
+      expect(access.locationIds, locationIds);
+      expect(legacyAccess.locationIds, locationIds);
+    });
 
     test('non-list and non-string location ids are refused', () {
       for (final invalidLocations in <Object?>[
