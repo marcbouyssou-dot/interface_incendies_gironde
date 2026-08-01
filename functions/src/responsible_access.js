@@ -50,6 +50,28 @@ export function normalizeRequestedAssignment({role, locationIds} = {}) {
   return immutableAccess({roles: [role], locationIds: normalizedLocations});
 }
 
+export function normalizeResponsibleAccessUpdate({
+  roles,
+  locationIds,
+  active,
+} = {}) {
+  if (typeof active !== 'boolean') throw invalidAssignment();
+  const role = Array.isArray(roles) && roles.includes(COORDINATOR)
+    ? COORDINATOR
+    : SITE_MANAGER;
+  try {
+    return parseResponsibleAccess({
+      role,
+      roles,
+      locationIds,
+      active,
+      schemaVersion: 2,
+    });
+  } catch {
+    throw invalidAssignment();
+  }
+}
+
 export function mergeResponsibleAccess(existingDocument, assignment) {
   const requested = normalizeRequestedAssignment(assignment);
   const existing = existingDocument === null || existingDocument === undefined

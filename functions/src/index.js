@@ -18,6 +18,12 @@ import {
   parseResponsibleAccess,
 } from './responsible_access.js';
 import {
+  listResponsibleAccess as listAccess,
+  ResponsibleAccessAdministrationError,
+  safeResponsibleAccount,
+  updateResponsibleAccess as updateAccess,
+} from './update_responsible_access.js';
+import {
   createServerNotificationService,
 } from './notifications/create_notification_service.js';
 
@@ -34,6 +40,29 @@ const resendApiKey = isFunctionsEmulator
   : defineSecret('RESEND_API_KEY');
 const injectedEmulatorFailures = new Set();
 const injectedEmulatorNotificationFailures = new Set();
+
+export const listResponsibleAccess = onCall(
+  {region: 'europe-west1'},
+  async (request) => responsibleAccessCallable(() => listAccess({
+    callerUid: request.auth?.uid,
+    services: responsibleAccessAdministrationServices({
+      firestore: getFirestore(),
+      auth: getAuth(),
+    }),
+  })),
+);
+
+export const updateResponsibleAccess = onCall(
+  {region: 'europe-west1'},
+  async (request) => responsibleAccessCallable(() => updateAccess({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: responsibleAccessAdministrationServices({
+      firestore: getFirestore(),
+      auth: getAuth(),
+    }),
+  })),
+);
 
 export const provisionAdminInvitation = onCall(
   {
@@ -304,6 +333,120 @@ export function adminServices({
       });
     },
   };
+}
+
+export function responsibleAccessAdministrationServices({firestore, auth}) {
+  return {
+    async commitResponsibleAccessUpdate({
+      callerUid,
+      targetUid,
+      role,
+      roles,
+      locationIds,
+      active,
+      schemaVersion,
+    }) {
+      return firestore.runTransaction(async (transaction) => {
+        const callerRef = firestore.collection('roles').doc(callerUid);
+        const targetRef = firestore.collection('roles').doc(targetUid);
+        const [callerSnapshot, targetSnapshot] = await Promise.all([
+          transaction.get(callerRef),
+          transaction.get(targetRef),
+        ]);
+        if (
+          !callerSnapshot.exists
+          || !hasActiveCoordinatorRole(callerSnapshot.data())
+        ) {
+          throw new ResponsibleAccessAdministrationError(
+            'permission-denied',
+            'Accès coordinateur actif requis.',
+          );
+        }
+        if (!targetSnapshot.exists) {
+          throw new ResponsibleAccessAdministrationError(
+            'not-found',
+            'Compte responsable introuvable.',
+          );
+        }
+        const existing = targetSnapshot.data();
+        try {
+          parseResponsibleAccess(existing);
+        } catch {
+          throw new ResponsibleAccessAdministrationError(
+            'failed-precondition',
+            'Le compte responsable existant est invalide.',
+          );
+        }
+        transaction.set(targetRef, {
+          ...existing,
+          role,
+          roles: [...roles],
+          locationIds: [...locationIds],
+          active,
+          schemaVersion,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: false});
+        return {
+          account: safeResponsibleAccount(targetUid, {
+            role,
+            roles: [...roles],
+            locationIds: [...locationIds],
+            active,
+            schemaVersion,
+          }),
+        };
+      });
+    },
+    async listResponsibleAccounts({callerUid}) {
+      const snapshots = await firestore.runTransaction(async (transaction) => {
+        const callerRef = firestore.collection('roles').doc(callerUid);
+        const callerSnapshot = await transaction.get(callerRef);
+        if (
+          !callerSnapshot.exists
+          || !hasActiveCoordinatorRole(callerSnapshot.data())
+        ) {
+          throw new ResponsibleAccessAdministrationError(
+            'permission-denied',
+            'Accès coordinateur actif requis.',
+          );
+        }
+        return transaction.get(firestore.collection('roles'));
+      });
+      const documents = snapshots.docs.flatMap((snapshot) => {
+        try {
+          parseResponsibleAccess(snapshot.data());
+          return [{uid: snapshot.id, data: snapshot.data()}];
+        } catch {
+          return [];
+        }
+      });
+      const identities = new Map();
+      for (let start = 0; start < documents.length; start += 100) {
+        const batch = documents.slice(start, start + 100);
+        const result = await auth.getUsers(batch.map(({uid}) => ({uid})));
+        for (const user of result.users) identities.set(user.uid, user);
+      }
+      return documents.map(({uid, data}) =>
+        safeResponsibleAccount(uid, data, identities.get(uid)));
+    },
+  };
+}
+
+async function responsibleAccessCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof ResponsibleAccessAdministrationError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('RESPONSIBLE_ACCESS_ADMINISTRATION_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'La gestion de l’accès responsable a échoué.',
+    );
+  }
 }
 
 async function finalizeNotificationState({
