@@ -36,6 +36,8 @@ abstract interface class CoordinationRepository {
 
   Future<String> createMission(MissionDraft draft);
 
+  Future<void> updateMission(String missionId, MissionDraft draft);
+
   Stream<ResponsibleAccess?> watchResponsibleAccess();
 
   Future<ResponsibleAccess> signInResponsible({

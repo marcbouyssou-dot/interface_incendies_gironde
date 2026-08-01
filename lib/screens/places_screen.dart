@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
 import '../models/need.dart';
+import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
@@ -21,6 +22,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
   LiveCoordinationData? _liveData;
   Stream<List<ResponsePlace>>? _locations;
   Stream<List<CoordinationNeed>>? _missions;
+  Stream<ResponsibleAccess?>? _responsibleAccess;
 
   @override
   void didChangeDependencies() {
@@ -30,6 +32,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
       _liveData = liveData;
       _locations = liveData.watchLocations();
       _missions = liveData.watchMissions();
+      _responsibleAccess = liveData.watchResponsibleAccess();
     }
   }
 
@@ -134,6 +137,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                         location: visiblePlaces[index],
                         missions: _missions,
                         locations: _locations,
+                        responsibleAccess: _responsibleAccess,
                       ),
                     ),
                   ),

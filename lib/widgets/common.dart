@@ -427,10 +427,12 @@ class NeedCard extends StatelessWidget {
     required this.need,
     this.location,
     this.compact = false,
+    this.onEditMission,
   });
   final CoordinationNeed need;
   final ResponsePlace? location;
   final bool compact;
+  final VoidCallback? onEditMission;
 
   @override
   Widget build(BuildContext context) {
@@ -531,6 +533,18 @@ class NeedCard extends StatelessWidget {
               const Divider(height: 1),
               const SizedBox(height: 18),
               _NeedActions(need: need, location: location),
+              if (onEditMission != null) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: Key('edit-mission-${need.id}'),
+                    onPressed: onEditMission,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Modifier la mission'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

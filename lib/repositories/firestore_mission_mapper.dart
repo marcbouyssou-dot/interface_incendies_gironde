@@ -5,6 +5,21 @@ import '../models/profession_quotas.dart';
 import 'coordination_repository.dart';
 
 abstract final class FirestoreMissionMapper {
+  static Map<String, Object?> toUpdateCallableData({
+    required String missionId,
+    required MissionDraft draft,
+  }) {
+    return {
+      'missionId': missionId,
+      'locationId': draft.location.id,
+      'startAtMillis': draft.startAt.millisecondsSinceEpoch,
+      'endAtMillis': draft.endAt.millisecondsSinceEpoch,
+      'requiredByProfession': draft.requiredByProfession,
+      'equipment': List<String>.of(draft.equipment),
+      'details': draft.details,
+    };
+  }
+
   static Map<String, dynamic> cancellationUpdate({
     required String cancelledBy,
     required String reason,

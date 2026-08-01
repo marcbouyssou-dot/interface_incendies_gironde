@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
@@ -54,13 +55,21 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     this._auth, {
     FirebaseFirestore? responsibleFirestore,
     FirebaseAuth? responsibleAuth,
+    FirebaseFunctions? responsibleFunctions,
   }) : _responsibleFirestore = responsibleFirestore ?? _firestore,
-       _responsibleAuth = responsibleAuth ?? _auth;
+       _responsibleAuth = responsibleAuth ?? _auth,
+       _responsibleFunctions =
+           responsibleFunctions ??
+           FirebaseFunctions.instanceFor(
+             app: (responsibleAuth ?? _auth).app,
+             region: 'europe-west1',
+           );
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final FirebaseFirestore _responsibleFirestore;
   final FirebaseAuth _responsibleAuth;
+  final FirebaseFunctions _responsibleFunctions;
   @override
   late final AdminInvitationRepository adminInvitationRepository =
       FirestoreAdminInvitationRepository.withFirebase(
@@ -596,6 +605,39 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   }
 
   @override
+  Future<void> updateMission(String missionId, MissionDraft draft) async {
+    final user = _responsibleAuth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw const RepositoryException(
+        'Vous devez vous connecter pour modifier une mission.',
+      );
+    }
+    try {
+      await _responsibleFunctions
+          .httpsCallable('updateMission')
+          .call<Object?>(
+            FirestoreMissionMapper.toUpdateCallableData(
+              missionId: missionId,
+              draft: draft,
+            ),
+          )
+          .timeout(const Duration(seconds: 15));
+    } on FirebaseFunctionsException catch (error, stackTrace) {
+      debugPrint('Échec updateMission (${error.code})');
+      debugPrintStack(stackTrace: stackTrace);
+      throw RepositoryException(_missionUpdateMessage(error.code));
+    } on RepositoryException {
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('Échec updateMission : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      throw const RepositoryException(
+        'La mission n’a pas pu être mise à jour. Réessayez.',
+      );
+    }
+  }
+
+  @override
   Future<EngagementCreationResult> createEngagement({
     required String missionId,
     required String firstName,
@@ -1122,6 +1164,17 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     }
     return EngagementStatus.confirmed;
   }
+
+  static String _missionUpdateMessage(String code) => switch (code) {
+    'permission-denied' =>
+      'Vous ne pouvez modifier que les missions de vos centres.',
+    'not-found' => 'Mission introuvable.',
+    'failed-precondition' =>
+      'La mission ne peut pas être mise à jour avec ces informations.',
+    'invalid-argument' => 'Les informations de la mission sont invalides.',
+    'unauthenticated' => 'Vous devez vous connecter pour modifier une mission.',
+    _ => 'La mission n’a pas pu être mise à jour. Réessayez.',
+  };
 
   static NeedStatus _statusForQuotas(ProfessionQuotas quotas) {
     if (quotas.isCovered) return NeedStatus.complete;

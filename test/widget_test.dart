@@ -143,7 +143,7 @@ void main() {
 
     expect(repository.missionFactories, 1);
     expect(repository.locationFactories, 1);
-    expect(repository.accessFactories, 0);
+    expect(repository.accessFactories, 1);
     expect(find.text('SITUATION'), findsNothing);
     expect(find.text('URPS MK Nouvelle-Aquitaine'), findsNothing);
 

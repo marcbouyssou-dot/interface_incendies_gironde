@@ -8,6 +8,7 @@ import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
+import 'create_need_screen.dart';
 
 @visibleForTesting
 List<CoordinationNeed> missionsVisibleToResponsible({
@@ -423,7 +424,11 @@ class _SituationRow extends StatelessWidget {
             CoverageBar(need: need),
             const SizedBox(height: 14),
             if (access?.isCoordinator == true) _MissionEngagements(need: need),
-            _ResponsibleMissionActions(need: need, access: access),
+            _ResponsibleMissionActions(
+              need: need,
+              location: location,
+              access: access,
+            ),
           ],
         ),
       ),
@@ -432,28 +437,51 @@ class _SituationRow extends StatelessWidget {
 }
 
 class _ResponsibleMissionActions extends StatelessWidget {
-  const _ResponsibleMissionActions({required this.need, required this.access});
+  const _ResponsibleMissionActions({
+    required this.need,
+    required this.location,
+    required this.access,
+  });
 
   final CoordinationNeed need;
+  final ResponsePlace? location;
   final ResponsibleAccess? access;
 
   @override
   Widget build(BuildContext context) {
     final currentAccess = access;
-    final locationId = need.locationId;
+    final locationId = need.locationId ?? location?.id;
     if (currentAccess == null ||
         !currentAccess.hasPrivilegedAccess ||
-        (currentAccess.isLocationRestricted &&
-            (locationId == null || !currentAccess.canManage(locationId))) ||
-        need.createdBy == null ||
-        need.createdBy != currentAccess.uid ||
+        locationId == null ||
+        !currentAccess.canManage(locationId) ||
         !need.isActive ||
         need.isCancelled) {
       return const SizedBox.shrink();
     }
+    final canCancel =
+        need.createdBy != null && need.createdBy == currentAccess.uid;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: MissionCancellationButton(need: need),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            key: Key('edit-mission-${need.id}'),
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => Scaffold(
+                  body: SafeArea(child: CreateNeedScreen(mission: need)),
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('Modifier la mission'),
+          ),
+          if (canCancel) MissionCancellationButton(need: need),
+        ],
+      ),
     );
   }
 }

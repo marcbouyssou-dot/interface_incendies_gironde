@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
+import '../models/responsible_access.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
+import 'create_need_screen.dart';
 
 class LocationDetailScreen extends StatelessWidget {
   const LocationDetailScreen({
@@ -11,90 +13,108 @@ class LocationDetailScreen extends StatelessWidget {
     required this.location,
     this.missions,
     this.locations,
+    this.responsibleAccess,
   });
 
   final ResponsePlace location;
   final Stream<List<CoordinationNeed>>? missions;
   final Stream<List<ResponsePlace>>? locations;
+  final Stream<ResponsibleAccess?>? responsibleAccess;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Fiche du lieu')),
-      body: PageContainer(
-        child: locations == null
-            ? _buildMissions(context, location)
-            : StreamBuilder<List<CoordinationNeed>>(
-                stream: missions ?? Stream.value(const <CoordinationNeed>[]),
-                builder: (context, missionsSnapshot) {
-                  return StreamBuilder<List<ResponsePlace>>(
-                    stream: locations,
-                    builder: (context, locationsSnapshot) {
-                      if (locationsSnapshot.hasError) {
-                        return const CriticalDataUnavailableState(
-                          stateKey: Key(
-                            'location-detail-location-unavailable-state',
-                          ),
-                          eyebrow: 'Fiche du lieu',
-                          title: 'Informations du centre indisponibles',
-                          message:
-                              'Nous ne pouvons pas charger les informations '
-                              'de ce centre pour le moment.',
-                          safetyMessage:
-                              'Les anciennes coordonnées ne sont pas '
-                              'affichées afin d’éviter toute information '
-                              'périmée.',
+      body: StreamBuilder<ResponsibleAccess?>(
+        stream: responsibleAccess ?? Stream.value(null),
+        builder: (context, accessSnapshot) => PageContainer(
+          child: locations == null
+              ? _buildMissions(
+                  context,
+                  location,
+                  accessSnapshot.hasError ? null : accessSnapshot.data,
+                )
+              : StreamBuilder<List<CoordinationNeed>>(
+                  stream: missions ?? Stream.value(const <CoordinationNeed>[]),
+                  builder: (context, missionsSnapshot) {
+                    return StreamBuilder<List<ResponsePlace>>(
+                      stream: locations,
+                      builder: (context, locationsSnapshot) {
+                        if (locationsSnapshot.hasError) {
+                          return const CriticalDataUnavailableState(
+                            stateKey: Key(
+                              'location-detail-location-unavailable-state',
+                            ),
+                            eyebrow: 'Fiche du lieu',
+                            title: 'Informations du centre indisponibles',
+                            message:
+                                'Nous ne pouvons pas charger les informations '
+                                'de ce centre pour le moment.',
+                            safetyMessage:
+                                'Les anciennes coordonnées ne sont pas '
+                                'affichées afin d’éviter toute information '
+                                'périmée.',
+                          );
+                        }
+                        if (missionsSnapshot.hasError) {
+                          return const CriticalDataUnavailableState(
+                            stateKey: Key(
+                              'location-missions-unavailable-state',
+                            ),
+                            eyebrow: 'Fiche du lieu',
+                            title: 'Missions temporairement indisponibles',
+                            message:
+                                'Nous ne pouvons pas charger les besoins de ce '
+                                'lieu pour le moment.',
+                            safetyMessage:
+                                'Les anciennes missions ne sont pas affichées '
+                                'afin d’éviter toute information périmée.',
+                          );
+                        }
+                        if (!locationsSnapshot.hasData ||
+                            !missionsSnapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        final currentLocation = _locationFrom(
+                          locationsSnapshot.data!,
                         );
-                      }
-                      if (missionsSnapshot.hasError) {
-                        return const CriticalDataUnavailableState(
-                          stateKey: Key('location-missions-unavailable-state'),
-                          eyebrow: 'Fiche du lieu',
-                          title: 'Missions temporairement indisponibles',
-                          message:
-                              'Nous ne pouvons pas charger les besoins de ce '
-                              'lieu pour le moment.',
-                          safetyMessage:
-                              'Les anciennes missions ne sont pas affichées '
-                              'afin d’éviter toute information périmée.',
+                        if (currentLocation == null) {
+                          return const CriticalDataUnavailableState(
+                            stateKey: Key(
+                              'location-detail-location-missing-state',
+                            ),
+                            eyebrow: 'Fiche du lieu',
+                            title: 'Lieu indisponible',
+                            message:
+                                'Ce lieu ne figure plus dans les données '
+                                'actuellement disponibles.',
+                            safetyMessage:
+                                'Les anciennes coordonnées ne sont pas '
+                                'affichées.',
+                          );
+                        }
+                        return _buildContent(
+                          context,
+                          currentLocation,
+                          missionsSnapshot.data!,
+                          accessSnapshot.hasError ? null : accessSnapshot.data,
                         );
-                      }
-                      if (!locationsSnapshot.hasData ||
-                          !missionsSnapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final currentLocation = _locationFrom(
-                        locationsSnapshot.data!,
-                      );
-                      if (currentLocation == null) {
-                        return const CriticalDataUnavailableState(
-                          stateKey: Key(
-                            'location-detail-location-missing-state',
-                          ),
-                          eyebrow: 'Fiche du lieu',
-                          title: 'Lieu indisponible',
-                          message:
-                              'Ce lieu ne figure plus dans les données '
-                              'actuellement disponibles.',
-                          safetyMessage:
-                              'Les anciennes coordonnées ne sont pas '
-                              'affichées.',
-                        );
-                      }
-                      return _buildContent(
-                        context,
-                        currentLocation,
-                        missionsSnapshot.data!,
-                      );
-                    },
-                  );
-                },
-              ),
+                      },
+                    );
+                  },
+                ),
+        ),
       ),
     );
   }
 
-  Widget _buildMissions(BuildContext context, ResponsePlace currentLocation) {
+  Widget _buildMissions(
+    BuildContext context,
+    ResponsePlace currentLocation,
+    ResponsibleAccess? access,
+  ) {
     return StreamBuilder<List<CoordinationNeed>>(
       stream: missions ?? Stream.value(const <CoordinationNeed>[]),
       builder: (context, snapshot) {
@@ -114,7 +134,7 @@ class LocationDetailScreen extends StatelessWidget {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return _buildContent(context, currentLocation, snapshot.data!);
+        return _buildContent(context, currentLocation, snapshot.data!, access);
       },
     );
   }
@@ -123,6 +143,7 @@ class LocationDetailScreen extends StatelessWidget {
     BuildContext context,
     ResponsePlace currentLocation,
     List<CoordinationNeed> missions,
+    ResponsibleAccess? access,
   ) {
     final activeMissions = _activeMissions(missions, currentLocation);
     return ListView(
@@ -161,10 +182,25 @@ class LocationDetailScreen extends StatelessWidget {
               key: ValueKey(activeMissions[index].id),
               need: activeMissions[index],
               location: currentLocation,
+              onEditMission:
+                  access?.hasPrivilegedAccess == true &&
+                      access!.canManage(currentLocation.id)
+                  ? () => _openMissionEditor(context, activeMissions[index])
+                  : null,
             ),
             if (index != activeMissions.length - 1) const SizedBox(height: 16),
           ],
       ],
+    );
+  }
+
+  void _openMissionEditor(BuildContext context, CoordinationNeed mission) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          body: SafeArea(child: CreateNeedScreen(mission: mission)),
+        ),
+      ),
     );
   }
 

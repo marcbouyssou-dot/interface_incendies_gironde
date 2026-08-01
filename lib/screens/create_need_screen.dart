@@ -9,9 +9,10 @@ import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 
 class CreateNeedScreen extends StatefulWidget {
-  const CreateNeedScreen({super.key, this.onViewMission});
+  const CreateNeedScreen({super.key, this.onViewMission, this.mission});
 
   final VoidCallback? onViewMission;
+  final CoordinationNeed? mission;
 
   @override
   State<CreateNeedScreen> createState() => _CreateNeedScreenState();
@@ -53,6 +54,31 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   LiveCoordinationData? _liveData;
   Stream<ResponsibleAccess?>? _responsibleAccess;
   Stream<List<ResponsePlace>>? _locations;
+
+  bool get _isEditing => widget.mission != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final mission = widget.mission;
+    if (mission == null) return;
+    _selectedDate = mission.startAt == null
+        ? null
+        : DateUtils.dateOnly(mission.startAt!);
+    _startTime = mission.startAt == null
+        ? null
+        : TimeOfDay.fromDateTime(mission.startAt!);
+    _endTime = mission.endAt == null
+        ? null
+        : TimeOfDay.fromDateTime(mission.endAt!);
+    for (final quota in mission.professionQuotas.values) {
+      _requiredByProfession[quota.professionId] = quota.required;
+    }
+    _equipment
+      ..clear()
+      ..addAll(mission.equipment);
+    _detailsController.text = mission.details ?? '';
+  }
 
   @override
   void didChangeDependencies() {
@@ -130,23 +156,39 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     ResponsibleAccess access,
     List<ResponsePlace> locations,
   ) {
-    if (_publishedMission != null) {
+    if (!_isEditing && _publishedMission != null) {
       return _MissionPublishedView(
         mission: _publishedMission!,
         onViewMission: widget.onViewMission,
         onCreateAnother: _resetForm,
       );
     }
+    if (_isEditing && _selectedLocation == null) {
+      _selectedLocation = responsePlaceForNeed(widget.mission!, locations);
+    }
     return PageContainer(
       child: ListView(
         key: const PageStorageKey('create'),
         padding: const EdgeInsets.fromLTRB(20, 22, 20, 36),
         children: [
-          const PageHeader(
-            eyebrow: 'Nouvelle mission',
-            title: 'Créer un besoin',
-            subtitle: 'Publiez les renforts nécessaires.',
+          PageHeader(
+            eyebrow: _isEditing ? 'Mission existante' : 'Nouvelle mission',
+            title: _isEditing ? 'Modifier la mission' : 'Créer un besoin',
+            subtitle: _isEditing
+                ? 'Mettez à jour les informations opérationnelles.'
+                : 'Publiez les renforts nécessaires.',
           ),
+          if (_isEditing) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _publishing ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Retour'),
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Align(
             alignment: Alignment.centerRight,
@@ -168,6 +210,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     access: access,
                     locations: locations,
                     selectedLocation: _selectedLocation,
+                    preserveUnavailableSelection: _isEditing,
                     enabled: !_publishing,
                     onSelected: (location) {
                       if (!mounted) return;
@@ -297,7 +340,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                   ],
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    key: const Key('publish-mission'),
+                    key: Key(_isEditing ? 'update-mission' : 'publish-mission'),
                     onPressed: _publishing ? null : _publish,
                     icon: _publishing
                         ? const SizedBox.square(
@@ -308,7 +351,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             ),
                           )
                         : const Icon(Icons.arrow_forward_rounded),
-                    label: Text(_publishing ? 'Publication…' : 'Publier'),
+                    label: Text(
+                      _publishing
+                          ? (_isEditing ? 'Enregistrement…' : 'Publication…')
+                          : (_isEditing
+                                ? 'Enregistrer les modifications'
+                                : 'Publier'),
+                    ),
                   ),
                 ],
               ),
@@ -321,10 +370,14 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
 
   Future<void> _pickDate() async {
     final today = DateUtils.dateOnly(DateTime.now());
+    final firstDate =
+        _isEditing && _selectedDate != null && _selectedDate!.isBefore(today)
+        ? _selectedDate!
+        : today;
     final selected = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? today,
-      firstDate: today,
+      firstDate: firstDate,
       lastDate: DateTime(today.year + 2, today.month, today.day),
     );
     if (selected != null && mounted) {
@@ -372,6 +425,18 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     });
     debugPrint('Publication mission : début de validation confirmée');
     try {
+      if (_isEditing) {
+        await RepositoryScope.of(
+          context,
+        ).updateMission(widget.mission!.id, draft);
+        if (!mounted) return;
+        setState(() => _publishing = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Mission mise à jour.')));
+        if (Navigator.of(context).canPop()) Navigator.pop(context);
+        return;
+      }
       final id = await RepositoryScope.of(context).createMission(draft);
       if (!mounted) return;
       debugPrint('Publication mission confirmée : $id');
@@ -379,13 +444,25 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         _publishing = false;
         _publishedMission = _PublishedMission(id: id, draft: draft);
       });
+    } on RepositoryException catch (error, stackTrace) {
+      debugPrint('Enregistrement mission refusé : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() {
+        _publishing = false;
+        _errorMessage = _isEditing
+            ? error.message
+            : 'La mission n’a pas pu être publiée. Réessayez.';
+      });
     } catch (error, stackTrace) {
       debugPrint('Publication mission échouée : $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       setState(() {
         _publishing = false;
-        _errorMessage = 'La mission n’a pas pu être publiée. Réessayez.';
+        _errorMessage = _isEditing
+            ? 'La mission n’a pas pu être mise à jour. Réessayez.'
+            : 'La mission n’a pas pu être publiée. Réessayez.';
       });
     }
   }
@@ -400,6 +477,15 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     }
     if (_requiredByProfession.values.every((quota) => quota == 0)) {
       return 'Indiquez au moins un professionnel nécessaire';
+    }
+    final mission = widget.mission;
+    if (mission != null) {
+      for (final quota in mission.professionQuotas.values) {
+        if (_requiredByProfession[quota.professionId]! < quota.registered) {
+          return 'Le besoin ne peut pas être inférieur aux engagements '
+              'confirmés.';
+        }
+      }
     }
     return null;
   }
@@ -689,6 +775,7 @@ class _LocationInput extends StatelessWidget {
     required this.access,
     required this.locations,
     required this.selectedLocation,
+    required this.preserveUnavailableSelection,
     required this.enabled,
     required this.onSelected,
   });
@@ -696,6 +783,7 @@ class _LocationInput extends StatelessWidget {
   final ResponsibleAccess access;
   final List<ResponsePlace> locations;
   final ResponsePlace? selectedLocation;
+  final bool preserveUnavailableSelection;
   final bool enabled;
   final ValueChanged<ResponsePlace?> onSelected;
 
@@ -704,14 +792,21 @@ class _LocationInput extends StatelessWidget {
     final available = locations
         .where((location) => location.isOperational && location.isEnabled)
         .toList(growable: false);
+    final selected = selectedLocation;
+    final displayed =
+        preserveUnavailableSelection &&
+            selected != null &&
+            !available.any((location) => location.id == selected.id)
+        ? [selected, ...available]
+        : available;
     if (access.singleManagedLocationId != null) {
-      return _buildLockedLocation(context, available);
+      return _buildLockedLocation(context, displayed);
     }
     final selectable = access.isLocationRestricted
-        ? available
+        ? displayed
               .where((location) => access.locationIds.contains(location.id))
               .toList(growable: false)
-        : available;
+        : displayed;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -729,13 +824,21 @@ class _LocationInput extends StatelessWidget {
               .map(
                 (location) => DropdownMenuItem(
                   value: location.id,
+                  enabled: location.isOperational && location.isEnabled,
                   child: Text(location.name, overflow: TextOverflow.ellipsis),
                 ),
               )
               .toList(),
           onChanged: enabled
               ? (id) => onSelected(
-                  selectable.where((location) => location.id == id).firstOrNull,
+                  selectable
+                      .where(
+                        (location) =>
+                            location.id == id &&
+                            location.isOperational &&
+                            location.isEnabled,
+                      )
+                      .firstOrNull,
                 )
               : null,
           icon: const Icon(Icons.keyboard_arrow_down_rounded),

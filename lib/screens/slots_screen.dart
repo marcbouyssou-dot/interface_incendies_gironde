@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
 import '../models/need.dart';
+import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
+import 'create_need_screen.dart';
 
 class SlotsScreen extends StatefulWidget {
   const SlotsScreen({super.key});
@@ -20,6 +22,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
+  Stream<ResponsibleAccess?>? _responsibleAccess;
 
   @override
   void didChangeDependencies() {
@@ -29,57 +32,67 @@ class _SlotsScreenState extends State<SlotsScreen> {
       _liveData = liveData;
       _missions = liveData.watchMissions();
       _locations = liveData.watchLocations();
+      _responsibleAccess = liveData.watchResponsibleAccess();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<CoordinationNeed>>(
-      stream: _missions,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const CriticalDataUnavailableState(
-            stateKey: Key('missions-unavailable-state'),
-            eyebrow: 'Missions',
-            title: 'Missions temporairement indisponibles',
-            message: 'Nous ne pouvons pas charger les missions pour le moment.',
-            safetyMessage:
-                'Les dernières missions reçues ne sont pas affichées afin '
-                'd’éviter toute information périmée.',
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return StreamBuilder<List<ResponsePlace>>(
-          stream: _locations,
-          builder: (context, locationsSnapshot) {
-            if (locationsSnapshot.hasError) {
-              return const CriticalDataUnavailableState(
-                stateKey: Key('mission-locations-unavailable-state'),
-                eyebrow: 'Missions',
-                title: 'Informations des centres indisponibles',
-                message:
-                    'Nous ne pouvons pas charger les informations des centres '
-                    'pour le moment.',
-                safetyMessage:
-                    'Les missions associées aux lieux ne sont pas affichées '
-                    'afin d’éviter toute information périmée.',
+    return StreamBuilder<ResponsibleAccess?>(
+      stream: _responsibleAccess,
+      builder: (context, accessSnapshot) => StreamBuilder<List<CoordinationNeed>>(
+        stream: _missions,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const CriticalDataUnavailableState(
+              stateKey: Key('missions-unavailable-state'),
+              eyebrow: 'Missions',
+              title: 'Missions temporairement indisponibles',
+              message:
+                  'Nous ne pouvons pas charger les missions pour le moment.',
+              safetyMessage:
+                  'Les dernières missions reçues ne sont pas affichées afin '
+                  'd’éviter toute information périmée.',
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return StreamBuilder<List<ResponsePlace>>(
+            stream: _locations,
+            builder: (context, locationsSnapshot) {
+              if (locationsSnapshot.hasError) {
+                return const CriticalDataUnavailableState(
+                  stateKey: Key('mission-locations-unavailable-state'),
+                  eyebrow: 'Missions',
+                  title: 'Informations des centres indisponibles',
+                  message:
+                      'Nous ne pouvons pas charger les informations des centres '
+                      'pour le moment.',
+                  safetyMessage:
+                      'Les missions associées aux lieux ne sont pas affichées '
+                      'afin d’éviter toute information périmée.',
+                );
+              }
+              if (!locationsSnapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return _buildContent(
+                snapshot.data!,
+                locationsSnapshot.data!,
+                accessSnapshot.hasError ? null : accessSnapshot.data,
               );
-            }
-            if (!locationsSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            return _buildContent(snapshot.data!, locationsSnapshot.data!);
-          },
-        );
-      },
+            },
+          );
+        },
+      ),
     );
   }
 
   Widget _buildContent(
     List<CoordinationNeed> missions,
     List<ResponsePlace> locations,
+    ResponsibleAccess? access,
   ) {
     final statusNeeds = _filter == 0
         ? missions
@@ -139,11 +152,25 @@ class _SlotsScreenState extends State<SlotsScreen> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
             sliver: SliverList.separated(
               itemCount: visibleNeeds.length,
-              itemBuilder: (context, index) => NeedCard(
-                key: ValueKey(visibleNeeds[index].place),
-                need: visibleNeeds[index],
-                location: responsePlaceForNeed(visibleNeeds[index], locations),
-              ),
+              itemBuilder: (context, index) {
+                final need = visibleNeeds[index];
+                final location = responsePlaceForNeed(need, locations);
+                final locationId = need.locationId ?? location?.id;
+                final canEdit =
+                    access?.hasPrivilegedAccess == true &&
+                    locationId != null &&
+                    access!.canManage(locationId) &&
+                    need.isActive &&
+                    !need.isCancelled;
+                return NeedCard(
+                  key: ValueKey(need.place),
+                  need: need,
+                  location: location,
+                  onEditMission: canEdit
+                      ? () => _openMissionEditor(context, need)
+                      : null,
+                );
+              },
               separatorBuilder: (_, _) => const SizedBox(height: 18),
             ),
           ),
@@ -153,6 +180,16 @@ class _SlotsScreenState extends State<SlotsScreen> {
   }
 
   void _select(int index) => setState(() => _filter = index);
+
+  void _openMissionEditor(BuildContext context, CoordinationNeed mission) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          body: SafeArea(child: CreateNeedScreen(mission: mission)),
+        ),
+      ),
+    );
+  }
 }
 
 class _CrisisHeader extends StatelessWidget {

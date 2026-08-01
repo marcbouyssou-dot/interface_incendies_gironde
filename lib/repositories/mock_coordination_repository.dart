@@ -4,6 +4,7 @@ import '../data/mock_data.dart';
 import '../models/admin_location.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
+import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
@@ -432,6 +433,84 @@ class MockCoordinationRepository implements CoordinationRepository {
     _missions.add(mission);
     _missionUpdates.add(_activeMissions());
     return id;
+  }
+
+  @override
+  Future<void> updateMission(String missionId, MissionDraft draft) async {
+    final access = _responsibleAccess;
+    final index = _missions.indexWhere((mission) => mission.id == missionId);
+    if (index < 0) throw const RepositoryException('Mission introuvable.');
+    final mission = _missions[index];
+    final sourceLocationId = mission.locationId;
+    if (access == null ||
+        !access.active ||
+        (!access.isCoordinator &&
+            (sourceLocationId == null ||
+                !access.canManage(sourceLocationId))) ||
+        !access.canManage(draft.location.id)) {
+      throw const RepositoryException(
+        'Vous ne pouvez modifier que les missions de vos centres.',
+      );
+    }
+    if (!mission.isActive || mission.isCancelled) {
+      throw const RepositoryException(
+        'Cette mission ne peut plus être modifiée.',
+      );
+    }
+    final changesLocation = draft.location.id != sourceLocationId;
+    if (changesLocation &&
+        (!draft.location.isEnabled || !draft.location.isOperational)) {
+      throw const RepositoryException('Le lieu sélectionné est inactif.');
+    }
+    for (final quota in draft.professionQuotas.values) {
+      final confirmed = missionEngagements
+          .where(
+            (engagement) =>
+                engagement.missionId == missionId &&
+                engagement.status == EngagementStatus.confirmed &&
+                engagement.profession.canonicalId == quota.professionId,
+          )
+          .length;
+      final minimum = mission.professionQuotas
+          .quotaFor(quota.professionId)
+          .registered
+          .clamp(confirmed, 1 << 31);
+      if (quota.required < minimum) {
+        throw const RepositoryException(
+          'Le besoin ne peut pas être inférieur aux engagements confirmés.',
+        );
+      }
+    }
+    final quotas = ProfessionQuotas.fromMaps(
+      requiredByProfession: draft.requiredByProfession,
+      registeredByProfession: mission.professionQuotas.registeredByProfession,
+    );
+    final mk = quotas.quotaFor('physiotherapist');
+    final pp = quotas.quotaFor('podiatrist');
+    _missions[index] = CoordinationNeed(
+      id: mission.id,
+      locationId: draft.location.id,
+      place: draft.location.name,
+      group: draft.location.group,
+      date: _dateLabel(draft.startAt),
+      time: '${_timeLabel(draft.startAt)} — ${_timeLabel(draft.endAt)}',
+      startAt: draft.startAt,
+      endAt: draft.endAt,
+      requiredPhysiotherapists: mk.required,
+      registeredPhysiotherapists: mk.registered,
+      requiredPodiatrists: pp.required,
+      registeredPodiatrists: pp.registered,
+      professionQuotas: quotas,
+      equipment: List.of(draft.equipment),
+      details: draft.details.trim(),
+      isActive: mission.isActive,
+      isCancelled: mission.isCancelled,
+      cancelledAt: mission.cancelledAt,
+      cancelledBy: mission.cancelledBy,
+      cancellationReason: mission.cancellationReason,
+      createdBy: mission.createdBy,
+    );
+    _missionUpdates.add(_activeMissions());
   }
 
   @override

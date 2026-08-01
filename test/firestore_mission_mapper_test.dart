@@ -60,6 +60,42 @@ void main() {
     expect(mission.requiredPodiatrists, 1);
   });
 
+  test('mission update callable payload contains only editable inputs', () {
+    final draft = MissionDraft(
+      location: places.first,
+      startAt: DateTime(2026, 8, 3, 8),
+      endAt: DateTime(2026, 8, 3, 12),
+      requiredByProfession: const {
+        'physiotherapist': 2,
+        'podiatrist': 1,
+        'physician': 0,
+        'nurse': 0,
+        'other_health_professional': 0,
+      },
+      equipment: const ['Tables'],
+      details: 'Accès nord',
+    );
+
+    final data = FirestoreMissionMapper.toUpdateCallableData(
+      missionId: 'mission-stable',
+      draft: draft,
+    );
+
+    expect(data.keys.toSet(), {
+      'missionId',
+      'locationId',
+      'startAtMillis',
+      'endAtMillis',
+      'requiredByProfession',
+      'equipment',
+      'details',
+    });
+    expect(data['missionId'], 'mission-stable');
+    expect(data['requiredByProfession'], draft.requiredByProfession);
+    expect(data.containsKey('registeredByProfession'), isFalse);
+    expect(data.containsKey('createdBy'), isFalse);
+  });
+
   test('generic maps take priority without merging legacy fields', () {
     final mission = FirestoreMissionMapper.fromFirestore(
       id: 'generic',

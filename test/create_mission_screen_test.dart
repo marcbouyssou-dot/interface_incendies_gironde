@@ -17,8 +17,9 @@ import 'package:interface_incendies_gironde/theme/app_theme.dart';
 void main() {
   Future<void> pumpForm(
     WidgetTester tester,
-    _MissionRepository repository,
-  ) async {
+    _MissionRepository repository, {
+    CoordinationNeed? mission,
+  }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -31,7 +32,9 @@ void main() {
           data: liveData,
           child: MaterialApp(
             theme: AppTheme.light,
-            home: const Scaffold(body: SafeArea(child: CreateNeedScreen())),
+            home: Scaffold(
+              body: SafeArea(child: CreateNeedScreen(mission: mission)),
+            ),
           ),
         ),
       ),
@@ -379,12 +382,136 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  testWidgets('edit mode pre-fills the mission and updates it once', (
+    tester,
+  ) async {
+    final location = places.first;
+    final start = DateTime.now().add(const Duration(days: 1));
+    final mission = CoordinationNeed(
+      id: 'mission-to-edit',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: '03/08/2026',
+      time: '08:00 — 12:00',
+      startAt: DateTime(start.year, start.month, start.day, 8),
+      endAt: DateTime(start.year, start.month, start.day, 12),
+      requiredPhysiotherapists: 2,
+      registeredPhysiotherapists: 1,
+      requiredPodiatrists: 1,
+      registeredPodiatrists: 0,
+      equipment: const ['Tables', 'Huiles'],
+      details: 'Consigne initiale',
+      createdBy: 'another-manager',
+    );
+    final repository = _MissionRepository(locations: [location]);
+    await pumpForm(tester, repository, mission: mission);
+
+    expect(find.text('Modifier la mission'), findsOneWidget);
+    expect(find.text('Enregistrer les modifications'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('Consigne initiale'), findsOneWidget);
+    expect(find.byKey(const Key('publish-mission')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+
+    expect(repository.updateCalls, 1);
+    expect(repository.calls, 0);
+    expect(repository.updatedMissionId, mission.id);
+    expect(repository.lastDraft?.location.id, location.id);
+    expect(repository.lastDraft?.requiredPhysiotherapists, 2);
+    expect(find.text('Mission mise à jour.'), findsOneWidget);
+  });
+
+  testWidgets('edit mode refuses a quota below registered counters', (
+    tester,
+  ) async {
+    final location = places.first;
+    final start = DateTime.now().add(const Duration(days: 1));
+    final mission = CoordinationNeed(
+      id: 'mission-with-engagements',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: '03/08/2026',
+      time: '08:00 — 12:00',
+      startAt: DateTime(start.year, start.month, start.day, 8),
+      endAt: DateTime(start.year, start.month, start.day, 12),
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 1,
+      requiredPodiatrists: 1,
+      registeredPodiatrists: 0,
+      equipment: const [],
+    );
+    final repository = _MissionRepository(locations: [location]);
+    await pumpForm(tester, repository, mission: mission);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('physiotherapist-remove')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('physiotherapist-remove')));
+    await tester.ensureVisible(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('update-mission')));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Le besoin ne peut pas être inférieur aux engagements confirmés.',
+      ),
+      findsOneWidget,
+    );
+    expect(repository.updateCalls, 0);
+  });
+
+  testWidgets('edit mode exposes the exact outside-scope error', (
+    tester,
+  ) async {
+    final location = places.first;
+    final start = DateTime.now().add(const Duration(days: 1));
+    final mission = CoordinationNeed(
+      id: 'mission-outside-scope',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: '03/08/2026',
+      time: '08:00 — 12:00',
+      startAt: DateTime(start.year, start.month, start.day, 8),
+      endAt: DateTime(start.year, start.month, start.day, 12),
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+    );
+    final repository = _MissionRepository(
+      locations: [location],
+      updateError: const RepositoryException(
+        'Vous ne pouvez modifier que les missions de vos centres.',
+      ),
+    );
+    await pumpForm(tester, repository, mission: mission);
+    await tester.ensureVisible(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Vous ne pouvez modifier que les missions de vos centres.'),
+      findsOneWidget,
+    );
+  });
 }
 
 class _MissionRepository implements CoordinationRepository {
   _MissionRepository({
     this.pending = false,
     this.error = false,
+    this.updateError,
     this.accessError,
     this.access = _coordinatorAccess,
     List<ResponsePlace>? locations,
@@ -393,10 +520,13 @@ class _MissionRepository implements CoordinationRepository {
   final bool pending;
   final bool error;
   final Object? accessError;
+  final RepositoryException? updateError;
   final ResponsibleAccess access;
   final List<ResponsePlace> locations;
   final Completer<String> _completer = Completer<String>();
   int calls = 0;
+  int updateCalls = 0;
+  String? updatedMissionId;
   MissionDraft? lastDraft;
   @override
   final adminInvitationRepository = MockAdminInvitationRepository();
@@ -427,6 +557,14 @@ class _MissionRepository implements CoordinationRepository {
 
   @override
   Future<void> cancelMission(String missionId, String? reason) async {}
+
+  @override
+  Future<void> updateMission(String missionId, MissionDraft draft) async {
+    updateCalls++;
+    updatedMissionId = missionId;
+    lastDraft = draft;
+    if (updateError != null) throw updateError!;
+  }
 
   @override
   Future<VolunteerProfile?> getVolunteerProfile() async => null;
