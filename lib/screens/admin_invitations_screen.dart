@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../models/admin_invitation.dart';
 import '../models/need.dart';
+import '../models/responsible_account.dart';
 import '../repositories/admin_invitation_repository.dart';
 import '../repositories/admin_invitation_repository_scope.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
+import '../repositories/responsible_access_administration_repository.dart';
+import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
+import 'responsible_access_form_screen.dart';
 
 class AdminInvitationsScreen extends StatefulWidget {
   const AdminInvitationsScreen({super.key});
@@ -56,6 +60,10 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
           }
           return _CoordinatorInvitationsContent(
             repository: AdminInvitationRepositoryScope.of(context),
+            accessRepository: ResponsibleAccessAdministrationRepositoryScope.of(
+              context,
+            ),
+            currentUid: snapshot.data!.uid,
             locations: _locations!,
           );
         },
@@ -84,10 +92,14 @@ class _AccessDenied extends StatelessWidget {
 class _CoordinatorInvitationsContent extends StatefulWidget {
   const _CoordinatorInvitationsContent({
     required this.repository,
+    required this.accessRepository,
+    required this.currentUid,
     required this.locations,
   });
 
   final AdminInvitationRepository repository;
+  final ResponsibleAccessAdministrationRepository accessRepository;
+  final String currentUid;
   final Stream<List<ResponsePlace>> locations;
 
   @override
@@ -98,11 +110,13 @@ class _CoordinatorInvitationsContent extends StatefulWidget {
 class _CoordinatorInvitationsContentState
     extends State<_CoordinatorInvitationsContent> {
   late Stream<List<AdminInvitation>> _invitations;
+  late Future<List<ResponsibleAccount>> _accounts;
 
   @override
   void initState() {
     super.initState();
     _invitations = widget.repository.watchInvitations();
+    _accounts = widget.accessRepository.listAccounts();
   }
 
   @override
@@ -110,6 +124,9 @@ class _CoordinatorInvitationsContentState
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.repository, widget.repository)) {
       _invitations = widget.repository.watchInvitations();
+    }
+    if (!identical(oldWidget.accessRepository, widget.accessRepository)) {
+      _accounts = widget.accessRepository.listAccounts();
     }
   }
 
@@ -128,6 +145,34 @@ class _CoordinatorInvitationsContentState
         content: Text(
           'Invitation créée. Préparez maintenant le compte pour envoyer '
           'l’e-mail d’activation.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _manageAccess(
+    ResponsibleAccount account,
+    List<ResponsePlace> locations,
+  ) async {
+    if (account.uid == widget.currentUid) return;
+    final updated = await Navigator.of(context).push<ResponsibleAccount>(
+      MaterialPageRoute(
+        builder: (_) => ResponsibleAccessFormScreen(
+          account: account,
+          currentUid: widget.currentUid,
+          locations: locations,
+          repository: widget.accessRepository,
+        ),
+      ),
+    );
+    if (!mounted || updated == null) return;
+    setState(() => _accounts = widget.accessRepository.listAccounts());
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          updated.access.active
+              ? 'Accès responsable mis à jour.'
+              : 'Accès responsable désactivé.',
         ),
       ),
     );
@@ -168,6 +213,59 @@ class _CoordinatorInvitationsContentState
                     ),
                   ),
                   const SizedBox(height: 20),
+                  Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: ExpansionTile(
+                      key: const Key('responsible-accounts-section'),
+                      title: const Text('Accès existants'),
+                      subtitle: const Text('Comptes, rôles et centres'),
+                      childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+                      children: [
+                        FutureBuilder<List<ResponsibleAccount>>(
+                          future: _accounts,
+                          builder: (context, accountSnapshot) {
+                            if (accountSnapshot.hasError) {
+                              return _AccessListError(
+                                onRetry: () => setState(
+                                  () => _accounts = widget.accessRepository
+                                      .listAccounts(),
+                                ),
+                              );
+                            }
+                            if (!accountSnapshot.hasData) {
+                              return const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(20),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+                            return Column(
+                              children: accountSnapshot.data!
+                                  .map(
+                                    (account) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
+                                      child: _ResponsibleAccountCard(
+                                        account: account,
+                                        currentUid: widget.currentUid,
+                                        locationsById: locationsById,
+                                        onManage: () =>
+                                            _manageAccess(account, locations),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const SectionTitle(title: 'Invitations'),
+                  const SizedBox(height: 10),
                   if (snapshot.hasError)
                     const _ErrorState(
                       message: 'Les invitations ne sont pas disponibles.',
@@ -279,6 +377,142 @@ class _CoordinatorInvitationsContentState
     } finally {
       if (mounted) setState(() => _provisioningIds.remove(invitation.id));
     }
+  }
+}
+
+class _ResponsibleAccountCard extends StatelessWidget {
+  const _ResponsibleAccountCard({
+    required this.account,
+    required this.currentUid,
+    required this.locationsById,
+    required this.onManage,
+  });
+
+  final ResponsibleAccount account;
+  final String currentUid;
+  final Map<String, ResponsePlace> locationsById;
+  final VoidCallback onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    final access = account.access;
+    final isSelf = account.uid == currentUid;
+    final roleLabel = access.isCumulative
+        ? 'Coordinateur et responsable'
+        : access.roles.contains(ResponsibleRole.coordinator)
+        ? 'Coordinateur départemental'
+        : 'Responsable de centre';
+    final locations =
+        access.locationIds
+            .map((id) => locationsById[id]?.name ?? 'Lieu indisponible')
+            .toList()
+          ..sort();
+    return Card(
+      key: Key('responsible-account-${account.uid}'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    account.identityLabel,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                _AccountStatusBadge(active: access.active),
+              ],
+            ),
+            if (account.email case final email?) ...[
+              const SizedBox(height: 4),
+              Text(email),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              roleLabel,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              access.locationIds.isEmpty
+                  ? 'Tous les centres'
+                  : '${locations.length} centre${locations.length > 1 ? 's' : ''} · '
+                        '${locations.join(' · ')}',
+            ),
+            if (isSelf) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Votre propre accès doit être géré par un autre coordinateur.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: Key('manage-responsible-${account.uid}'),
+                onPressed: isSelf ? null : onManage,
+                icon: const Icon(Icons.manage_accounts_outlined),
+                label: const Text('Gérer l’accès'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountStatusBadge extends StatelessWidget {
+  const _AccountStatusBadge({required this.active});
+
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.green : AppColors.red;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        active ? 'Actif' : 'Inactif',
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _AccessListError extends StatelessWidget {
+  const _AccessListError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            const Text(
+              'Les accès responsables ne sont pas disponibles.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            TextButton(onPressed: onRetry, child: const Text('Réessayer')),
+          ],
+        ),
+      ),
+    );
   }
 }
 

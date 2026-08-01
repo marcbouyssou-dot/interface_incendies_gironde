@@ -7,6 +7,8 @@ import '../models/volunteer_profile.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
 import 'mock_admin_invitation_repository.dart';
+import 'mock_responsible_access_administration_repository.dart';
+import 'responsible_access_administration_repository.dart';
 
 class MockCoordinationRepository implements CoordinationRepository {
   MockCoordinationRepository({
@@ -15,6 +17,8 @@ class MockCoordinationRepository implements CoordinationRepository {
     List<EngagementInfo>? initialEngagements,
     Map<String, VolunteerProfile>? initialProfiles,
     AdminInvitationRepository? adminInvitationRepository,
+    ResponsibleAccessAdministrationRepository?
+    responsibleAccessAdministrationRepository,
     this.volunteerUid = 'mock-volunteer',
     ResponsibleAccess? responsibleAccess = _mockAccess,
   }) : _missions = List.of(initialMissions ?? needs),
@@ -28,6 +32,11 @@ class MockCoordinationRepository implements CoordinationRepository {
            adminInvitationRepository ??
            MockAdminInvitationRepository(
              coordinatorUid: responsibleAccess?.uid ?? 'mock-coordinator',
+           ),
+       responsibleAccessAdministrationRepository =
+           responsibleAccessAdministrationRepository ??
+           MockResponsibleAccessAdministrationRepository(
+             currentUid: responsibleAccess?.uid ?? 'mock-coordinator',
            );
 
   static final instance = MockCoordinationRepository();
@@ -35,6 +44,9 @@ class MockCoordinationRepository implements CoordinationRepository {
   final List<CoordinationNeed> _missions;
   @override
   final AdminInvitationRepository adminInvitationRepository;
+  @override
+  final ResponsibleAccessAdministrationRepository
+  responsibleAccessAdministrationRepository;
   final List<ResponsePlace> _locations;
   final ResponsibleAccess? _responsibleAccess;
   final String volunteerUid;

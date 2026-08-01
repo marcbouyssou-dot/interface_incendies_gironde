@@ -13,6 +13,8 @@ import 'coordination_repository.dart';
 import 'firestore_admin_invitation_repository.dart';
 import 'firestore_location_mapper.dart';
 import 'firestore_mission_mapper.dart';
+import 'firestore_responsible_access_administration_repository.dart';
+import 'responsible_access_administration_repository.dart';
 
 @visibleForTesting
 bool canStartVolunteerEngagement({
@@ -61,6 +63,12 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   late final AdminInvitationRepository adminInvitationRepository =
       FirestoreAdminInvitationRepository.withFirebase(
         firestore: _responsibleFirestore,
+        auth: _responsibleAuth,
+      );
+  @override
+  late final ResponsibleAccessAdministrationRepository
+  responsibleAccessAdministrationRepository =
+      FirestoreResponsibleAccessAdministrationRepository.withFirebase(
         auth: _responsibleAuth,
       );
 

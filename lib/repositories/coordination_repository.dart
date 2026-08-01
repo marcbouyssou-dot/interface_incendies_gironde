@@ -3,11 +3,15 @@ import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
 import 'admin_invitation_repository.dart';
+import 'responsible_access_administration_repository.dart';
 
 export '../models/responsible_access.dart';
 
 abstract interface class CoordinationRepository {
   AdminInvitationRepository get adminInvitationRepository;
+
+  ResponsibleAccessAdministrationRepository
+  get responsibleAccessAdministrationRepository;
 
   Stream<List<CoordinationNeed>> watchMissions();
 
