@@ -109,9 +109,16 @@ class _SharedLatestStream<T> {
   StreamSubscription<T>? _sourceSubscription;
   bool _hasValue = false;
   T? _latest;
+  bool _hasError = false;
+  Object? _latestError;
+  StackTrace? _latestErrorStackTrace;
 
   Stream<T> watch() => Stream<T>.multi((controller) {
-    if (_hasValue) controller.add(_latest as T);
+    if (_hasError) {
+      controller.addError(_latestError!, _latestErrorStackTrace);
+    } else if (_hasValue) {
+      controller.add(_latest as T);
+    }
     final subscription = _events.stream.listen(
       controller.add,
       onError: controller.addError,
@@ -122,10 +129,18 @@ class _SharedLatestStream<T> {
       (value) {
         _latest = value;
         _hasValue = true;
+        _hasError = false;
+        _latestError = null;
+        _latestErrorStackTrace = null;
         onValue?.call(value);
         _events.add(value);
       },
-      onError: _events.addError,
+      onError: (Object error, StackTrace stackTrace) {
+        _hasError = true;
+        _latestError = error;
+        _latestErrorStackTrace = stackTrace;
+        _events.addError(error, stackTrace);
+      },
       onDone: _events.close,
     );
   });

@@ -185,6 +185,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'invalid V2 access blocks Situation without a permanent spinner',
+    (tester) async {
+      final repository = _InvalidResponsibleAccessRepository();
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Situation').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Configuration d’accès invalide'), findsOneWidget);
+      expect(find.text('SITUATION'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text(needs.first.place), findsNothing);
+    },
+  );
+
   testWidgets('slot filters update visible cards', (tester) async {
     await pumpIPhone(tester);
     await tester.tap(find.text('Critiques'));
@@ -277,4 +297,15 @@ class _CountingRepository extends MockCoordinationRepository {
     );
     return super.watchMissionEngagements(missionId);
   }
+}
+
+class _InvalidResponsibleAccessRepository extends MockCoordinationRepository {
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() =>
+      Stream<ResponsibleAccess?>.error(
+        const ResponsibleAccessFormatException(
+          ResponsibleAccessFormatError.invalidLocationIds,
+          'invalid V2 scope',
+        ),
+      );
 }

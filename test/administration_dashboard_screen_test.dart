@@ -22,7 +22,7 @@ void main() {
   Future<_DashboardRepository> pumpDashboard(
     WidgetTester tester, {
     ResponsibleAccess? access = coordinator,
-    bool accessError = false,
+    Object? accessError,
     List<CoordinationNeed>? missions,
     List<ResponsePlace>? locations,
   }) async {
@@ -287,6 +287,28 @@ void main() {
     expect(find.byKey(const Key('administration-create-need')), findsOneWidget);
   });
 
+  testWidgets(
+    'invalid V2 access exposes a safe explicit administration state',
+    (tester) async {
+      await pumpDashboard(
+        tester,
+        accessError: const ResponsibleAccessFormatException(
+          ResponsibleAccessFormatError.invalidLocationIds,
+          'invalid V2 scope',
+        ),
+      );
+
+      expect(find.text('Configuration d’accès invalide'), findsOneWidget);
+      expect(
+        find.text('Aucun accès d’administration n’a été accordé.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('administration-create-need')), findsNothing);
+      expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    },
+  );
+
   testWidgets('Plus contains information and places but no administration', (
     tester,
   ) async {
@@ -341,7 +363,7 @@ class _DashboardRepository extends MockCoordinationRepository {
        );
 
   ResponsibleAccess? _currentAccess;
-  final bool accessError;
+  final Object? accessError;
   final _accessUpdates = StreamController<ResponsibleAccess?>.broadcast();
   int accessFactories = 0;
   int signOutCalls = 0;
@@ -349,8 +371,11 @@ class _DashboardRepository extends MockCoordinationRepository {
   @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() {
     accessFactories++;
-    if (accessError && accessFactories == 1) {
-      return Stream<ResponsibleAccess?>.error(StateError('role unavailable'));
+    if (accessError != null && accessFactories == 1) {
+      final error = accessError == true
+          ? StateError('role unavailable')
+          : accessError!;
+      return Stream<ResponsibleAccess?>.error(error);
     }
     return Stream<ResponsibleAccess?>.multi((controller) {
       controller.add(_currentAccess);

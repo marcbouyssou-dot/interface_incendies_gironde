@@ -66,6 +66,57 @@ void main() {
       await repository.disposeControllers();
     },
   );
+
+  test(
+    'responsible access errors are replayed and cleared after recovery',
+    () async {
+      final repository = _ControlledAccessRepository();
+      final data = LiveCoordinationData(repository);
+      final firstErrors = <Object>[];
+      final firstValues = <ResponsibleAccess?>[];
+      final firstSubscription = data.watchResponsibleAccess().listen(
+        firstValues.add,
+        onError: firstErrors.add,
+      );
+      const invalidAccess = ResponsibleAccessFormatException(
+        ResponsibleAccessFormatError.invalidLocationIds,
+        'invalid V2 scope',
+      );
+
+      repository.emitError(invalidAccess);
+      await Future<void>.delayed(Duration.zero);
+
+      final replayedErrors = <Object>[];
+      final replayedValues = <ResponsibleAccess?>[];
+      final secondSubscription = data.watchResponsibleAccess().listen(
+        replayedValues.add,
+        onError: replayedErrors.add,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.factories, 1);
+      expect(firstErrors, [invalidAccess]);
+      expect(replayedErrors, [invalidAccess]);
+      expect(replayedValues, isEmpty);
+
+      const recovered = ResponsibleAccess(
+        uid: 'coordinator',
+        role: 'coordinator',
+        locationIds: {'*'},
+        active: true,
+      );
+      repository.emit(recovered);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(firstValues, [recovered]);
+      expect(replayedValues, [recovered]);
+
+      await firstSubscription.cancel();
+      await secondSubscription.cancel();
+      await data.dispose();
+      await repository.disposeController();
+    },
+  );
 }
 
 class _ControlledEngagementRepository extends MockCoordinationRepository {
@@ -92,4 +143,23 @@ class _ControlledEngagementRepository extends MockCoordinationRepository {
       await controller.close();
     }
   }
+}
+
+class _ControlledAccessRepository extends MockCoordinationRepository {
+  final _controller = StreamController<ResponsibleAccess?>.broadcast(
+    sync: true,
+  );
+  int factories = 0;
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() {
+    factories++;
+    return _controller.stream;
+  }
+
+  void emit(ResponsibleAccess access) => _controller.add(access);
+
+  void emitError(Object error) => _controller.addError(error);
+
+  Future<void> disposeController() => _controller.close();
 }

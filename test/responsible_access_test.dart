@@ -145,6 +145,109 @@ void main() {
       expect(access.locationIds, {'bazas', 'bassens'});
     });
 
+    test('exactly 65 unique location ids are accepted', () {
+      final locationIds = List.generate(65, (index) => 'location-$index');
+
+      final access = parse(
+        v2(
+          role: 'site_manager',
+          roles: const ['site_manager'],
+          locationIds: locationIds,
+        ),
+      );
+
+      expect(access.locationIds, hasLength(65));
+    });
+
+    test('missing locationIds is refused even for a coordinator', () {
+      final data = v2()..remove('locationIds');
+
+      expect(
+        () => parse(data),
+        failsWith(ResponsibleAccessFormatError.invalidLocationIds),
+      );
+    });
+
+    test('more than 65 location ids are refused', () {
+      expect(
+        () => parse(
+          v2(
+            role: 'site_manager',
+            roles: const ['site_manager'],
+            locationIds: List.generate(66, (index) => 'location-$index'),
+          ),
+        ),
+        failsWith(ResponsibleAccessFormatError.invalidLocationIds),
+      );
+    });
+
+    test(
+      'empty, duplicate, wildcard and separator location ids are refused',
+      () {
+        for (final invalidLocations in <Object?>[
+          const [''],
+          const ['bazas', 'bazas'],
+          const ['*'],
+          const ['bazas\u001fother'],
+        ]) {
+          expect(
+            () => parse(
+              v2(
+                role: 'site_manager',
+                roles: const ['site_manager'],
+                locationIds: invalidLocations,
+              ),
+            ),
+            failsWith(ResponsibleAccessFormatError.invalidLocationIds),
+          );
+        }
+      },
+    );
+
+    test('non-list and non-string location ids are refused', () {
+      for (final invalidLocations in <Object?>[
+        'bazas',
+        const ['bazas', 12],
+      ]) {
+        expect(
+          () => parse(
+            v2(
+              role: 'site_manager',
+              roles: const ['site_manager'],
+              locationIds: invalidLocations,
+            ),
+          ),
+          failsWith(ResponsibleAccessFormatError.invalidLocationIds),
+        );
+      }
+    });
+
+    test('role and location scope must remain coherent', () {
+      expect(
+        () => parse(v2(locationIds: const ['bazas'])),
+        failsWith(ResponsibleAccessFormatError.invalidRoleScope),
+      );
+      expect(
+        () => parse(
+          v2(
+            role: 'site_manager',
+            roles: const ['site_manager'],
+            locationIds: const [],
+          ),
+        ),
+        failsWith(ResponsibleAccessFormatError.invalidRoleScope),
+      );
+      expect(
+        () => parse(
+          v2(
+            roles: const ['coordinator', 'site_manager'],
+            locationIds: const [],
+          ),
+        ),
+        failsWith(ResponsibleAccessFormatError.invalidRoleScope),
+      );
+    });
+
     test('coherent legacy projection is accepted', () {
       expect(
         parse(
@@ -308,6 +411,13 @@ void main() {
     expect(v2Access.isSiteManager, legacyAccess.isSiteManager);
     expect(v2Access.locationIds, legacyAccess.locationIds);
     expect(v2Access.canManage('langon'), legacyAccess.canManage('langon'));
+  });
+
+  test('an absent role document is represented by an absent access', () {
+    expect(
+      ResponsibleAccessParser.parseOptional(uid: 'missing', data: null),
+      isNull,
+    );
   });
 
   test('Firestore mapper loads legacy and V2 documents identically', () {

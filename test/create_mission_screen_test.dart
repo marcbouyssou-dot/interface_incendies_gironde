@@ -272,6 +272,24 @@ void main() {
     expect(find.text('Bordeaux Benauge'), findsNothing);
   });
 
+  testWidgets('invalid V2 access blocks the mission form explicitly', (
+    tester,
+  ) async {
+    final repository = _MissionRepository(
+      accessError: const ResponsibleAccessFormatException(
+        ResponsibleAccessFormatError.invalidLocationIds,
+        'invalid V2 scope',
+      ),
+    );
+
+    await pumpForm(tester, repository);
+
+    expect(find.text('Configuration d’accès invalide'), findsOneWidget);
+    expect(find.byKey(const Key('publish-mission')), findsNothing);
+    expect(find.byKey(const Key('mission-location')), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('cumulative coordinator retains the global location selector', (
     tester,
   ) async {
@@ -365,12 +383,14 @@ class _MissionRepository implements CoordinationRepository {
   _MissionRepository({
     this.pending = false,
     this.error = false,
+    this.accessError,
     this.access = _coordinatorAccess,
     List<ResponsePlace>? locations,
   }) : locations = locations ?? [places.first];
 
   final bool pending;
   final bool error;
+  final Object? accessError;
   final ResponsibleAccess access;
   final List<ResponsePlace> locations;
   final Completer<String> _completer = Completer<String>();
@@ -407,7 +427,8 @@ class _MissionRepository implements CoordinationRepository {
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {}
 
   @override
-  Stream<ResponsibleAccess?> watchResponsibleAccess() => Stream.value(access);
+  Stream<ResponsibleAccess?> watchResponsibleAccess() =>
+      accessError == null ? Stream.value(access) : Stream.error(accessError!);
 
   @override
   Future<ResponsibleAccess> signInResponsible({

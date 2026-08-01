@@ -75,10 +75,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
           .doc(user.uid)
           .snapshots()
           .map((snapshot) {
-            if (!snapshot.exists) return null;
-            return parseResponsibleAccessDocument(
+            return ResponsibleAccessParser.parseOptional(
               uid: user.uid,
-              data: snapshot.data()!,
+              data: snapshot.data(),
             );
           });
     });

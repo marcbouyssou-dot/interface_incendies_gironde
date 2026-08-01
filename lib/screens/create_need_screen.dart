@@ -17,6 +17,25 @@ class CreateNeedScreen extends StatefulWidget {
   State<CreateNeedScreen> createState() => _CreateNeedScreenState();
 }
 
+class _ResponsibleAccessReadFailure extends StatelessWidget {
+  const _ResponsibleAccessReadFailure();
+
+  @override
+  Widget build(BuildContext context) {
+    return const PageContainer(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Votre accès responsable ne peut pas être vérifié.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CreateNeedScreenState extends State<CreateNeedScreen> {
   final Map<String, int> _requiredByProfession = {
     for (final profession in HealthProfessionRegistry.values) profession.id: 0,
@@ -61,6 +80,12 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     return StreamBuilder<ResponsibleAccess?>(
       stream: _responsibleAccess,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          if (isInvalidResponsibleAccessError(snapshot.error)) {
+            return const InvalidResponsibleAccessState();
+          }
+          return const _ResponsibleAccessReadFailure();
+        }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }

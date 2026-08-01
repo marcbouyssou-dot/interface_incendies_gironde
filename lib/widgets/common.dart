@@ -72,6 +72,59 @@ class PageHeader extends StatelessWidget {
   }
 }
 
+bool isInvalidResponsibleAccessError(Object? error) =>
+    error is ResponsibleAccessFormatException;
+
+class InvalidResponsibleAccessState extends StatelessWidget {
+  const InvalidResponsibleAccessState({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return PageContainer(
+      child: ListView(
+        key: const Key('invalid-responsible-access-state'),
+        padding: const EdgeInsets.fromLTRB(20, 42, 20, 32),
+        children: [
+          const PageHeader(
+            eyebrow: 'Accès responsable',
+            title: 'Configuration d’accès invalide',
+            subtitle:
+                'Votre compte responsable contient une configuration de '
+                'rôles incorrecte.',
+          ),
+          const SizedBox(height: 22),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.lock_outline_rounded,
+                    color: AppColors.red,
+                    size: 34,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Aucun accès d’administration n’a été accordé.',
+                    key: const Key('invalid-responsible-access-message'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Contactez un coordinateur MobSanté.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SectionTitle extends StatelessWidget {
   const SectionTitle({super.key, required this.title, this.action});
   final String title;

@@ -6,9 +6,14 @@ import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/admin_invitation.dart';
 import 'package:interface_incendies_gironde/repositories/admin_invitation_repository.dart';
+import 'package:interface_incendies_gironde/repositories/admin_invitation_repository_scope.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
+import 'package:interface_incendies_gironde/screens/admin_invitations_screen.dart';
+import 'package:interface_incendies_gironde/theme/app_theme.dart';
 
 void main() {
   const coordinator = ResponsibleAccess(
@@ -71,6 +76,36 @@ void main() {
     expect(find.text('Invitations et accès aux centres'), findsOneWidget);
     expect(find.text('Aucune invitation pour le moment.'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('invalid V2 access blocks invitation administration explicitly', (
+    tester,
+  ) async {
+    final repository = _InvalidAccessRepository();
+    final liveData = LiveCoordinationData(repository);
+    addTearDown(liveData.dispose);
+
+    await tester.pumpWidget(
+      RepositoryScope(
+        repository: repository,
+        child: AdminInvitationRepositoryScope(
+          repository: repository.adminInvitationRepository,
+          child: LiveCoordinationDataScope(
+            data: liveData,
+            child: MaterialApp(
+              theme: AppTheme.light,
+              home: const AdminInvitationsScreen(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Configuration d’accès invalide'), findsOneWidget);
+    expect(find.byKey(const Key('invite-admin-button')), findsNothing);
+    expect(find.text('Aucune invitation pour le moment.'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('list renders all statuses and unavailable locations', (
@@ -449,6 +484,17 @@ class _CountingInvitationRepository implements AdminInvitationRepository {
     emailDelivery: 'pending',
     alreadyProvisioned: false,
   );
+}
+
+class _InvalidAccessRepository extends MockCoordinationRepository {
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() =>
+      Stream<ResponsibleAccess?>.error(
+        const ResponsibleAccessFormatException(
+          ResponsibleAccessFormatError.invalidRoles,
+          'invalid V2 roles',
+        ),
+      );
 }
 
 class _ProvisionInvitationRepository implements AdminInvitationRepository {

@@ -121,13 +121,22 @@ class ResponsibleAccess {
 }
 
 abstract final class ResponsibleAccessParser {
+  static const maxLocationIds = 65;
+  static const _rulesListSeparator = '\u001f';
+
+  static ResponsibleAccess? parseOptional({
+    required String uid,
+    required Map<String, Object?>? data,
+  }) => data == null ? null : parse(uid: uid, data: data);
+
   static ResponsibleAccess parse({
     required String uid,
     required Map<String, Object?> data,
   }) {
     final active = _parseActive(data);
-    final locationIds = _parseLocationIds(data);
-    if (data.containsKey('roles')) {
+    final isV2 = data.containsKey('roles');
+    final locationIds = _parseLocationIds(data, required: isV2);
+    if (isV2) {
       return _parseV2(
         uid: uid,
         data: data,
@@ -160,21 +169,34 @@ abstract final class ResponsibleAccessParser {
     return active;
   }
 
-  static Set<String> _parseLocationIds(Map<String, Object?> data) {
-    if (!data.containsKey('locationIds')) return const {};
-    final raw = data['locationIds'];
-    if (raw is! List || raw.any((value) => value is! String)) {
+  static Set<String> _parseLocationIds(
+    Map<String, Object?> data, {
+    required bool required,
+  }) {
+    if (!data.containsKey('locationIds')) {
+      if (!required) return const {};
       throw const ResponsibleAccessFormatException(
         ResponsibleAccessFormatError.invalidLocationIds,
-        'Le champ locationIds doit être une liste de chaînes.',
+        'Le champ locationIds est obligatoire en V2.',
+      );
+    }
+    final raw = data['locationIds'];
+    if (raw is! List ||
+        raw.length > maxLocationIds ||
+        raw.any((value) => value is! String)) {
+      throw const ResponsibleAccessFormatException(
+        ResponsibleAccessFormatError.invalidLocationIds,
+        'Le champ locationIds doit contenir au maximum 65 chaînes.',
       );
     }
     final values = raw.cast<String>();
     if (values.any((value) => value.isEmpty) ||
+        (required && values.contains('*')) ||
+        values.any((value) => value.contains(_rulesListSeparator)) ||
         values.toSet().length != values.length) {
       throw const ResponsibleAccessFormatException(
         ResponsibleAccessFormatError.invalidLocationIds,
-        'Les identifiants de lieux doivent être uniques et non vides.',
+        'Les identifiants de lieux doivent être valides, uniques et non vides.',
       );
     }
     return values.toSet();

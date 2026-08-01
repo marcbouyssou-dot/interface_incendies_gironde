@@ -41,6 +41,9 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
         stream: _access,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
+            if (isInvalidResponsibleAccessError(snapshot.error)) {
+              return const InvalidResponsibleAccessState();
+            }
             return const _AccessDenied();
           }
           if (!snapshot.hasData) {

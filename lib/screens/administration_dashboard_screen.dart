@@ -53,6 +53,9 @@ class _AdministrationDashboardScreenState
       stream: _access,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
+          if (isInvalidResponsibleAccessError(snapshot.error)) {
+            return const InvalidResponsibleAccessState();
+          }
           return _ResponsibleAccessUnavailable(
             message: 'Votre accès responsable ne peut pas être vérifié.',
             onRetry: widget.onRetryAccess,

@@ -64,11 +64,17 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
           builder: (context, locationsSnapshot) =>
               StreamBuilder<ResponsibleAccess?>(
                 stream: _responsibleAccess,
-                builder: (context, accessSnapshot) => _buildContent(
-                  missionsSnapshot.data!,
-                  locationsSnapshot.data ?? const <ResponsePlace>[],
-                  accessSnapshot.data,
-                ),
+                builder: (context, accessSnapshot) {
+                  if (accessSnapshot.hasError &&
+                      isInvalidResponsibleAccessError(accessSnapshot.error)) {
+                    return const InvalidResponsibleAccessState();
+                  }
+                  return _buildContent(
+                    missionsSnapshot.data!,
+                    locationsSnapshot.data ?? const <ResponsePlace>[],
+                    accessSnapshot.data,
+                  );
+                },
               ),
         );
       },
