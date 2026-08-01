@@ -153,14 +153,16 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
 
   @override
   Future<AdminInvitation> createInvitation(AdminInvitationDraft draft) async {
-    final uid = await _requireCoordinator();
     final createdAt = _now();
     draft.validate(now: createdAt);
+    final role = draft.role;
+    final locationIds = draft.locationIds;
+    final uid = await _requireCoordinator();
     final id = await _dataSource.addDocument({
       'email': draft.email,
       'displayName': draft.displayName,
-      'role': draft.role,
-      'locationIds': draft.locationIds.toList()..sort(),
+      'role': role,
+      'locationIds': List<String>.of(locationIds)..sort(),
       'createdBy': uid,
       'createdAt': _dataSource.serverTimestamp(),
       'expiresAt': _dataSource.timestampFromDate(draft.expiresAt),
@@ -171,8 +173,8 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
       id: id,
       email: draft.email,
       displayName: draft.displayName,
-      role: draft.role,
-      locationIds: draft.locationIds,
+      role: role,
+      locationIds: Set<String>.unmodifiable(locationIds),
       createdBy: uid,
       createdAt: createdAt,
       expiresAt: draft.expiresAt,

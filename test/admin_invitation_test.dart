@@ -23,7 +23,7 @@ void main() {
     expect(value.email, 'responsable@exemple.fr');
     expect(value.displayName, 'Camille Martin');
     expect(value.role, 'site_manager');
-    expect(value.locationIds, {'site-a', 'site-b'});
+    expect(value.locationIds, unorderedEquals(['site-a', 'site-b']));
     expect(
       adminInvitationStatusFromValue('cancelled'),
       AdminInvitationStatus.cancelled,
@@ -61,6 +61,137 @@ void main() {
       ).validate(now: now),
       throwsFormatException,
     );
+  });
+
+  group('strict invitation scope validation', () {
+    AdminInvitationDraft scopedDraft({
+      Object? role = AdminInvitationDraft.siteManagerRole,
+      Iterable<Object?> locationIds = const ['site-a'],
+    }) => AdminInvitationDraft(
+      email: 'responsable@example.fr',
+      displayName: 'Responsable',
+      role: role,
+      locationIds: locationIds,
+      expiresAt: now.add(const Duration(days: 7)),
+    );
+
+    test('accepts coordinator and site manager scopes up to 65 locations', () {
+      scopedDraft(
+        role: AdminInvitationDraft.coordinatorRole,
+        locationIds: const [],
+      ).validate(now: now);
+      scopedDraft(locationIds: const ['site-a']).validate(now: now);
+      scopedDraft(locationIds: const ['site-a', 'site-b']).validate(now: now);
+      scopedDraft(
+        locationIds: List.generate(65, (index) => 'site-$index'),
+      ).validate(now: now);
+    });
+
+    test('refuses incoherent role scopes and the 66th location', () {
+      expect(
+        () => scopedDraft(locationIds: const []).validate(now: now),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('au moins un centre'),
+          ),
+        ),
+      );
+      expect(
+        () => scopedDraft(
+          role: AdminInvitationDraft.coordinatorRole,
+          locationIds: const ['site-a'],
+        ).validate(now: now),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('ne doit pas être limité'),
+          ),
+        ),
+      );
+      expect(
+        () => scopedDraft(
+          locationIds: List.generate(66, (index) => 'site-$index'),
+        ).validate(now: now),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('plus de 65 centres'),
+          ),
+        ),
+      );
+    });
+
+    for (final invalidLocations in <List<Object?>>[
+      [''],
+      ['   '],
+      ['site-a', 'site-a'],
+      ['*'],
+      ['site-a\u001fsite-b'],
+      ['site-a', 42],
+    ]) {
+      test('refuses malformed location selection $invalidLocations', () {
+        expect(
+          () => scopedDraft(locationIds: invalidLocations).validate(now: now),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('sélection des centres est invalide'),
+            ),
+          ),
+        );
+      });
+    }
+
+    for (final invalidRole in <Object?>[
+      '',
+      'unknown',
+      'coordinator+site_manager',
+      const ['coordinator', 'site_manager'],
+    ]) {
+      test('refuses unsupported singular role $invalidRole', () {
+        expect(
+          () => scopedDraft(role: invalidRole).validate(now: now),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Rôle d’invitation invalide.',
+            ),
+          ),
+        );
+      });
+    }
+
+    test('validation is repeatable and never repairs an invalid payload', () {
+      final duplicates = ['site-a', 'site-a'];
+      final duplicateDraft = scopedDraft(locationIds: duplicates);
+      duplicates.removeLast();
+
+      expect(() => duplicateDraft.validate(now: now), throwsFormatException);
+      expect(() => duplicateDraft.validate(now: now), throwsFormatException);
+      expect(duplicateDraft.locationIds, ['site-a', 'site-a']);
+
+      final oversizedDraft = scopedDraft(
+        locationIds: List.generate(66, (index) => 'site-$index'),
+      );
+      expect(() => oversizedDraft.validate(now: now), throwsFormatException);
+      expect(oversizedDraft.locationIds, hasLength(66));
+
+      final wildcardDraft = scopedDraft(locationIds: const ['*']);
+      expect(() => wildcardDraft.validate(now: now), throwsFormatException);
+      expect(wildcardDraft.locationIds, ['*']);
+
+      final separatorDraft = scopedDraft(
+        locationIds: const ['site-a\u001fsite-b'],
+      );
+      expect(() => separatorDraft.validate(now: now), throwsFormatException);
+      expect(separatorDraft.locationIds.single, contains('\u001f'));
+    });
   });
 
   test(
@@ -168,6 +299,104 @@ void main() {
     expect(source.createdDocuments, 1);
   });
 
+  test('repositories reject an invalid draft before any persistence', () async {
+    final invalidDraft = AdminInvitationDraft(
+      email: 'responsable@example.fr',
+      displayName: 'Responsable',
+      locationIds: const ['site-a', 'site-a'],
+      expiresAt: now.add(const Duration(days: 7)),
+    );
+    final source = _FakeInvitationDataSource(now: now);
+    final firestoreRepository = FirestoreAdminInvitationRepository(
+      dataSource: source,
+      now: () => now,
+    );
+    final mockRepository = MockAdminInvitationRepository(now: () => now);
+    addTearDown(mockRepository.dispose);
+
+    await expectLater(
+      firestoreRepository.createInvitation(invalidDraft),
+      throwsFormatException,
+    );
+    await expectLater(
+      mockRepository.createInvitation(invalidDraft),
+      throwsFormatException,
+    );
+
+    expect(source.roleReads, 0);
+    expect(source.createdDocuments, 0);
+    expect(await mockRepository.watchInvitations().first, isEmpty);
+  });
+
+  test('firestore repository persists exactly 65 valid locations', () async {
+    final source = _FakeInvitationDataSource(now: now);
+    final repository = FirestoreAdminInvitationRepository(
+      dataSource: source,
+      now: () => now,
+    );
+    final locations = List.generate(65, (index) => 'site-$index');
+
+    await repository.createInvitation(
+      AdminInvitationDraft(
+        email: 'responsable@example.fr',
+        displayName: 'Responsable',
+        locationIds: locations,
+        expiresAt: now.add(const Duration(days: 7)),
+      ),
+    );
+
+    expect(source.createdDocuments, 1);
+    expect(source.documents.single.data['locationIds'], hasLength(65));
+  });
+
+  test(
+    'firestore repository rejects every malformed scope before reads',
+    () async {
+      final invalidDrafts = [
+        AdminInvitationDraft(
+          email: 'responsable@example.fr',
+          displayName: 'Responsable',
+          locationIds: List.generate(66, (index) => 'site-$index'),
+          expiresAt: now.add(const Duration(days: 7)),
+        ),
+        AdminInvitationDraft(
+          email: 'responsable@example.fr',
+          displayName: 'Responsable',
+          locationIds: const ['*'],
+          expiresAt: now.add(const Duration(days: 7)),
+        ),
+        AdminInvitationDraft(
+          email: 'responsable@example.fr',
+          displayName: 'Responsable',
+          locationIds: const ['site-a\u001fsite-b'],
+          expiresAt: now.add(const Duration(days: 7)),
+        ),
+        AdminInvitationDraft(
+          email: 'coord@example.fr',
+          displayName: 'Coordination',
+          role: AdminInvitationDraft.coordinatorRole,
+          locationIds: const ['site-a'],
+          expiresAt: now.add(const Duration(days: 7)),
+        ),
+      ];
+
+      for (final invalidDraft in invalidDrafts) {
+        final source = _FakeInvitationDataSource(now: now);
+        final repository = FirestoreAdminInvitationRepository(
+          dataSource: source,
+          now: () => now,
+        );
+        await expectLater(
+          repository.createInvitation(invalidDraft),
+          throwsFormatException,
+        );
+        expect(source.roleReads, 0);
+        expect(source.createdDocuments, 0);
+        expect(source.provisionedInvitationId, isNull);
+      }
+    },
+  );
+
   test('firestore repository exposes a malformed role document', () async {
     final source = _FakeInvitationDataSource(
       now: now,
@@ -249,6 +478,7 @@ class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
   final Map<String, Object?>? roleDocument;
   final List<AdminInvitationDocument> documents = [];
   int createdDocuments = 0;
+  int roleReads = 0;
   Map<String, Object?>? lastUpdate;
   String? provisionedInvitationId;
 
@@ -275,13 +505,15 @@ class _FakeInvitationDataSource implements AdminInvitationFirestoreDataSource {
   }
 
   @override
-  Future<Map<String, Object?>?> getCurrentRole() async =>
-      roleDocument ??
-      {
-        'role': role,
-        'locationIds': role == 'site_manager' ? ['site-a'] : <String>[],
-        'active': true,
-      };
+  Future<Map<String, Object?>?> getCurrentRole() async {
+    roleReads++;
+    return roleDocument ??
+        {
+          'role': role,
+          'locationIds': role == 'site_manager' ? ['site-a'] : <String>[],
+          'active': true,
+        };
+  }
 
   @override
   Future<void> updateDocument(String id, Map<String, Object?> data) async {

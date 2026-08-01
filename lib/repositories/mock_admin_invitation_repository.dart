@@ -35,12 +35,14 @@ class MockAdminInvitationRepository implements AdminInvitationRepository {
   Future<AdminInvitation> createInvitation(AdminInvitationDraft draft) async {
     final createdAt = _now();
     draft.validate(now: createdAt);
+    final role = draft.role;
+    final locationIds = draft.locationIds;
     final invitation = AdminInvitation(
       id: 'mock-invitation-${_nextId++}',
       email: draft.email,
       displayName: draft.displayName,
-      role: draft.role,
-      locationIds: draft.locationIds,
+      role: role,
+      locationIds: Set<String>.unmodifiable(locationIds),
       createdBy: coordinatorUid,
       createdAt: createdAt,
       expiresAt: draft.expiresAt,

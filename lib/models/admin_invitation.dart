@@ -79,23 +79,35 @@ class AdminInvitationDraft {
   AdminInvitationDraft({
     required String email,
     required String displayName,
-    required Set<String> locationIds,
+    required Iterable<Object?> locationIds,
     required this.expiresAt,
-    this.role = siteManagerRole,
+    Object? role = siteManagerRole,
   }) : email = email.trim().toLowerCase(),
        displayName = displayName.trim(),
-       locationIds = Set.unmodifiable(
-         locationIds.map((id) => id.trim()).where((id) => id.isNotEmpty),
-       );
+       _role = role,
+       _locationIds = List<Object?>.unmodifiable(locationIds);
 
   static const siteManagerRole = 'site_manager';
   static const coordinatorRole = 'coordinator';
+  static const maxLocationIds = 65;
+  static const _rulesListSeparator = '\u001f';
 
   final String email;
   final String displayName;
-  final String role;
-  final Set<String> locationIds;
+  final Object? _role;
+  final List<Object?> _locationIds;
   final DateTime expiresAt;
+
+  String get role {
+    final value = _role;
+    if (value is! String) throw _invalidRole;
+    return value;
+  }
+
+  List<String> get locationIds {
+    if (_locationIds.any((id) => id is! String)) throw _invalidLocations;
+    return List<String>.unmodifiable(_locationIds.cast<String>());
+  }
 
   void validate({required DateTime now}) {
     if (!_emailPattern.hasMatch(email)) {
@@ -104,15 +116,36 @@ class AdminInvitationDraft {
     if (displayName.isEmpty) {
       throw const FormatException('Le nom du responsable est obligatoire.');
     }
-    if (role != siteManagerRole && role != coordinatorRole) {
-      throw const FormatException('Rôle d’invitation invalide.');
+    if (_role != siteManagerRole && _role != coordinatorRole) {
+      throw _invalidRole;
     }
-    if (role == siteManagerRole && locationIds.isEmpty) {
-      throw const FormatException('Sélectionnez au moins un lieu.');
-    }
-    if (role == coordinatorRole && locationIds.isNotEmpty) {
+    if (_locationIds.length > maxLocationIds) {
       throw const FormatException(
-        'Un coordinateur départemental ne doit pas être limité à un lieu.',
+        'Une invitation ne peut contenir plus de 65 centres.',
+      );
+    }
+    if (_locationIds.any((id) => id is! String)) throw _invalidLocations;
+    final locations = _locationIds.cast<String>();
+    if (locations.any(
+      (id) =>
+          id.isEmpty ||
+          id.trim().isEmpty ||
+          id == '*' ||
+          id.contains(_rulesListSeparator),
+    )) {
+      throw _invalidLocations;
+    }
+    if (locations.toSet().length != locations.length) {
+      throw _invalidLocations;
+    }
+    if (_role == siteManagerRole && locations.isEmpty) {
+      throw const FormatException(
+        'Un responsable de site doit être associé à au moins un centre.',
+      );
+    }
+    if (_role == coordinatorRole && locations.isNotEmpty) {
+      throw const FormatException(
+        'Un coordinateur ne doit pas être limité à des centres.',
       );
     }
     if (!expiresAt.isAfter(now)) {
@@ -120,5 +153,13 @@ class AdminInvitationDraft {
     }
   }
 }
+
+const FormatException _invalidRole = FormatException(
+  'Rôle d’invitation invalide.',
+);
+const FormatException _invalidLocations = FormatException(
+  'La sélection des centres est invalide. '
+  'Vérifiez votre choix puis réessayez.',
+);
 
 final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');

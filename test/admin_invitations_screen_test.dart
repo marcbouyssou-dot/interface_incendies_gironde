@@ -261,7 +261,7 @@ void main() {
         'mobile@mobsante.fr',
       );
       await tester.pump();
-      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
 
       final location = places.where((place) => place.isOperational).first;
       await tester.scrollUntilVisible(
@@ -283,6 +283,109 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'invalid local scope never reaches repository and form stays reusable',
+    (tester) async {
+      final invitationsRepository = MockAdminInvitationRepository(
+        now: () => now,
+      );
+      addTearDown(invitationsRepository.dispose);
+      await pumpApp(tester, invitationRepository: invitationsRepository);
+      await openInvitations(tester);
+      await tester.tap(find.byKey(const Key('invite-admin-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('invitation-display-name')),
+        'Responsable récupérable',
+      );
+      await tester.enterText(
+        find.byKey(const Key('invitation-email')),
+        'recuperable@mobsante.fr',
+      );
+      await tester.pump();
+
+      final submitFinder = find.byKey(const Key('create-admin-invitation'));
+      final submitButton = tester.widget<FilledButton>(submitFinder);
+      expect(submitButton.onPressed, isNotNull);
+      submitButton.onPressed!();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.text(
+          'Un responsable de site doit être associé à au moins un centre.',
+        ),
+        findsOneWidget,
+      );
+      expect(await invitationsRepository.watchInvitations().first, isEmpty);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+
+      final location = places.where((place) => place.isOperational).first;
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('location-search')),
+        250,
+        scrollable: _scrollableInside(const Key('admin-invitation-form')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key('invitation-location-${location.id}')));
+      await tester.pump();
+      await tester.tap(submitFinder);
+      await tester.pumpAndSettle();
+
+      expect(
+        (await invitationsRepository.watchInvitations().first)
+            .single
+            .locationIds,
+        {location.id},
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('server creation error resets double-submit protection', (
+    tester,
+  ) async {
+    final invitationsRepository = _CreateInvitationRepository(now);
+    await pumpApp(tester, invitationRepository: invitationsRepository);
+    await openInvitations(tester);
+    await tester.tap(find.byKey(const Key('invite-admin-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('invitation-display-name')),
+      'Coordination test',
+    );
+    await tester.enterText(
+      find.byKey(const Key('invitation-email')),
+      'coord-test@mobsante.fr',
+    );
+    await tester.tap(find.byKey(const Key('invitation-role')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.pumpAndSettle();
+
+    final submitFinder = find.byKey(const Key('create-admin-invitation'));
+    await tester.tap(submitFinder);
+    await tester.pump();
+    expect(invitationsRepository.calls, 1);
+    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+    await tester.tap(submitFinder);
+    expect(invitationsRepository.calls, 1);
+
+    invitationsRepository.failFirst();
+    await tester.pumpAndSettle();
+    expect(
+      find.text('L’invitation n’a pas pu être créée. Réessayez.'),
+      findsOneWidget,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+
+    await tester.tap(submitFinder);
+    await tester.pumpAndSettle();
+    expect(invitationsRepository.calls, 2);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('role and validity choices keep their existing behavior', (
     tester,
@@ -534,4 +637,47 @@ class _ProvisionInvitationRepository implements AdminInvitationRepository {
   @override
   Future<AdminInvitation?> getInvitation(String invitationId) async =>
       invitation;
+}
+
+class _CreateInvitationRepository implements AdminInvitationRepository {
+  _CreateInvitationRepository(this.now);
+
+  final DateTime now;
+  final Completer<AdminInvitation> _firstCreation = Completer();
+  int calls = 0;
+
+  void failFirst() => _firstCreation.completeError(StateError('server failed'));
+
+  @override
+  Future<AdminInvitation> createInvitation(AdminInvitationDraft draft) {
+    calls++;
+    if (calls == 1) return _firstCreation.future;
+    draft.validate(now: now);
+    return Future.value(
+      AdminInvitation(
+        id: 'created-after-retry',
+        email: draft.email,
+        displayName: draft.displayName,
+        role: draft.role,
+        locationIds: Set<String>.unmodifiable(draft.locationIds),
+        createdBy: 'coord',
+        createdAt: now,
+        expiresAt: draft.expiresAt,
+        status: AdminInvitationStatus.pending,
+      ),
+    );
+  }
+
+  @override
+  Stream<List<AdminInvitation>> watchInvitations() => Stream.value(const []);
+
+  @override
+  Future<void> cancelInvitation(String invitationId) async {}
+
+  @override
+  Future<AdminInvitation?> getInvitation(String invitationId) async => null;
+
+  @override
+  Future<AdminProvisioningResult> provisionInvitation(String invitationId) =>
+      throw UnimplementedError();
 }

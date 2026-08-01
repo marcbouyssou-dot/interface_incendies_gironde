@@ -475,11 +475,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
         r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
       ).hasMatch(_emailController.text.trim());
 
-  bool get _canSubmit =>
-      !_submitting &&
-      _hasValidIdentity &&
-      (_role == AdminInvitationDraft.coordinatorRole ||
-          _selectedLocations.isNotEmpty);
+  bool get _canSubmit => !_submitting && _hasValidIdentity;
 
   @override
   void dispose() {
@@ -590,25 +586,29 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     if (_formKey.currentState?.validate() != true) return;
-    if (_role == AdminInvitationDraft.siteManagerRole &&
-        _selectedLocations.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sélectionnez au moins un centre.')),
+    final now = DateTime.now();
+    late final AdminInvitationDraft draft;
+    try {
+      draft = AdminInvitationDraft(
+        email: _emailController.text,
+        displayName: _nameController.text,
+        role: _role,
+        locationIds: _selectedLocations,
+        expiresAt: now.add(Duration(days: _expirationDays)),
       );
+      draft.validate(now: now);
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_messageFor(error))));
       return;
     }
     setState(() => _submitting = true);
     try {
-      final invitation = await widget.repository.createInvitation(
-        AdminInvitationDraft(
-          email: _emailController.text,
-          displayName: _nameController.text,
-          role: _role,
-          locationIds: _selectedLocations,
-          expiresAt: DateTime.now().add(Duration(days: _expirationDays)),
-        ),
-      );
+      final invitation = await widget.repository.createInvitation(draft);
       if (mounted) Navigator.pop(context, invitation);
     } on Object catch (error) {
       if (!mounted) return;
