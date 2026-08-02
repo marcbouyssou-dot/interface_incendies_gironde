@@ -9,6 +9,11 @@ import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import 'create_need_screen.dart';
 
+class _MissionFilterMemory {
+  static int status = 0;
+  static TerritorialGroup? group;
+}
+
 class SlotsScreen extends StatefulWidget {
   const SlotsScreen({super.key});
 
@@ -17,8 +22,8 @@ class SlotsScreen extends StatefulWidget {
 }
 
 class _SlotsScreenState extends State<SlotsScreen> {
-  int _filter = 0;
-  TerritorialGroup? _group;
+  int _filter = _MissionFilterMemory.status;
+  TerritorialGroup? _group = _MissionFilterMemory.group;
   String? _editingMissionId;
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
@@ -113,8 +118,11 @@ class _SlotsScreenState extends State<SlotsScreen> {
                 const SizedBox(height: 24),
                 TerritorialGroupFilter(
                   key: const Key('slots-territorial-filter'),
+                  fieldKey: ValueKey(
+                    'slots-territorial-${_group?.name ?? 'all'}',
+                  ),
                   value: _group,
-                  onChanged: (group) => setState(() => _group = group),
+                  onChanged: _selectGroup,
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -143,6 +151,15 @@ class _SlotsScreenState extends State<SlotsScreen> {
                         onTap: () => _select(3),
                       ),
                     ],
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    key: const Key('reset-mission-filters'),
+                    onPressed: _hasActiveFilters ? _resetFilters : null,
+                    icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                    label: const Text('Réinitialiser les filtres'),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -182,7 +199,27 @@ class _SlotsScreenState extends State<SlotsScreen> {
     );
   }
 
-  void _select(int index) => setState(() => _filter = index);
+  bool get _hasActiveFilters => _filter != 0 || _group != null;
+
+  void _select(int index) {
+    _MissionFilterMemory.status = index;
+    setState(() => _filter = index);
+  }
+
+  void _selectGroup(TerritorialGroup? group) {
+    _MissionFilterMemory.group = group;
+    setState(() => _group = group);
+  }
+
+  void _resetFilters() {
+    if (!_hasActiveFilters) return;
+    _MissionFilterMemory.status = 0;
+    _MissionFilterMemory.group = null;
+    setState(() {
+      _filter = 0;
+      _group = null;
+    });
+  }
 
   Future<void> _openMissionEditor(
     BuildContext context,

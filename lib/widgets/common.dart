@@ -212,14 +212,17 @@ class TerritorialGroupFilter extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.fieldKey,
   });
 
   final TerritorialGroup? value;
   final ValueChanged<TerritorialGroup?> onChanged;
+  final Key? fieldKey;
 
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
+      key: fieldKey,
       initialValue: value?.name ?? 'all',
       isExpanded: true,
       decoration: const InputDecoration(
