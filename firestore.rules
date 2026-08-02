@@ -470,6 +470,13 @@ service cloud.firestore {
       return /databases/$(database)/documents/volunteers/$(uid);
     }
 
+    function hasParticipationProfessionalIdentifier(data) {
+      return 'professionalIdType' in data
+        && 'professionalIdValue' in data
+        && data.professionalIdType in ['rpps', 'ordinal']
+        && isNonBlankCanonicalText(data.professionalIdValue);
+    }
+
     function expectedStatus(data) {
       let required = totalRequired(data);
       let registered = totalRegistered(data);
@@ -589,6 +596,9 @@ service cloud.firestore {
           == request.auth.uid
         && getAfter(volunteerPath(request.auth.uid)).data.profession
           == profession
+        && hasParticipationProfessionalIdentifier(
+          getAfter(volunteerPath(request.auth.uid)).data
+        )
         && exists(/databases/$(database)/documents/missions/$(missionId))
         && existsAfter(
           /databases/$(database)/documents/missions/$(missionId)
