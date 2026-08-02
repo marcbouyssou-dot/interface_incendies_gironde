@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
 import '../models/need.dart';
+import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
@@ -242,15 +243,13 @@ class _CrisisHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final required = missions.fold(0, (sum, item) => sum + item.requiredPeople);
-    final mobilized = missions.fold(
-      0,
-      (sum, item) => sum + item.registeredPeople,
+    final totalQuotas = ProfessionQuotas.aggregate(
+      missions.map((mission) => mission.professionQuotas),
     );
+    final required = totalQuotas.requiredTotal;
+    final mobilized = totalQuotas.registeredTotal;
     final remaining = (required - mobilized).clamp(0, required);
-    final coverage = required == 0
-        ? 0.0
-        : (mobilized / required).clamp(0, 1).toDouble();
+    final coverage = required == 0 ? 0.0 : totalQuotas.coverage;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

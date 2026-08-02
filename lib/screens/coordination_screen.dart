@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/profession_quotas.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
@@ -137,18 +138,13 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     final complete = visibleMissions
         .where((need) => need.status == NeedStatus.complete)
         .length;
-    final required = visibleMissions.fold(
-      0,
-      (sum, item) => sum + item.requiredPeople,
+    final totalQuotas = ProfessionQuotas.aggregate(
+      visibleMissions.map((mission) => mission.professionQuotas),
     );
-    final mobilized = visibleMissions.fold(
-      0,
-      (sum, item) => sum + item.registeredPeople,
-    );
+    final required = totalQuotas.requiredTotal;
+    final mobilized = totalQuotas.registeredTotal;
     final remaining = (required - mobilized).clamp(0, required);
-    final coverage = required == 0
-        ? 0.0
-        : (mobilized / required).clamp(0, 1).toDouble();
+    final coverage = required == 0 ? 0.0 : totalQuotas.coverage;
     return PageContainer(
       child: CustomScrollView(
         key: const PageStorageKey('coordination'),

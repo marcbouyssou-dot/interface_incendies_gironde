@@ -13,6 +13,7 @@ class ProfessionQuota {
   final int registered;
 
   int get missing => (required - registered).clamp(0, required);
+  bool get hasActivity => required > 0 || registered > 0;
   bool get isCovered => registered >= required;
   double get coverage =>
       required == 0 ? 1 : (registered / required).clamp(0, 1).toDouble();
@@ -64,6 +65,26 @@ class ProfessionQuotas {
       registeredByProfession: {
         HealthProfessionId.physiotherapist: registeredMk,
         HealthProfessionId.podiatrist: registeredPp,
+      },
+    );
+  }
+
+  factory ProfessionQuotas.aggregate(Iterable<ProfessionQuotas> sources) {
+    final quotas = sources.toList(growable: false);
+    return ProfessionQuotas.fromMaps(
+      requiredByProfession: {
+        for (final id in HealthProfessionId.canonical)
+          id: quotas.fold(
+            0,
+            (total, source) => total + source.quotaFor(id).required,
+          ),
+      },
+      registeredByProfession: {
+        for (final id in HealthProfessionId.canonical)
+          id: quotas.fold(
+            0,
+            (total, source) => total + source.quotaFor(id).registered,
+          ),
       },
     );
   }

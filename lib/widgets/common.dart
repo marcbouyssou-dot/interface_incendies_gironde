@@ -473,7 +473,7 @@ class _ProfessionQuotaRows extends StatelessWidget {
     final visibleProfessions = HealthProfessionRegistry.values
         .where(
           (profession) =>
-              need.professionQuotas.quotaFor(profession.id).required > 0,
+              need.professionQuotas.quotaFor(profession.id).hasActivity,
         )
         .toList(growable: false);
     return Column(
