@@ -27,6 +27,7 @@ void main() {
         'podiatrist': 2,
         'physician': 1,
         'nurse': 2,
+        'veterinarian': 2,
         'other_health_professional': 3,
       },
       registeredByProfession: const {
@@ -34,6 +35,7 @@ void main() {
         'podiatrist': 1,
         'physician': 0,
         'nurse': 2,
+        'veterinarian': 1,
         'other_health_professional': 1,
       },
     ),
@@ -73,9 +75,10 @@ void main() {
     expect(find.text('Pédicure-podologue'), findsOneWidget);
     expect(find.text('Médecin'), findsOneWidget);
     expect(find.text('Infirmier'), findsOneWidget);
+    expect(find.text('Vétérinaire'), findsOneWidget);
     expect(find.text('Autre professionnel de santé'), findsOneWidget);
     expect(find.text('3 / 4'), findsOneWidget);
-    expect(find.text('1 / 2'), findsOneWidget);
+    expect(find.text('1 / 2'), findsNWidgets(2));
     expect(find.text('0 / 1'), findsOneWidget);
     expect(find.text('2 / 2'), findsOneWidget);
     expect(find.text('1 / 3'), findsOneWidget);
@@ -127,6 +130,7 @@ void main() {
     expect(find.text('Pédicure-podologue'), findsNothing);
     expect(find.text('Médecin'), findsNothing);
     expect(find.text('Infirmier'), findsNothing);
+    expect(find.text('Vétérinaire'), findsNothing);
     expect(find.text('Autre professionnel de santé'), findsNothing);
   });
 }

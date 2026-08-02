@@ -5,6 +5,7 @@ const PROFESSIONS = Object.freeze([
   'podiatrist',
   'physician',
   'nurse',
+  'veterinarian',
   'other_health_professional',
 ]);
 const PROFESSION_ALIASES = Object.freeze({
@@ -15,6 +16,7 @@ const PROFESSION_ALIASES = Object.freeze({
   physician: 'physician',
   doctor: 'physician',
   nurse: 'nurse',
+  veterinarian: 'veterinarian',
   other_health_professional: 'other_health_professional',
   otherHealthProfessional: 'other_health_professional',
 });

@@ -13,11 +13,12 @@ void main() {
       expect(VolunteerProfession.pp.label, 'Pédicure-podologue');
       expect(VolunteerProfession.doctor.label, 'Médecin');
       expect(VolunteerProfession.nurse.label, 'Infirmier / Infirmière');
+      expect(VolunteerProfession.veterinarian.label, 'Vétérinaire');
       expect(
         VolunteerProfession.otherHealthProfessional.label,
         'Autre professionnel de santé',
       );
-      expect(VolunteerProfession.values, hasLength(5));
+      expect(VolunteerProfession.values, hasLength(6));
     },
   );
 

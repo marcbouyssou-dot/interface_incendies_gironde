@@ -37,6 +37,7 @@ void main() {
           'podiatrist': 0,
           'physician': 0,
           'nurse': 0,
+          'veterinarian': 0,
           'other_health_professional': 0,
         },
         equipment: const ['Serviettes'],

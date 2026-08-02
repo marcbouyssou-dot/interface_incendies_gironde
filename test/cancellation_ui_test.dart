@@ -27,8 +27,8 @@ void main() {
     createdBy: 'mock-coordinator',
   );
 
-  CoordinationNeed fiveProfessionMission() => CoordinationNeed(
-    id: 'five-profession-mission',
+  CoordinationNeed sixProfessionMission() => CoordinationNeed(
+    id: 'six-profession-mission',
     locationId: 'site-a',
     place: 'Site A',
     group: TerritorialGroup.medoc,
@@ -44,6 +44,7 @@ void main() {
         'podiatrist': 1,
         'physician': 1,
         'nurse': 1,
+        'veterinarian': 1,
         'other_health_professional': 1,
       },
       registeredByProfession: const {},
@@ -81,7 +82,7 @@ void main() {
     await tester.tap(find.text('RPPS').last);
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Numéro RPPS'),
+      find.byKey(const Key('professional-id-value')),
       '10123456789',
     );
     await tester.ensureVisible(find.byKey(const Key('cpts-choice')));
@@ -99,6 +100,33 @@ void main() {
       'CPTS Médoc',
     );
   }
+
+  Future<void> openEngagementForm(WidgetTester tester) async {
+    final action = find.text('❤️ JE M’ENGAGE');
+    final missionScroll = find
+        .descendant(
+          of: find.byType(CustomScrollView).first,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(action, 300, scrollable: missionScroll);
+    await tester.pumpAndSettle();
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> selectNavigationTab(WidgetTester tester, int index) async {
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    navigation.onDestinationSelected?.call(index);
+    await tester.pumpAndSettle();
+  }
+
+  Finder pageScroll() => find
+      .descendant(
+        of: find.byType(CustomScrollView).first,
+        matching: find.byType(Scrollable),
+      )
+      .first;
 
   testWidgets('new engagement shows confirmed state and disengagement', (
     tester,
@@ -269,19 +297,7 @@ void main() {
       initialLocations: const [],
     );
     await pumpApp(tester, repository);
-    final missionScroll = find
-        .descendant(
-          of: find.byType(CustomScrollView).first,
-          matching: find.byType(Scrollable),
-        )
-        .first;
-    await tester.scrollUntilVisible(
-      find.text('❤️ JE M’ENGAGE'),
-      300,
-      scrollable: missionScroll,
-    );
-    await tester.tap(find.text('❤️ JE M’ENGAGE'));
-    await tester.pumpAndSettle();
+    await openEngagementForm(tester);
 
     final mkTile = tester.widget<RadioListTile<VolunteerProfession>>(
       find.widgetWithText(
@@ -297,20 +313,27 @@ void main() {
     );
     expect(mkTile.enabled, isTrue);
     expect(ppTile.enabled, isFalse);
-    expect(find.text('Aucun besoin disponible'), findsNWidgets(4));
+    expect(find.text('Aucun besoin disponible'), findsNWidgets(5));
   });
 
-  testWidgets('all five professions are selectable without iPhone overflow', (
+  testWidgets('all six professions are selectable without iPhone overflow', (
     tester,
   ) async {
     final repository = MockCoordinationRepository(
-      initialMissions: [fiveProfessionMission()],
+      initialMissions: [sixProfessionMission()],
       initialLocations: const [],
     );
     await pumpApp(tester, repository);
-    await tester.drag(
-      find.byType(CustomScrollView).first,
-      const Offset(0, -400),
+    final missionScroll = find
+        .descendant(
+          of: find.byType(CustomScrollView).first,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(
+      find.text('❤️ JE M’ENGAGE'),
+      300,
+      scrollable: missionScroll,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('❤️ JE M’ENGAGE'));
@@ -321,6 +344,7 @@ void main() {
       'Pédicure-podologue',
       'Médecin',
       'Infirmier / Infirmière',
+      'Vétérinaire',
       'Autre professionnel de santé',
     ]) {
       expect(
@@ -337,6 +361,8 @@ void main() {
       VolunteerProfession.pp: ProfessionalEquipmentId.adaptedSeat,
       VolunteerProfession.doctor: ProfessionalEquipmentId.stethoscope,
       VolunteerProfession.nurse: ProfessionalEquipmentId.dressingEquipment,
+      VolunteerProfession.veterinarian:
+          ProfessionalEquipmentId.veterinaryExaminationKit,
       VolunteerProfession.otherHealthProfessional:
           ProfessionalEquipmentId.professionSpecificEquipment,
     };
@@ -385,9 +411,7 @@ void main() {
       },
     );
     await pumpApp(tester, repository);
-    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
-    await tester.tap(find.text('❤️ JE M’ENGAGE'));
-    await tester.pumpAndSettle();
+    await openEngagementForm(tester);
 
     expect(find.text('Alice Martin'), findsOneWidget);
     expect(find.text('Masseur-kinésithérapeute'), findsAtLeastNWidgets(1));
@@ -408,9 +432,7 @@ void main() {
     );
     expect(
       tester
-          .widget<TextFormField>(
-            find.widgetWithText(TextFormField, 'Numéro RPPS'),
-          )
+          .widget<TextFormField>(find.byKey(const Key('professional-id-value')))
           .controller
           ?.text,
       '10123456789',
@@ -441,9 +463,7 @@ void main() {
       initialLocations: const [],
     );
     await pumpApp(tester, repository);
-    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
-    await tester.tap(find.text('❤️ JE M’ENGAGE'));
-    await tester.pumpAndSettle();
+    await openEngagementForm(tester);
 
     expect(find.text('Aucun identifiant'), findsOneWidget);
     expect(find.text('Aucune'), findsOneWidget);
@@ -479,7 +499,7 @@ void main() {
     'profession change preserves incompatible and free historical equipment',
     (tester) async {
       final repository = MockCoordinationRepository(
-        initialMissions: [fiveProfessionMission()],
+        initialMissions: [sixProfessionMission()],
         initialLocations: const [],
         initialProfiles: const {
           'mock-volunteer': VolunteerProfile(
@@ -496,14 +516,8 @@ void main() {
         },
       );
       await pumpApp(tester, repository);
-      await tester.drag(
-        find.byType(CustomScrollView).first,
-        const Offset(0, -500),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('❤️ JE M’ENGAGE'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Modifier mes informations'));
+      await openEngagementForm(tester);
+      await tester.tap(find.text('Compléter mon profil'));
       await tester.pumpAndSettle();
 
       final doctor = find.byKey(const Key('profession-physician'));
@@ -568,17 +582,11 @@ void main() {
     'profession-specific equipment requests details without iPhone overflow',
     (tester) async {
       final repository = MockCoordinationRepository(
-        initialMissions: [fiveProfessionMission()],
+        initialMissions: [sixProfessionMission()],
         initialLocations: const [],
       );
       await pumpApp(tester, repository);
-      await tester.drag(
-        find.byType(CustomScrollView).first,
-        const Offset(0, -500),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('❤️ JE M’ENGAGE'));
-      await tester.pumpAndSettle();
+      await openEngagementForm(tester);
 
       final otherProfession = find.byKey(
         const Key('profession-other_health_professional'),
@@ -611,9 +619,7 @@ void main() {
       completion: completion,
     );
     await pumpApp(tester, repository);
-    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
-    await tester.tap(find.text('❤️ JE M’ENGAGE'));
-    await tester.pumpAndSettle();
+    await openEngagementForm(tester);
     await tester.enterText(find.widgetWithText(TextFormField, 'Prénom'), 'A');
     await tester.enterText(find.widgetWithText(TextFormField, 'Nom'), 'B');
     await tester.enterText(
@@ -644,9 +650,7 @@ void main() {
       result: EngagementCreationResult.alreadyConfirmed,
     );
     await pumpApp(tester, repository);
-    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE'));
-    await tester.tap(find.text('❤️ JE M’ENGAGE'));
-    await tester.pumpAndSettle();
+    await openEngagementForm(tester);
     await tester.enterText(find.widgetWithText(TextFormField, 'Prénom'), 'A');
     await tester.enterText(find.widgetWithText(TextFormField, 'Nom'), 'B');
     await tester.enterText(
@@ -674,18 +678,14 @@ void main() {
     );
     await pumpApp(tester, repository);
     expect(find.text('Annuler ce besoin'), findsNothing);
-    await tester.tap(find.text('Situation').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 2);
     await tester.scrollUntilVisible(
-      find.text('Annuler ce besoin').first,
+      find.text('Annuler ce besoin'),
       200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.drag(
-      find.byType(CustomScrollView).first,
-      const Offset(0, -120),
+      scrollable: pageScroll(),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Annuler ce besoin').first);
     await tester.tap(find.text('Annuler ce besoin').first);
     await tester.pumpAndSettle();
     expect(find.text('Annuler ce besoin ?'), findsOneWidget);
@@ -713,14 +713,11 @@ void main() {
       initialEngagements: const [engagement],
     );
     await pumpApp(tester, repository);
-    await tester.tap(find.text('Situation').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 2);
     final menu = find.byKey(const Key('engagement-menu-ui-mission_volunteer'));
-    await tester.scrollUntilVisible(
-      menu,
-      200,
-      scrollable: find.byType(Scrollable).last,
-    );
+    await tester.scrollUntilVisible(menu, 200, scrollable: pageScroll());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(menu);
     await tester.tap(menu);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Confirmer').last);
@@ -747,8 +744,7 @@ void main() {
       ),
     );
     await pumpApp(tester, unauthorized);
-    await tester.tap(find.text('Situation').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 2);
     expect(find.text('Annuler ce besoin'), findsNothing);
 
     final authorized = MockCoordinationRepository(
@@ -763,11 +759,9 @@ void main() {
     );
     await tester.pumpWidget(FireCoordinationApp(repository: authorized));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Missions').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 0);
     expect(find.text('Annuler ce besoin'), findsNothing);
-    await tester.tap(find.text('Situation').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 2);
     expect(find.text('Annuler ce besoin'), findsWidgets);
   });
 }

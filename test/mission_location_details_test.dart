@@ -82,10 +82,8 @@ void main() {
     expect(find.text('Référent : Camille Martin'), findsOneWidget);
     expect(find.text('06 12 34 56 78'), findsOneWidget);
     expect(find.text('Itinéraire'), findsOneWidget);
-    expect(
-      find.text('Table de massage • Bottes de pressothérapie'),
-      findsOneWidget,
-    );
+    expect(find.text('Table de massage'), findsOneWidget);
+    expect(find.text('Bottes de pressothérapie'), findsOneWidget);
     expect(find.byIcon(Icons.fire_truck_rounded), findsNothing);
     expect(find.text('Récupération pompiers'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -118,7 +116,20 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Situation').last);
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    navigation.onDestinationSelected?.call(2);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('10 rue du Test, 33000 Bordeaux, France'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(CustomScrollView).first,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('10 rue du Test, 33000 Bordeaux, France'), findsOneWidget);

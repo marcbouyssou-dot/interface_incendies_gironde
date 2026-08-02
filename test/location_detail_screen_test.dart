@@ -205,14 +205,25 @@ void main() {
     expect(find.text('Adresse à renseigner'), findsNothing);
     expect(find.text('Voir le lieu'), findsWidgets);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('place-card-site-a')),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(CustomScrollView).first,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('place-card-site-a')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-detail-screen')), findsOneWidget);
     expect(repository.missionFactories, 1);
 
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('place-card-site-a')), findsOneWidget);
+    expect(find.text('10 rue du Test, 33000 Bordeaux, France'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

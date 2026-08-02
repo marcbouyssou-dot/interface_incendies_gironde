@@ -142,6 +142,7 @@ void main() {
       'podiatrist': 0,
       'physician': 2,
       'nurse': 1,
+      'veterinarian': 0,
       'other_health_professional': 0,
     });
     expect(created.requiredPhysiotherapists, 0);
@@ -1295,8 +1296,12 @@ void main() {
         lastName: 'Martin',
         phone: '0600000000',
         email: 'alice@example.fr',
-        professionalIdType: ProfessionalIdType.none,
-        professionalIdValue: '',
+        professionalIdType: profession == VolunteerProfession.veterinarian
+            ? ProfessionalIdType.ordinal
+            : ProfessionalIdType.rpps,
+        professionalIdValue: profession == VolunteerProfession.veterinarian
+            ? 'VET-33001'
+            : '10123456789',
         profession: profession,
       );
 

@@ -13,6 +13,7 @@ const professions = [
   'podiatrist',
   'physician',
   'nurse',
+  'veterinarian',
   'other_health_professional',
 ];
 
@@ -100,7 +101,7 @@ function assertCode(action, code) {
   });
 }
 
-test('strict request validation accepts the five canonical quotas', () => {
+test('strict request validation accepts the six canonical quotas', () => {
   const value = validateMissionUpdateRequest(request());
   assert.deepEqual(value.requiredByProfession, quotas({
     physiotherapist: 2,
@@ -115,12 +116,43 @@ test('strict request validation refuses malformed schedules and payloads', () =>
     {...request(), unknown: true},
     request({endAtMillis: request().startAtMillis}),
     request({requiredByProfession: {physiotherapist: 1}}),
+    request({requiredByProfession: {
+      ...quotas({physiotherapist: 1}),
+      doctor: 0,
+    }}),
     request({requiredByProfession: quotas({physiotherapist: -1})}),
     request({requiredByProfession: quotas()}),
     request({equipment: ['Tables', 'Tables']}),
   ]) {
     assertCode(() => validateMissionUpdateRequest(value), 'invalid-argument');
   }
+});
+
+test('veterinarian quotas and counters are validated and preserved', () => {
+  const value = mutation({
+    request: request({
+      requiredByProfession: quotas({veterinarian: 2}),
+    }),
+    mission: mission({
+      registeredByProfession: quotas({veterinarian: 1}),
+      registeredMk: 0,
+    }),
+    engagements: [{profession: 'veterinarian', status: 'confirmed'}],
+  });
+  assert.equal(value.fields.requiredByProfession.veterinarian, 2);
+  assert.equal(value.fields.registeredByProfession.veterinarian, 1);
+
+  assertCode(
+    () => mutation({
+      request: request({
+        requiredByProfession: quotas({physiotherapist: 1}),
+      }),
+      mission: mission({
+        registeredByProfession: quotas({veterinarian: 1}),
+      }),
+    }),
+    'failed-precondition',
+  );
 });
 
 test('coordinator update preserves counters and only returns editable fields', () => {

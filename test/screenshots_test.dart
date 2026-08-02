@@ -10,7 +10,7 @@ void main() {
     await tester.pumpWidget(const FireCoordinationApp());
     await tester.pumpAndSettle();
     if (tab != null) {
-      await tester.tap(find.text(tab).last);
+      await tester.tap(find.widgetWithText(NavigationDestination, tab));
       await tester.pumpAndSettle();
     }
   }
@@ -18,7 +18,7 @@ void main() {
   final screens = <String, String?>{
     'accueil': null,
     'declarer_besoin': 'Déclarer',
-    'coordination': 'Situation',
+    'coordination': 'Statistiques',
     'lieux': 'Plus',
   };
 

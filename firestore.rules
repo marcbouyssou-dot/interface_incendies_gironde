@@ -147,7 +147,7 @@ service cloud.firestore {
     function validProfession(value) {
       return value in [
         'physiotherapist', 'podiatrist', 'physician', 'nurse',
-        'other_health_professional', 'mk', 'pp', 'doctor',
+        'veterinarian', 'other_health_professional', 'mk', 'pp', 'doctor',
         'otherHealthProfessional'
       ];
     }
@@ -165,27 +165,31 @@ service cloud.firestore {
             ? 'physician'
             : (value == 'nurse'
               ? 'nurse'
-              : (value == 'otherHealthProfessional'
-                    || value == 'other_health_professional'
-                ? 'other_health_professional'
-                : 'invalid'))));
+              : (value == 'veterinarian'
+                ? 'veterinarian'
+                : (value == 'otherHealthProfessional'
+                      || value == 'other_health_professional'
+                  ? 'other_health_professional'
+                  : 'invalid')))));
     }
 
     function validQuotaMap(value) {
       return value is map
         && value.keys().hasOnly([
           'physiotherapist', 'podiatrist', 'physician', 'nurse',
-          'other_health_professional'
+          'veterinarian', 'other_health_professional'
         ])
         && value.get('physiotherapist', 0) is int
         && value.get('podiatrist', 0) is int
         && value.get('physician', 0) is int
         && value.get('nurse', 0) is int
+        && value.get('veterinarian', 0) is int
         && value.get('other_health_professional', 0) is int
         && value.get('physiotherapist', 0) >= 0
         && value.get('podiatrist', 0) >= 0
         && value.get('physician', 0) >= 0
         && value.get('nurse', 0) >= 0
+        && value.get('veterinarian', 0) >= 0
         && value.get('other_health_professional', 0) >= 0;
     }
 
@@ -234,6 +238,8 @@ service cloud.firestore {
           <= data.requiredByProfession.get('physician', 0)
         && data.registeredByProfession.get('nurse', 0)
           <= data.requiredByProfession.get('nurse', 0)
+        && data.registeredByProfession.get('veterinarian', 0)
+          <= data.requiredByProfession.get('veterinarian', 0)
         && data.registeredByProfession.get('other_health_professional', 0)
           <= data.requiredByProfession.get('other_health_professional', 0)
         && data.requiredMk
@@ -291,6 +297,7 @@ service cloud.firestore {
           + data.requiredByProfession.get('podiatrist', 0)
           + data.requiredByProfession.get('physician', 0)
           + data.requiredByProfession.get('nurse', 0)
+          + data.requiredByProfession.get('veterinarian', 0)
           + data.requiredByProfession.get('other_health_professional', 0)
         : data.requiredMk + data.requiredPp;
     }
@@ -301,6 +308,7 @@ service cloud.firestore {
           + data.registeredByProfession.get('podiatrist', 0)
           + data.registeredByProfession.get('physician', 0)
           + data.registeredByProfession.get('nurse', 0)
+          + data.registeredByProfession.get('veterinarian', 0)
           + data.registeredByProfession.get('other_health_professional', 0)
         : data.registeredMk + data.registeredPp;
     }
@@ -331,6 +339,7 @@ service cloud.firestore {
           ? (!('requiredByProfession' in after)
             || (after.requiredByProfession.get('physician', 0) == 0
               && after.requiredByProfession.get('nurse', 0) == 0
+              && after.requiredByProfession.get('veterinarian', 0) == 0
               && after.requiredByProfession
                 .get('other_health_professional', 0) == 0))
           : ('requiredByProfession' in after

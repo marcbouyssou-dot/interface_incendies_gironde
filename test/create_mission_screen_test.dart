@@ -13,6 +13,7 @@ import 'package:interface_incendies_gironde/repositories/mock_responsible_access
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
+import 'package:interface_incendies_gironde/utils/french_date_time.dart';
 
 void main() {
   Future<void> pumpForm(
@@ -114,10 +115,7 @@ void main() {
     await pumpForm(tester, _MissionRepository());
     await chooseDate(tester);
     final today = DateTime.now();
-    final dateLabel =
-        '${today.day.toString().padLeft(2, '0')}/'
-        '${today.month.toString().padLeft(2, '0')}/${today.year}';
-    expect(find.text(dateLabel), findsOneWidget);
+    expect(find.text(FrenchDateTime.date(today)), findsOneWidget);
 
     await chooseTime(tester, const Key('mission-start-time'), '08:00');
     await chooseTime(tester, const Key('mission-end-time'), '12:00');
@@ -131,7 +129,7 @@ void main() {
     await tester.tap(find.byKey(const Key('publish-mission')));
     await tester.pump();
 
-    expect(find.text('Choisissez un lieu'), findsOneWidget);
+    expect(find.text('Choisissez un lieu d’intervention.'), findsOneWidget);
     expect(repository.calls, 0);
   });
 
@@ -144,7 +142,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('Indiquez au moins un professionnel nécessaire'),
+      find.text('Indiquez au moins un professionnel nécessaire.'),
       findsOneWidget,
     );
     expect(repository.calls, 0);
@@ -187,13 +185,15 @@ void main() {
     expect(find.text('Pédicure-podologue'), findsOneWidget);
     expect(find.text('Médecin'), findsOneWidget);
     expect(find.text('Infirmier'), findsOneWidget);
+    expect(find.text('Vétérinaire'), findsOneWidget);
     expect(find.text('Autre professionnel de santé'), findsOneWidget);
-    expect(find.text('0'), findsNWidgets(5));
+    expect(find.text('0'), findsNWidgets(6));
 
     await completeRequiredFields(tester, addQuota: false);
     await addQuota(tester, 'physician');
     await addQuota(tester, 'nurse');
     await addQuota(tester, 'nurse');
+    await addQuota(tester, 'veterinarian');
     await addQuota(tester, 'other_health_professional');
     await revealPublishButton(tester);
     await tester.tap(find.byKey(const Key('publish-mission')));
@@ -205,6 +205,7 @@ void main() {
       'podiatrist': 0,
       'physician': 1,
       'nurse': 2,
+      'veterinarian': 1,
       'other_health_professional': 1,
     });
   });

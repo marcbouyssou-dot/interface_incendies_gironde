@@ -39,6 +39,14 @@ void main() {
       ProfessionalEquipmentId.careEquipment,
       ProfessionalEquipmentId.otherEquipment,
     ]);
+    expect(idsFor(HealthProfessionId.veterinarian), [
+      ProfessionalEquipmentId.veterinaryExaminationKit,
+      ProfessionalEquipmentId.veterinaryCareEquipment,
+      ProfessionalEquipmentId.animalRestraintEquipment,
+      ProfessionalEquipmentId.animalTransportEquipment,
+      ProfessionalEquipmentId.electronicChipReader,
+      ProfessionalEquipmentId.otherVeterinaryEquipment,
+    ]);
     expect(idsFor(HealthProfessionId.otherHealthProfessional), [
       ProfessionalEquipmentId.protectiveEquipment,
       ProfessionalEquipmentId.examinationEquipment,
@@ -78,7 +86,7 @@ void main() {
     );
   });
 
-  test('details are required for both customizable choices', () {
+  test('details are required for every customizable choice', () {
     expect(
       ProfessionalEquipmentRegistry.requiresDetails([
         ProfessionalEquipmentId.otherEquipment,
@@ -88,6 +96,12 @@ void main() {
     expect(
       ProfessionalEquipmentRegistry.requiresDetails([
         ProfessionalEquipmentId.professionSpecificEquipment,
+      ]),
+      isTrue,
+    );
+    expect(
+      ProfessionalEquipmentRegistry.requiresDetails([
+        ProfessionalEquipmentId.otherVeterinaryEquipment,
       ]),
       isTrue,
     );

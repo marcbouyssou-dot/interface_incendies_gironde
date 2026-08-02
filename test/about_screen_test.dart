@@ -131,7 +131,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('about-screen')), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('about-entry')), findsOneWidget);
     expect(tester.takeException(), isNull);

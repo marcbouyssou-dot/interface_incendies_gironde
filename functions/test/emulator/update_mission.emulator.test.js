@@ -36,6 +36,7 @@ const quotas = (physiotherapist = 0, podiatrist = 0) => ({
   podiatrist,
   physician: 0,
   nurse: 0,
+  veterinarian: 0,
   other_health_professional: 0,
 });
 
@@ -157,16 +158,32 @@ test('coordinator updates editable data and preserves identity and counters', as
   const destination = unique('destination');
   await seedLocation(source);
   await seedLocation(destination);
-  const missionId = await seedMission(source);
+  const missionId = await seedMission(source, {
+    requiredByProfession: {
+      ...quotas(2, 1),
+      veterinarian: 2,
+    },
+    registeredByProfession: {
+      ...quotas(1, 0),
+      veterinarian: 1,
+    },
+  });
   const user = await createUser(coordinatorRole());
   const update = await callable(user);
-  await update(updateRequest(missionId, destination));
+  await update(updateRequest(missionId, destination, {
+    requiredByProfession: {
+      ...quotas(3, 1),
+      veterinarian: 2,
+    },
+  }));
   const stored = (await db.collection('missions').doc(missionId).get()).data();
   assert.equal(stored.id, missionId);
   assert.equal(stored.locationId, destination);
   assert.equal(stored.locationName, `Centre ${destination}`);
   assert.equal(stored.registeredMk, 1);
   assert.equal(stored.registeredByProfession.physiotherapist, 1);
+  assert.equal(stored.requiredByProfession.veterinarian, 2);
+  assert.equal(stored.registeredByProfession.veterinarian, 1);
   assert.equal(stored.createdBy, 'original-creator');
   assert.equal(stored.createdAt.toDate().toISOString(),
     '2026-08-01T10:00:00.000Z');

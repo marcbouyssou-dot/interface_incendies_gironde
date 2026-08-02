@@ -21,6 +21,29 @@ void main() {
     active: true,
   );
 
+  Future<void> selectNavigationTab(WidgetTester tester, int index) async {
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    navigation.onDestinationSelected?.call(index);
+    await tester.pump();
+  }
+
+  Future<void> revealSituationContent(
+    WidgetTester tester,
+    Finder target,
+  ) async {
+    await tester.scrollUntilVisible(
+      target,
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(CustomScrollView).first,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pump();
+  }
+
   Future<_ControlledSituationRepository> pumpSituation(
     WidgetTester tester, {
     ResponsibleAccess? initialAccess,
@@ -38,7 +61,7 @@ void main() {
     addTearDown(repository.disposeAccess);
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Situation').last);
+    await selectNavigationTab(tester, 2);
     for (
       var attempt = 0;
       attempt < 5 && repository.accessFactories == 0;
@@ -50,6 +73,10 @@ void main() {
     if (emitInitialAccess) {
       repository.emit(initialAccess);
       await tester.pumpAndSettle();
+      if (initialAccess?.hasPrivilegedAccess == true &&
+          initialAccess?.uid == createdBy) {
+        await revealSituationContent(tester, find.text('Annuler ce besoin'));
+      }
     }
     return repository;
   }
@@ -92,7 +119,10 @@ void main() {
         initialAccess: coordinator,
       );
 
-      expect(find.text('SITUATION'), findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        2,
+      );
       expect(find.text('Annuler ce besoin'), findsOneWidget);
       expect(
         find.byKey(const Key('engagement-menu-ui-mission_volunteer')),
@@ -108,9 +138,13 @@ void main() {
 
       repository.emit(coordinator);
       await pumpAccessUpdate(tester);
+      await revealSituationContent(tester, find.text('Annuler ce besoin'));
 
       expect(find.text('Accès temporairement indisponible'), findsNothing);
-      expect(find.text('SITUATION'), findsOneWidget);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        2,
+      );
       expect(find.text('Annuler ce besoin'), findsOneWidget);
       expect(
         find.byKey(const Key('engagement-menu-ui-mission_volunteer')),
@@ -181,6 +215,7 @@ void main() {
 
     repository.emit(coordinator);
     await pumpAccessUpdate(tester);
+    await revealSituationContent(tester, find.text('Annuler ce besoin'));
     expect(find.text('Annuler ce besoin'), findsOneWidget);
 
     repository.emit(null);
@@ -223,9 +258,8 @@ void main() {
     await pumpAccessUpdate(tester);
     expect(find.text('Accès temporairement indisponible'), findsOneWidget);
 
-    await tester.tap(find.text('Plus').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Situation').last);
+    await selectNavigationTab(tester, 3);
+    await selectNavigationTab(tester, 2);
     await tester.pump();
 
     expect(find.text('Accès temporairement indisponible'), findsOneWidget);
@@ -233,6 +267,7 @@ void main() {
 
     repository.emit(coordinator);
     await pumpAccessUpdate(tester);
+    await revealSituationContent(tester, find.text('Annuler ce besoin'));
     expect(find.text('Accès temporairement indisponible'), findsNothing);
     expect(find.text('Annuler ce besoin'), findsOneWidget);
   });
@@ -284,10 +319,14 @@ void main() {
       repository.emitLocationsError(locationError);
     }
     await tester.pump();
-    await tester.tap(find.text('Situation').last);
-    await tester.pump();
+    await selectNavigationTab(tester, 2);
     repository.emitAccess(access);
     await pumpAccessUpdate(tester);
+    if (missionError == null &&
+        locationError == null &&
+        access?.hasPrivilegedAccess == true) {
+      await revealSituationContent(tester, find.text('Annuler ce besoin'));
+    }
     return repository;
   }
 
@@ -331,6 +370,7 @@ void main() {
 
     repository.emitMissions([_situationMission('new', 'Nouvelle mission')]);
     await pumpAccessUpdate(tester);
+    await revealSituationContent(tester, find.byKey(const ValueKey('new')));
 
     expect(find.text('Situation temporairement indisponible'), findsNothing);
     expect(find.text('Nouvelle mission'), findsOneWidget);
@@ -368,6 +408,7 @@ void main() {
       _situationLocation('Centre actualisé', type: ResponsePlaceType.redCross),
     ]);
     await pumpAccessUpdate(tester);
+    await revealSituationContent(tester, find.text('Croix-Rouge'));
 
     expect(find.text('Informations des centres indisponibles'), findsNothing);
     expect(find.text('Croix-Rouge'), findsOneWidget);
@@ -396,9 +437,8 @@ void main() {
     repository.emitMissionsError(StateError('missions unavailable'));
     await pumpAccessUpdate(tester);
 
-    await tester.tap(find.text('Plus').last);
-    await tester.pump();
-    await tester.tap(find.text('Situation').last);
+    await selectNavigationTab(tester, 3);
+    await selectNavigationTab(tester, 2);
     await tester.pump();
 
     expect(find.text('Situation temporairement indisponible'), findsOneWidget);
@@ -406,6 +446,7 @@ void main() {
 
     repository.emitMissions([_situationMission('new', 'Nouvelle mission')]);
     await pumpAccessUpdate(tester);
+    await revealSituationContent(tester, find.byKey(const ValueKey('new')));
     expect(find.text('Nouvelle mission'), findsOneWidget);
   });
 
@@ -433,6 +474,7 @@ void main() {
       _situationLocation('Centre manager actualisé'),
     ]);
     await pumpAccessUpdate(tester);
+    await revealSituationContent(tester, find.text('Annuler ce besoin'));
     expect(find.text('Annuler ce besoin'), findsOneWidget);
     expect(find.text('Ancien centre'), findsNothing);
   });

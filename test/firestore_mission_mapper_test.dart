@@ -40,6 +40,7 @@ void main() {
       'podiatrist': 1,
       'physician': 0,
       'nurse': 0,
+      'veterinarian': 0,
       'other_health_professional': 0,
     });
     expect(data['registeredByProfession'], {
@@ -47,6 +48,7 @@ void main() {
       'podiatrist': 0,
       'physician': 0,
       'nurse': 0,
+      'veterinarian': 0,
       'other_health_professional': 0,
     });
     expect(data['isActive'], isTrue);
@@ -70,6 +72,7 @@ void main() {
         'podiatrist': 1,
         'physician': 0,
         'nurse': 0,
+        'veterinarian': 0,
         'other_health_professional': 0,
       },
       equipment: const ['Tables'],
@@ -126,7 +129,8 @@ void main() {
         'podiatrist': 1,
         'physician': 3,
         'nurse': 4,
-        'other_health_professional': 5,
+        'veterinarian': 5,
+        'other_health_professional': 6,
       },
       equipment: const [],
       details: '',
@@ -145,6 +149,7 @@ void main() {
       'podiatrist': 0,
       'physician': 0,
       'nurse': 0,
+      'veterinarian': 0,
       'other_health_professional': 0,
     });
     expect(data['requiredMk'], 2);

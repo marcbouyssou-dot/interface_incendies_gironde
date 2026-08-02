@@ -18,6 +18,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> selectNavigationTab(WidgetTester tester, int index) async {
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    navigation.onDestinationSelected?.call(index);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets(
     'ready application enters the shell without a fixed splash delay',
     (tester) async {
@@ -45,7 +51,7 @@ void main() {
     tester,
   ) async {
     await pumpIPhone(tester);
-    expect(find.text('MobSanté'), findsOneWidget);
+    expect(find.text('MOBSANTÉ'), findsOneWidget);
     expect(find.text('Incendies Gironde'), findsOneWidget);
     expect(find.text('64 % de couverture'), findsOneWidget);
     expect(find.text('MÉRIGNAC'), findsOneWidget);
@@ -97,9 +103,9 @@ void main() {
     expect(find.text('Téléphone'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Email (facultatif)'), findsNothing);
-    expect(find.text('Identifiant professionnel'), findsOneWidget);
+    expect(find.text('Identifiant professionnel *'), findsOneWidget);
     expect(find.text('Aucun identifiant'), findsOneWidget);
-    expect(find.text('Numéro RPPS'), findsNothing);
+    expect(find.text('Numéro RPPS *'), findsNothing);
     expect(find.text('CPTS'), findsOneWidget);
     expect(find.text('Aucune'), findsOneWidget);
     expect(find.text('Identifiant CPTS'), findsNothing);
@@ -117,9 +123,15 @@ void main() {
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navigation.destinations, hasLength(4));
 
-    for (final label in ['Déclarer', 'Situation', 'Plus', 'Missions']) {
-      await tester.tap(find.text(label).last);
-      await tester.pumpAndSettle();
+    for (final entry in [
+      (1, 'Déclarer'),
+      (2, 'Statistiques'),
+      (3, 'Plus'),
+      (0, 'Missions'),
+    ]) {
+      final (index, label) = entry;
+      expect(find.widgetWithText(NavigationDestination, label), findsOneWidget);
+      await selectNavigationTab(tester, index);
       expect(
         tester.takeException(),
         isNull,
@@ -127,7 +139,7 @@ void main() {
       );
     }
 
-    expect(find.text('MobSanté'), findsOneWidget);
+    expect(find.text('MOBSANTÉ'), findsOneWidget);
   });
 
   testWidgets('tabs are lazy and shared streams are created only once', (
@@ -157,8 +169,7 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.text('Situation').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 2);
     expect(find.text('SITUATION'), findsOneWidget);
     expect(repository.missionFactories, 1);
     expect(repository.accessFactories, 1);
@@ -167,17 +178,14 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.text('Plus').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 3);
     expect(repository.locationFactories, 1);
 
-    await tester.tap(find.text('Déclarer').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 1);
     expect(repository.locationFactories, 1);
     expect(repository.accessFactories, 1);
 
-    await tester.tap(find.text('Missions').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 0);
     expect(find.text('PARC DES EXPOSITIONS DE BORDEAUX'), findsNothing);
     expect(repository.missionFactories, 1);
     expect(repository.locationFactories, 1);
@@ -195,8 +203,7 @@ void main() {
 
       await tester.pumpWidget(FireCoordinationApp(repository: repository));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Situation').last);
-      await tester.pumpAndSettle();
+      await selectNavigationTab(tester, 2);
 
       expect(find.text('Configuration d’accès invalide'), findsOneWidget);
       expect(find.text('SITUATION'), findsNothing);
@@ -217,11 +224,10 @@ void main() {
 
   testWidgets('places can be filtered by territorial group', (tester) async {
     await pumpIPhone(tester);
-    await tester.tap(find.text('Plus').last);
-    await tester.pumpAndSettle();
+    await selectNavigationTab(tester, 3);
 
-    expect(find.text('MobSanté'), findsOneWidget);
-    expect(find.text('Incendies Gironde'), findsOneWidget);
+    expect(find.text('Lieux'), findsOneWidget);
+    expect(find.text('DISPOSITIF TERRITORIAL'), findsOneWidget);
     expect(find.text('Version RC1'), findsNothing);
     await tester.tap(find.byKey(const Key('places-territorial-filter')));
     await tester.pumpAndSettle();
@@ -236,6 +242,8 @@ void main() {
 
   testWidgets('slots can be filtered by territorial group', (tester) async {
     await pumpIPhone(tester);
+    await tester.tap(find.byKey(const Key('reset-mission-filters')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('slots-territorial-filter')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sites partenaires').last);

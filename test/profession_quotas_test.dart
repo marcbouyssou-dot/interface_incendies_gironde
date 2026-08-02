@@ -10,19 +10,21 @@ void main() {
       'podiatrist',
       'physician',
       'nurse',
+      'veterinarian',
       'other_health_professional',
     ]);
     expect(
       HealthProfessionRegistry.values
           .map((profession) => profession.id)
           .toSet(),
-      hasLength(5),
+      hasLength(6),
     );
     expect(HealthProfessionRegistry.byId('physician')?.label, 'Médecin');
     expect(HealthProfessionRegistry.byId('pp'), isNull);
     expect(HealthProfessionId.normalize('mk'), 'physiotherapist');
     expect(HealthProfessionId.normalize('pp'), 'podiatrist');
     expect(HealthProfessionId.normalize('doctor'), 'physician');
+    expect(HealthProfessionId.normalize('veterinarian'), 'veterinarian');
     expect(
       HealthProfessionId.normalize('otherHealthProfessional'),
       'other_health_professional',
@@ -40,12 +42,20 @@ void main() {
       HealthProfessionId.physician,
     );
     expect(VolunteerProfession.pp.canonicalId, HealthProfessionId.podiatrist);
+    expect(
+      VolunteerProfession.veterinarian.canonicalId,
+      HealthProfessionId.veterinarian,
+    );
     expect(volunteerProfessionFromId('physician'), VolunteerProfession.doctor);
     expect(volunteerProfessionFromId('mk'), VolunteerProfession.mk);
     expect(volunteerProfessionFromId('podiatrist'), VolunteerProfession.pp);
     expect(volunteerProfessionFromId('pp'), VolunteerProfession.pp);
     expect(volunteerProfessionFromId('doctor'), VolunteerProfession.doctor);
     expect(volunteerProfessionFromId('nurse'), VolunteerProfession.nurse);
+    expect(
+      volunteerProfessionFromId('veterinarian'),
+      VolunteerProfession.veterinarian,
+    );
     expect(
       volunteerProfessionFromId('otherHealthProfessional'),
       VolunteerProfession.otherHealthProfessional,
@@ -103,7 +113,7 @@ void main() {
     final missing = quotas.quotaFor(HealthProfessionId.nurse);
     expect(missing.required, 0);
     expect(missing.registered, 0);
-    expect(quotas.requiredByProfession, hasLength(5));
+    expect(quotas.requiredByProfession, hasLength(6));
     expect(quotas.requiredByProfession.values, everyElement(0));
   });
 
@@ -119,6 +129,7 @@ void main() {
         'podiatrist': 2,
         'physician': 1,
         'nurse': 0,
+        'veterinarian': 0,
         'other_health_professional': 0,
       },
       'registeredByProfession': {
@@ -126,6 +137,7 @@ void main() {
         'podiatrist': 1,
         'physician': 1,
         'nurse': 0,
+        'veterinarian': 0,
         'other_health_professional': 0,
       },
       'requiredMk': 0,

@@ -141,6 +141,7 @@ const emptyQuotas = () => ({
   podiatrist: 0,
   physician: 0,
   nurse: 0,
+  veterinarian: 0,
   other_health_professional: 0,
 });
 
@@ -164,6 +165,7 @@ function canonicalProfession(value) {
   if (value === 'pp' || value === 'podiatrist') return 'podiatrist';
   if (value === 'doctor' || value === 'physician') return 'physician';
   if (value === 'nurse') return 'nurse';
+  if (value === 'veterinarian') return 'veterinarian';
   if (
     value === 'otherHealthProfessional'
     || value === 'other_health_professional'
@@ -384,7 +386,13 @@ test('missions: legacy and valid generic quota documents are allowed', async () 
   ));
   await assertSucceeds(setDoc(
     doc(db('coord'), 'missions/generic'),
-    genericMission({id: 'generic'}),
+    genericMission({
+      id: 'generic',
+      requiredByProfession: {
+        ...emptyQuotas(),
+        veterinarian: 1,
+      },
+    }),
   ));
 });
 
@@ -630,7 +638,8 @@ test('volunteers: createdAt is immutable and updatedAt must be server time', asy
 test('volunteers: all profile professions allowed and unknown/extra denied', async () => {
   await seed();
   for (const profession of [
-    'mk', 'pp', 'doctor', 'nurse', 'otherHealthProfessional',
+    'mk', 'pp', 'doctor', 'nurse', 'veterinarian',
+    'otherHealthProfessional',
   ]) {
     const uid = `profile-${profession}`;
     await assertSucceeds(setDoc(
@@ -663,10 +672,11 @@ test('engagements: owner creation confirms and increments MK and PP', async () =
   assert.equal(storedMission.status, 'toComplete');
 });
 
-test('engagements: canonical physician, nurse and other professions are allowed', async () => {
+test('engagements: canonical non-legacy professions are allowed', async () => {
   for (const profession of [
     'physician',
     'nurse',
+    'veterinarian',
     'other_health_professional',
   ]) {
     await seed({mission: false});
