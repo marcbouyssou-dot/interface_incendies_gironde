@@ -487,6 +487,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   }
 
   Future<void> _publish() async {
+    if (_publishing) return;
+
     final validation = _validate();
     if (validation != null) {
       setState(() => _errorMessage = validation.message);
