@@ -570,6 +570,52 @@ class _ProfessionQuotaRow extends StatelessWidget {
   }
 }
 
+class _MissionCardSectionTitle extends StatelessWidget {
+  const _MissionCardSectionTitle(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 16,
+          decoration: BoxDecoration(
+            color: AppColors.orange,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MissionCardSectionDivider extends StatelessWidget {
+  const _MissionCardSectionDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 20),
+      child: Divider(height: 1, thickness: 1, color: AppColors.border),
+    );
+  }
+}
+
 class NeedCard extends StatelessWidget {
   const NeedCard({
     super.key,
@@ -630,54 +676,51 @@ class NeedCard extends StatelessWidget {
                 ),
               ),
               MissionLocationDetails(location: location),
-              const SizedBox(height: 20),
-              const Text(
-                'Aujourd’hui',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Aujourd’hui',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _operationalTime(need.time),
+                      style: const TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 3),
-              Text(
-                _operationalTime(need.time),
-                style: const TextStyle(
-                  color: AppColors.navy,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 22),
-              const Divider(height: 1),
-              const SizedBox(height: 20),
-              const Text(
-                'PROFESSIONNELS RECHERCHÉS',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 11,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 10),
+              const _MissionCardSectionDivider(),
+              const _MissionCardSectionTitle('PROFESSIONNELS RECHERCHÉS'),
+              const SizedBox(height: 12),
               _ProfessionQuotaRows(need: need, emphasized: true),
-              const SizedBox(height: 20),
-              const Divider(height: 1),
               if (need.equipment
                   .where((item) => item.trim().isNotEmpty)
                   .isNotEmpty) ...[
-                const SizedBox(height: 18),
-                const Text(
-                  'MATÉRIEL DEMANDÉ',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 7),
+                const _MissionCardSectionDivider(),
+                const _MissionCardSectionTitle('MATÉRIEL DEMANDÉ'),
+                const SizedBox(height: 10),
                 Wrap(
                   key: const Key('mission-equipment-text'),
                   spacing: 7,
@@ -709,9 +752,7 @@ class NeedCard extends StatelessWidget {
                       .toList(growable: false),
                 ),
               ],
-              const SizedBox(height: 20),
-              const Divider(height: 1),
-              const SizedBox(height: 18),
+              const _MissionCardSectionDivider(),
               _NeedActions(need: need, location: location),
               if (onEditMission != null) ...[
                 const SizedBox(height: 10),
