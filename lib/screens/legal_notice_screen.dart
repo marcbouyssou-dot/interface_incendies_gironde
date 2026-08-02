@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'credits_screen.dart';
 import 'privacy_policy_screen.dart';
 
 class LegalNoticeScreen extends StatelessWidget {
@@ -59,20 +60,42 @@ class LegalNoticeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Card(
-                child: ListTile(
-                  key: const Key('privacy-policy-entry'),
-                  leading: const Icon(
-                    Icons.privacy_tip_outlined,
-                    color: AppColors.orange,
-                  ),
-                  title: const Text('Politique de confidentialité'),
-                  subtitle: const Text('Données personnelles et droits RGPD'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const PrivacyPolicyScreen(),
+                child: Column(
+                  children: [
+                    ListTile(
+                      key: const Key('privacy-policy-entry'),
+                      leading: const Icon(
+                        Icons.privacy_tip_outlined,
+                        color: AppColors.orange,
+                      ),
+                      title: const Text('Politique de confidentialité'),
+                      subtitle: const Text(
+                        'Données personnelles et droits RGPD',
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const PrivacyPolicyScreen(),
+                        ),
+                      ),
                     ),
-                  ),
+                    const Divider(height: 1),
+                    ListTile(
+                      key: const Key('credits-entry'),
+                      dense: true,
+                      leading: const Icon(
+                        Icons.favorite_outline_rounded,
+                        color: AppColors.orange,
+                      ),
+                      title: const Text('Crédits'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const CreditsScreen(),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
