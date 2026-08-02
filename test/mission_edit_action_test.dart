@@ -78,6 +78,8 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(action, findsOneWidget);
+    await tester.ensureVisible(action);
+    await tester.pumpAndSettle();
     await tester.tap(action);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -133,6 +135,8 @@ void main() {
     );
     expect(action, findsOneWidget);
     expect(find.text('Modifier la mission'), findsOneWidget);
+    await tester.ensureVisible(action);
+    await tester.pumpAndSettle();
     await tester.tap(action);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
