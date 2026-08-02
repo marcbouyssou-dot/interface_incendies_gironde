@@ -3,6 +3,7 @@ abstract final class HealthProfessionId {
   static const podiatrist = 'podiatrist';
   static const physician = 'physician';
   static const nurse = 'nurse';
+  static const veterinarian = 'veterinarian';
   static const otherHealthProfessional = 'other_health_professional';
 
   /// Conservé uniquement pour lire les anciennes missions MK/PP.
@@ -13,6 +14,7 @@ abstract final class HealthProfessionId {
     podiatrist,
     physician,
     nurse,
+    veterinarian,
     otherHealthProfessional,
   };
 
@@ -24,6 +26,7 @@ abstract final class HealthProfessionId {
       'pp' || podiatrist => podiatrist,
       'doctor' || physician => physician,
       nurse => nurse,
+      veterinarian => veterinarian,
       'otherHealthProfessional' ||
       otherHealthProfessional => otherHealthProfessional,
       _ => throw FormatException('Profession inconnue : $value'),
@@ -67,6 +70,11 @@ abstract final class HealthProfessionRegistry {
       id: HealthProfessionId.nurse,
       label: 'Infirmier / Infirmière',
       shortLabel: 'IDE',
+    ),
+    HealthProfessionDefinition(
+      id: HealthProfessionId.veterinarian,
+      label: 'Vétérinaire',
+      shortLabel: 'Vétérinaire',
     ),
     HealthProfessionDefinition(
       id: HealthProfessionId.otherHealthProfessional,

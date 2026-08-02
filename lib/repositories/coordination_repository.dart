@@ -161,6 +161,7 @@ abstract final class EngagementCounterTransition {
       VolunteerProfession.pp => (mk: 0, pp: amount),
       VolunteerProfession.doctor ||
       VolunteerProfession.nurse ||
+      VolunteerProfession.veterinarian ||
       VolunteerProfession.otherHealthProfessional => (mk: 0, pp: 0),
     };
   }

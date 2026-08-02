@@ -3,7 +3,14 @@ import 'profession_quotas.dart';
 
 enum NeedStatus { critical, toComplete, complete }
 
-enum VolunteerProfession { mk, pp, doctor, nurse, otherHealthProfessional }
+enum VolunteerProfession {
+  mk,
+  pp,
+  doctor,
+  nurse,
+  veterinarian,
+  otherHealthProfessional,
+}
 
 extension VolunteerProfessionLabel on VolunteerProfession {
   String? get canonicalId => switch (this) {
@@ -11,6 +18,7 @@ extension VolunteerProfessionLabel on VolunteerProfession {
     VolunteerProfession.pp => HealthProfessionId.podiatrist,
     VolunteerProfession.doctor => HealthProfessionId.physician,
     VolunteerProfession.nurse => HealthProfessionId.nurse,
+    VolunteerProfession.veterinarian => HealthProfessionId.veterinarian,
     VolunteerProfession.otherHealthProfessional =>
       HealthProfessionId.otherHealthProfessional,
   };
@@ -24,6 +32,7 @@ VolunteerProfession volunteerProfessionFromId(String value) {
     HealthProfessionId.podiatrist => VolunteerProfession.pp,
     HealthProfessionId.physician => VolunteerProfession.doctor,
     HealthProfessionId.nurse => VolunteerProfession.nurse,
+    HealthProfessionId.veterinarian => VolunteerProfession.veterinarian,
     HealthProfessionId.otherHealthProfessional =>
       VolunteerProfession.otherHealthProfessional,
     _ => throw FormatException('Profession inconnue : $value'),
