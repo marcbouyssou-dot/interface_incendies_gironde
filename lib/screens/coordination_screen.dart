@@ -201,6 +201,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                     mobilizedProfessionals: mobilized,
                     remainingProfessionals: remaining,
                     coverage: coverage,
+                    professionQuotas: totalQuotas,
                   ),
                 ] else ...[
                   const SizedBox(height: 30),
@@ -380,6 +381,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
     required this.mobilizedProfessionals,
     required this.remainingProfessionals,
     required this.coverage,
+    required this.professionQuotas,
   });
 
   final int totalMissions;
@@ -389,6 +391,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
   final int mobilizedProfessionals;
   final int remainingProfessionals;
   final double coverage;
+  final ProfessionQuotas professionQuotas;
 
   @override
   Widget build(BuildContext context) {
@@ -548,8 +551,179 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           AnimatedCoverageIndicator(value: coverage, minHeight: 10),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          const Text(
+            'COUVERTURE PAR PROFESSION',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (
+            var index = 0;
+            index < HealthProfessionRegistry.values.length;
+            index++
+          ) ...[
+            _ProfessionDashboardRow(
+              profession: HealthProfessionRegistry.values[index],
+              quota: professionQuotas.quotaFor(
+                HealthProfessionRegistry.values[index].id,
+              ),
+            ),
+            if (index < HealthProfessionRegistry.values.length - 1)
+              const SizedBox(height: 10),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _ProfessionDashboardRow extends StatelessWidget {
+  const _ProfessionDashboardRow({
+    required this.profession,
+    required this.quota,
+  });
+
+  final HealthProfessionDefinition profession;
+  final ProfessionQuota quota;
+
+  @override
+  Widget build(BuildContext context) {
+    final coverage = quota.required == 0 ? 0.0 : quota.coverage;
+    final color = quota.required == 0
+        ? AppColors.textMuted
+        : quota.isCovered
+        ? AppColors.green
+        : coverage < .5
+        ? AppColors.red
+        : AppColors.orange;
+    return Container(
+      key: Key('dashboard-profession-${profession.id}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  profession.label,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${(coverage * 100).round()} %',
+                key: Key('dashboard-profession-${profession.id}-coverage'),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          Row(
+            children: [
+              Expanded(
+                child: _ProfessionDashboardValue(
+                  valueKey: Key(
+                    'dashboard-profession-${profession.id}-required',
+                  ),
+                  label: 'Demandé',
+                  value: quota.required,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _ProfessionDashboardValue(
+                  valueKey: Key(
+                    'dashboard-profession-${profession.id}-mobilized',
+                  ),
+                  label: 'Mobilisés',
+                  value: quota.registered,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _ProfessionDashboardValue(
+                  valueKey: Key(
+                    'dashboard-profession-${profession.id}-remaining',
+                  ),
+                  label: 'Recherchés',
+                  value: quota.missing,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          AnimatedCoverageIndicator(
+            value: coverage,
+            color: color,
+            minHeight: 6,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfessionDashboardValue extends StatelessWidget {
+  const _ProfessionDashboardValue({
+    required this.valueKey,
+    required this.label,
+    required this.value,
+  });
+
+  final Key valueKey;
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          '$value',
+          key: valueKey,
+          style: const TextStyle(
+            color: AppColors.navy,
+            fontSize: 18,
+            height: 1,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
