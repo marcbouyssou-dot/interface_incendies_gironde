@@ -319,23 +319,32 @@ class MissionTimingPill extends StatelessWidget {
       label: 'Mission $label',
       child: Container(
         key: Key('mission-timing-${mission.id}'),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        constraints: const BoxConstraints(minHeight: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: color.withValues(alpha: 0.18)),
+          border: Border.all(color: color.withValues(alpha: 0.34), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                letterSpacing: 0.1,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ],
