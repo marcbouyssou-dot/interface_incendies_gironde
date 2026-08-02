@@ -15,6 +15,7 @@ Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
       builder: (_) => LiveCoordinationDataScope(
         data: liveData,
         child: Scaffold(
+          resizeToAvoidBottomInset: true,
           body: SafeArea(child: CreateNeedScreen(mission: mission)),
         ),
       ),
@@ -183,6 +184,9 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     return PageContainer(
       child: ListView(
         key: const PageStorageKey('create'),
+        keyboardDismissBehavior: _isEditing
+            ? ScrollViewKeyboardDismissBehavior.onDrag
+            : ScrollViewKeyboardDismissBehavior.manual,
         padding: const EdgeInsets.fromLTRB(20, 22, 20, 36),
         children: [
           PageHeader(
@@ -336,6 +340,15 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     controller: _detailsController,
                     enabled: !_publishing,
                     maxLines: 3,
+                    scrollPadding: EdgeInsets.fromLTRB(
+                      20,
+                      20,
+                      20,
+                      _isEditing ? 120 : 20,
+                    ),
+                    onTapOutside: _isEditing
+                        ? (_) => FocusManager.instance.primaryFocus?.unfocus()
+                        : null,
                     decoration: const InputDecoration(
                       hintText: 'Accès, contact sur place, consignes…',
                     ),
@@ -353,24 +366,30 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     ),
                   ],
                   const SizedBox(height: 20),
-                  FilledButton.icon(
-                    key: Key(_isEditing ? 'update-mission' : 'publish-mission'),
-                    onPressed: _publishing ? null : _publish,
-                    icon: _publishing
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.arrow_forward_rounded),
-                    label: Text(
-                      _publishing
-                          ? (_isEditing ? 'Enregistrement…' : 'Publication…')
-                          : (_isEditing
-                                ? 'Enregistrer les modifications'
-                                : 'Publier'),
+                  SizedBox(
+                    width: _isEditing ? double.infinity : null,
+                    child: FilledButton.icon(
+                      key: Key(
+                        _isEditing ? 'update-mission' : 'publish-mission',
+                      ),
+                      onPressed: _publishing ? null : _publish,
+                      icon: _publishing
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.arrow_forward_rounded),
+                      label: Text(
+                        _publishing
+                            ? (_isEditing ? 'Enregistrement…' : 'Publication…')
+                            : (_isEditing
+                                  ? 'Enregistrer les modifications'
+                                  : 'Publier'),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                 ],
