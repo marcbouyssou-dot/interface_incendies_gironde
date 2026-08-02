@@ -7,6 +7,7 @@ import '../repositories/location_administration_repository.dart';
 import '../repositories/location_administration_repository_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import 'admin_location_form_screen.dart';
 
 enum _LocationStatusFilter { all, active, inactive }
@@ -212,17 +213,15 @@ class _LocationAdministrationScreenState
   );
 
   Future<void> _openCreate() async {
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AdminLocationFormScreen()),
-    );
+    final changed = await Navigator.of(
+      context,
+    ).push<bool>(AppPageRoute(builder: (_) => const AdminLocationFormScreen()));
     if (changed == true) await _reload();
   }
 
   Future<void> _openEdit(AdminLocation location) async {
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => AdminLocationFormScreen(location: location),
-      ),
+      AppPageRoute(builder: (_) => AdminLocationFormScreen(location: location)),
     );
     if (changed == true) await _reload();
   }

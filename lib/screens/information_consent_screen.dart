@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import 'legal_notice_screen.dart';
 import 'privacy_policy_screen.dart';
@@ -95,7 +96,7 @@ class InformationConsentScreen extends StatelessWidget {
                       title: const Text('Mentions légales'),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => const LegalNoticeScreen(),
                         ),
                       ),
@@ -110,7 +111,7 @@ class InformationConsentScreen extends StatelessWidget {
                       title: const Text('Politique de confidentialité'),
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
+                        AppPageRoute<void>(
                           builder: (_) => const PrivacyPolicyScreen(),
                         ),
                       ),

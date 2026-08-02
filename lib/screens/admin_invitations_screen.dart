@@ -10,6 +10,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/responsible_access_administration_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
@@ -133,7 +134,7 @@ class _CoordinatorInvitationsContentState
 
   Future<void> _openForm(List<ResponsePlace> locations) async {
     final invitation = await Navigator.of(context).push<AdminInvitation>(
-      MaterialPageRoute(
+      AppPageRoute(
         builder: (_) => AdminInvitationFormScreen(
           repository: widget.repository,
           locations: locations,
@@ -157,7 +158,7 @@ class _CoordinatorInvitationsContentState
   ) async {
     if (account.uid == widget.currentUid) return;
     final updated = await Navigator.of(context).push<ResponsibleAccount>(
-      MaterialPageRoute(
+      AppPageRoute(
         builder: (_) => ResponsibleAccessFormScreen(
           account: account,
           currentUid: widget.currentUid,
@@ -311,7 +312,7 @@ class _CoordinatorInvitationsContentState
     List<ResponsePlace> locations,
   ) async {
     final updated = await Navigator.of(context).push<AdminInvitation>(
-      MaterialPageRoute(
+      AppPageRoute(
         builder: (_) => AdminInvitationFormScreen(
           repository: widget.repository,
           locations: locations,

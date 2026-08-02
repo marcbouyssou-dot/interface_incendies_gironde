@@ -6,13 +6,14 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
 
 Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
   final liveData = LiveCoordinationDataScope.of(context);
   return Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
+    AppPageRoute<void>(
       builder: (_) => LiveCoordinationDataScope(
         data: liveData,
         child: Scaffold(

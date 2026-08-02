@@ -5,6 +5,7 @@ import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'about_screen.dart';
@@ -108,7 +109,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                         title: const Text('À propos'),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
+                          AppPageRoute<void>(
                             builder: (_) => const AboutScreen(),
                           ),
                         ),
@@ -121,7 +122,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                         title: const Text('Mentions légales'),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
+                          AppPageRoute<void>(
                             builder: (_) => const LegalNoticeScreen(),
                           ),
                         ),
@@ -148,7 +149,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
               itemBuilder: (context, index) => _PlaceCard(
                 place: visiblePlaces[index],
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
+                  AppPageRoute<void>(
                     builder: (_) => LiveCoordinationDataScope(
                       data: _liveData!,
                       child: LocationDetailScreen(

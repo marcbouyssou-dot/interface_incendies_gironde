@@ -11,6 +11,7 @@ import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
 import '../screens/information_consent_screen.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import 'mission_location_details.dart';
 
@@ -1503,7 +1504,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 child: TextButton.icon(
                   key: const Key('profile-information-consent-entry'),
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
+                    AppPageRoute<void>(
                       builder: (_) => const InformationConsentScreen(),
                     ),
                   ),
@@ -1891,7 +1892,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     }
     if (!mounted) return;
     await Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => EngagementConfirmationScreen(
           need: widget.need,
           location: widget.location,

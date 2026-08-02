@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../firebase_bootstrap.dart';
 import '../firebase_startup_gate.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 
@@ -118,7 +119,7 @@ class _AdminAccountActivationAppState extends State<AdminAccountActivationApp> {
               service: snapshot.data!,
               onSignIn: () {
                 Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(
+                  AppPageRoute<void>(
                     builder: (_) => const FirebaseStartupGate(initialTab: 1),
                   ),
                 );

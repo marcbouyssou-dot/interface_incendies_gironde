@@ -5,6 +5,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import 'admin_invitations_screen.dart';
 import 'create_need_screen.dart';
@@ -137,7 +138,7 @@ class _AdministrationDashboard extends StatelessWidget {
 
   void _openCreateNeed(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => LiveCoordinationDataScope(
           data: liveData,
           child: CreateNeedScreen(
@@ -153,7 +154,7 @@ class _AdministrationDashboard extends StatelessWidget {
 
   void _openInvitations(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      AppPageRoute<void>(
         builder: (_) => LiveCoordinationDataScope(
           data: liveData,
           child: const AdminInvitationsScreen(),
@@ -164,9 +165,7 @@ class _AdministrationDashboard extends StatelessWidget {
 
   void _openLocations(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const LocationAdministrationScreen(),
-      ),
+      AppPageRoute<void>(builder: (_) => const LocationAdministrationScreen()),
     );
   }
 

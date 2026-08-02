@@ -30,6 +30,16 @@ abstract final class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: AppColors.background,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _AppPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: _AppPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: _AppPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: _AppPageTransitionsBuilder(),
+        },
+      ),
       fontFamily: 'sans-serif',
       textTheme: const TextTheme(
         headlineLarge: TextStyle(
@@ -113,6 +123,36 @@ abstract final class AppTheme {
           ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
+      ),
+    );
+  }
+}
+
+class _AppPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _AppPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (route.isFirst || MediaQuery.disableAnimationsOf(context)) return child;
+    final curvedAnimation = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return FadeTransition(
+      opacity: curvedAnimation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.018, 0),
+          end: Offset.zero,
+        ).animate(curvedAnimation),
+        child: child,
       ),
     );
   }
