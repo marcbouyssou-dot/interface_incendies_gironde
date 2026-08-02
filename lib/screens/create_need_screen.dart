@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/professional_equipment.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
@@ -80,7 +81,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
-  final Set<String> _equipment = {'Tables', 'Serviettes'};
+  final Set<String> _equipment = {};
   final _detailsController = TextEditingController();
   bool _publishing = false;
   String? _errorMessage;
@@ -112,6 +113,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     _equipment
       ..clear()
       ..addAll(mission.equipment);
+    _retainCompatibleEquipment();
     _detailsController.text = mission.details ?? '';
   }
 
@@ -355,35 +357,38 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                   const SizedBox(height: AppFormLayout.sectionSpacing),
                   const FormSectionTitle(title: 'Matériel'),
                   const SizedBox(height: AppFormLayout.titleSpacing),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children:
-                        [
-                              'Tables',
-                              'Serviettes',
-                              'Huiles',
-                              'Gels froids',
-                              'Tapis',
-                            ]
-                            .map(
-                              (item) => FilterChip(
-                                label: Text(item),
-                                selected: _equipment.contains(item),
-                                onSelected: _publishing
-                                    ? null
-                                    : (selected) => setState(
-                                        () => selected
-                                            ? _equipment.add(item)
-                                            : _equipment.remove(item),
-                                      ),
-                                selectedColor: AppColors.orangeSoft,
-                                checkmarkColor: AppColors.orange,
-                                side: const BorderSide(color: AppColors.border),
-                              ),
-                            )
-                            .toList(),
-                  ),
+                  if (_availableEquipment.isEmpty)
+                    const Text(
+                      'Ajoutez au moins un professionnel recherché pour '
+                      'afficher le matériel correspondant.',
+                      key: Key('mission-equipment-empty'),
+                      style: TextStyle(color: AppColors.textMuted),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final equipment in _availableEquipment)
+                          FilterChip(
+                            key: Key('mission-equipment-${equipment.id}'),
+                            label: Text(equipment.label),
+                            selected: _equipment.contains(equipment.label),
+                            onSelected: _publishing
+                                ? null
+                                : (selected) => setState(() {
+                                    if (selected) {
+                                      _equipment.add(equipment.label);
+                                    } else {
+                                      _equipment.remove(equipment.label);
+                                    }
+                                  }),
+                            selectedColor: AppColors.orangeSoft,
+                            checkmarkColor: AppColors.orange,
+                            side: const BorderSide(color: AppColors.border),
+                          ),
+                      ],
+                    ),
                   const SizedBox(height: AppFormLayout.sectionSpacing),
                   const FormSectionTitle(title: 'Commentaire'),
                   const SizedBox(height: AppFormLayout.titleSpacing),
@@ -654,9 +659,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       for (final profession in _requiredByProfession.keys) {
         _requiredByProfession[profession] = 0;
       }
-      _equipment
-        ..clear()
-        ..addAll(['Tables', 'Serviettes']);
+      _equipment.clear();
       _detailsController.clear();
       _errorMessage = null;
       _publishedMission = null;
@@ -667,8 +670,55 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     setState(() {
       final current = _requiredByProfession[professionId]!;
       _requiredByProfession[professionId] = current + delta;
+      _retainCompatibleEquipment();
       _errorMessage = null;
     });
+  }
+
+  List<ProfessionalEquipmentDefinition> get _availableEquipment {
+    final activeProfessionIds = _requiredByProfession.entries
+        .where((entry) => entry.value > 0)
+        .map((entry) => entry.key)
+        .toSet();
+    final seenIds = <String>{};
+    final seenLabels = <String>{};
+    return ProfessionalEquipmentRegistry.values
+        .where(
+          (equipment) =>
+              equipment.professionIds.any(activeProfessionIds.contains) &&
+              seenIds.add(equipment.id) &&
+              seenLabels.add(equipment.label.trim().toLowerCase()),
+        )
+        .toList(growable: false);
+  }
+
+  void _retainCompatibleEquipment() {
+    final availableById = {
+      for (final equipment in _availableEquipment) equipment.id: equipment,
+    };
+    final retainedLabels = <String>{};
+    for (final value in _equipment) {
+      final definition = _equipmentDefinition(value);
+      if (definition != null && availableById.containsKey(definition.id)) {
+        retainedLabels.add(definition.label);
+      }
+    }
+    _equipment
+      ..clear()
+      ..addAll(retainedLabels);
+  }
+
+  static ProfessionalEquipmentDefinition? _equipmentDefinition(String value) {
+    final normalized = ProfessionalEquipmentRegistry.normalizeStoredValue(
+      value,
+    );
+    final byId = ProfessionalEquipmentRegistry.byId(normalized);
+    if (byId != null) return byId;
+    final normalizedLabel = value.trim().toLowerCase();
+    for (final equipment in ProfessionalEquipmentRegistry.values) {
+      if (equipment.label.toLowerCase() == normalizedLabel) return equipment;
+    }
+    return null;
   }
 
   static int _minutes(TimeOfDay value) => value.hour * 60 + value.minute;
