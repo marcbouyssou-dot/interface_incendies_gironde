@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'about_screen.dart';
+import 'legal_notice_screen.dart';
 import 'location_detail_screen.dart';
 
 class PlacesScreen extends StatefulWidget {
@@ -99,16 +100,33 @@ class _PlacesScreenState extends State<PlacesScreen> {
                 ),
                 const SizedBox(height: 12),
                 Card(
-                  child: ListTile(
-                    key: const Key('about-entry'),
-                    leading: const Icon(Icons.info_outline_rounded),
-                    title: const Text('À propos'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const AboutScreen(),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        key: const Key('about-entry'),
+                        leading: const Icon(Icons.info_outline_rounded),
+                        title: const Text('À propos'),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const AboutScreen(),
+                          ),
+                        ),
                       ),
-                    ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const Key('legal-notice-entry'),
+                        dense: true,
+                        leading: const Icon(Icons.gavel_outlined, size: 21),
+                        title: const Text('Mentions légales'),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const LegalNoticeScreen(),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 20),
