@@ -1276,6 +1276,12 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   bool get _hasAvailableProfession => _professions.any(_isAvailable);
 
+  bool get _isVeterinarian => _profession == VolunteerProfession.veterinarian;
+
+  List<ProfessionalIdType> get _professionalIdTypeOptions => _isVeterinarian
+      ? const [ProfessionalIdType.ordinal]
+      : ProfessionalIdType.values;
+
   List<ProfessionalEquipmentDefinition> get _equipmentOptions =>
       ProfessionalEquipmentRegistry.forProfession(_profession.canonicalId!);
 
@@ -1317,6 +1323,21 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     );
   }
 
+  void _applyProfessionalIdentifierTypeForProfession() {
+    if (!_isVeterinarian || _professionalIdType == ProfessionalIdType.ordinal) {
+      return;
+    }
+    _professionalIdType = ProfessionalIdType.ordinal;
+    _professionalIdController.clear();
+  }
+
+  void _selectProfession(VolunteerProfession profession) {
+    setState(() {
+      _profession = profession;
+      _applyProfessionalIdentifierTypeForProfession();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1324,6 +1345,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
       _isAvailable,
       orElse: () => _professions.first,
     );
+    _applyProfessionalIdentifierTypeForProfession();
   }
 
   @override
@@ -1398,6 +1420,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         if (profileProfessionAvailable) {
           _profession = profile.profession;
         }
+        _applyProfessionalIdentifierTypeForProfession();
       }
       setState(() {
         _profile = profile;
@@ -1475,7 +1498,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
               if (_isProfessionalIdentifierReady)
                 const _ProfessionalIdentifierReadyNotice()
               else
-                const _ProfessionalIdentifierRequiredNotice(),
+                _ProfessionalIdentifierRequiredNotice(
+                  ordinalOnly: _isVeterinarian,
+                ),
               const SizedBox(height: AppFormLayout.fieldSpacing),
               if (_profile != null && !_editingProfile) ...[
                 _ProfileSummary(profile: _profile!),
@@ -1495,7 +1520,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 const SizedBox(height: AppFormLayout.titleSpacing),
                 RadioGroup<VolunteerProfession>(
                   groupValue: _profession,
-                  onChanged: (value) => setState(() => _profession = value!),
+                  onChanged: (value) => _selectProfession(value!),
                   child: Column(
                     children: [
                       for (final profession in _professions)
@@ -1550,36 +1575,47 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   validator: _email,
                 ),
                 const SizedBox(height: AppFormLayout.fieldSpacing),
-                DropdownButtonFormField<ProfessionalIdType>(
-                  key: const Key('professional-id-type'),
-                  initialValue: _professionalIdType,
-                  decoration: const InputDecoration(
-                    labelText: 'Identifiant professionnel *',
-                    helperText: 'Obligatoire pour participer.',
-                    prefixIcon: Icon(Icons.badge_outlined),
+                KeyedSubtree(
+                  key: ValueKey(
+                    'professional-id-type-${_isVeterinarian ? 'ordinal' : 'all'}',
                   ),
-                  items: ProfessionalIdType.values
-                      .map(
-                        (type) => DropdownMenuItem(
-                          value: type,
-                          child: Text(type.label),
-                        ),
-                      )
-                      .toList(),
-                  validator: (type) =>
-                      type == ProfessionalIdType.rpps ||
-                          type == ProfessionalIdType.ordinal
-                      ? null
-                      : 'Choisissez un identifiant RPPS ou ordinal.',
-                  onChanged: (type) {
-                    if (type == null) return;
-                    setState(() {
-                      _professionalIdType = type;
-                      if (type == ProfessionalIdType.none) {
-                        _professionalIdController.clear();
+                  child: DropdownButtonFormField<ProfessionalIdType>(
+                    key: const Key('professional-id-type'),
+                    initialValue: _professionalIdType,
+                    decoration: const InputDecoration(
+                      labelText: 'Identifiant professionnel *',
+                      helperText: 'Obligatoire pour participer.',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                    ),
+                    items: _professionalIdTypeOptions
+                        .map(
+                          (type) => DropdownMenuItem(
+                            value: type,
+                            child: Text(type.label),
+                          ),
+                        )
+                        .toList(),
+                    validator: (type) {
+                      if (_isVeterinarian) {
+                        return type == ProfessionalIdType.ordinal
+                            ? null
+                            : 'Le numéro ordinal est obligatoire.';
                       }
-                    });
-                  },
+                      return type == ProfessionalIdType.rpps ||
+                              type == ProfessionalIdType.ordinal
+                          ? null
+                          : 'Choisissez un identifiant RPPS ou ordinal.';
+                    },
+                    onChanged: (type) {
+                      if (type == null) return;
+                      setState(() {
+                        _professionalIdType = type;
+                        if (type == ProfessionalIdType.none) {
+                          _professionalIdController.clear();
+                        }
+                      });
+                    },
+                  ),
                 ),
                 if (_professionalIdType != ProfessionalIdType.none) ...[
                   const SizedBox(height: AppFormLayout.fieldSpacing),
@@ -1788,10 +1824,13 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     if (!_hasValidProfessionalIdentifier) {
       setState(() => _editingProfile = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Complétez votre profil avec un numéro RPPS ou ordinal avant de '
-            'participer.',
+            _isVeterinarian
+                ? 'Complétez votre profil avec votre numéro ordinal avant de '
+                      'participer.'
+                : 'Complétez votre profil avec un numéro RPPS ou ordinal '
+                      'avant de participer.',
           ),
         ),
       );
@@ -1854,7 +1893,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 }
 
 class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
-  const _ProfessionalIdentifierRequiredNotice();
+  const _ProfessionalIdentifierRequiredNotice({required this.ordinalOnly});
+
+  final bool ordinalOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -1867,16 +1908,21 @@ class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.badge_outlined, color: AppColors.orange, size: 20),
-          SizedBox(width: 10),
+          const Icon(Icons.badge_outlined, color: AppColors.orange, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Un numéro RPPS ou ordinal est obligatoire pour participer. '
-              'Complétez votre profil avant de confirmer votre participation.',
-              style: TextStyle(
+              ordinalOnly
+                  ? 'Votre numéro ordinal est obligatoire pour participer. '
+                        'Complétez votre profil avant de confirmer votre '
+                        'participation.'
+                  : 'Un numéro RPPS ou ordinal est obligatoire pour '
+                        'participer. Complétez votre profil avant de confirmer '
+                        'votre participation.',
+              style: const TextStyle(
                 color: AppColors.navy,
                 fontSize: 13,
                 height: 1.35,
