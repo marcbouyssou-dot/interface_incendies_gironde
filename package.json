@@ -1,0 +1,19 @@
+{
+  "name": "mobsante-read-only-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e:install": "playwright install chromium",
+    "e2e:auth": "node e2e/auth.mjs",
+    "e2e:public": "playwright test e2e/smoke/public.spec.ts e2e/harness.spec.ts",
+    "e2e:harness": "playwright test e2e/harness.spec.ts",
+    "e2e:smoke": "playwright test e2e/smoke e2e/harness.spec.ts",
+    "e2e:smoke:headed": "playwright test e2e/smoke e2e/harness.spec.ts --headed",
+    "e2e:report": "playwright show-report e2e/playwright-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.0.0",
+    "dotenv": "^17.2.1"
+  }
+}
