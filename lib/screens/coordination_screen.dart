@@ -47,6 +47,40 @@ List<CoordinationNeed> missionsVisibleToResponsible({
   return (past: past, current: current, upcoming: upcoming);
 }
 
+enum _DashboardPeriod { today, last7Days, last30Days }
+
+extension _DashboardPeriodLabel on _DashboardPeriod {
+  String get label => switch (this) {
+    _DashboardPeriod.today => 'Aujourd’hui',
+    _DashboardPeriod.last7Days => '7 derniers jours',
+    _DashboardPeriod.last30Days => '30 derniers jours',
+  };
+
+  int get dayCount => switch (this) {
+    _DashboardPeriod.today => 1,
+    _DashboardPeriod.last7Days => 7,
+    _DashboardPeriod.last30Days => 30,
+  };
+}
+
+List<CoordinationNeed> _missionsForDashboardPeriod(
+  Iterable<CoordinationNeed> missions,
+  _DashboardPeriod period,
+  DateTime now,
+) {
+  final today = DateTime(now.year, now.month, now.day);
+  final start = today.subtract(Duration(days: period.dayCount - 1));
+  final end = today.add(const Duration(days: 1));
+  return missions
+      .where((mission) {
+        final missionStart = mission.startAt ?? mission.endAt;
+        final missionEnd = mission.endAt ?? mission.startAt;
+        if (missionStart == null || missionEnd == null) return true;
+        return missionStart.isBefore(end) && missionEnd.isAfter(start);
+      })
+      .toList(growable: false);
+}
+
 class _LocationDashboardStats {
   const _LocationDashboardStats({
     required this.id,
@@ -121,6 +155,7 @@ class CoordinationScreen extends StatefulWidget {
 
 class _CoordinationScreenState extends State<CoordinationScreen> {
   String? _editingMissionId;
+  _DashboardPeriod _dashboardPeriod = _DashboardPeriod.today;
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
@@ -213,24 +248,28 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
       locations: locations,
       access: access,
     );
-    final critical = visibleMissions
+    final now = DateTime.now();
+    final dashboardMissions = access?.isCoordinator == true
+        ? _missionsForDashboardPeriod(visibleMissions, _dashboardPeriod, now)
+        : visibleMissions;
+    final critical = dashboardMissions
         .where((need) => need.status == NeedStatus.critical)
         .length;
-    final incomplete = visibleMissions
+    final incomplete = dashboardMissions
         .where((need) => need.status == NeedStatus.toComplete)
         .length;
-    final complete = visibleMissions
+    final complete = dashboardMissions
         .where((need) => need.status == NeedStatus.complete)
         .length;
     final totalQuotas = ProfessionQuotas.aggregate(
-      visibleMissions.map((mission) => mission.professionQuotas),
+      dashboardMissions.map((mission) => mission.professionQuotas),
     );
     final required = totalQuotas.requiredTotal;
     final mobilized = totalQuotas.registeredTotal;
     final remaining = (required - mobilized).clamp(0, required);
     final coverage = required == 0 ? 0.0 : totalQuotas.coverage;
-    final timingCounts = _missionTimingCounts(visibleMissions, DateTime.now());
-    final locationStats = _locationDashboardStats(visibleMissions, locations);
+    final timingCounts = _missionTimingCounts(dashboardMissions, now);
+    final locationStats = _locationDashboardStats(dashboardMissions, locations);
     return PageContainer(
       child: CustomScrollView(
         key: const PageStorageKey('coordination'),
@@ -260,7 +299,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                 if (access?.isCoordinator == true) ...[
                   const SizedBox(height: 24),
                   _CoordinatorGlobalDashboard(
-                    totalMissions: visibleMissions.length,
+                    totalMissions: dashboardMissions.length,
                     pastMissions: timingCounts.past,
                     currentMissions: timingCounts.current,
                     upcomingMissions: timingCounts.upcoming,
@@ -269,6 +308,10 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                     coverage: coverage,
                     professionQuotas: totalQuotas,
                     locationStats: locationStats,
+                    selectedPeriod: _dashboardPeriod,
+                    onPeriodChanged: (period) {
+                      setState(() => _dashboardPeriod = period);
+                    },
                   ),
                 ] else ...[
                   const SizedBox(height: 30),
@@ -450,6 +493,8 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
     required this.coverage,
     required this.professionQuotas,
     required this.locationStats,
+    required this.selectedPeriod,
+    required this.onPeriodChanged,
   });
 
   final int totalMissions;
@@ -461,6 +506,8 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
   final double coverage;
   final ProfessionQuotas professionQuotas;
   final List<_LocationDashboardStats> locationStats;
+  final _DashboardPeriod selectedPeriod;
+  final ValueChanged<_DashboardPeriod> onPeriodChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -502,6 +549,36 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                   ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              for (final period in _DashboardPeriod.values)
+                ChoiceChip(
+                  key: Key('dashboard-period-${period.name}'),
+                  label: Text(period.label),
+                  selected: selectedPeriod == period,
+                  showCheckmark: false,
+                  selectedColor: AppColors.orangeSoft,
+                  side: BorderSide(
+                    color: selectedPeriod == period
+                        ? AppColors.orange.withValues(alpha: 0.35)
+                        : AppColors.border,
+                  ),
+                  labelStyle: TextStyle(
+                    color: selectedPeriod == period
+                        ? AppColors.orange
+                        : AppColors.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  onSelected: (selected) {
+                    if (selected) onPeriodChanged(period);
+                  },
+                ),
             ],
           ),
           const SizedBox(height: 18),
