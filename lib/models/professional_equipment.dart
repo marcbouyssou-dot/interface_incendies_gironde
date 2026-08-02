@@ -16,6 +16,12 @@ abstract final class ProfessionalEquipmentId {
   static const emergencyEquipment = 'emergency_equipment';
   static const dressingEquipment = 'dressing_equipment';
   static const careEquipment = 'care_equipment';
+  static const veterinaryExaminationKit = 'veterinary_examination_kit';
+  static const veterinaryCareEquipment = 'veterinary_care_equipment';
+  static const animalRestraintEquipment = 'animal_restraint_equipment';
+  static const animalTransportEquipment = 'animal_transport_equipment';
+  static const electronicChipReader = 'electronic_chip_reader';
+  static const otherVeterinaryEquipment = 'other_veterinary_equipment';
   static const professionSpecificEquipment = 'profession_specific_equipment';
   static const otherEquipment = 'other_equipment';
 }
@@ -35,6 +41,40 @@ class ProfessionalEquipmentDefinition {
 }
 
 abstract final class ProfessionalEquipmentRegistry {
+  static const veterinarianValues = <ProfessionalEquipmentDefinition>[
+    ProfessionalEquipmentDefinition(
+      id: ProfessionalEquipmentId.veterinaryExaminationKit,
+      label: 'Kit d’examen vétérinaire',
+      professionIds: {HealthProfessionId.veterinarian},
+    ),
+    ProfessionalEquipmentDefinition(
+      id: ProfessionalEquipmentId.veterinaryCareEquipment,
+      label: 'Matériel de soins vétérinaires',
+      professionIds: {HealthProfessionId.veterinarian},
+    ),
+    ProfessionalEquipmentDefinition(
+      id: ProfessionalEquipmentId.animalRestraintEquipment,
+      label: 'Matériel de contention animale',
+      professionIds: {HealthProfessionId.veterinarian},
+    ),
+    ProfessionalEquipmentDefinition(
+      id: ProfessionalEquipmentId.animalTransportEquipment,
+      label: 'Matériel de transport animalier',
+      professionIds: {HealthProfessionId.veterinarian},
+    ),
+    ProfessionalEquipmentDefinition(
+      id: ProfessionalEquipmentId.electronicChipReader,
+      label: 'Lecteur de puce électronique',
+      professionIds: {HealthProfessionId.veterinarian},
+    ),
+    ProfessionalEquipmentDefinition(
+      id: ProfessionalEquipmentId.otherVeterinaryEquipment,
+      label: 'Autre matériel vétérinaire',
+      professionIds: {HealthProfessionId.veterinarian},
+      requiresDetails: true,
+    ),
+  ];
+
   static const values = <ProfessionalEquipmentDefinition>[
     ProfessionalEquipmentDefinition(
       id: ProfessionalEquipmentId.massageTable,
@@ -120,6 +160,7 @@ abstract final class ProfessionalEquipmentRegistry {
         HealthProfessionId.otherHealthProfessional,
       },
     ),
+    ...veterinarianValues,
     ProfessionalEquipmentDefinition(
       id: ProfessionalEquipmentId.professionSpecificEquipment,
       label: 'Matériel spécifique à ma profession',
