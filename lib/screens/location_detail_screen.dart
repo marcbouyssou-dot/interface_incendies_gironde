@@ -195,13 +195,7 @@ class LocationDetailScreen extends StatelessWidget {
   }
 
   void _openMissionEditor(BuildContext context, CoordinationNeed mission) {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          body: SafeArea(child: CreateNeedScreen(mission: mission)),
-        ),
-      ),
-    );
+    openMissionEditor(context, mission);
   }
 
   ResponsePlace? _locationFrom(List<ResponsePlace> values) {

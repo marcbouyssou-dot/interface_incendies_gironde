@@ -469,13 +469,7 @@ class _ResponsibleMissionActions extends StatelessWidget {
         children: [
           OutlinedButton.icon(
             key: Key('edit-mission-${need.id}'),
-            onPressed: () => Navigator.of(context).push<void>(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  body: SafeArea(child: CreateNeedScreen(mission: need)),
-                ),
-              ),
-            ),
+            onPressed: () => openMissionEditor(context, need),
             icon: const Icon(Icons.edit_outlined),
             label: const Text('Modifier la mission'),
           ),

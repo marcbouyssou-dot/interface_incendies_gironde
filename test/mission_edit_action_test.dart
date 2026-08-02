@@ -46,11 +46,11 @@ void main() {
     await tester.pumpWidget(
       RepositoryScope(
         repository: repository,
-        child: LiveCoordinationDataScope(
-          data: liveData,
-          child: MaterialApp(
-            theme: AppTheme.light,
-            home: const Scaffold(body: SafeArea(child: CoordinationScreen())),
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: LiveCoordinationDataScope(
+            data: liveData,
+            child: const Scaffold(body: SafeArea(child: CoordinationScreen())),
           ),
         ),
       ),
@@ -80,8 +80,13 @@ void main() {
     expect(action, findsOneWidget);
     await tester.tap(action);
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     expect(find.text('Modifier la mission'), findsOneWidget);
     expect(find.byKey(const Key('update-mission')), findsOneWidget);
+    expect(find.text(location.name), findsOneWidget);
+    expect(find.text('03/08/2026'), findsOneWidget);
+    expect(find.text('08:00'), findsOneWidget);
+    expect(find.text('12:00'), findsOneWidget);
   });
 
   testWidgets('site manager outside the location sees no mission action', (
@@ -128,5 +133,9 @@ void main() {
     );
     expect(action, findsOneWidget);
     expect(find.text('Modifier la mission'), findsOneWidget);
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('update-mission')), findsOneWidget);
   });
 }

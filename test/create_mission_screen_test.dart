@@ -410,6 +410,9 @@ void main() {
 
     expect(find.text('Modifier la mission'), findsOneWidget);
     expect(find.text('Enregistrer les modifications'), findsOneWidget);
+    expect(find.text(location.name), findsOneWidget);
+    expect(find.text('08:00'), findsOneWidget);
+    expect(find.text('12:00'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
     expect(find.text('Consigne initiale'), findsOneWidget);
     expect(find.byKey(const Key('publish-mission')), findsNothing);
@@ -424,6 +427,68 @@ void main() {
     expect(repository.lastDraft?.location.id, location.id);
     expect(repository.lastDraft?.requiredPhysiotherapists, 2);
     expect(find.text('Mission mise à jour.'), findsOneWidget);
+  });
+
+  testWidgets('return from edit mode closes the form without writing', (
+    tester,
+  ) async {
+    final location = places.first;
+    final start = DateTime.now().add(const Duration(days: 1));
+    final mission = CoordinationNeed(
+      id: 'mission-cancel-edit',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: '03/08/2026',
+      time: '08:00 — 12:00',
+      startAt: DateTime(start.year, start.month, start.day, 8),
+      endAt: DateTime(start.year, start.month, start.day, 12),
+      requiredPhysiotherapists: 2,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 1,
+      registeredPodiatrists: 0,
+      equipment: const ['Tables', 'Huiles'],
+      details: 'Consigne conservée',
+    );
+    final repository = _MissionRepository(locations: [location]);
+    final liveData = LiveCoordinationData(repository);
+    addTearDown(liveData.dispose);
+    await tester.pumpWidget(
+      RepositoryScope(
+        repository: repository,
+        child: MaterialApp(
+          home: LiveCoordinationDataScope(
+            data: liveData,
+            child: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => openMissionEditor(context, mission),
+                child: const Text('Ouvrir'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ouvrir'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Modifier la mission'), findsOneWidget);
+    expect(find.text(location.name), findsOneWidget);
+    expect(find.text('08:00'), findsOneWidget);
+    expect(find.text('12:00'), findsOneWidget);
+    expect(find.text('Consigne conservée'), findsOneWidget);
+    expect(repository.updateCalls, 0);
+    expect(repository.calls, 0);
+
+    await tester.tap(find.text('Retour'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ouvrir'), findsOneWidget);
+    expect(find.text('Modifier la mission'), findsNothing);
+    expect(repository.updateCalls, 0);
+    expect(repository.calls, 0);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('edit mode refuses a quota below registered counters', (

@@ -8,6 +8,20 @@ import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 
+Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
+  final liveData = LiveCoordinationDataScope.of(context);
+  return Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => LiveCoordinationDataScope(
+        data: liveData,
+        child: Scaffold(
+          body: SafeArea(child: CreateNeedScreen(mission: mission)),
+        ),
+      ),
+    ),
+  );
+}
+
 class CreateNeedScreen extends StatefulWidget {
   const CreateNeedScreen({super.key, this.onViewMission, this.mission});
 

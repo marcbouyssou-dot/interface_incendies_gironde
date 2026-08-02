@@ -182,13 +182,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
   void _select(int index) => setState(() => _filter = index);
 
   void _openMissionEditor(BuildContext context, CoordinationNeed mission) {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          body: SafeArea(child: CreateNeedScreen(mission: mission)),
-        ),
-      ),
-    );
+    openMissionEditor(context, mission);
   }
 }
 
