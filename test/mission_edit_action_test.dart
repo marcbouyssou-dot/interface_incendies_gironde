@@ -86,7 +86,13 @@ void main() {
     expect(find.text('Modifier la mission'), findsOneWidget);
     expect(find.byKey(const Key('update-mission')), findsOneWidget);
     expect(find.text(location.name), findsOneWidget);
-    expect(find.text('03/08/2026'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('mission-date')),
+        matching: find.text('lundi 3 août 2026'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('08:00'), findsOneWidget);
     expect(find.text('12:00'), findsOneWidget);
   });
