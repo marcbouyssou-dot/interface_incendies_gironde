@@ -669,17 +669,35 @@ class NeedCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 7),
-                Text(
-                  need.equipment
-                      .where((item) => item.trim().isNotEmpty)
-                      .join(' • '),
+                Wrap(
                   key: const Key('mission-equipment-text'),
-                  style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    height: 1.4,
-                  ),
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: need.equipment
+                      .where((item) => item.trim().isNotEmpty)
+                      .map(
+                        (item) => Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Text(
+                            item,
+                            style: const TextStyle(
+                              color: AppColors.navy,
+                              fontSize: 12,
+                              height: 1.2,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
                 ),
               ],
               const SizedBox(height: 20),
