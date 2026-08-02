@@ -7,7 +7,7 @@ import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'create_need_screen.dart';
 
-class LocationDetailScreen extends StatelessWidget {
+class LocationDetailScreen extends StatefulWidget {
   const LocationDetailScreen({
     super.key,
     required this.location,
@@ -20,6 +20,18 @@ class LocationDetailScreen extends StatelessWidget {
   final Stream<List<CoordinationNeed>>? missions;
   final Stream<List<ResponsePlace>>? locations;
   final Stream<ResponsibleAccess?>? responsibleAccess;
+
+  @override
+  State<LocationDetailScreen> createState() => _LocationDetailScreenState();
+}
+
+class _LocationDetailScreenState extends State<LocationDetailScreen> {
+  String? _editingMissionId;
+
+  ResponsePlace get location => widget.location;
+  Stream<List<CoordinationNeed>>? get missions => widget.missions;
+  Stream<List<ResponsePlace>>? get locations => widget.locations;
+  Stream<ResponsibleAccess?>? get responsibleAccess => widget.responsibleAccess;
 
   @override
   Widget build(BuildContext context) {
@@ -182,6 +194,9 @@ class LocationDetailScreen extends StatelessWidget {
               key: ValueKey(activeMissions[index].id),
               need: activeMissions[index],
               location: currentLocation,
+              isMissionEditorOpening:
+                  _editingMissionId == activeMissions[index].id,
+              isMissionEditorBlocked: _editingMissionId != null,
               onEditMission:
                   access?.hasPrivilegedAccess == true &&
                       access!.canManage(currentLocation.id)
@@ -194,8 +209,17 @@ class LocationDetailScreen extends StatelessWidget {
     );
   }
 
-  void _openMissionEditor(BuildContext context, CoordinationNeed mission) {
-    openMissionEditor(context, mission);
+  Future<void> _openMissionEditor(
+    BuildContext context,
+    CoordinationNeed mission,
+  ) async {
+    if (_editingMissionId != null) return;
+    setState(() => _editingMissionId = mission.id);
+    try {
+      await openMissionEditor(context, mission);
+    } finally {
+      if (mounted) setState(() => _editingMissionId = null);
+    }
   }
 
   ResponsePlace? _locationFrom(List<ResponsePlace> values) {

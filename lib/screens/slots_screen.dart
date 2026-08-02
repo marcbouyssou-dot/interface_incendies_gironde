@@ -19,6 +19,7 @@ class SlotsScreen extends StatefulWidget {
 class _SlotsScreenState extends State<SlotsScreen> {
   int _filter = 0;
   TerritorialGroup? _group;
+  String? _editingMissionId;
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
@@ -166,6 +167,8 @@ class _SlotsScreenState extends State<SlotsScreen> {
                   key: ValueKey(need.place),
                   need: need,
                   location: location,
+                  isMissionEditorOpening: _editingMissionId == need.id,
+                  isMissionEditorBlocked: _editingMissionId != null,
                   onEditMission: canEdit
                       ? () => _openMissionEditor(context, need)
                       : null,
@@ -181,8 +184,17 @@ class _SlotsScreenState extends State<SlotsScreen> {
 
   void _select(int index) => setState(() => _filter = index);
 
-  void _openMissionEditor(BuildContext context, CoordinationNeed mission) {
-    openMissionEditor(context, mission);
+  Future<void> _openMissionEditor(
+    BuildContext context,
+    CoordinationNeed mission,
+  ) async {
+    if (_editingMissionId != null) return;
+    setState(() => _editingMissionId = mission.id);
+    try {
+      await openMissionEditor(context, mission);
+    } finally {
+      if (mounted) setState(() => _editingMissionId = null);
+    }
   }
 }
 

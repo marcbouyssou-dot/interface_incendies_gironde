@@ -35,6 +35,7 @@ class CoordinationScreen extends StatefulWidget {
 }
 
 class _CoordinationScreenState extends State<CoordinationScreen> {
+  String? _editingMissionId;
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
@@ -264,12 +265,30 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                   locations,
                 ),
                 access: access,
+                isMissionEditorOpening:
+                    _editingMissionId == visibleMissions[index].id,
+                isMissionEditorBlocked: _editingMissionId != null,
+                onEditMission: () =>
+                    _openMissionEditor(context, visibleMissions[index]),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _openMissionEditor(
+    BuildContext context,
+    CoordinationNeed mission,
+  ) async {
+    if (_editingMissionId != null) return;
+    setState(() => _editingMissionId = mission.id);
+    try {
+      await openMissionEditor(context, mission);
+    } finally {
+      if (mounted) setState(() => _editingMissionId = null);
+    }
   }
 }
 
@@ -377,10 +396,16 @@ class _SituationRow extends StatelessWidget {
     required this.need,
     required this.location,
     required this.access,
+    required this.isMissionEditorOpening,
+    required this.isMissionEditorBlocked,
+    required this.onEditMission,
   });
   final CoordinationNeed need;
   final ResponsePlace? location;
   final ResponsibleAccess? access;
+  final bool isMissionEditorOpening;
+  final bool isMissionEditorBlocked;
+  final VoidCallback onEditMission;
 
   @override
   Widget build(BuildContext context) {
@@ -428,6 +453,9 @@ class _SituationRow extends StatelessWidget {
               need: need,
               location: location,
               access: access,
+              isMissionEditorOpening: isMissionEditorOpening,
+              isMissionEditorBlocked: isMissionEditorBlocked,
+              onEditMission: onEditMission,
             ),
           ],
         ),
@@ -441,11 +469,17 @@ class _ResponsibleMissionActions extends StatelessWidget {
     required this.need,
     required this.location,
     required this.access,
+    required this.isMissionEditorOpening,
+    required this.isMissionEditorBlocked,
+    required this.onEditMission,
   });
 
   final CoordinationNeed need;
   final ResponsePlace? location;
   final ResponsibleAccess? access;
+  final bool isMissionEditorOpening;
+  final bool isMissionEditorBlocked;
+  final VoidCallback onEditMission;
 
   @override
   Widget build(BuildContext context) {
@@ -469,9 +503,18 @@ class _ResponsibleMissionActions extends StatelessWidget {
         children: [
           OutlinedButton.icon(
             key: Key('edit-mission-${need.id}'),
-            onPressed: () => openMissionEditor(context, need),
-            icon: const Icon(Icons.edit_outlined),
-            label: const Text('Modifier la mission'),
+            onPressed: isMissionEditorBlocked ? null : onEditMission,
+            icon: isMissionEditorOpening
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.edit_outlined),
+            label: Text(
+              isMissionEditorOpening
+                  ? 'Modification en cours…'
+                  : 'Modifier la mission',
+            ),
           ),
           if (canCancel) MissionCancellationButton(need: need),
         ],
