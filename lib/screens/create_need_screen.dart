@@ -221,12 +221,22 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                 ? 'Mettez à jour les informations opérationnelles.'
                 : 'Publiez les renforts nécessaires.',
           ),
-          if (_isEditing) ...[
+          if (Navigator.of(context).canPop()) ...[
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: _publishing ? null : () => Navigator.pop(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textMuted,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: _publishing
+                    ? null
+                    : () => Navigator.maybePop(context),
                 icon: const Icon(Icons.arrow_back_rounded),
                 label: const Text('Retour'),
               ),
