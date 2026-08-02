@@ -344,6 +344,7 @@ class _ActivationFrame extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
               children: [
                 const Center(child: BrandMark(size: 72)),

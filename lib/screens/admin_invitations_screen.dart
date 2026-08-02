@@ -43,32 +43,34 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Responsables')),
-      body: StreamBuilder<ResponsibleAccess?>(
-        stream: _access,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            if (isInvalidResponsibleAccessError(snapshot.error)) {
-              return const InvalidResponsibleAccessState();
+      body: SafeArea(
+        top: false,
+        child: StreamBuilder<ResponsibleAccess?>(
+          stream: _access,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              if (isInvalidResponsibleAccessError(snapshot.error)) {
+                return const InvalidResponsibleAccessState();
+              }
+              return const _AccessDenied();
             }
-            return const _AccessDenied();
-          }
-          if (!snapshot.hasData) {
-            return snapshot.connectionState == ConnectionState.waiting
-                ? const Center(child: CircularProgressIndicator())
-                : const _AccessDenied();
-          }
-          if (snapshot.data?.isCoordinator != true) {
-            return const _AccessDenied();
-          }
-          return _CoordinatorInvitationsContent(
-            repository: AdminInvitationRepositoryScope.of(context),
-            accessRepository: ResponsibleAccessAdministrationRepositoryScope.of(
-              context,
-            ),
-            currentUid: snapshot.data!.uid,
-            locations: _locations!,
-          );
-        },
+            if (!snapshot.hasData) {
+              return snapshot.connectionState == ConnectionState.waiting
+                  ? const Center(child: CircularProgressIndicator())
+                  : const _AccessDenied();
+            }
+            if (snapshot.data?.isCoordinator != true) {
+              return const _AccessDenied();
+            }
+            return _CoordinatorInvitationsContent(
+              repository: AdminInvitationRepositoryScope.of(context),
+              accessRepository:
+                  ResponsibleAccessAdministrationRepositoryScope.of(context),
+              currentUid: snapshot.data!.uid,
+              locations: _locations!,
+            );
+          },
+        ),
       ),
     );
   }

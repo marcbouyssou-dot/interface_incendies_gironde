@@ -211,9 +211,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     return PageContainer(
       child: ListView(
         key: const PageStorageKey('create'),
-        keyboardDismissBehavior: _isEditing
-            ? ScrollViewKeyboardDismissBehavior.onDrag
-            : ScrollViewKeyboardDismissBehavior.manual,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: AppFormLayout.pagePadding,
         children: [
           PageHeader(
@@ -393,12 +391,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     controller: _detailsController,
                     enabled: !_publishing,
                     maxLines: 3,
-                    scrollPadding: EdgeInsets.fromLTRB(
-                      20,
-                      20,
-                      20,
-                      _isEditing ? 120 : 20,
-                    ),
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                     onTapOutside: _isEditing
                         ? (_) => FocusManager.instance.primaryFocus?.unfocus()
                         : null,
@@ -745,6 +738,7 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
   Widget build(BuildContext context) {
     return PageContainer(
       child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: AppFormLayout.pagePadding,
         children: [
           const PageHeader(

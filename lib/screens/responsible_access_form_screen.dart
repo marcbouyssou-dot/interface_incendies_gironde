@@ -84,7 +84,10 @@ class _ResponsibleAccessFormScreenState
                     onPressed: _submitting
                         ? null
                         : () => Navigator.pop(context),
-                    child: const Text('Annuler'),
+                    child: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Annuler'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -92,8 +95,11 @@ class _ResponsibleAccessFormScreenState
                   child: FilledButton(
                     key: const Key('save-responsible-access'),
                     onPressed: _submitting ? null : _save,
-                    child: Text(
-                      _submitting ? 'Enregistrement…' : 'Enregistrer',
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _submitting ? 'Enregistrement…' : 'Enregistrer',
+                      ),
                     ),
                   ),
                 ),
@@ -105,6 +111,7 @@ class _ResponsibleAccessFormScreenState
       body: PageContainer(
         child: ListView(
           key: const Key('responsible-access-form'),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: AppFormLayout.pagePadding,
           children: [
             Text(

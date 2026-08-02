@@ -129,6 +129,12 @@ class _LocationMultiSelectorState extends State<LocationMultiSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final visibleHeight = mediaQuery.size.height - mediaQuery.viewInsets.bottom;
+    final preferredListHeight = visibleHeight * 0.35;
+    final effectiveListHeight = widget.listHeight <= 180
+        ? widget.listHeight
+        : preferredListHeight.clamp(180.0, widget.listHeight).toDouble();
     final available = _availableLocations;
     final filtered = _filteredLocations;
     final selectedLocations = available
@@ -214,7 +220,7 @@ class _LocationMultiSelectorState extends State<LocationMultiSelector> {
         ),
         const SizedBox(height: 8),
         Container(
-          height: widget.listHeight,
+          height: effectiveListHeight,
           decoration: BoxDecoration(
             color: Colors.white,
             border: Border.all(color: AppColors.border),

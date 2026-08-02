@@ -37,86 +37,92 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Fiche du lieu')),
-      body: StreamBuilder<ResponsibleAccess?>(
-        stream: responsibleAccess ?? Stream.value(null),
-        builder: (context, accessSnapshot) => PageContainer(
-          child: locations == null
-              ? _buildMissions(
-                  context,
-                  location,
-                  accessSnapshot.hasError ? null : accessSnapshot.data,
-                )
-              : StreamBuilder<List<CoordinationNeed>>(
-                  stream: missions ?? Stream.value(const <CoordinationNeed>[]),
-                  builder: (context, missionsSnapshot) {
-                    return StreamBuilder<List<ResponsePlace>>(
-                      stream: locations,
-                      builder: (context, locationsSnapshot) {
-                        if (locationsSnapshot.hasError) {
-                          return const CriticalDataUnavailableState(
-                            stateKey: Key(
-                              'location-detail-location-unavailable-state',
-                            ),
-                            eyebrow: 'Fiche du lieu',
-                            title: 'Informations du centre indisponibles',
-                            message:
-                                'Nous ne pouvons pas charger les informations '
-                                'de ce centre pour le moment.',
-                            safetyMessage:
-                                'Les anciennes coordonnées ne sont pas '
-                                'affichées afin d’éviter toute information '
-                                'périmée.',
+      body: SafeArea(
+        top: false,
+        child: StreamBuilder<ResponsibleAccess?>(
+          stream: responsibleAccess ?? Stream.value(null),
+          builder: (context, accessSnapshot) => PageContainer(
+            child: locations == null
+                ? _buildMissions(
+                    context,
+                    location,
+                    accessSnapshot.hasError ? null : accessSnapshot.data,
+                  )
+                : StreamBuilder<List<CoordinationNeed>>(
+                    stream:
+                        missions ?? Stream.value(const <CoordinationNeed>[]),
+                    builder: (context, missionsSnapshot) {
+                      return StreamBuilder<List<ResponsePlace>>(
+                        stream: locations,
+                        builder: (context, locationsSnapshot) {
+                          if (locationsSnapshot.hasError) {
+                            return const CriticalDataUnavailableState(
+                              stateKey: Key(
+                                'location-detail-location-unavailable-state',
+                              ),
+                              eyebrow: 'Fiche du lieu',
+                              title: 'Informations du centre indisponibles',
+                              message:
+                                  'Nous ne pouvons pas charger les informations '
+                                  'de ce centre pour le moment.',
+                              safetyMessage:
+                                  'Les anciennes coordonnées ne sont pas '
+                                  'affichées afin d’éviter toute information '
+                                  'périmée.',
+                            );
+                          }
+                          if (missionsSnapshot.hasError) {
+                            return const CriticalDataUnavailableState(
+                              stateKey: Key(
+                                'location-missions-unavailable-state',
+                              ),
+                              eyebrow: 'Fiche du lieu',
+                              title: 'Missions temporairement indisponibles',
+                              message:
+                                  'Nous ne pouvons pas charger les besoins de ce '
+                                  'lieu pour le moment.',
+                              safetyMessage:
+                                  'Les anciennes missions ne sont pas affichées '
+                                  'afin d’éviter toute information périmée.',
+                            );
+                          }
+                          if (!locationsSnapshot.hasData ||
+                              !missionsSnapshot.hasData) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          final currentLocation = _locationFrom(
+                            locationsSnapshot.data!,
                           );
-                        }
-                        if (missionsSnapshot.hasError) {
-                          return const CriticalDataUnavailableState(
-                            stateKey: Key(
-                              'location-missions-unavailable-state',
-                            ),
-                            eyebrow: 'Fiche du lieu',
-                            title: 'Missions temporairement indisponibles',
-                            message:
-                                'Nous ne pouvons pas charger les besoins de ce '
-                                'lieu pour le moment.',
-                            safetyMessage:
-                                'Les anciennes missions ne sont pas affichées '
-                                'afin d’éviter toute information périmée.',
+                          if (currentLocation == null) {
+                            return const CriticalDataUnavailableState(
+                              stateKey: Key(
+                                'location-detail-location-missing-state',
+                              ),
+                              eyebrow: 'Fiche du lieu',
+                              title: 'Lieu indisponible',
+                              message:
+                                  'Ce lieu ne figure plus dans les données '
+                                  'actuellement disponibles.',
+                              safetyMessage:
+                                  'Les anciennes coordonnées ne sont pas '
+                                  'affichées.',
+                            );
+                          }
+                          return _buildContent(
+                            context,
+                            currentLocation,
+                            missionsSnapshot.data!,
+                            accessSnapshot.hasError
+                                ? null
+                                : accessSnapshot.data,
                           );
-                        }
-                        if (!locationsSnapshot.hasData ||
-                            !missionsSnapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        final currentLocation = _locationFrom(
-                          locationsSnapshot.data!,
-                        );
-                        if (currentLocation == null) {
-                          return const CriticalDataUnavailableState(
-                            stateKey: Key(
-                              'location-detail-location-missing-state',
-                            ),
-                            eyebrow: 'Fiche du lieu',
-                            title: 'Lieu indisponible',
-                            message:
-                                'Ce lieu ne figure plus dans les données '
-                                'actuellement disponibles.',
-                            safetyMessage:
-                                'Les anciennes coordonnées ne sont pas '
-                                'affichées.',
-                          );
-                        }
-                        return _buildContent(
-                          context,
-                          currentLocation,
-                          missionsSnapshot.data!,
-                          accessSnapshot.hasError ? null : accessSnapshot.data,
-                        );
-                      },
-                    );
-                  },
-                ),
+                        },
+                      );
+                    },
+                  ),
+          ),
         ),
       ),
     );

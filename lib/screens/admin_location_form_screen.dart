@@ -87,6 +87,7 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
             key: _formKey,
             child: ListView(
               key: const Key('admin-location-form-list'),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: AppFormLayout.pagePadding,
               children: [
                 TextFormField(
@@ -144,12 +145,9 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
                 const SizedBox(height: AppFormLayout.titleSpacing),
                 _field(_addressLine1, 'Adresse'),
                 _field(_addressLine2, 'Complément d’adresse'),
-                Row(
-                  children: [
-                    Expanded(child: _field(_postalCode, 'Code postal')),
-                    const SizedBox(width: 12),
-                    Expanded(child: _field(_city, 'Commune')),
-                  ],
+                _AdaptiveFieldPair(
+                  first: _field(_postalCode, 'Code postal'),
+                  second: _field(_city, 'Commune'),
                 ),
                 _field(
                   _country,
@@ -170,34 +168,27 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
                 const SizedBox(height: AppFormLayout.sectionTransitionSpacing),
                 const FormSectionTitle(title: 'Coordonnées facultatives'),
                 const SizedBox(height: AppFormLayout.titleSpacing),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _field(
-                        _latitude,
-                        'Latitude',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          signed: true,
-                          decimal: true,
-                        ),
-                        validator: (value) =>
-                            _validateCoordinate(value, min: -90, max: 90),
-                      ),
+                _AdaptiveFieldPair(
+                  first: _field(
+                    _latitude,
+                    'Latitude',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      signed: true,
+                      decimal: true,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _field(
-                        _longitude,
-                        'Longitude',
-                        keyboardType: const TextInputType.numberWithOptions(
-                          signed: true,
-                          decimal: true,
-                        ),
-                        validator: (value) =>
-                            _validateCoordinate(value, min: -180, max: 180),
-                      ),
+                    validator: (value) =>
+                        _validateCoordinate(value, min: -90, max: 90),
+                  ),
+                  second: _field(
+                    _longitude,
+                    'Longitude',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      signed: true,
+                      decimal: true,
                     ),
-                  ],
+                    validator: (value) =>
+                        _validateCoordinate(value, min: -180, max: 180),
+                  ),
                 ),
                 if (_editing) ...[
                   const SizedBox(height: 10),
@@ -331,4 +322,29 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
   }
 
   static String _coordinate(double? value) => value?.toString() ?? '';
+}
+
+class _AdaptiveFieldPair extends StatelessWidget {
+  const _AdaptiveFieldPair({required this.first, required this.second});
+
+  final Widget first;
+  final Widget second;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 300) {
+          return Column(children: [first, second]);
+        }
+        return Row(
+          children: [
+            Expanded(child: first),
+            const SizedBox(width: 12),
+            Expanded(child: second),
+          ],
+        );
+      },
+    );
+  }
 }

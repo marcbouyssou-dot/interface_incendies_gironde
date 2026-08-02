@@ -49,34 +49,37 @@ class _LocationAdministrationScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Lieux')),
-      body: StreamBuilder<ResponsibleAccess?>(
-        stream: _access,
-        builder: (context, accessSnapshot) {
-          if (accessSnapshot.hasError) {
-            return _AccessRefused(onRetry: _retryAccess);
-          }
-          if (!accessSnapshot.hasData &&
-              accessSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final access = accessSnapshot.data;
-          if (access == null || !access.active || !access.isCoordinator) {
-            return const _AccessRefused();
-          }
-          _locations ??= _repository!.listLocations();
-          return FutureBuilder<List<AdminLocation>>(
-            future: _locations,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return _LoadError(onRetry: _reload);
-              }
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              return _content(snapshot.data!);
-            },
-          );
-        },
+      body: SafeArea(
+        top: false,
+        child: StreamBuilder<ResponsibleAccess?>(
+          stream: _access,
+          builder: (context, accessSnapshot) {
+            if (accessSnapshot.hasError) {
+              return _AccessRefused(onRetry: _retryAccess);
+            }
+            if (!accessSnapshot.hasData &&
+                accessSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final access = accessSnapshot.data;
+            if (access == null || !access.active || !access.isCoordinator) {
+              return const _AccessRefused();
+            }
+            _locations ??= _repository!.listLocations();
+            return FutureBuilder<List<AdminLocation>>(
+              future: _locations,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return _LoadError(onRetry: _reload);
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return _content(snapshot.data!);
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -103,7 +106,8 @@ class _LocationAdministrationScreenState
       onRefresh: _reload,
       child: ListView(
         key: const Key('admin-location-list'),
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 100),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
         children: [
           FilledButton.icon(
             key: const Key('admin-location-create'),

@@ -13,7 +13,13 @@ class InformationConsentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Informations et consentement')),
+      appBar: AppBar(
+        title: const Text(
+          'Informations et consentement',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: SafeArea(
         child: PageContainer(
           child: ListView(

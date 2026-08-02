@@ -1471,6 +1471,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     }
     return SafeArea(
       child: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: EdgeInsets.fromLTRB(
           20,
           4,
@@ -1549,26 +1550,37 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   ),
                 ),
                 const SizedBox(height: AppFormLayout.fieldSpacing),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _firstNameController,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(labelText: 'Prénom'),
-                        validator: _required,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _lastNameController,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(labelText: 'Nom'),
-                        validator: _required,
-                      ),
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final firstNameField = TextFormField(
+                      controller: _firstNameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Prénom'),
+                      validator: _required,
+                    );
+                    final lastNameField = TextFormField(
+                      controller: _lastNameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Nom'),
+                      validator: _required,
+                    );
+                    if (constraints.maxWidth < 300) {
+                      return Column(
+                        children: [
+                          firstNameField,
+                          const SizedBox(height: AppFormLayout.fieldSpacing),
+                          lastNameField,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: firstNameField),
+                        const SizedBox(width: 12),
+                        Expanded(child: lastNameField),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: AppFormLayout.fieldSpacing),
                 TextFormField(

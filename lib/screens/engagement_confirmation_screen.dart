@@ -25,69 +25,79 @@ class EngagementConfirmationScreen extends StatelessWidget {
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Spacer(),
-                  const Text('❤️', style: TextStyle(fontSize: 48)),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Merci !',
-                    style: Theme.of(context).textTheme.headlineLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    result.existingMessage ?? 'Votre engagement est confirmé.',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  if (result == EngagementCreationResult.alreadyPending) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Une ancienne demande est encore en attente.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _ConfirmationDetail(
-                            icon: Icons.location_on_outlined,
-                            label: 'Lieu',
-                            value: need.place,
-                          ),
-                          if (location?.verifiedAddress != null) ...[
-                            const SizedBox(height: 6),
-                            LocationAddressLine(location: location),
-                          ],
-                          const SizedBox(height: 18),
-                          _ConfirmationDetail(
-                            icon: Icons.schedule_rounded,
-                            label: 'Horaires',
-                            value: need.time,
-                          ),
-                          const SizedBox(height: 18),
-                          _ConfirmationDetail(
-                            icon: Icons.medical_services_outlined,
-                            label: 'Matériel demandé',
-                            value: need.equipment.join(' • '),
+            child: CustomScrollView(
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Spacer(),
+                        const Text('❤️', style: TextStyle(fontSize: 48)),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Merci !',
+                          style: Theme.of(context).textTheme.headlineLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          result.existingMessage ??
+                              'Votre engagement est confirmé.',
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        if (result ==
+                            EngagementCreationResult.alreadyPending) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Une ancienne demande est encore en attente.',
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ],
-                      ),
+                        const SizedBox(height: 32),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _ConfirmationDetail(
+                                  icon: Icons.location_on_outlined,
+                                  label: 'Lieu',
+                                  value: need.place,
+                                ),
+                                if (location?.verifiedAddress != null) ...[
+                                  const SizedBox(height: 6),
+                                  LocationAddressLine(location: location),
+                                ],
+                                const SizedBox(height: 18),
+                                _ConfirmationDetail(
+                                  icon: Icons.schedule_rounded,
+                                  label: 'Horaires',
+                                  value: need.time,
+                                ),
+                                const SizedBox(height: 18),
+                                _ConfirmationDetail(
+                                  icon: Icons.medical_services_outlined,
+                                  label: 'Matériel demandé',
+                                  value: need.equipment.join(' • '),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        const SizedBox(height: 24),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Retour aux interventions'),
+                        ),
+                      ],
                     ),
                   ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Retour aux interventions'),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

@@ -9,7 +9,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Politique de confidentialité')),
+      appBar: AppBar(
+        title: const Text(
+          'Politique de confidentialité',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: SafeArea(
         child: PageContainer(
           child: ListView(
