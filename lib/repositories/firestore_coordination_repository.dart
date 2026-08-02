@@ -653,14 +653,25 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) async {
+    final resolvedProfessionalIdType =
+        professionalIdType ??
+        ((rpps?.trim().isNotEmpty ?? false)
+            ? ProfessionalIdType.rpps
+            : ProfessionalIdType.none);
+    final resolvedProfessionalIdValue = professionalIdValue ?? rpps ?? '';
+    if (!isValidProfessionalIdentifier(
+      resolvedProfessionalIdType,
+      resolvedProfessionalIdValue,
+    )) {
+      throw const RepositoryException(
+        'Complétez votre profil avec un numéro RPPS ou ordinal avant de '
+        'participer.',
+      );
+    }
     _validateRequiredProfileFields(
       email: email,
-      professionalIdType:
-          professionalIdType ??
-          ((rpps?.trim().isNotEmpty ?? false)
-              ? ProfessionalIdType.rpps
-              : ProfessionalIdType.none),
-      professionalIdValue: professionalIdValue ?? rpps ?? '',
+      professionalIdType: resolvedProfessionalIdType,
+      professionalIdValue: resolvedProfessionalIdValue,
       cptsId: cptsId,
       cptsLabel: cptsLabel,
       equipment: equipment,
@@ -749,16 +760,12 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
                 equipment,
               ),
             };
-            final resolvedIdType =
-                professionalIdType ??
-                ((rpps?.trim().isNotEmpty ?? false)
-                    ? ProfessionalIdType.rpps
-                    : ProfessionalIdType.none);
             final resolvedIdValue = _normalizeProfessionalIdValue(
-              resolvedIdType,
-              professionalIdValue ?? rpps ?? '',
+              resolvedProfessionalIdType,
+              resolvedProfessionalIdValue,
             );
-            volunteerData['professionalIdType'] = resolvedIdType.name;
+            volunteerData['professionalIdType'] =
+                resolvedProfessionalIdType.name;
             volunteerData['professionalIdValue'] = resolvedIdValue;
             final normalizedEmail = email?.trim();
             if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
@@ -767,7 +774,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
               volunteerData['email'] = FieldValue.delete();
             }
             for (final entry in {
-              'rpps': resolvedIdType == ProfessionalIdType.rpps
+              'rpps': resolvedProfessionalIdType == ProfessionalIdType.rpps
                   ? resolvedIdValue
                   : null,
               'cptsId': _nullableTrim(cptsId),

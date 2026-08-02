@@ -10,6 +10,12 @@ extension ProfessionalIdTypeLabel on ProfessionalIdType {
   };
 }
 
+bool isValidProfessionalIdentifier(ProfessionalIdType type, String? value) {
+  return (type == ProfessionalIdType.rpps ||
+          type == ProfessionalIdType.ordinal) &&
+      (value?.trim().isNotEmpty ?? false);
+}
+
 class VolunteerProfile {
   const VolunteerProfile({
     required this.uid,
@@ -58,6 +64,11 @@ class VolunteerProfile {
                   : null) ??
               '')
           .trim();
+
+  bool get hasValidProfessionalIdentifier => isValidProfessionalIdentifier(
+    effectiveProfessionalIdType,
+    effectiveProfessionalIdValue,
+  );
 
   VolunteerProfile copyWith({
     String? firstName,

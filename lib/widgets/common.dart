@@ -1290,6 +1290,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   bool get _equipmentDetailsRequired =>
       ProfessionalEquipmentRegistry.requiresDetails(_selectedEquipment);
 
+  bool get _hasValidProfessionalIdentifier => isValidProfessionalIdentifier(
+    _professionalIdType,
+    _professionalIdController.text,
+  );
+
   @override
   void initState() {
     super.initState();
@@ -1445,12 +1450,20 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppFormLayout.sectionSpacing),
+              if (!_hasValidProfessionalIdentifier) ...[
+                const _ProfessionalIdentifierRequiredNotice(),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
+              ],
               if (_profile != null && !_editingProfile) ...[
                 _ProfileSummary(profile: _profile!),
                 const SizedBox(height: 6),
                 TextButton(
                   onPressed: () => setState(() => _editingProfile = true),
-                  child: const Text('Modifier mes informations'),
+                  child: Text(
+                    _profile!.hasValidProfessionalIdentifier
+                        ? 'Modifier mes informations'
+                        : 'Compléter mon profil',
+                  ),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -1528,6 +1541,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                         ),
                       )
                       .toList(),
+                  validator: (type) =>
+                      type == ProfessionalIdType.rpps ||
+                          type == ProfessionalIdType.ordinal
+                      ? null
+                      : 'Choisissez un identifiant RPPS ou ordinal.',
                   onChanged: (type) {
                     if (type == null) return;
                     setState(() {
@@ -1552,6 +1570,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                           : 'Numéro ordinal',
                     ),
                     validator: _professionalId,
+                    onChanged: (_) => setState(() {}),
                   ),
                 ],
                 const SizedBox(height: AppFormLayout.fieldSpacing),
@@ -1713,6 +1732,18 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   Future<void> _submit() async {
     if (_submitting) return;
+    if (!_hasValidProfessionalIdentifier) {
+      setState(() => _editingProfile = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complétez votre profil avec un numéro RPPS ou ordinal avant de '
+            'participer.',
+          ),
+        ),
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
     late final EngagementCreationResult result;
@@ -1764,6 +1795,43 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
           location: widget.location,
           result: result,
         ),
+      ),
+    );
+  }
+}
+
+class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
+  const _ProfessionalIdentifierRequiredNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('professional-identifier-required'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.orangeSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.badge_outlined, color: AppColors.orange, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Un numéro RPPS ou ordinal est obligatoire pour participer. '
+              'Complétez votre profil avant de confirmer votre participation.',
+              style: TextStyle(
+                color: AppColors.navy,
+                fontSize: 13,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

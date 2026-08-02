@@ -529,14 +529,25 @@ class MockCoordinationRepository implements CoordinationRepository {
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) async {
+    final resolvedProfessionalIdType =
+        professionalIdType ??
+        ((rpps?.trim().isNotEmpty ?? false)
+            ? ProfessionalIdType.rpps
+            : ProfessionalIdType.none);
+    final resolvedProfessionalIdValue = professionalIdValue ?? rpps ?? '';
+    if (!isValidProfessionalIdentifier(
+      resolvedProfessionalIdType,
+      resolvedProfessionalIdValue,
+    )) {
+      throw const RepositoryException(
+        'Complétez votre profil avec un numéro RPPS ou ordinal avant de '
+        'participer.',
+      );
+    }
     _validateRequiredProfileFields(
       email: email,
-      professionalIdType:
-          professionalIdType ??
-          ((rpps?.trim().isNotEmpty ?? false)
-              ? ProfessionalIdType.rpps
-              : ProfessionalIdType.none),
-      professionalIdValue: professionalIdValue ?? rpps ?? '',
+      professionalIdType: resolvedProfessionalIdType,
+      professionalIdValue: resolvedProfessionalIdValue,
       cptsId: cptsId,
       cptsLabel: cptsLabel,
       equipment: equipment,
@@ -597,25 +608,13 @@ class MockCoordinationRepository implements CoordinationRepository {
       lastName: lastName.trim(),
       phone: phone.trim(),
       email: _nullableTrim(email),
-      rpps:
-          (professionalIdType ??
-                  ((rpps?.trim().isNotEmpty ?? false)
-                      ? ProfessionalIdType.rpps
-                      : ProfessionalIdType.none)) ==
-              ProfessionalIdType.rpps
-          ? _normalizeRpps(professionalIdValue ?? rpps)
+      rpps: resolvedProfessionalIdType == ProfessionalIdType.rpps
+          ? _normalizeRpps(resolvedProfessionalIdValue)
           : null,
-      professionalIdType:
-          professionalIdType ??
-          ((rpps?.trim().isNotEmpty ?? false)
-              ? ProfessionalIdType.rpps
-              : ProfessionalIdType.none),
+      professionalIdType: resolvedProfessionalIdType,
       professionalIdValue: _normalizeProfessionalIdValue(
-        professionalIdType ??
-            ((rpps?.trim().isNotEmpty ?? false)
-                ? ProfessionalIdType.rpps
-                : ProfessionalIdType.none),
-        professionalIdValue ?? rpps ?? '',
+        resolvedProfessionalIdType,
+        resolvedProfessionalIdValue,
       ),
       cptsId: _nullableTrim(cptsId),
       cptsLabel: _nullableTrim(cptsLabel),
