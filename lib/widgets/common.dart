@@ -27,6 +27,33 @@ class PageContainer extends StatelessWidget {
   }
 }
 
+abstract final class AppFormLayout {
+  static const pagePadding = EdgeInsets.fromLTRB(20, 20, 20, 36);
+  static const actionBarPadding = EdgeInsets.fromLTRB(20, 12, 20, 12);
+  static const double fieldSpacing = 14;
+  static const double sectionSpacing = 24;
+  static const double sectionTransitionSpacing = 10;
+  static const double titleSpacing = 12;
+  static const double actionHeight = 56;
+}
+
+class FormSectionTitle extends StatelessWidget {
+  const FormSectionTitle({super.key, required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
 class PageHeader extends StatelessWidget {
   const PageHeader({
     super.key,
@@ -1417,7 +1444,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 widget.need.place,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: AppFormLayout.sectionSpacing),
               if (_profile != null && !_editingProfile) ...[
                 _ProfileSummary(profile: _profile!),
                 const SizedBox(height: 6),
@@ -1428,10 +1455,8 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 const SizedBox(height: 12),
               ],
               if (_editingProfile) ...[
-                Text(
-                  'Profession',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                const FormSectionTitle(title: 'Profession'),
+                const SizedBox(height: AppFormLayout.titleSpacing),
                 RadioGroup<VolunteerProfession>(
                   groupValue: _profession,
                   onChanged: (value) => setState(() => _profession = value!),
@@ -1451,7 +1476,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
                 Row(
                   children: [
                     Expanded(
@@ -1462,7 +1487,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                         validator: _required,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: TextFormField(
                         controller: _lastNameController,
@@ -1473,14 +1498,14 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(labelText: 'Téléphone'),
                   validator: _phone,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -1488,7 +1513,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   decoration: const InputDecoration(labelText: 'Email'),
                   validator: _email,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
                 DropdownButtonFormField<ProfessionalIdType>(
                   key: const Key('professional-id-type'),
                   initialValue: _professionalIdType,
@@ -1514,7 +1539,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   },
                 ),
                 if (_professionalIdType != ProfessionalIdType.none) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppFormLayout.fieldSpacing),
                   TextFormField(
                     key: const Key('professional-id-value'),
                     controller: _professionalIdController,
@@ -1529,7 +1554,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                     validator: _professionalId,
                   ),
                 ],
-                const SizedBox(height: 10),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
                 DropdownButtonFormField<bool>(
                   key: const Key('cpts-choice'),
                   initialValue: _hasCpts,
@@ -1553,7 +1578,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   },
                 ),
                 if (_hasCpts) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppFormLayout.fieldSpacing),
                   TextFormField(
                     controller: _cptsIdController,
                     decoration: const InputDecoration(
@@ -1561,7 +1586,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                     ),
                     validator: _required,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppFormLayout.fieldSpacing),
                   TextFormField(
                     controller: _cptsController,
                     textCapitalization: TextCapitalization.words,
@@ -1569,12 +1594,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                     validator: _required,
                   ),
                 ],
-                const SizedBox(height: 16),
-                Text(
-                  'Matériel que je peux apporter',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppFormLayout.sectionSpacing),
+                const FormSectionTitle(title: 'Matériel que je peux apporter'),
+                const SizedBox(height: AppFormLayout.titleSpacing),
                 for (final equipment in _equipmentOptions)
                   CheckboxListTile(
                     key: Key('equipment-${equipment.id}'),
@@ -1625,21 +1647,25 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                     ),
                     validator: _required,
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppFormLayout.sectionSpacing),
               ],
-              FilledButton(
-                onPressed: _submitting || !_hasAvailableProfession
-                    ? null
-                    : _submit,
-                child: _submitting
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('CONFIRMER MA PARTICIPATION'),
+              SizedBox(
+                width: double.infinity,
+                height: AppFormLayout.actionHeight,
+                child: FilledButton(
+                  onPressed: _submitting || !_hasAvailableProfession
+                      ? null
+                      : _submit,
+                  child: _submitting
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('CONFIRMER MA PARTICIPATION'),
+                ),
               ),
             ],
           ),

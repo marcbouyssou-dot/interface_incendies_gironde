@@ -5,6 +5,7 @@ import '../models/need.dart';
 import '../repositories/location_administration_repository.dart';
 import '../repositories/location_administration_repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../widgets/common.dart';
 
 class AdminLocationFormScreen extends StatefulWidget {
   const AdminLocationFormScreen({super.key, this.location});
@@ -81,149 +82,160 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
         title: Text(_editing ? 'Modifier le lieu' : 'Créer un lieu'),
       ),
       body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            key: const Key('admin-location-form-list'),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-            children: [
-              TextFormField(
-                key: const Key('admin-location-id-field'),
-                controller: _id,
-                enabled: !_editing && !_submitting,
-                decoration: const InputDecoration(
-                  labelText: 'Identifiant stable',
-                  helperText: 'Minuscules, chiffres et tirets uniquement.',
-                ),
-                validator: _validateId,
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                key: const Key('admin-location-name-field'),
-                controller: _name,
-                enabled: !_submitting,
-                decoration: const InputDecoration(labelText: 'Nom'),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Saisissez le nom du lieu.'
-                    : null,
-              ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<TerritorialGroup>(
-                key: const Key('admin-location-group-field'),
-                initialValue: _group,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Groupe territorial',
-                ),
-                items: [
-                  for (final value in TerritorialGroup.values)
-                    DropdownMenuItem(value: value, child: Text(value.label)),
-                ],
-                onChanged: _submitting
-                    ? null
-                    : (value) => setState(() => _group = value!),
-              ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<ResponsePlaceType>(
-                key: const Key('admin-location-type-field'),
-                initialValue: _type,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Type de lieu'),
-                items: [
-                  for (final value in ResponsePlaceType.values)
-                    DropdownMenuItem(value: value, child: Text(value.label)),
-                ],
-                onChanged: _submitting
-                    ? null
-                    : (value) => setState(() => _type = value!),
-              ),
-              const SizedBox(height: 22),
-              const _SectionTitle('Adresse'),
-              _field(_addressLine1, 'Adresse'),
-              _field(_addressLine2, 'Complément d’adresse'),
-              Row(
-                children: [
-                  Expanded(child: _field(_postalCode, 'Code postal')),
-                  const SizedBox(width: 12),
-                  Expanded(child: _field(_city, 'Commune')),
-                ],
-              ),
-              _field(
-                _country,
-                'Pays',
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Saisissez le pays.'
-                    : null,
-              ),
-              const SizedBox(height: 18),
-              const _SectionTitle('Contact facultatif'),
-              _field(_contactName, 'Référent'),
-              _field(
-                _contactPhone,
-                'Téléphone',
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 18),
-              const _SectionTitle('Coordonnées facultatives'),
-              Row(
-                children: [
-                  Expanded(
-                    child: _field(
-                      _latitude,
-                      'Latitude',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        signed: true,
-                        decimal: true,
-                      ),
-                      validator: (value) =>
-                          _validateCoordinate(value, min: -90, max: 90),
-                    ),
+        child: PageContainer(
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              key: const Key('admin-location-form-list'),
+              padding: AppFormLayout.pagePadding,
+              children: [
+                TextFormField(
+                  key: const Key('admin-location-id-field'),
+                  controller: _id,
+                  enabled: !_editing && !_submitting,
+                  decoration: const InputDecoration(
+                    labelText: 'Identifiant stable',
+                    helperText: 'Minuscules, chiffres et tirets uniquement.',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _field(
-                      _longitude,
-                      'Longitude',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        signed: true,
-                        decimal: true,
+                  validator: _validateId,
+                ),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
+                TextFormField(
+                  key: const Key('admin-location-name-field'),
+                  controller: _name,
+                  enabled: !_submitting,
+                  decoration: const InputDecoration(labelText: 'Nom'),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Saisissez le nom du lieu.'
+                      : null,
+                ),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
+                DropdownButtonFormField<TerritorialGroup>(
+                  key: const Key('admin-location-group-field'),
+                  initialValue: _group,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Groupe territorial',
+                  ),
+                  items: [
+                    for (final value in TerritorialGroup.values)
+                      DropdownMenuItem(value: value, child: Text(value.label)),
+                  ],
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _group = value!),
+                ),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
+                DropdownButtonFormField<ResponsePlaceType>(
+                  key: const Key('admin-location-type-field'),
+                  initialValue: _type,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Type de lieu'),
+                  items: [
+                    for (final value in ResponsePlaceType.values)
+                      DropdownMenuItem(value: value, child: Text(value.label)),
+                  ],
+                  onChanged: _submitting
+                      ? null
+                      : (value) => setState(() => _type = value!),
+                ),
+                const SizedBox(height: AppFormLayout.sectionSpacing),
+                const FormSectionTitle(title: 'Adresse'),
+                const SizedBox(height: AppFormLayout.titleSpacing),
+                _field(_addressLine1, 'Adresse'),
+                _field(_addressLine2, 'Complément d’adresse'),
+                Row(
+                  children: [
+                    Expanded(child: _field(_postalCode, 'Code postal')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _field(_city, 'Commune')),
+                  ],
+                ),
+                _field(
+                  _country,
+                  'Pays',
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Saisissez le pays.'
+                      : null,
+                ),
+                const SizedBox(height: AppFormLayout.sectionTransitionSpacing),
+                const FormSectionTitle(title: 'Contact facultatif'),
+                const SizedBox(height: AppFormLayout.titleSpacing),
+                _field(_contactName, 'Référent'),
+                _field(
+                  _contactPhone,
+                  'Téléphone',
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: AppFormLayout.sectionTransitionSpacing),
+                const FormSectionTitle(title: 'Coordonnées facultatives'),
+                const SizedBox(height: AppFormLayout.titleSpacing),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _field(
+                        _latitude,
+                        'Latitude',
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                          decimal: true,
+                        ),
+                        validator: (value) =>
+                            _validateCoordinate(value, min: -90, max: 90),
                       ),
-                      validator: (value) =>
-                          _validateCoordinate(value, min: -180, max: 180),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _field(
+                        _longitude,
+                        'Longitude',
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: true,
+                          decimal: true,
+                        ),
+                        validator: (value) =>
+                            _validateCoordinate(value, min: -180, max: 180),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_editing) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.location!.active
+                        ? 'Statut : Actif'
+                        : 'Statut : Désactivé',
+                    style: const TextStyle(color: AppColors.textMuted),
+                  ),
+                  const Text(
+                    'Le statut se modifie depuis la liste des lieux.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                 ],
-              ),
-              if (_editing) ...[
-                const SizedBox(height: 10),
-                Text(
-                  widget.location!.active
-                      ? 'Statut : Actif'
-                      : 'Statut : Désactivé',
-                  style: const TextStyle(color: AppColors.textMuted),
-                ),
-                const Text(
-                  'Le statut se modifie depuis la liste des lieux.',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                ),
+                const SizedBox(height: AppFormLayout.sectionSpacing),
               ],
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-          child: FilledButton(
-            key: const Key('admin-location-submit'),
-            onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(_editing ? 'Enregistrer' : 'Créer le lieu'),
+      bottomNavigationBar: Material(
+        color: Colors.white,
+        elevation: 10,
+        child: SafeArea(
+          top: false,
+          minimum: AppFormLayout.actionBarPadding,
+          child: SizedBox(
+            height: AppFormLayout.actionHeight,
+            child: FilledButton(
+              key: const Key('admin-location-submit'),
+              onPressed: _submitting ? null : _submit,
+              child: _submitting
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(_editing ? 'Enregistrer' : 'Créer le lieu'),
+            ),
           ),
         ),
       ),
@@ -236,7 +248,7 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
     TextInputType? keyboardType,
     String? Function(String?)? validator,
   }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.only(bottom: AppFormLayout.fieldSpacing),
     child: TextFormField(
       controller: controller,
       enabled: !_submitting,
@@ -319,19 +331,4 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
   }
 
   static String _coordinate(double? value) => value?.toString() ?? '';
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Text(
-      label,
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-    ),
-  );
 }

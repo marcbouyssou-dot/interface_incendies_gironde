@@ -212,7 +212,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         keyboardDismissBehavior: _isEditing
             ? ScrollViewKeyboardDismissBehavior.onDrag
             : ScrollViewKeyboardDismissBehavior.manual,
-        padding: const EdgeInsets.fromLTRB(20, 22, 20, 36),
+        padding: AppFormLayout.pagePadding,
         children: [
           PageHeader(
             eyebrow: _isEditing ? 'Mission existante' : 'Nouvelle mission',
@@ -275,7 +275,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       });
                     },
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: AppFormLayout.fieldSpacing),
                   KeyedSubtree(
                     key: _dateKey,
                     child: _PickerField(
@@ -289,7 +289,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       onTap: _publishing ? null : _pickDate,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: AppFormLayout.fieldSpacing),
                   Row(
                     children: [
                       Expanded(
@@ -329,9 +329,9 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 18),
-                  const _FieldLabel('Professionnels recherchés'),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppFormLayout.sectionSpacing),
+                  const FormSectionTitle(title: 'Professionnels recherchés'),
+                  const SizedBox(height: AppFormLayout.titleSpacing),
                   for (final profession in HealthProfessionRegistry.values) ...[
                     _QuotaStepper(
                       key: _quotaKeys[profession.id],
@@ -352,9 +352,9 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     if (profession != HealthProfessionRegistry.values.last)
                       const SizedBox(height: 8),
                   ],
-                  const SizedBox(height: 18),
-                  const _FieldLabel('Matériel'),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppFormLayout.sectionSpacing),
+                  const FormSectionTitle(title: 'Matériel'),
+                  const SizedBox(height: AppFormLayout.titleSpacing),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -384,9 +384,9 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             )
                             .toList(),
                   ),
-                  const SizedBox(height: 18),
-                  const _FieldLabel('Commentaire'),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppFormLayout.sectionSpacing),
+                  const FormSectionTitle(title: 'Commentaire'),
+                  const SizedBox(height: AppFormLayout.titleSpacing),
                   TextField(
                     controller: _detailsController,
                     enabled: !_publishing,
@@ -405,7 +405,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     ),
                   ),
                   if (_errorMessage != null) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: AppFormLayout.fieldSpacing),
                     Text(
                       _errorMessage!,
                       key: const Key('mission-form-error'),
@@ -416,9 +416,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppFormLayout.sectionSpacing),
                   SizedBox(
-                    width: _isEditing ? double.infinity : null,
+                    width: double.infinity,
+                    height: AppFormLayout.actionHeight,
                     child: FilledButton.icon(
                       key: Key(
                         _isEditing ? 'update-mission' : 'publish-mission',
@@ -744,14 +745,14 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
   Widget build(BuildContext context) {
     return PageContainer(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 42, 20, 36),
+        padding: AppFormLayout.pagePadding,
         children: [
           const PageHeader(
             eyebrow: 'Espace responsable',
             title: 'Se connecter',
             subtitle: 'Vous devez vous connecter pour déclarer un besoin.',
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppFormLayout.sectionSpacing),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -766,7 +767,7 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                       labelText: 'Adresse email',
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: AppFormLayout.fieldSpacing),
                   TextField(
                     key: const Key('manager-password'),
                     controller: _password,
@@ -778,7 +779,7 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                     ),
                   ),
                   if (_message != null) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: AppFormLayout.fieldSpacing),
                     Text(
                       _message!,
                       style: const TextStyle(
@@ -787,11 +788,14 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    key: const Key('manager-sign-in'),
-                    onPressed: _loading ? null : _signIn,
-                    child: Text(_loading ? 'Connexion…' : 'Se connecter'),
+                  const SizedBox(height: AppFormLayout.sectionSpacing),
+                  SizedBox(
+                    height: AppFormLayout.actionHeight,
+                    child: FilledButton(
+                      key: const Key('manager-sign-in'),
+                      onPressed: _loading ? null : _signIn,
+                      child: Text(_loading ? 'Connexion…' : 'Se connecter'),
+                    ),
                   ),
                 ],
               ),

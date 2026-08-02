@@ -8,6 +8,7 @@ import '../firebase_bootstrap.dart';
 import '../firebase_startup_gate.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand_mark.dart';
+import '../widgets/common.dart';
 
 enum ActivationFailure { invalid, expired, alreadyUsed, unavailable }
 
@@ -424,12 +425,9 @@ class _ActivationForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Définissez votre mot de passe',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          const FormSectionTitle(title: 'Définissez votre mot de passe'),
           if (email != null && email!.isNotEmpty) ...[
-            const SizedBox(height: 18),
+            const SizedBox(height: AppFormLayout.titleSpacing),
             TextFormField(
               key: const Key('activation-email'),
               initialValue: email,
@@ -437,7 +435,7 @@ class _ActivationForm extends StatelessWidget {
               decoration: const InputDecoration(labelText: 'Adresse email'),
             ),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: AppFormLayout.fieldSpacing),
           TextField(
             key: const Key('activation-password'),
             controller: password,
@@ -458,7 +456,7 @@ class _ActivationForm extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppFormLayout.fieldSpacing),
           TextField(
             key: const Key('activation-confirmation'),
             controller: confirmation,
@@ -491,11 +489,14 @@ class _ActivationForm extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 20),
-          FilledButton(
-            key: const Key('activate-account'),
-            onPressed: submitting ? null : onSubmit,
-            child: Text(submitting ? 'Activation…' : 'Activer mon accès'),
+          const SizedBox(height: AppFormLayout.sectionSpacing),
+          SizedBox(
+            height: AppFormLayout.actionHeight,
+            child: FilledButton(
+              key: const Key('activate-account'),
+              onPressed: submitting ? null : onSubmit,
+              child: Text(submitting ? 'Activation…' : 'Activer mon accès'),
+            ),
           ),
         ],
       ),

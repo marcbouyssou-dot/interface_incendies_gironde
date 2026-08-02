@@ -4,6 +4,7 @@ import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../models/responsible_account.dart';
 import '../repositories/responsible_access_administration_repository.dart';
+import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
 
@@ -64,31 +65,47 @@ class _ResponsibleAccessFormScreenState
         elevation: 10,
         child: SafeArea(
           top: false,
-          minimum: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _submitting ? null : () => Navigator.pop(context),
-                  child: const Text('Annuler'),
+          minimum: AppFormLayout.actionBarPadding,
+          child: SizedBox(
+            height: AppFormLayout.actionHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.navy,
+                      side: const BorderSide(color: AppColors.border),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: _submitting
+                        ? null
+                        : () => Navigator.pop(context),
+                    child: const Text('Annuler'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  key: const Key('save-responsible-access'),
-                  onPressed: _submitting ? null : _save,
-                  child: Text(_submitting ? 'Enregistrement…' : 'Enregistrer'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('save-responsible-access'),
+                    onPressed: _submitting ? null : _save,
+                    child: Text(
+                      _submitting ? 'Enregistrement…' : 'Enregistrer',
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
       body: PageContainer(
         child: ListView(
           key: const Key('responsible-access-form'),
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
+          padding: AppFormLayout.pagePadding,
           children: [
             Text(
               widget.account.identityLabel,
@@ -98,7 +115,7 @@ class _ResponsibleAccessFormScreenState
               const SizedBox(height: 4),
               Text(email),
             ],
-            const SizedBox(height: 18),
+            const SizedBox(height: AppFormLayout.sectionSpacing),
             SwitchListTile.adaptive(
               key: const Key('responsible-active-switch'),
               contentPadding: EdgeInsets.zero,
@@ -109,7 +126,7 @@ class _ResponsibleAccessFormScreenState
                   ? null
                   : (value) => setState(() => _active = value),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppFormLayout.fieldSpacing),
             DropdownButtonFormField<String>(
               key: const Key('responsible-role-choice'),
               initialValue: _roleChoice,
@@ -137,9 +154,9 @@ class _ResponsibleAccessFormScreenState
                     }),
             ),
             if (_includesSiteManager) ...[
-              const SizedBox(height: 22),
-              const SectionTitle(title: 'Centres autorisés'),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppFormLayout.sectionSpacing),
+              const FormSectionTitle(title: 'Centres autorisés'),
+              const SizedBox(height: AppFormLayout.titleSpacing),
               LocationMultiSelector(
                 locations: widget.locations,
                 selectedIds: _locationIds,

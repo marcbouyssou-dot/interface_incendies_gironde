@@ -903,7 +903,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
           child: ListView(
             key: const Key('admin-invitation-form'),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
+            padding: AppFormLayout.pagePadding,
             children: [
               TextFormField(
                 key: const Key('invitation-display-name'),
@@ -915,7 +915,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                     : null,
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppFormLayout.fieldSpacing),
               TextFormField(
                 key: const Key('invitation-email'),
                 controller: _emailController,
@@ -930,7 +930,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 },
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppFormLayout.fieldSpacing),
               DropdownButtonFormField<String>(
                 key: const Key('invitation-role'),
                 initialValue: _role,
@@ -954,7 +954,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 }),
               ),
               if (!_isEditing) ...[
-                const SizedBox(height: 14),
+                const SizedBox(height: AppFormLayout.fieldSpacing),
                 DropdownButtonFormField<int>(
                   key: const Key('invitation-expiration'),
                   initialValue: _expirationDays,
@@ -969,9 +969,9 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 ),
               ],
               if (_role == AdminInvitationDraft.siteManagerRole) ...[
-                const SizedBox(height: 22),
-                const SectionTitle(title: 'Centres autorisés'),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppFormLayout.sectionSpacing),
+                const FormSectionTitle(title: 'Centres autorisés'),
+                const SizedBox(height: AppFormLayout.titleSpacing),
                 LocationMultiSelector(
                   locations: widget.locations,
                   selectedIds: _selectedLocations,
@@ -1104,9 +1104,9 @@ class _InvitationSubmitBar extends StatelessWidget {
         ),
         child: SafeArea(
           top: false,
-          minimum: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          minimum: AppFormLayout.actionBarPadding,
           child: SizedBox(
-            height: 56,
+            height: AppFormLayout.actionHeight,
             child: FilledButton.icon(
               key: Key(
                 editing ? 'save-admin-invitation' : 'create-admin-invitation',
