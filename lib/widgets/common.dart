@@ -11,6 +11,7 @@ import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
 import '../screens/information_consent_screen.dart';
 import '../theme/app_theme.dart';
+import '../utils/french_date_time.dart';
 import 'mission_location_details.dart';
 
 class PageContainer extends StatelessWidget {
@@ -720,8 +721,10 @@ class NeedCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Aujourd’hui',
+                    Text(
+                      need.startAt == null
+                          ? need.date
+                          : FrenchDateTime.relativeDate(need.startAt!),
                       style: TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 13,
@@ -730,7 +733,7 @@ class NeedCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      _operationalTime(need.time),
+                      need.time,
                       style: const TextStyle(
                         color: AppColors.navy,
                         fontSize: 22,
@@ -809,13 +812,6 @@ class NeedCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _operationalTime(String time) {
-    return time
-        .replaceAll(':00', 'h')
-        .replaceAll(' — ', ' → ')
-        .replaceAll(':', 'h');
   }
 }
 

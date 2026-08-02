@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/need.dart';
 import '../models/profession_quotas.dart';
+import '../utils/french_date_time.dart';
 import 'coordination_repository.dart';
 
 abstract final class FirestoreMissionMapper {
@@ -83,10 +84,10 @@ abstract final class FirestoreMissionMapper {
       ),
       date: startAt == null
           ? data['date'] as String? ?? 'À renseigner'
-          : _dateLabel(startAt),
+          : FrenchDateTime.date(startAt),
       time: startAt == null || endAt == null
           ? data['time'] as String? ?? 'À renseigner'
-          : '${_timeLabel(startAt)} — ${_timeLabel(endAt)}',
+          : FrenchDateTime.timeRange(startAt, endAt),
       startAt: startAt,
       endAt: endAt,
       requiredPhysiotherapists: mk.required,
@@ -114,16 +115,6 @@ abstract final class FirestoreMissionMapper {
     if (value is DateTime) return value;
     return null;
   }
-
-  static String _dateLabel(DateTime value) {
-    return '${_two(value.day)}/${_two(value.month)}/${value.year}';
-  }
-
-  static String _timeLabel(DateTime value) {
-    return '${_two(value.hour)}:${_two(value.minute)}';
-  }
-
-  static String _two(int value) => value.toString().padLeft(2, '0');
 
   static T _enumByName<T extends Enum>(
     List<T> values,

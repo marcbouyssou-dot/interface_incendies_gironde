@@ -10,6 +10,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/responsible_access_administration_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
 import 'responsible_access_form_screen.dart';
@@ -703,8 +704,8 @@ class _InvitationCard extends StatelessWidget {
             Text(locationLabels.join(' · ')),
             const SizedBox(height: 8),
             Text(
-              'Créée le ${_dateLabel(invitation.createdAt)} · '
-              'Expire le ${_dateLabel(invitation.expiresAt)}',
+              'Créée le ${FrenchDateTime.date(invitation.createdAt)} · '
+              'Expire le ${FrenchDateTime.date(invitation.expiresAt)}',
               style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             if (effectiveStatus == AdminInvitationStatus.pending) ...[
@@ -1132,9 +1133,4 @@ class _InvitationSubmitBar extends StatelessWidget {
       ),
     );
   }
-}
-
-String _dateLabel(DateTime date) {
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${two(date.day)}/${two(date.month)}/${date.year}';
 }

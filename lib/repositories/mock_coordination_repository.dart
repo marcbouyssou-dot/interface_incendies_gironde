@@ -6,6 +6,7 @@ import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
+import '../utils/french_date_time.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
 import 'mock_admin_invitation_repository.dart';
@@ -417,8 +418,8 @@ class MockCoordinationRepository implements CoordinationRepository {
       locationId: draft.location.id,
       place: draft.location.name,
       group: draft.location.group,
-      date: _dateLabel(draft.startAt),
-      time: '${_timeLabel(draft.startAt)} — ${_timeLabel(draft.endAt)}',
+      date: FrenchDateTime.date(draft.startAt),
+      time: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
       startAt: draft.startAt,
       endAt: draft.endAt,
       requiredPhysiotherapists: draft.requiredPhysiotherapists,
@@ -492,8 +493,8 @@ class MockCoordinationRepository implements CoordinationRepository {
       locationId: draft.location.id,
       place: draft.location.name,
       group: draft.location.group,
-      date: _dateLabel(draft.startAt),
-      time: '${_timeLabel(draft.startAt)} — ${_timeLabel(draft.endAt)}',
+      date: FrenchDateTime.date(draft.startAt),
+      time: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
       startAt: draft.startAt,
       endAt: draft.endAt,
       requiredPhysiotherapists: mk.required,
@@ -810,14 +811,4 @@ class MockCoordinationRepository implements CoordinationRepository {
       );
     }
   }
-
-  static String _dateLabel(DateTime value) {
-    return '${_two(value.day)}/${_two(value.month)}/${value.year}';
-  }
-
-  static String _timeLabel(DateTime value) {
-    return '${_two(value.hour)}:${_two(value.minute)}';
-  }
-
-  static String _two(int value) => value.toString().padLeft(2, '0');
 }

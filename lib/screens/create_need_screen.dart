@@ -6,6 +6,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
 
 Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
@@ -677,11 +678,9 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   }
 
   static int _minutes(TimeOfDay value) => value.hour * 60 + value.minute;
-  static String _formatDate(DateTime value) =>
-      '${_two(value.day)}/${_two(value.month)}/${value.year}';
+  static String _formatDate(DateTime value) => FrenchDateTime.date(value);
   static String _formatTime(TimeOfDay value) =>
-      '${_two(value.hour)}:${_two(value.minute)}';
-  static String _two(int value) => value.toString().padLeft(2, '0');
+      FrenchDateTime.timeFromParts(value.hour, value.minute);
 }
 
 class ResponsibleLogin extends StatefulWidget {
@@ -870,7 +869,7 @@ class _MissionPublishedView extends StatelessWidget {
                   const SizedBox(height: 14),
                   _SummaryLine(
                     label: 'Horaires',
-                    value: '${_time(draft.startAt)} → ${_time(draft.endAt)}',
+                    value: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
                   ),
                   const SizedBox(height: 14),
                   _SummaryLine(
@@ -905,10 +904,6 @@ class _MissionPublishedView extends StatelessWidget {
       ),
     );
   }
-
-  static String _time(DateTime value) =>
-      '${value.hour.toString().padLeft(2, '0')}:'
-      '${value.minute.toString().padLeft(2, '0')}';
 }
 
 class _SummaryLine extends StatelessWidget {

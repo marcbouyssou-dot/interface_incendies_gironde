@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'config/app_identity.dart';
 import 'repositories/coordination_repository.dart';
@@ -32,6 +33,9 @@ class FireCoordinationApp extends StatelessWidget {
             child: MaterialApp(
               title: AppIdentity.productName,
               debugShowCheckedModeBanner: false,
+              locale: const Locale('fr', 'FR'),
+              supportedLocales: const [Locale('fr', 'FR')],
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
               theme: AppTheme.light,
               home: AppShell(initialIndex: initialTab),
             ),
