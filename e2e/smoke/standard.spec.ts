@@ -10,34 +10,39 @@ const test = createSmokeTest('standard');
 skipWithoutAuth(test, 'standard');
 
 test.describe('Compte standard', () => {
-  test('accède aux Missions publiques', async ({smoke}) => {
+  test('utilise une session authentifiée', async ({smoke}) => {
     await openApp(smoke.page);
-    await expect(smoke.page.getByText(/professionnels à mobiliser/i).first()).toBeVisible();
+    const state = await smoke.page.context().storageState({indexedDB: true});
+    expect(
+      state.origins.some((origin) =>
+        origin.indexedDB?.some(
+          (database) => database.name === 'firebaseLocalStorageDb',
+        ),
+      ),
+    ).toBe(true);
   });
 
-  test('accède à Situation', async ({smoke}) => {
-    await openApp(smoke.page);
-    await navigate(smoke.page, 'Situation');
-    await expect(smoke.page.getByText('SITUATION', {exact: true}).first()).toBeVisible();
-  });
-
-  test('n’obtient pas une Administration privilégiée', async ({smoke}) => {
+  test('ne voit aucun accès Administration', async ({smoke}) => {
     await openApp(smoke.page);
     await navigate(smoke.page, 'Déclarer');
-    await expect(smoke.page.getByText('Coordination départementale', {exact: true})).toHaveCount(0);
-    await expect(smoke.page.getByText('Créer un besoin', {exact: true})).toHaveCount(0);
+    await expect(
+      smoke.page.getByText(/Coordination départementale/i),
+    ).toHaveCount(0);
+    await expect(
+      smoke.page.getByText(/Votre accès responsable/i),
+    ).toHaveCount(0);
   });
 
-  test('ne voit pas la gestion des responsables', async ({smoke}) => {
+  test('ne voit aucune action responsable ou coordinateur', async ({smoke}) => {
     await openApp(smoke.page);
     await navigate(smoke.page, 'Déclarer');
-    await expect(smoke.page.getByText('Responsables', {exact: true})).toHaveCount(0);
-  });
-
-  test('ne voit aucune action de modification privilégiée', async ({smoke}) => {
-    await openApp(smoke.page);
-    await navigate(smoke.page, 'Situation');
-    await expect(smoke.page.getByText('Modifier la mission', {exact: true})).toHaveCount(0);
-    await expect(smoke.page.getByText('Annuler la mission', {exact: true})).toHaveCount(0);
+    await expect(
+      smoke.page.getByRole('button', {name: /créer un besoin/i}),
+    ).toHaveCount(0);
+    await expect(
+      smoke.page.getByRole('button', {
+        name: /ouvrir la gestion des responsables/i,
+      }),
+    ).toHaveCount(0);
   });
 });

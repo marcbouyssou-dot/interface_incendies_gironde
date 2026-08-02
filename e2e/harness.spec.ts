@@ -10,6 +10,11 @@ import {
   monitorPage,
 } from './helpers/read-only-guard';
 import {redactSecrets} from './helpers/secrets';
+import {
+  extractResponsibleUid,
+  registerUniqueSession,
+  validateObservedRole,
+} from './helpers/session-validation.mjs';
 
 test.describe('harnais de sécurité lecture seule', () => {
   test('une session absente produit une instruction claire', () => {
@@ -19,6 +24,56 @@ test.describe('harnais de sécurité lecture seule', () => {
         authDirectory: '/private/tmp/mobsante-auth-does-not-exist',
       }),
     ).toThrow(/npm run e2e:auth.*MOBSANTE_E2E_COORDINATOR_EMAIL/s);
+  });
+
+  test('un mauvais rôle est refusé avant sauvegarde', () => {
+    expect(() =>
+      validateObservedRole('site_manager', {
+        coordinator: true,
+        siteManager: false,
+        globalResponsibleManagement: true,
+      }),
+    ).toThrow(/ne correspond pas à site_manager.*Reconnectez-vous/s);
+  });
+
+  test('deux sessions avec le même UID sont refusées sans exposer l’identifiant', () => {
+    const uid = 'uid-secret-test-only';
+    const sessions = new Map([['coordinator', uid]]);
+    let message = '';
+    try {
+      registerUniqueSession(sessions, 'site_manager', uid);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(
+      /session site_manager utilise déjà le même compte que coordinator/i,
+    );
+    expect(message).not.toContain(uid);
+  });
+
+  test('l’UID responsable est extrait sans journaliser les données de session', () => {
+    const uid = 'uid-secret-test-only';
+    const state = syntheticStorageState(uid);
+    expect(extractResponsibleUid(state)).toBe(uid);
+  });
+
+  test('les rôles accessibles retrouvent les noms Flutter fusionnés', async ({
+    page,
+  }) => {
+    await page.setContent(`
+      <main>
+        <div role="group" aria-label="MobSanté Encore 7 professionnels à mobiliser 0 % de couverture">Résumé</div>
+        <button aria-label="Bassens Caserne SDIS Inactif Voir le lieu">Ouvrir</button>
+      </main>
+    `);
+    await expect(
+      page.getByRole('group', {
+        name: /encore \d+ professionnels à mobiliser/i,
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', {name: /voir le lieu/i}),
+    ).toBeVisible();
   });
 
   test('une erreur console fait échouer le contrôle global', async ({browser}) => {
@@ -113,3 +168,37 @@ test.describe('harnais de sécurité lecture seule', () => {
     expect(fixture).toContain('takeSanitizedFailureScreenshot');
   });
 });
+
+function syntheticStorageState(uid: string) {
+  return {
+    cookies: [],
+    origins: [
+      {
+        origin: 'https://example.test',
+        localStorage: [],
+        indexedDB: [
+          {
+            name: 'firebaseLocalStorageDb',
+            stores: [
+              {
+                records: [
+                  {
+                    valueEncoded: {
+                      o: [
+                        {
+                          k: 'fbase_key',
+                          v: 'firebase:authUser:test:responsible',
+                        },
+                        {k: 'uid', v: uid},
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}

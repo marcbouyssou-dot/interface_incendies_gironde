@@ -42,9 +42,7 @@ export default class SummaryReporter implements Reporter {
       const count = this.counts.get(label);
       process.stdout.write(
         count
-          ? label === 'Public' && count.passed === count.total
-            ? `${label} : OK\n`
-            : `${label} : ${count.passed}/${count.total}\n`
+          ? `${label} : ${count.passed}/${count.total}\n`
           : `${label} : non exécuté (session absente)\n`,
       );
     }

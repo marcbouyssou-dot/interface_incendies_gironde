@@ -6,9 +6,13 @@ est `https://mobsante.netlify.app` par défaut et peut être remplacée avec
 
 ## Première authentification
 
-Exécuter `npm run e2e:auth`, puis se connecter manuellement avec les trois
-profils demandés. Les états de session, y compris IndexedDB utilisé par Firebase
-Auth, sont enregistrés sous `e2e/.auth/`. Ce dossier est ignoré par Git.
+Exécuter `npm run e2e:auth`, puis se connecter manuellement avec les profils
+manquants. Le script vérifie le marqueur d’interface propre au rôle et refuse
+qu’un même UID Firebase soit enregistré pour deux profils. Pour recréer un
+profil précis, utiliser par exemple `npm run e2e:auth -- site_manager`. Les états
+de session, y compris IndexedDB utilisé par Firebase Auth, sont enregistrés sous
+`e2e/.auth/`. Ce dossier est ignoré par Git et les identifiants ne sont jamais
+affichés.
 
 Une autre possibilité consiste à copier `e2e/.env.example` vers `e2e/.env` et à
 renseigner les variables localement. Le fichier réel est ignoré par Git et les
@@ -16,11 +20,8 @@ secrets ne sont jamais consignés dans les rapports.
 
 ## Commandes
 
-- `npm run e2e:install` : installe Chromium pour Playwright ;
 - `npm run e2e:auth` : enregistre interactivement les sessions locales ;
-- `npm run e2e:public` : exécute le public et les tests du harnais ;
-- `npm run e2e:harness` : teste uniquement les garde-fous ;
-- `npm run e2e:smoke` : exécute tous les rôles disponibles ;
+- `npm run e2e:smoke` : exécute les 13 contrôles critiques ;
 - `npm run e2e:smoke:headed` : même parcours avec navigateur visible ;
 - `npm run e2e:report` : ouvre le dernier rapport HTML.
 
