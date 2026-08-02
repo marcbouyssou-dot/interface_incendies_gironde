@@ -469,14 +469,79 @@ class _ProfessionQuotaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final quota = need.professionQuotas.quotaFor(profession.id);
+    if (emphasized) {
+      final color = quota.isCovered
+          ? AppColors.green
+          : quota.coverage < .5
+          ? AppColors.red
+          : AppColors.orange;
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    profession.missionLabel,
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 15,
+                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: color.withValues(alpha: 0.24)),
+                  ),
+                  child: Text(
+                    '${quota.registered} / ${quota.required}',
+                    key: Key('mission-quota-${profession.id}'),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 18,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 11),
+            AnimatedCoverageIndicator(
+              value: quota.coverage,
+              color: color,
+              minHeight: 7,
+            ),
+          ],
+        ),
+      );
+    }
     return Row(
       children: [
         Expanded(
           child: Text(
             profession.missionLabel,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.navy,
-              fontSize: emphasized ? 15 : 12,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -485,9 +550,9 @@ class _ProfessionQuotaRow extends StatelessWidget {
         Text(
           '${quota.registered} / ${quota.required}',
           key: Key('mission-quota-${profession.id}'),
-          style: TextStyle(
+          style: const TextStyle(
             color: AppColors.navy,
-            fontSize: emphasized ? 17 : 12,
+            fontSize: 12,
             fontWeight: FontWeight.w900,
           ),
         ),
