@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../config/app_identity.dart';
 import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
@@ -73,7 +72,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
         key: const PageStorageKey('places'),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
             sliver: SliverList.list(
               children: [
                 const PageHeader(
@@ -81,25 +80,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                   title: 'Lieux',
                   subtitle: 'Les points d’intervention mobilisés en Gironde.',
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  AppIdentity.productName,
-                  style: TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  AppIdentity.productSubtitle,
-                  style: TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
                 Card(
                   child: Column(
                     children: [
@@ -130,7 +111,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
                 TerritorialGroupFilter(
                   key: const Key('places-territorial-filter'),
                   value: _group,

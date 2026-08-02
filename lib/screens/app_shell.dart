@@ -82,7 +82,7 @@ class _AppShellState extends State<AppShell> {
       child: Scaffold(
         body: SafeArea(
           bottom: false,
-          child: _NavigationStack(
+          child: IndexedStack(
             index: _currentIndex,
             children: List.generate(
               _screens.length,
@@ -110,7 +110,7 @@ class _AppShellState extends State<AppShell> {
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Situation',
+              label: 'Statistiques',
             ),
             NavigationDestination(
               icon: Icon(Icons.location_on_outlined),
@@ -120,44 +120,6 @@ class _AppShellState extends State<AppShell> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _NavigationStack extends StatelessWidget {
-  const _NavigationStack({required this.index, required this.children});
-
-  final int index;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        for (var childIndex = 0; childIndex < children.length; childIndex++)
-          IgnorePointer(
-            ignoring: childIndex != index,
-            child: ExcludeSemantics(
-              excluding: childIndex != index,
-              child: ExcludeFocus(
-                excluding: childIndex != index,
-                child: TickerMode(
-                  enabled: childIndex == index,
-                  child: AnimatedOpacity(
-                    opacity: childIndex == index ? 1 : 0,
-                    duration: reduceMotion
-                        ? Duration.zero
-                        : const Duration(milliseconds: 150),
-                    curve: Curves.easeOutCubic,
-                    child: children[childIndex],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }

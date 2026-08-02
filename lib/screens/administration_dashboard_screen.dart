@@ -174,7 +174,7 @@ class _AdministrationDashboard extends StatelessWidget {
     return PageContainer(
       child: ListView(
         key: const PageStorageKey('administration-dashboard'),
-        padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: [
           PageHeader(
             eyebrow: 'Administration',
@@ -185,7 +185,7 @@ class _AdministrationDashboard extends StatelessWidget {
                 ? 'Pilotez les besoins et les accès aux centres.'
                 : 'Gérez les besoins de votre périmètre.',
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
           _ResponsibleScopeCard(access: access, locations: locations),
           const SizedBox(height: 14),
           _AdministrationActionCard(

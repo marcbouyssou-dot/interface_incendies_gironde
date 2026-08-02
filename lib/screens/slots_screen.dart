@@ -253,31 +253,11 @@ class _CrisisHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const BrandMark(),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    AppIdentity.shortName,
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Incendies Gironde',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        const PageHeader(
+          eyebrow: AppIdentity.productName,
+          title: 'Missions',
+          subtitle: AppIdentity.productSubtitle,
+          trailing: BrandMark(size: 48),
         ),
         const SizedBox(height: 24),
         Text(

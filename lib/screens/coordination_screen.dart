@@ -365,26 +365,13 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
         key: const PageStorageKey('coordination'),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
             sliver: SliverList.list(
               children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.local_fire_department_rounded,
-                      color: AppColors.orange,
-                      size: 28,
-                    ),
-                    SizedBox(width: 10),
-                    Text(
-                      'SITUATION',
-                      style: TextStyle(
-                        color: AppColors.navy,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
+                const PageHeader(
+                  eyebrow: 'Situation',
+                  title: 'Statistiques',
+                  subtitle: 'Couverture opérationnelle des missions.',
                 ),
                 if (access?.isCoordinator == true) ...[
                   const SizedBox(height: 24),
@@ -404,7 +391,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                     },
                   ),
                 ] else ...[
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 24),
                   const Text(
                     'COUVERTURE',
                     style: TextStyle(
@@ -437,7 +424,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 30),
+                const SizedBox(height: 24),
                 Row(
                   children: [
                     Expanded(
@@ -468,7 +455,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 34),
+                const SizedBox(height: 28),
                 const Text(
                   'MISSIONS',
                   style: TextStyle(
