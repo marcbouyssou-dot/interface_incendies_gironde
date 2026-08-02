@@ -47,6 +47,71 @@ List<CoordinationNeed> missionsVisibleToResponsible({
   return (past: past, current: current, upcoming: upcoming);
 }
 
+class _LocationDashboardStats {
+  const _LocationDashboardStats({
+    required this.id,
+    required this.name,
+    required this.missionCount,
+    required this.quotas,
+  });
+
+  final String id;
+  final String name;
+  final int missionCount;
+  final ProfessionQuotas quotas;
+
+  int get required => quotas.requiredTotal;
+  int get mobilized => quotas.registeredTotal;
+  int get remaining =>
+      quotas.values.fold(0, (total, quota) => total + quota.missing);
+  double get coverage => required == 0 ? 0 : quotas.coverage;
+}
+
+List<_LocationDashboardStats> _locationDashboardStats(
+  Iterable<CoordinationNeed> missions,
+  Iterable<ResponsePlace> locations,
+) {
+  final missionsByLocation = <String, List<CoordinationNeed>>{};
+  final locationNames = <String, String>{};
+  for (final mission in missions) {
+    final location = responsePlaceForNeed(mission, locations);
+    final missionPlace = mission.place.trim();
+    final missionLocationId = mission.locationId?.trim();
+    final id = location?.id.trim().isNotEmpty == true
+        ? location!.id.trim()
+        : missionLocationId?.isNotEmpty == true
+        ? missionLocationId!
+        : 'legacy:${missionPlace.toLowerCase()}';
+    final name = location?.name.trim().isNotEmpty == true
+        ? location!.name.trim()
+        : missionPlace.isNotEmpty
+        ? missionPlace
+        : 'Lieu non renseigné';
+    missionsByLocation.putIfAbsent(id, () => []).add(mission);
+    locationNames[id] = name;
+  }
+  final stats = missionsByLocation.entries
+      .map(
+        (entry) => _LocationDashboardStats(
+          id: entry.key,
+          name: locationNames[entry.key]!,
+          missionCount: entry.value.length,
+          quotas: ProfessionQuotas.aggregate(
+            entry.value.map((mission) => mission.professionQuotas),
+          ),
+        ),
+      )
+      .toList(growable: false);
+  stats.sort((first, second) {
+    final coverageComparison = first.coverage.compareTo(second.coverage);
+    if (coverageComparison != 0) return coverageComparison;
+    final remainingComparison = second.remaining.compareTo(first.remaining);
+    if (remainingComparison != 0) return remainingComparison;
+    return first.name.compareTo(second.name);
+  });
+  return stats;
+}
+
 class CoordinationScreen extends StatefulWidget {
   const CoordinationScreen({super.key});
 
@@ -165,6 +230,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     final remaining = (required - mobilized).clamp(0, required);
     final coverage = required == 0 ? 0.0 : totalQuotas.coverage;
     final timingCounts = _missionTimingCounts(visibleMissions, DateTime.now());
+    final locationStats = _locationDashboardStats(visibleMissions, locations);
     return PageContainer(
       child: CustomScrollView(
         key: const PageStorageKey('coordination'),
@@ -202,6 +268,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                     remainingProfessionals: remaining,
                     coverage: coverage,
                     professionQuotas: totalQuotas,
+                    locationStats: locationStats,
                   ),
                 ] else ...[
                   const SizedBox(height: 30),
@@ -382,6 +449,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
     required this.remainingProfessionals,
     required this.coverage,
     required this.professionQuotas,
+    required this.locationStats,
   });
 
   final int totalMissions;
@@ -392,6 +460,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
   final int remainingProfessionals;
   final double coverage;
   final ProfessionQuotas professionQuotas;
+  final List<_LocationDashboardStats> locationStats;
 
   @override
   Widget build(BuildContext context) {
@@ -579,6 +648,39 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
             if (index < HealthProfessionRegistry.values.length - 1)
               const SizedBox(height: 10),
           ],
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          const Text(
+            'COUVERTURE PAR LIEU',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Du moins couvert au mieux couvert',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (locationStats.isEmpty)
+            const Text(
+              'Aucune mission associée à un lieu.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            )
+          else
+            for (var index = 0; index < locationStats.length; index++) ...[
+              _LocationDashboardRow(stats: locationStats[index]),
+              if (index < locationStats.length - 1) const SizedBox(height: 10),
+            ],
         ],
       ),
     );
@@ -644,7 +746,7 @@ class _ProfessionDashboardRow extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _ProfessionDashboardValue(
+                child: _DashboardBreakdownValue(
                   valueKey: Key(
                     'dashboard-profession-${profession.id}-required',
                   ),
@@ -654,7 +756,7 @@ class _ProfessionDashboardRow extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: _ProfessionDashboardValue(
+                child: _DashboardBreakdownValue(
                   valueKey: Key(
                     'dashboard-profession-${profession.id}-mobilized',
                   ),
@@ -664,7 +766,7 @@ class _ProfessionDashboardRow extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: _ProfessionDashboardValue(
+                child: _DashboardBreakdownValue(
                   valueKey: Key(
                     'dashboard-profession-${profession.id}-remaining',
                   ),
@@ -686,8 +788,108 @@ class _ProfessionDashboardRow extends StatelessWidget {
   }
 }
 
-class _ProfessionDashboardValue extends StatelessWidget {
-  const _ProfessionDashboardValue({
+class _LocationDashboardRow extends StatelessWidget {
+  const _LocationDashboardRow({required this.stats});
+
+  final _LocationDashboardStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = stats.required == 0
+        ? AppColors.textMuted
+        : stats.coverage >= 1
+        ? AppColors.green
+        : stats.coverage < .5
+        ? AppColors.red
+        : AppColors.orange;
+    return Container(
+      key: Key('dashboard-location-${stats.id}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  stats.name,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${(stats.coverage * 100).round()} %',
+                key: Key('dashboard-location-${stats.id}-coverage'),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${stats.missionCount} mission${stats.missionCount > 1 ? 's' : ''}',
+            key: Key('dashboard-location-${stats.id}-missions'),
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 11),
+          Row(
+            children: [
+              Expanded(
+                child: _DashboardBreakdownValue(
+                  valueKey: Key('dashboard-location-${stats.id}-required'),
+                  label: 'Demandé',
+                  value: stats.required,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _DashboardBreakdownValue(
+                  valueKey: Key('dashboard-location-${stats.id}-mobilized'),
+                  label: 'Mobilisés',
+                  value: stats.mobilized,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _DashboardBreakdownValue(
+                  valueKey: Key('dashboard-location-${stats.id}-remaining'),
+                  label: 'Recherchés',
+                  value: stats.remaining,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          AnimatedCoverageIndicator(
+            value: stats.coverage,
+            color: color,
+            minHeight: 6,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardBreakdownValue extends StatelessWidget {
+  const _DashboardBreakdownValue({
     required this.valueKey,
     required this.label,
     required this.value,
