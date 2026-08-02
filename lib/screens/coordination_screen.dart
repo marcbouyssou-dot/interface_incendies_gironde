@@ -7,6 +7,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../utils/csv_export.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'create_need_screen.dart';
@@ -144,6 +145,95 @@ List<_LocationDashboardStats> _locationDashboardStats(
     return first.name.compareTo(second.name);
   });
   return stats;
+}
+
+String _csvRow(Iterable<Object?> values) => values
+    .map((value) {
+      final text = value?.toString() ?? '';
+      return '"${text.replaceAll('"', '""')}"';
+    })
+    .join(';');
+
+String _coordinatorDashboardCsv({
+  required _DashboardPeriod period,
+  required int totalMissions,
+  required int pastMissions,
+  required int currentMissions,
+  required int upcomingMissions,
+  required int remainingProfessionals,
+  required double coverage,
+  required ProfessionQuotas professionQuotas,
+  required List<_LocationDashboardStats> locationStats,
+}) {
+  final rows = <String>[
+    _csvRow([
+      'Section',
+      'Libellé',
+      'Période',
+      'Nombre de missions',
+      'Missions passées',
+      'Missions en cours',
+      'Missions à venir',
+      'Quota total demandé',
+      'Professionnels mobilisés',
+      'Professionnels encore recherchés',
+      'Taux de couverture (%)',
+    ]),
+    _csvRow([
+      'Global',
+      'Toutes les missions',
+      period.label,
+      totalMissions,
+      pastMissions,
+      currentMissions,
+      upcomingMissions,
+      professionQuotas.requiredTotal,
+      professionQuotas.registeredTotal,
+      remainingProfessionals,
+      (coverage * 100).round(),
+    ]),
+    for (final profession in HealthProfessionRegistry.values)
+      _csvRow([
+        'Profession',
+        profession.label,
+        period.label,
+        null,
+        null,
+        null,
+        null,
+        professionQuotas.quotaFor(profession.id).required,
+        professionQuotas.quotaFor(profession.id).registered,
+        professionQuotas.quotaFor(profession.id).missing,
+        (professionQuotas.quotaFor(profession.id).required == 0
+                ? 0
+                : professionQuotas.quotaFor(profession.id).coverage * 100)
+            .round(),
+      ]),
+    for (final stats in locationStats)
+      _csvRow([
+        'Lieu',
+        stats.name,
+        period.label,
+        stats.missionCount,
+        null,
+        null,
+        null,
+        stats.required,
+        stats.mobilized,
+        stats.remaining,
+        (stats.coverage * 100).round(),
+      ]),
+  ];
+  return '\ufeff${rows.join('\r\n')}\r\n';
+}
+
+String _dashboardCsvFileName(_DashboardPeriod period, DateTime now) {
+  final date = [
+    now.year.toString().padLeft(4, '0'),
+    now.month.toString().padLeft(2, '0'),
+    now.day.toString().padLeft(2, '0'),
+  ].join('-');
+  return 'tableau-de-bord-${period.name}-$date.csv';
 }
 
 class CoordinationScreen extends StatefulWidget {
@@ -509,6 +599,33 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
   final _DashboardPeriod selectedPeriod;
   final ValueChanged<_DashboardPeriod> onPeriodChanged;
 
+  Future<void> _exportCsv(BuildContext context) async {
+    final exported = await exportCsvFile(
+      fileName: _dashboardCsvFileName(selectedPeriod, DateTime.now()),
+      contents: _coordinatorDashboardCsv(
+        period: selectedPeriod,
+        totalMissions: totalMissions,
+        pastMissions: pastMissions,
+        currentMissions: currentMissions,
+        upcomingMissions: upcomingMissions,
+        remainingProfessionals: remainingProfessionals,
+        coverage: coverage,
+        professionQuotas: professionQuotas,
+        locationStats: locationStats,
+      ),
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          exported
+              ? 'Le tableau de bord a été exporté au format CSV.'
+              : 'L’export CSV est disponible depuis la version web.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -580,6 +697,16 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                   },
                 ),
             ],
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              key: const Key('dashboard-export-csv'),
+              onPressed: () => _exportCsv(context),
+              icon: const Icon(Icons.download_outlined, size: 18),
+              label: const Text('Exporter en CSV'),
+            ),
           ),
           const SizedBox(height: 18),
           Row(
