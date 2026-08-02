@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
@@ -1298,10 +1299,22 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   bool get _isProfessionalIdentifierReady {
     final value = _professionalIdController.text.trim();
     if (_professionalIdType == ProfessionalIdType.rpps) {
-      return RegExp(r'^\d{11}$').hasMatch(value.replaceAll(RegExp(r'\s+'), ''));
+      return RegExp(r'^\d{11}$').hasMatch(value);
     }
     return _professionalIdType == ProfessionalIdType.ordinal &&
         value.isNotEmpty;
+  }
+
+  int get _professionalIdentifierMaxLength =>
+      _professionalIdType == ProfessionalIdType.rpps ? 11 : 32;
+
+  void _trimProfessionalIdentifier() {
+    final normalized = _professionalIdController.text.trim();
+    if (normalized == _professionalIdController.text) return;
+    _professionalIdController.value = TextEditingValue(
+      text: normalized,
+      selection: TextSelection.collapsed(offset: normalized.length),
+    );
   }
 
   @override
@@ -1576,16 +1589,37 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                     keyboardType: _professionalIdType == ProfessionalIdType.rpps
                         ? TextInputType.number
                         : TextInputType.text,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [
+                      if (_professionalIdType == ProfessionalIdType.rpps)
+                        FilteringTextInputFormatter.digitsOnly
+                      else
+                        FilteringTextInputFormatter.deny(RegExp(r'^\s+')),
+                      LengthLimitingTextInputFormatter(
+                        _professionalIdentifierMaxLength,
+                      ),
+                    ],
                     decoration: InputDecoration(
                       labelText: _professionalIdType == ProfessionalIdType.rpps
                           ? 'Numéro RPPS *'
                           : 'Numéro ordinal *',
                       helperText: _professionalIdType == ProfessionalIdType.rpps
                           ? '11 chiffres.'
-                          : 'Numéro délivré par votre ordre professionnel.',
+                          : '32 caractères maximum, délivré par votre ordre.',
+                      counterText: '',
                     ),
                     validator: _professionalId,
                     onChanged: (_) => setState(() {}),
+                    onTapOutside: (_) {
+                      _trimProfessionalIdentifier();
+                      setState(() {});
+                      FocusManager.instance.primaryFocus?.unfocus();
+                    },
+                    onFieldSubmitted: (_) {
+                      _trimProfessionalIdentifier();
+                      setState(() {});
+                      FocusScope.of(context).nextFocus();
+                    },
                   ),
                 ],
                 const SizedBox(height: AppFormLayout.fieldSpacing),
@@ -1732,21 +1766,25 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   String? _professionalId(String? value) {
     final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) {
+      return _professionalIdType == ProfessionalIdType.rpps
+          ? 'Saisissez votre numéro RPPS.'
+          : 'Saisissez votre numéro ordinal.';
+    }
     if (_professionalIdType == ProfessionalIdType.rpps &&
-        !RegExp(
-          r'^\d{11}$',
-        ).hasMatch(normalized.replaceAll(RegExp(r'\s+'), ''))) {
-      return 'Saisissez un numéro RPPS valide à 11 chiffres.';
+        !RegExp(r'^\d{11}$').hasMatch(normalized)) {
+      return 'Le numéro RPPS doit contenir exactement 11 chiffres.';
     }
     if (_professionalIdType == ProfessionalIdType.ordinal &&
-        normalized.isEmpty) {
-      return 'Champ requis';
+        normalized.length > 32) {
+      return 'Le numéro ordinal ne peut pas dépasser 32 caractères.';
     }
     return null;
   }
 
   Future<void> _submit() async {
     if (_submitting) return;
+    _trimProfessionalIdentifier();
     if (!_hasValidProfessionalIdentifier) {
       setState(() => _editingProfile = true);
       ScaffoldMessenger.of(context).showSnackBar(
