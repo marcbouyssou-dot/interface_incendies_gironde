@@ -4,6 +4,7 @@ import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import 'credits_screen.dart';
+import 'information_consent_screen.dart';
 import 'privacy_policy_screen.dart';
 
 class LegalNoticeScreen extends StatelessWidget {
@@ -92,6 +93,22 @@ class LegalNoticeScreen extends StatelessWidget {
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const CreditsScreen(),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      key: const Key('information-consent-entry'),
+                      dense: true,
+                      leading: const Icon(
+                        Icons.fact_check_outlined,
+                        color: AppColors.orange,
+                      ),
+                      title: const Text('Informations et consentement'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const InformationConsentScreen(),
                         ),
                       ),
                     ),

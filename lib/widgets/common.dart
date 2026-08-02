@@ -9,6 +9,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
+import '../screens/information_consent_screen.dart';
 import '../theme/app_theme.dart';
 import 'mission_location_details.dart';
 
@@ -1501,6 +1502,19 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 _ProfessionalIdentifierRequiredNotice(
                   ordinalOnly: _isVeterinarian,
                 ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const Key('profile-information-consent-entry'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const InformationConsentScreen(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.fact_check_outlined, size: 17),
+                  label: const Text('Informations et consentement'),
+                ),
+              ),
               const SizedBox(height: AppFormLayout.fieldSpacing),
               if (_profile != null && !_editingProfile) ...[
                 _ProfileSummary(profile: _profile!),
