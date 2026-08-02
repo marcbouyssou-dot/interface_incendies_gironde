@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import 'privacy_policy_screen.dart';
 
 class LegalNoticeScreen extends StatelessWidget {
   const LegalNoticeScreen({super.key});
@@ -55,6 +56,24 @@ class LegalNoticeScreen extends StatelessWidget {
                 icon: Icons.info_outline_rounded,
                 title: 'Version de l’application',
                 content: AppIdentity.version,
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: ListTile(
+                  key: const Key('privacy-policy-entry'),
+                  leading: const Icon(
+                    Icons.privacy_tip_outlined,
+                    color: AppColors.orange,
+                  ),
+                  title: const Text('Politique de confidentialité'),
+                  subtitle: const Text('Données personnelles et droits RGPD'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PrivacyPolicyScreen(),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
