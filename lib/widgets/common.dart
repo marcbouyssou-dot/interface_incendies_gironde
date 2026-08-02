@@ -1295,6 +1295,15 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     _professionalIdController.text,
   );
 
+  bool get _isProfessionalIdentifierReady {
+    final value = _professionalIdController.text.trim();
+    if (_professionalIdType == ProfessionalIdType.rpps) {
+      return RegExp(r'^\d{11}$').hasMatch(value.replaceAll(RegExp(r'\s+'), ''));
+    }
+    return _professionalIdType == ProfessionalIdType.ordinal &&
+        value.isNotEmpty;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1450,17 +1459,18 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppFormLayout.sectionSpacing),
-              if (!_hasValidProfessionalIdentifier) ...[
+              if (_isProfessionalIdentifierReady)
+                const _ProfessionalIdentifierReadyNotice()
+              else
                 const _ProfessionalIdentifierRequiredNotice(),
-                const SizedBox(height: AppFormLayout.fieldSpacing),
-              ],
+              const SizedBox(height: AppFormLayout.fieldSpacing),
               if (_profile != null && !_editingProfile) ...[
                 _ProfileSummary(profile: _profile!),
                 const SizedBox(height: 6),
                 TextButton(
                   onPressed: () => setState(() => _editingProfile = true),
                   child: Text(
-                    _profile!.hasValidProfessionalIdentifier
+                    _isProfessionalIdentifierReady
                         ? 'Modifier mes informations'
                         : 'Compléter mon profil',
                   ),
@@ -1531,7 +1541,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   key: const Key('professional-id-type'),
                   initialValue: _professionalIdType,
                   decoration: const InputDecoration(
-                    labelText: 'Identifiant professionnel',
+                    labelText: 'Identifiant professionnel *',
+                    helperText: 'Obligatoire pour participer.',
+                    prefixIcon: Icon(Icons.badge_outlined),
                   ),
                   items: ProfessionalIdType.values
                       .map(
@@ -1566,8 +1578,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                         : TextInputType.text,
                     decoration: InputDecoration(
                       labelText: _professionalIdType == ProfessionalIdType.rpps
-                          ? 'Numéro RPPS'
-                          : 'Numéro ordinal',
+                          ? 'Numéro RPPS *'
+                          : 'Numéro ordinal *',
+                      helperText: _professionalIdType == ProfessionalIdType.rpps
+                          ? '11 chiffres.'
+                          : 'Numéro délivré par votre ordre professionnel.',
                     ),
                     validator: _professionalId,
                     onChanged: (_) => setState(() {}),
@@ -1829,6 +1844,55 @@ class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
                 height: 1.35,
                 fontWeight: FontWeight.w700,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
+  const _ProfessionalIdentifierReadyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('professional-identifier-ready'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.greenSoft,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_circle_outline, color: AppColors.green, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Profil prêt à participer',
+                  style: TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Votre identifiant professionnel est renseigné.',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
