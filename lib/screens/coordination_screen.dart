@@ -423,9 +423,12 @@ class _SituationRow extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
+                const SizedBox(width: 8),
                 StatusPill(status: need.status),
               ],
             ),
+            const SizedBox(height: 5),
+            MissionTimingPill(mission: need),
             const SizedBox(height: 5),
             Text(
               need.group.label,

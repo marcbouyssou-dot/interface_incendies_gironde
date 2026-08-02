@@ -284,6 +284,78 @@ class StatusPill extends StatelessWidget {
   }
 }
 
+enum _MissionTiming { past, current, upcoming }
+
+class MissionTimingPill extends StatelessWidget {
+  const MissionTimingPill({super.key, required this.mission});
+
+  final CoordinationNeed mission;
+
+  @override
+  Widget build(BuildContext context) {
+    final timing = _timingAt(DateTime.now());
+    if (timing == null) return const SizedBox.shrink();
+    final (label, icon, color, background) = switch (timing) {
+      _MissionTiming.past => (
+        'Passée',
+        Icons.history_rounded,
+        AppColors.textMuted,
+        AppColors.background,
+      ),
+      _MissionTiming.current => (
+        'En cours',
+        Icons.play_circle_outline_rounded,
+        AppColors.green,
+        AppColors.greenSoft,
+      ),
+      _MissionTiming.upcoming => (
+        'À venir',
+        Icons.schedule_rounded,
+        AppColors.orange,
+        AppColors.orangeSoft,
+      ),
+    };
+    return Semantics(
+      label: 'Mission $label',
+      child: Container(
+        key: Key('mission-timing-${mission.id}'),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  _MissionTiming? _timingAt(DateTime now) {
+    final startAt = mission.startAt;
+    final endAt = mission.endAt;
+    if (endAt != null && !now.isBefore(endAt)) return _MissionTiming.past;
+    if (startAt != null && now.isBefore(startAt)) {
+      return _MissionTiming.upcoming;
+    }
+    if (startAt != null || endAt != null) return _MissionTiming.current;
+    return null;
+  }
+}
+
 class CoverageBar extends StatelessWidget {
   const CoverageBar({super.key, required this.need});
   final CoordinationNeed need;
@@ -460,9 +532,18 @@ class NeedCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                need.place.toUpperCase(),
-                style: Theme.of(context).textTheme.titleLarge,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      need.place.toUpperCase(),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  MissionTimingPill(mission: need),
+                ],
               ),
               const SizedBox(height: 5),
               Text(
