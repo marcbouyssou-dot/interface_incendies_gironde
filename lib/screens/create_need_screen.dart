@@ -56,6 +56,24 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   final Map<String, int> _requiredByProfession = {
     for (final profession in HealthProfessionRegistry.values) profession.id: 0,
   };
+  final _locationKey = GlobalKey(debugLabel: 'mission-location-anchor');
+  final _dateKey = GlobalKey(debugLabel: 'mission-date-anchor');
+  final _startTimeKey = GlobalKey(debugLabel: 'mission-start-time-anchor');
+  final _endTimeKey = GlobalKey(debugLabel: 'mission-end-time-anchor');
+  final Map<String, GlobalKey> _quotaKeys = {
+    for (final profession in HealthProfessionRegistry.values)
+      profession.id: GlobalKey(
+        debugLabel: 'mission-${profession.id}-quota-anchor',
+      ),
+  };
+  final _locationFocusNode = FocusNode(debugLabel: 'mission-location');
+  final _dateFocusNode = FocusNode(debugLabel: 'mission-date');
+  final _startTimeFocusNode = FocusNode(debugLabel: 'mission-start-time');
+  final _endTimeFocusNode = FocusNode(debugLabel: 'mission-end-time');
+  final Map<String, FocusNode> _quotaFocusNodes = {
+    for (final profession in HealthProfessionRegistry.values)
+      profession.id: FocusNode(debugLabel: 'mission-${profession.id}-quota'),
+  };
   ResponsePlace? _selectedLocation;
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
@@ -112,6 +130,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   @override
   void dispose() {
     _detailsController.dispose();
+    _locationFocusNode.dispose();
+    _dateFocusNode.dispose();
+    _startTimeFocusNode.dispose();
+    _endTimeFocusNode.dispose();
+    for (final focusNode in _quotaFocusNodes.values) {
+      focusNode.dispose();
+    }
     super.dispose();
   }
 
@@ -225,11 +250,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _LocationInput(
+                    key: _locationKey,
                     access: access,
                     locations: locations,
                     selectedLocation: _selectedLocation,
                     preserveUnavailableSelection: _isEditing,
                     enabled: !_publishing,
+                    focusNode: _locationFocusNode,
                     onSelected: (location) {
                       if (!mounted) return;
                       setState(() {
@@ -239,43 +266,55 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     },
                   ),
                   const SizedBox(height: 18),
-                  _PickerField(
-                    key: const Key('mission-date'),
-                    label: 'Date',
-                    value: _selectedDate == null
-                        ? 'Choisir une date'
-                        : _formatDate(_selectedDate!),
-                    icon: Icons.calendar_today_rounded,
-                    onTap: _publishing ? null : _pickDate,
+                  KeyedSubtree(
+                    key: _dateKey,
+                    child: _PickerField(
+                      key: const Key('mission-date'),
+                      label: 'Date',
+                      value: _selectedDate == null
+                          ? 'Choisir une date'
+                          : _formatDate(_selectedDate!),
+                      icon: Icons.calendar_today_rounded,
+                      focusNode: _dateFocusNode,
+                      onTap: _publishing ? null : _pickDate,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
-                        child: _PickerField(
-                          key: const Key('mission-start-time'),
-                          label: 'Début',
-                          value: _startTime == null
-                              ? 'Choisir'
-                              : _formatTime(_startTime!),
-                          icon: Icons.schedule_rounded,
-                          onTap: _publishing
-                              ? null
-                              : () => _pickTime(isStart: true),
+                        child: KeyedSubtree(
+                          key: _startTimeKey,
+                          child: _PickerField(
+                            key: const Key('mission-start-time'),
+                            label: 'Début',
+                            value: _startTime == null
+                                ? 'Choisir'
+                                : _formatTime(_startTime!),
+                            icon: Icons.schedule_rounded,
+                            focusNode: _startTimeFocusNode,
+                            onTap: _publishing
+                                ? null
+                                : () => _pickTime(isStart: true),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _PickerField(
-                          key: const Key('mission-end-time'),
-                          label: 'Fin',
-                          value: _endTime == null
-                              ? 'Choisir'
-                              : _formatTime(_endTime!),
-                          icon: Icons.schedule_rounded,
-                          onTap: _publishing
-                              ? null
-                              : () => _pickTime(isStart: false),
+                        child: KeyedSubtree(
+                          key: _endTimeKey,
+                          child: _PickerField(
+                            key: const Key('mission-end-time'),
+                            label: 'Fin',
+                            value: _endTime == null
+                                ? 'Choisir'
+                                : _formatTime(_endTime!),
+                            icon: Icons.schedule_rounded,
+                            focusNode: _endTimeFocusNode,
+                            onTap: _publishing
+                                ? null
+                                : () => _pickTime(isStart: false),
+                          ),
                         ),
                       ),
                     ],
@@ -285,10 +324,12 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                   const SizedBox(height: 8),
                   for (final profession in HealthProfessionRegistry.values) ...[
                     _QuotaStepper(
+                      key: _quotaKeys[profession.id],
                       label: profession.missionLabel,
                       value: _requiredByProfession[profession.id]!,
                       removeKey: Key('${profession.id}-remove'),
                       addKey: Key('${profession.id}-add'),
+                      addFocusNode: _quotaFocusNodes[profession.id]!,
                       onRemove:
                           !_publishing &&
                               _requiredByProfession[profession.id]! > 0
@@ -448,7 +489,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   Future<void> _publish() async {
     final validation = _validate();
     if (validation != null) {
-      setState(() => _errorMessage = validation);
+      setState(() => _errorMessage = validation.message);
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showValidationError(validation),
+      );
       return;
     }
     final draft = _buildDraft();
@@ -500,27 +544,81 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     }
   }
 
-  String? _validate() {
-    if (_selectedLocation == null) return 'Choisissez un lieu';
-    if (_selectedDate == null) return 'Choisissez une date';
-    if (_startTime == null) return 'Choisissez une heure de début';
-    if (_endTime == null) return 'Choisissez une heure de fin';
+  _MissionFormValidationError? _validate() {
+    if (_selectedLocation == null) {
+      return _MissionFormValidationError(
+        message: 'Choisissez un lieu d’intervention.',
+        targetKey: _locationKey,
+        focusNode: _locationFocusNode,
+      );
+    }
+    if (_selectedDate == null) {
+      return _MissionFormValidationError(
+        message: 'Choisissez une date.',
+        targetKey: _dateKey,
+        focusNode: _dateFocusNode,
+      );
+    }
+    if (_startTime == null) {
+      return _MissionFormValidationError(
+        message: 'Choisissez une heure de début.',
+        targetKey: _startTimeKey,
+        focusNode: _startTimeFocusNode,
+      );
+    }
+    if (_endTime == null) {
+      return _MissionFormValidationError(
+        message: 'Choisissez une heure de fin.',
+        targetKey: _endTimeKey,
+        focusNode: _endTimeFocusNode,
+      );
+    }
     if (_minutes(_startTime!) == _minutes(_endTime!)) {
-      return 'L’heure de fin doit être postérieure à l’heure de début';
+      return _MissionFormValidationError(
+        message: 'L’heure de fin doit être postérieure à l’heure de début.',
+        targetKey: _endTimeKey,
+        focusNode: _endTimeFocusNode,
+      );
     }
     if (_requiredByProfession.values.every((quota) => quota == 0)) {
-      return 'Indiquez au moins un professionnel nécessaire';
+      final firstProfession = HealthProfessionRegistry.values.first;
+      return _MissionFormValidationError(
+        message: 'Indiquez au moins un professionnel nécessaire.',
+        targetKey: _quotaKeys[firstProfession.id]!,
+        focusNode: _quotaFocusNodes[firstProfession.id]!,
+      );
     }
     final mission = widget.mission;
     if (mission != null) {
       for (final quota in mission.professionQuotas.values) {
         if (_requiredByProfession[quota.professionId]! < quota.registered) {
-          return 'Le besoin ne peut pas être inférieur aux engagements '
-              'confirmés.';
+          return _MissionFormValidationError(
+            message:
+                'Le besoin ne peut pas être inférieur aux engagements '
+                'confirmés.',
+            targetKey: _quotaKeys[quota.professionId]!,
+            focusNode: _quotaFocusNodes[quota.professionId]!,
+          );
         }
       }
     }
     return null;
+  }
+
+  Future<void> _showValidationError(
+    _MissionFormValidationError validation,
+  ) async {
+    if (!mounted) return;
+    validation.focusNode.requestFocus();
+    final targetContext = validation.targetKey.currentContext;
+    if (targetContext == null) return;
+    await Scrollable.ensureVisible(
+      targetContext,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      alignment: 0.15,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+    );
   }
 
   MissionDraft _buildDraft() {
@@ -699,6 +797,18 @@ class _PublishedMission {
   final MissionDraft draft;
 }
 
+class _MissionFormValidationError {
+  const _MissionFormValidationError({
+    required this.message,
+    required this.targetKey,
+    required this.focusNode,
+  });
+
+  final String message;
+  final GlobalKey targetKey;
+  final FocusNode focusNode;
+}
+
 class _MissionPublishedView extends StatelessWidget {
   const _MissionPublishedView({
     required this.mission,
@@ -805,11 +915,13 @@ class _SummaryLine extends StatelessWidget {
 
 class _LocationInput extends StatelessWidget {
   const _LocationInput({
+    super.key,
     required this.access,
     required this.locations,
     required this.selectedLocation,
     required this.preserveUnavailableSelection,
     required this.enabled,
+    required this.focusNode,
     required this.onSelected,
   });
 
@@ -818,6 +930,7 @@ class _LocationInput extends StatelessWidget {
   final ResponsePlace? selectedLocation;
   final bool preserveUnavailableSelection;
   final bool enabled;
+  final FocusNode focusNode;
   final ValueChanged<ResponsePlace?> onSelected;
 
   @override
@@ -847,6 +960,7 @@ class _LocationInput extends StatelessWidget {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           key: const Key('mission-location'),
+          focusNode: focusNode,
           isExpanded: true,
           initialValue:
               selectable.any((location) => location.id == selectedLocation?.id)
@@ -936,12 +1050,14 @@ class _LocationInput extends StatelessWidget {
 
 class _QuotaStepper extends StatelessWidget {
   const _QuotaStepper({
+    super.key,
     required this.label,
     required this.value,
     required this.onRemove,
     required this.onAdd,
     required this.removeKey,
     required this.addKey,
+    required this.addFocusNode,
   });
 
   final String label;
@@ -950,6 +1066,7 @@ class _QuotaStepper extends StatelessWidget {
   final VoidCallback? onAdd;
   final Key removeKey;
   final Key addKey;
+  final FocusNode addFocusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -979,6 +1096,7 @@ class _QuotaStepper extends StatelessWidget {
           ),
           IconButton(
             key: addKey,
+            focusNode: addFocusNode,
             onPressed: onAdd,
             icon: const Icon(Icons.add_rounded),
           ),
@@ -1003,12 +1121,14 @@ class _PickerField extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    required this.focusNode,
     required this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
+  final FocusNode focusNode;
   final VoidCallback? onTap;
 
   @override
@@ -1025,6 +1145,7 @@ class _PickerField extends StatelessWidget {
             side: const BorderSide(color: AppColors.border),
           ),
           child: InkWell(
+            focusNode: focusNode,
             onTap: onTap,
             borderRadius: BorderRadius.circular(14),
             child: SizedBox(
