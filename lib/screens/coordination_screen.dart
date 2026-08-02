@@ -28,6 +28,25 @@ List<CoordinationNeed> missionsVisibleToResponsible({
       .toList(growable: false);
 }
 
+({int past, int current, int upcoming}) _missionTimingCounts(
+  Iterable<CoordinationNeed> missions,
+  DateTime now,
+) {
+  var past = 0;
+  var current = 0;
+  var upcoming = 0;
+  for (final mission in missions) {
+    if (mission.endAt case final endAt? when !now.isBefore(endAt)) {
+      past++;
+    } else if (mission.startAt case final startAt? when now.isBefore(startAt)) {
+      upcoming++;
+    } else {
+      current++;
+    }
+  }
+  return (past: past, current: current, upcoming: upcoming);
+}
+
 class CoordinationScreen extends StatefulWidget {
   const CoordinationScreen({super.key});
 
@@ -145,6 +164,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     final mobilized = totalQuotas.registeredTotal;
     final remaining = (required - mobilized).clamp(0, required);
     final coverage = required == 0 ? 0.0 : totalQuotas.coverage;
+    final timingCounts = _missionTimingCounts(visibleMissions, DateTime.now());
     return PageContainer(
       child: CustomScrollView(
         key: const PageStorageKey('coordination'),
@@ -171,38 +191,51 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 30),
-                const Text(
-                  'COUVERTURE',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 12,
-                    letterSpacing: 1.4,
-                    fontWeight: FontWeight.w800,
+                if (access?.isCoordinator == true) ...[
+                  const SizedBox(height: 24),
+                  _CoordinatorGlobalDashboard(
+                    totalMissions: visibleMissions.length,
+                    pastMissions: timingCounts.past,
+                    currentMissions: timingCounts.current,
+                    upcomingMissions: timingCounts.upcoming,
+                    mobilizedProfessionals: mobilized,
+                    remainingProfessionals: remaining,
+                    coverage: coverage,
                   ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  '${(coverage * 100).round()} %',
-                  style: const TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 64,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -2,
+                ] else ...[
+                  const SizedBox(height: 30),
+                  const Text(
+                    'COUVERTURE',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 22),
-                AnimatedCoverageIndicator(value: coverage, minHeight: 22),
-                const SizedBox(height: 12),
-                Text(
-                  'Encore $remaining professionnels',
-                  style: const TextStyle(
-                    color: AppColors.orange,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                  const SizedBox(height: 5),
+                  Text(
+                    '${(coverage * 100).round()} %',
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 64,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -2,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 22),
+                  AnimatedCoverageIndicator(value: coverage, minHeight: 22),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Encore $remaining professionnels',
+                    style: const TextStyle(
+                      color: AppColors.orange,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 30),
                 Row(
                   children: [
@@ -330,6 +363,247 @@ class _ResponsibleAccessUnavailableState extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoordinatorGlobalDashboard extends StatelessWidget {
+  const _CoordinatorGlobalDashboard({
+    required this.totalMissions,
+    required this.pastMissions,
+    required this.currentMissions,
+    required this.upcomingMissions,
+    required this.mobilizedProfessionals,
+    required this.remainingProfessionals,
+    required this.coverage,
+  });
+
+  final int totalMissions;
+  final int pastMissions;
+  final int currentMissions;
+  final int upcomingMissions;
+  final int mobilizedProfessionals;
+  final int remainingProfessionals;
+  final double coverage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('coordinator-global-dashboard'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D1B2A41),
+            blurRadius: 18,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.dashboard_customize_outlined,
+                color: AppColors.orange,
+                size: 22,
+              ),
+              SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'TABLEAU DE BORD GLOBAL',
+                  style: TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$totalMissions',
+                key: const Key('dashboard-total-missions'),
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 44,
+                  height: 0.9,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'missions au total',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: _DashboardMetric(
+                  metricKey: const Key('dashboard-past-missions'),
+                  label: 'Passées',
+                  value: pastMissions,
+                  color: AppColors.textMuted,
+                  background: AppColors.background,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DashboardMetric(
+                  metricKey: const Key('dashboard-current-missions'),
+                  label: 'En cours',
+                  value: currentMissions,
+                  color: AppColors.green,
+                  background: AppColors.greenSoft,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DashboardMetric(
+                  metricKey: const Key('dashboard-upcoming-missions'),
+                  label: 'À venir',
+                  value: upcomingMissions,
+                  color: AppColors.orange,
+                  background: AppColors.orangeSoft,
+                ),
+              ),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _DashboardMetric(
+                  metricKey: const Key('dashboard-mobilized-professionals'),
+                  label: 'Professionnels mobilisés',
+                  value: mobilizedProfessionals,
+                  color: AppColors.green,
+                  background: AppColors.greenSoft,
+                  compactLabel: false,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DashboardMetric(
+                  metricKey: const Key('dashboard-remaining-professionals'),
+                  label: 'Encore recherchés',
+                  value: remainingProfessionals,
+                  color: AppColors.orange,
+                  background: AppColors.orangeSoft,
+                  compactLabel: false,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Taux global de couverture',
+                  style: TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                '${(coverage * 100).round()} %',
+                key: const Key('dashboard-global-coverage'),
+                style: const TextStyle(
+                  color: AppColors.orange,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          AnimatedCoverageIndicator(value: coverage, minHeight: 10),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardMetric extends StatelessWidget {
+  const _DashboardMetric({
+    required this.metricKey,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.background,
+    this.compactLabel = true,
+  });
+
+  final Key metricKey;
+  final String label;
+  final int value;
+  final Color color;
+  final Color background;
+  final bool compactLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(minHeight: compactLabel ? 82 : 100),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '$value',
+            key: metricKey,
+            style: TextStyle(
+              color: color,
+              fontSize: 26,
+              height: 1,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            maxLines: compactLabel ? 1 : 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: compactLabel ? 10 : 11,
+              height: 1.2,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
