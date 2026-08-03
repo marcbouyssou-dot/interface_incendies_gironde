@@ -6,12 +6,25 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'config/app_identity.dart';
 import 'firebase_bootstrap.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/firestore_coordination_repository.dart';
 import 'screens/splash_screen.dart';
 import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/brand_mark.dart';
+
+abstract final class _StartupVisuals {
+  static const background = Color(0xFFF5F5F3);
+  static const surface = Colors.white;
+  static const navy = Color(0xFF173052);
+  static const fieldBackground = Color(0xFFF1F1EF);
+  static const border = Color(0xFFE5E5E1);
+  static const textMuted = Color(0xFF7C817F);
+  static const orange = Color(0xFFF25C05);
+  static const error = Color(0xFFD94B4B);
+}
 
 bool mustCreateAnonymousVolunteerSession({
   required bool hasUser,
@@ -118,8 +131,9 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
           home: Scaffold(
+            backgroundColor: _StartupVisuals.background,
             body: snapshot.hasError
-                ? Center(child: _StartupError(onRetry: _retry))
+                ? _StartupError(onRetry: _retry)
                 : const SplashScreen(),
           ),
         );
@@ -135,28 +149,138 @@ class _StartupError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.cloud_off_rounded, color: AppColors.red, size: 44),
-          const SizedBox(height: 16),
-          Text(
-            'Connexion sécurisée impossible. Réessayez.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Vérifiez votre connexion.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 22),
-          FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
-        ],
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = constraints.maxWidth <= 556
+              ? 20.0
+              : (constraints.maxWidth - 520) / 2;
+          return CustomScrollView(
+            slivers: [
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    24,
+                    horizontalPadding,
+                    32,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _StartupIdentity(),
+                      const Spacer(),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          color: _StartupVisuals.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _StartupVisuals.border),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x0A173052),
+                              blurRadius: 18,
+                              offset: Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: _StartupVisuals.fieldBackground,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Icon(
+                                Icons.cloud_off_rounded,
+                                color: _StartupVisuals.error,
+                                size: 31,
+                              ),
+                            ),
+                            const SizedBox(height: 17),
+                            const Text(
+                              'Connexion sécurisée impossible. Réessayez.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _StartupVisuals.navy,
+                                fontSize: 19,
+                                height: 1.3,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Vérifiez votre connexion.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _StartupVisuals.textMuted,
+                                fontSize: 14,
+                                height: 1.45,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 22),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 54,
+                              child: FilledButton(
+                                onPressed: onRetry,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _StartupVisuals.orange,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                child: const Text('Réessayer'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
+    );
+  }
+}
+
+class _StartupIdentity extends StatelessWidget {
+  const _StartupIdentity();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        BrandMark(size: 50),
+        SizedBox(width: 13),
+        Expanded(
+          child: Text(
+            AppIdentity.productName,
+            style: TextStyle(
+              color: _StartupVisuals.navy,
+              fontSize: 22,
+              height: 1.1,
+              letterSpacing: -0.4,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
