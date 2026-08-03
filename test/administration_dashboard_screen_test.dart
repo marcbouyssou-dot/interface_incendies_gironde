@@ -245,7 +245,22 @@ void main() {
   testWidgets('sign out returns to the responsible login', (tester) async {
     final repository = await pumpDashboard(tester);
 
-    await tester.tap(find.byKey(const Key('administration-sign-out')));
+    final signOut = find.byKey(const Key('administration-sign-out'));
+    await tester.scrollUntilVisible(
+      signOut,
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byKey(
+              const PageStorageKey('administration-dashboard'),
+            ),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.ensureVisible(signOut);
+    await tester.pumpAndSettle();
+    await tester.tap(signOut);
     await tester.pumpAndSettle();
 
     expect(repository.signOutCalls, 1);

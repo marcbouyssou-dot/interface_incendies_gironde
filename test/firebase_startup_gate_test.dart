@@ -17,8 +17,11 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SplashScreen), findsOneWidget);
-    expect(find.text('MobSanté'), findsOneWidget);
-    expect(find.text('Incendies Gironde'), findsOneWidget);
+    final splashImage = tester.widget<Image>(find.byType(Image));
+    expect(
+      (splashImage.image as AssetImage).assetName,
+      'assets/images/splash_mobsante.png',
+    );
     expect(find.text('InterfaceRecup33'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
 

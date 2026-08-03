@@ -106,7 +106,7 @@ void main() {
     expect(find.text('Identifiant professionnel *'), findsOneWidget);
     expect(find.text('Aucun identifiant'), findsOneWidget);
     expect(find.text('Numéro RPPS *'), findsNothing);
-    expect(find.text('CPTS'), findsOneWidget);
+    expect(find.byKey(const Key('cpts-choice')), findsOneWidget);
     expect(find.text('Aucune'), findsOneWidget);
     expect(find.text('Identifiant CPTS'), findsNothing);
     expect(find.text('Matériel que je peux apporter'), findsOneWidget);

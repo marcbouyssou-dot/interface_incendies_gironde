@@ -107,7 +107,7 @@ void main() {
     expect(find.text('Accès temporairement indisponible'), findsOneWidget);
     expect(find.text('Configuration d’accès invalide'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('SITUATION'), findsNothing);
+    expect(find.byKey(const PageStorageKey('coordination')), findsNothing);
     expectNoPrivilegedSituationContent();
   });
 
@@ -133,7 +133,7 @@ void main() {
       await pumpAccessUpdate(tester);
 
       expect(find.text('Accès temporairement indisponible'), findsOneWidget);
-      expect(find.text('SITUATION'), findsNothing);
+      expect(find.byKey(const PageStorageKey('coordination')), findsNothing);
       expectNoPrivilegedSituationContent();
 
       repository.emit(coordinator);
@@ -210,7 +210,7 @@ void main() {
     );
     await pumpAccessUpdate(tester);
 
-    expect(find.text('SITUATION'), findsOneWidget);
+    expect(find.byKey(const PageStorageKey('coordination')), findsOneWidget);
     expectNoPrivilegedSituationContent();
 
     repository.emit(coordinator);
@@ -221,7 +221,7 @@ void main() {
     repository.emit(null);
     await pumpAccessUpdate(tester);
 
-    expect(find.text('SITUATION'), findsOneWidget);
+    expect(find.byKey(const PageStorageKey('coordination')), findsOneWidget);
     expectNoPrivilegedSituationContent();
   });
 
@@ -245,7 +245,7 @@ void main() {
     );
     await pumpAccessUpdate(tester);
 
-    expect(find.text('SITUATION'), findsOneWidget);
+    expect(find.byKey(const PageStorageKey('coordination')), findsOneWidget);
     expectNoPrivilegedSituationContent();
   });
 

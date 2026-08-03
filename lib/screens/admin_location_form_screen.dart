@@ -293,6 +293,7 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
             top: false,
             minimum: AppFormLayout.actionBarPadding,
             child: Center(
+              heightFactor: 1,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
                 child: SizedBox(

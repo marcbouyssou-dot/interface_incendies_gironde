@@ -59,6 +59,49 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> openInvitationForm(WidgetTester tester) async {
+    final inviteButton = find.byKey(const Key('invite-admin-button'));
+    await tester.ensureVisible(inviteButton);
+    await tester.pumpAndSettle();
+    await tester.tap(inviteButton);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('admin-invitation-form')), findsOneWidget);
+  }
+
+  Future<void> revealInvitationControl(
+    WidgetTester tester,
+    Key key,
+  ) async {
+    final control = find.byKey(key);
+    await tester.scrollUntilVisible(
+      control,
+      180,
+      scrollable: _scrollableInside(const Key('admin-invitation-form')),
+    );
+    await tester.ensureVisible(control);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> enterInvitationText(
+    WidgetTester tester,
+    Key key,
+    String text,
+  ) async {
+    await revealInvitationControl(tester, key);
+    final editable = find.descendant(
+      of: find.byKey(key),
+      matching: find.byType(EditableText),
+    );
+    expect(editable, findsOneWidget);
+    await tester.enterText(editable, text);
+  }
+
+  Future<void> tapInvitationControl(WidgetTester tester, Key key) async {
+    await revealInvitationControl(tester, key);
+    await tester.tap(find.byKey(key));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('dashboard entry is visible only to an active coordinator', (
     tester,
   ) async {
@@ -226,15 +269,16 @@ void main() {
     addTearDown(invitationsRepository.dispose);
     await pumpApp(tester, invitationRepository: invitationsRepository);
     await openInvitations(tester);
-    await tester.tap(find.byKey(const Key('invite-admin-button')));
-    await tester.pumpAndSettle();
+    await openInvitationForm(tester);
 
-    await tester.enterText(
-      find.byKey(const Key('invitation-display-name')),
+    await enterInvitationText(
+      tester,
+      const Key('invitation-display-name'),
       '  Camille Martin  ',
     );
-    await tester.enterText(
-      find.byKey(const Key('invitation-email')),
+    await enterInvitationText(
+      tester,
+      const Key('invitation-email'),
       ' CAMILLE@EXEMPLE.FR ',
     );
     final location = places.where((place) => place.isOperational).first;
@@ -278,18 +322,18 @@ void main() {
     addTearDown(invitationsRepository.dispose);
     await pumpApp(tester, invitationRepository: invitationsRepository);
     await openInvitations(tester);
-    await tester.tap(find.byKey(const Key('invite-admin-button')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('invitation-display-name')),
+    await openInvitationForm(tester);
+    await enterInvitationText(
+      tester,
+      const Key('invitation-display-name'),
       'Coordination Gironde',
     );
-    await tester.enterText(
-      find.byKey(const Key('invitation-email')),
+    await enterInvitationText(
+      tester,
+      const Key('invitation-email'),
       'coord@example.fr',
     );
-    await tester.tap(find.byKey(const Key('invitation-role')));
-    await tester.pumpAndSettle();
+    await tapInvitationControl(tester, const Key('invitation-role'));
     await tester.tap(find.text('Coordinateur départemental').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-search')), findsNothing);
@@ -307,20 +351,21 @@ void main() {
     (tester) async {
       await pumpApp(tester);
       await openInvitations(tester);
-      await tester.tap(find.byKey(const Key('invite-admin-button')));
-      await tester.pumpAndSettle();
+      await openInvitationForm(tester);
 
       final submitFinder = find.byKey(const Key('create-admin-invitation'));
       expect(submitFinder, findsOneWidget);
       expect(tester.getRect(submitFinder).bottom, lessThanOrEqualTo(844));
       expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
 
-      await tester.enterText(
-        find.byKey(const Key('invitation-display-name')),
+      await enterInvitationText(
+        tester,
+        const Key('invitation-display-name'),
         'Responsable mobile',
       );
-      await tester.enterText(
-        find.byKey(const Key('invitation-email')),
+      await enterInvitationText(
+        tester,
+        const Key('invitation-email'),
         'mobile@mobsante.fr',
       );
       await tester.pump();
@@ -352,23 +397,25 @@ void main() {
   ) async {
     await pumpApp(tester);
     await openInvitations(tester);
-    await tester.tap(find.byKey(const Key('invite-admin-button')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('invitation-display-name')),
+    await openInvitationForm(tester);
+    await enterInvitationText(
+      tester,
+      const Key('invitation-display-name'),
       'Responsable mobile',
     );
     final submitFinder = find.byKey(const Key('create-admin-invitation'));
 
-    await tester.enterText(
-      find.byKey(const Key('invitation-email')),
+    await enterInvitationText(
+      tester,
+      const Key('invitation-email'),
       '${List.filled(243, 'a').join()}@example.com',
     );
     await tester.pump();
     expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
 
-    await tester.enterText(
-      find.byKey(const Key('invitation-email')),
+    await enterInvitationText(
+      tester,
+      const Key('invitation-email'),
       '${List.filled(244, 'a').join()}@example.com',
     );
     await tester.pump();
@@ -384,14 +431,15 @@ void main() {
       addTearDown(invitationsRepository.dispose);
       await pumpApp(tester, invitationRepository: invitationsRepository);
       await openInvitations(tester);
-      await tester.tap(find.byKey(const Key('invite-admin-button')));
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const Key('invitation-display-name')),
+      await openInvitationForm(tester);
+      await enterInvitationText(
+        tester,
+        const Key('invitation-display-name'),
         'Responsable récupérable',
       );
-      await tester.enterText(
-        find.byKey(const Key('invitation-email')),
+      await enterInvitationText(
+        tester,
+        const Key('invitation-email'),
         'recuperable@mobsante.fr',
       );
       await tester.pump();
@@ -440,18 +488,18 @@ void main() {
     final invitationsRepository = _CreateInvitationRepository(now);
     await pumpApp(tester, invitationRepository: invitationsRepository);
     await openInvitations(tester);
-    await tester.tap(find.byKey(const Key('invite-admin-button')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('invitation-display-name')),
+    await openInvitationForm(tester);
+    await enterInvitationText(
+      tester,
+      const Key('invitation-display-name'),
       'Coordination test',
     );
-    await tester.enterText(
-      find.byKey(const Key('invitation-email')),
+    await enterInvitationText(
+      tester,
+      const Key('invitation-email'),
       'coord-test@mobsante.fr',
     );
-    await tester.tap(find.byKey(const Key('invitation-role')));
-    await tester.pumpAndSettle();
+    await tapInvitationControl(tester, const Key('invitation-role'));
     await tester.tap(find.text('Coordinateur départemental').last);
     await tester.pumpAndSettle();
 
@@ -483,11 +531,9 @@ void main() {
   ) async {
     await pumpApp(tester);
     await openInvitations(tester);
-    await tester.tap(find.byKey(const Key('invite-admin-button')));
-    await tester.pumpAndSettle();
+    await openInvitationForm(tester);
 
-    await tester.tap(find.byKey(const Key('invitation-expiration')));
-    await tester.pumpAndSettle();
+    await tapInvitationControl(tester, const Key('invitation-expiration'));
     await tester.tap(find.text('14 jours').last);
     await tester.pumpAndSettle();
     expect(
@@ -500,14 +546,12 @@ void main() {
     );
     expect(find.text('14 jours'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('invitation-role')));
-    await tester.pumpAndSettle();
+    await tapInvitationControl(tester, const Key('invitation-role'));
     await tester.tap(find.text('Coordinateur départemental').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-search')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('invitation-role')));
-    await tester.pumpAndSettle();
+    await tapInvitationControl(tester, const Key('invitation-role'));
     await tester.tap(find.text('Responsable de centre').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-search')), findsOneWidget);
@@ -648,10 +692,17 @@ void main() {
     addTearDown(repository.dispose);
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
-    await tester.tap(find.byKey(const Key('edit-invitation-cancelled')));
+    final editButton = find.byKey(
+      const Key('edit-invitation-cancelled'),
+    );
+    await tester.ensureVisible(editButton);
+    await tester.pumpAndSettle();
+    await tester.tap(editButton);
     await tester.pumpAndSettle();
 
     expect(find.text('Modifier l’invitation'), findsOneWidget);
+    expect(find.byKey(const Key('admin-invitation-form')), findsOneWidget);
+    await revealInvitationControl(tester, const Key('invitation-email'));
     expect(
       tester
           .widget<EditableText>(
@@ -663,12 +714,12 @@ void main() {
           .readOnly,
       isTrue,
     );
-    await tester.enterText(
-      find.byKey(const Key('invitation-display-name')),
+    await enterInvitationText(
+      tester,
+      const Key('invitation-display-name'),
       'Responsable modifié',
     );
-    await tester.tap(find.byKey(const Key('invitation-role')));
-    await tester.pumpAndSettle();
+    await tapInvitationControl(tester, const Key('invitation-role'));
     await tester.tap(find.text('Coordinateur départemental').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-admin-invitation')));

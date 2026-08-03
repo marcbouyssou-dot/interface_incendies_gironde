@@ -91,6 +91,10 @@ void main() {
     final repository = _RecordingRepository();
     await _openForm(tester, repository: repository);
 
+    await _scrollToFormControl(
+      tester,
+      find.byKey(const Key('responsible-role-choice')),
+    );
     await tester.tap(find.byKey(const Key('responsible-role-choice')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Coordinateur départemental').last);
@@ -112,6 +116,10 @@ void main() {
     );
     await _openForm(tester, repository: repository);
 
+    await _scrollToFormControl(
+      tester,
+      find.byKey(const Key('responsible-active-switch')),
+    );
     await tester.tap(find.byKey(const Key('responsible-active-switch')));
     await tester.tap(find.byKey(const Key('save-responsible-access')));
     await tester.pumpAndSettle();
@@ -157,6 +165,10 @@ void main() {
         account: _managerAccount(active: false),
       );
 
+      await _scrollToFormControl(
+        tester,
+        find.byKey(const Key('responsible-active-switch')),
+      );
       expect(find.text('Accès désactivé'), findsOneWidget);
       await tester.tap(find.byKey(const Key('responsible-active-switch')));
       await tester.tap(find.byKey(const Key('save-responsible-access')));
@@ -237,12 +249,34 @@ Future<void> _openForm(
   );
   await tester.tap(find.text('Ouvrir'));
   await tester.pumpAndSettle();
+  expect(find.byKey(const Key('responsible-access-form')), findsOneWidget);
 }
 
 Future<void> _chooseRole(WidgetTester tester, String label) async {
-  await tester.tap(find.byKey(const Key('responsible-role-choice')));
+  final roleChoice = find.byKey(const Key('responsible-role-choice'));
+  await _scrollToFormControl(tester, roleChoice);
+  await tester.tap(roleChoice);
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _scrollToFormControl(
+  WidgetTester tester,
+  Finder control,
+) async {
+  final formScrollable = find
+      .descendant(
+        of: find.byKey(const Key('responsible-access-form')),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+  await tester.scrollUntilVisible(
+    control,
+    200,
+    scrollable: formScrollable,
+  );
+  await tester.ensureVisible(control);
   await tester.pumpAndSettle();
 }
 

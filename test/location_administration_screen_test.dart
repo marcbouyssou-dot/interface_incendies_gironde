@@ -64,15 +64,57 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Finder locationListScrollable() => find
+      .descendant(
+        of: find.byKey(const Key('admin-location-list')),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+
+  Future<void> scrollToLocation(WidgetTester tester, String id) async {
+    final card = find.byKey(Key('admin-location-$id'));
+    await tester.scrollUntilVisible(
+      card,
+      250,
+      scrollable: locationListScrollable(),
+    );
+    await tester.ensureVisible(card);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> tapLocationAction(WidgetTester tester, Key key) async {
+    final action = find.byKey(key);
+    await tester.scrollUntilVisible(
+      action,
+      200,
+      scrollable: locationListScrollable(),
+    );
+    await tester.ensureVisible(action);
+    await tester.pumpAndSettle();
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openCreateForm(WidgetTester tester) async {
+    final createButton = find.byKey(const Key('admin-location-create'));
+    await tester.ensureVisible(createButton);
+    await tester.pumpAndSettle();
+    await tester.tap(createButton);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('admin-location-form-list')), findsOneWidget);
+  }
+
   testWidgets('coordinator sees active, inactive and legacy-safe values', (
     tester,
   ) async {
     await pumpScreen(tester);
 
     expect(find.byType(LocationAdministrationScreen), findsOneWidget);
+    await scrollToLocation(tester, 'merignac');
     expect(find.text('Mérignac'), findsOneWidget);
-    expect(find.text('Bazas'), findsOneWidget);
     expect(find.text('Actif'), findsOneWidget);
+    await scrollToLocation(tester, 'bazas');
+    expect(find.text('Bazas'), findsOneWidget);
     expect(find.text('Désactivé'), findsOneWidget);
     expect(find.text('Adresse à renseigner'), findsOneWidget);
     expect(
@@ -109,8 +151,7 @@ void main() {
     );
     await pumpScreen(tester, locationRepository: repository);
 
-    await tester.tap(find.byKey(const Key('admin-location-create')));
-    await tester.pumpAndSettle();
+    await openCreateForm(tester);
     await tester.enterText(
       find.byKey(const Key('admin-location-id-field')),
       'nouveau-centre',
@@ -122,14 +163,23 @@ void main() {
     await tester.tap(find.byKey(const Key('admin-location-submit')).last);
     await tester.pumpAndSettle();
 
-    expect(find.text('Nouveau centre'), findsOneWidget);
-    await tester.drag(
-      find.byKey(const Key('admin-location-list')),
-      const Offset(0, -300),
+    await scrollToLocation(tester, 'nouveau-centre');
+    final createdCard = find.byKey(
+      const Key('admin-location-nouveau-centre'),
     );
+    expect(
+      find.descendant(of: createdCard, matching: find.text('Nouveau centre')),
+      findsOneWidget,
+    );
+    final modifyButton = find.descendant(
+      of: createdCard,
+      matching: find.widgetWithText(OutlinedButton, 'Modifier'),
+    );
+    await tester.ensureVisible(modifyButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Modifier').last);
+    await tester.tap(modifyButton);
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('admin-location-form-list')), findsOneWidget);
     expect(
       tester
           .widget<TextFormField>(
@@ -144,6 +194,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('admin-location-submit')).last);
     await tester.pumpAndSettle();
+    await scrollToLocation(tester, 'nouveau-centre');
     expect(find.text('Centre renommé'), findsOneWidget);
   });
 
@@ -157,21 +208,27 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const Key('admin-location-toggle-merignac')));
-    await tester.pumpAndSettle();
+    await tapLocationAction(
+      tester,
+      const Key('admin-location-toggle-merignac'),
+    );
     expect(find.text('Désactiver ce lieu ?'), findsOneWidget);
     await tester.tap(find.text('Désactiver').last);
     await tester.pumpAndSettle();
     expect(find.text('Désactivé'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('admin-location-toggle-merignac')));
-    await tester.pumpAndSettle();
+    await tapLocationAction(
+      tester,
+      const Key('admin-location-toggle-merignac'),
+    );
     await tester.tap(find.text('Réactiver').last);
     await tester.pumpAndSettle();
     expect(find.text('Actif'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('admin-location-delete-merignac')));
-    await tester.pumpAndSettle();
+    await tapLocationAction(
+      tester,
+      const Key('admin-location-delete-merignac'),
+    );
     expect(find.text('Supprimer définitivement ce lieu ?'), findsOneWidget);
     await tester.tap(find.text('Supprimer').last);
     await tester.pumpAndSettle();
@@ -181,8 +238,10 @@ void main() {
   testWidgets('server deletion refusal is displayed clearly', (tester) async {
     await pumpScreen(tester, locationRepository: _DeletionRefusalRepository());
 
-    await tester.tap(find.byKey(const Key('admin-location-delete-merignac')));
-    await tester.pumpAndSettle();
+    await tapLocationAction(
+      tester,
+      const Key('admin-location-delete-merignac'),
+    );
     await tester.tap(find.text('Supprimer').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('encore utilisé'), findsOneWidget);
@@ -237,8 +296,7 @@ void main() {
   testWidgets('double creation submission is blocked', (tester) async {
     final repository = _PendingCreateRepository();
     await pumpScreen(tester, locationRepository: repository);
-    await tester.tap(find.byKey(const Key('admin-location-create')));
-    await tester.pumpAndSettle();
+    await openCreateForm(tester);
     await tester.enterText(
       find.byKey(const Key('admin-location-id-field')),
       'nouveau-centre',

@@ -638,16 +638,15 @@ class _StatisticsSectionHeader extends StatelessWidget {
 }
 
 class _StatisticsCard extends StatelessWidget {
-  const _StatisticsCard({required this.child, this.padding = 17});
+  const _StatisticsCard({required this.child});
 
   final Widget child;
-  final double padding;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(padding),
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: _StatisticsVisuals.surface,
         borderRadius: BorderRadius.circular(18),
