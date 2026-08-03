@@ -1,14 +1,17 @@
 # Identité visuelle MobSanté
 
-Le composant `BrandMark` utilise `logo_ui_256.png`, optimisé pour l’interface.
-Le fichier `logo_hd.png` reste la source haute définition et n’est pas embarqué
-dans le build Flutter.
+Le composant `BrandMark` utilise `mobsante_pictogram_256.png`, optimisé pour
+l’interface. `mobsante_pictogram_master.png` est la source haute définition
+commune aux déclinaisons Flutter et web ; elle n’est pas embarquée dans le
+build Flutter.
 
-Le visuel doit réunir :
+Le pictogramme applicatif réunit uniquement :
 
-- un casque ;
-- une flamme ;
-- la signature URPS ;
-- la mention MK NA.
+- la croix de santé ;
+- la figure humaine ;
+- les deux courbes rouge et bleue.
 
-La taille d’affichage reste contrainte par le widget.
+Le symbole de mobilisation, actuellement une flamme, est configuré et affiché
+séparément par Flutter. Les anciens fichiers `logo_hd.png` et
+`logo_ui_256.png` restent des sources institutionnelles distinctes et ne sont
+pas utilisés comme icône applicative.

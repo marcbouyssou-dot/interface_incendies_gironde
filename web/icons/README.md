@@ -8,7 +8,8 @@ Les PNG officiels utilisent les noms suivants :
 - `Icon-maskable-192.png` : icône maskable 192 × 192 ;
 - `Icon-maskable-512.png` : icône maskable 512 × 512.
 
-Les fichiers maskable doivent conserver une zone de sécurité suffisante autour
-du logo. Ils représentent uniquement le casque, la flamme et la signature
-institutionnelle : le nom de l’application ne doit jamais apparaître dans
-l’icône. Le manifeste et `index.html` référencent déjà ces chemins.
+Toutes les tailles sont dérivées de
+`assets/branding/mobsante_pictogram_master.png`. Les fichiers maskable
+conservent une zone de sécurité suffisante autour du pictogramme. Le symbole de
+mobilisation et le nom de l’application ne sont pas intégrés à l’icône. Le
+manifeste et `index.html` référencent ces chemins.

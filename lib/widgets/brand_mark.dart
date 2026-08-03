@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
 
 class BrandMark extends StatelessWidget {
@@ -10,7 +11,7 @@ class BrandMark extends StatelessWidget {
     this.onDarkBackground = false,
   });
 
-  static const officialAssetPath = 'assets/branding/logo_ui_256.png';
+  static const officialAssetPath = AppIdentity.pictogramAsset;
 
   final double size;
   final String? assetPath;
@@ -25,7 +26,7 @@ class BrandMark extends StatelessWidget {
         : Colors.transparent;
     final mark = assetPath == null
         ? Icon(
-            Icons.sports_motorsports_rounded,
+            Icons.health_and_safety_rounded,
             color: AppColors.orange,
             size: size * .56,
           )

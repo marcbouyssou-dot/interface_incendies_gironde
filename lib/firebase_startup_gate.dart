@@ -47,12 +47,18 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   @override
   void initState() {
     super.initState();
-    _startup = _start();
+    _startup = _start(preserveSplash: true);
   }
 
-  Future<CoordinationRepository> _start() async {
+  Future<CoordinationRepository> _start({bool preserveSplash = false}) async {
     await Future<void>.delayed(Duration.zero);
-    return widget.startup?.call() ?? _initializeFirebase();
+    final startup = widget.startup?.call() ?? _initializeFirebase();
+    if (!preserveSplash) return startup;
+    await Future.wait<void>([
+      startup.then<void>((_) {}),
+      Future<void>.delayed(AppIdentity.splashMinimumDuration),
+    ], eagerError: true);
+    return startup;
   }
 
   Future<CoordinationRepository> _initializeFirebase() async {

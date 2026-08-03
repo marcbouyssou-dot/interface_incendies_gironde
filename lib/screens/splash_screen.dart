@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
+import '../widgets/brand_mark.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -10,19 +12,144 @@ class SplashScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.navy,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Center(
-            child: Image.asset(
-              'assets/images/splash_mobsante.png',
-              fit: BoxFit.contain,
-              alignment: Alignment.center,
-              filterQuality: FilterQuality.high,
-              semanticLabel: 'MobSanté — Incendies Gironde',
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            const horizontalPadding = 28.0;
+            final contentHeight = constraints.maxHeight - 40;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: 20,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: contentHeight),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _SplashPictogram(),
+                        SizedBox(height: 30),
+                        Text(
+                          AppIdentity.productName,
+                          key: Key('splash-product-name'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 42,
+                            height: 1.05,
+                            letterSpacing: -1.1,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          AppIdentity.mobilizationSubtitle,
+                          key: Key('splash-mobilization-subtitle'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFFD9E3F1),
+                            fontSize: 20,
+                            height: 1.25,
+                            letterSpacing: 0.2,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: 58),
+                        _InstitutionalSignature(),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashPictogram extends StatelessWidget {
+  const _SplashPictogram();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Pictogramme MobSanté',
+      image: true,
+      child: SizedBox.square(
+        dimension: 224,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Positioned.fill(
+              child: BrandMark(
+                key: Key('splash-pictogram'),
+                size: 224,
+                onDarkBackground: true,
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 5,
+              child: Container(
+                key: const Key('splash-mobilization-symbol'),
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: AppColors.orangeSoft,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    width: 2,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 7),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  AppIdentity.mobilizationSymbol,
+                  color: AppColors.orange,
+                  size: 32,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InstitutionalSignature extends StatelessWidget {
+  const _InstitutionalSignature();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(child: Container(height: 1, color: Colors.white24)),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            AppIdentity.institutionalSignature,
+            key: Key('splash-institutional-signature'),
+            style: TextStyle(
+              color: Color(0xFF58A5FF),
+              fontSize: 14,
+              letterSpacing: 3.2,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ),
-      ),
+        Expanded(child: Container(height: 1, color: Colors.white24)),
+      ],
     );
   }
 }
