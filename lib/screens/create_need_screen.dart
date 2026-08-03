@@ -18,7 +18,9 @@ abstract final class _CreateNeedVisuals {
   static const background = Color(0xFFF5F5F3);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
+  static const borderStrong = Color(0xFFD5D8D5);
   static const textMuted = Color(0xFF7C817F);
+  static const textDisabled = Color(0xFFAEB2B0);
 }
 
 Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
@@ -369,14 +371,33 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     const _CreateNeedSectionTitle('Matériel demandé'),
                     const SizedBox(height: 9),
                     if (_availableEquipment.isEmpty)
-                      const Text(
-                        'Ajoutez au moins un professionnel recherché pour '
-                        'afficher le matériel correspondant.',
+                      const Padding(
                         key: Key('mission-equipment-empty'),
-                        style: TextStyle(
-                          color: _CreateNeedVisuals.textMuted,
-                          fontSize: 12,
-                          height: 1.35,
+                        padding: EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: EdgeInsets.only(top: 1),
+                              child: Icon(
+                                Icons.info_outline_rounded,
+                                size: 14,
+                                color: _CreateNeedVisuals.textMuted,
+                              ),
+                            ),
+                            SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                'Ajoutez au moins un professionnel recherché '
+                                'pour afficher le matériel correspondant.',
+                                style: TextStyle(
+                                  color: _CreateNeedVisuals.textMuted,
+                                  fontSize: 11,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       )
                     else
@@ -401,18 +422,25 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                               selectedColor: _CreateNeedVisuals.orangeSoft,
                               backgroundColor: Colors.white,
                               checkmarkColor: _CreateNeedVisuals.orange,
+                              showCheckmark: true,
                               side: BorderSide(
                                 color: _equipment.contains(equipment.label)
                                     ? _CreateNeedVisuals.orange
-                                    : _CreateNeedVisuals.navy.withValues(
-                                        alpha: 0.5,
-                                      ),
+                                    : _CreateNeedVisuals.borderStrong,
+                                width: _equipment.contains(equipment.label)
+                                    ? 1.4
+                                    : 1,
                               ),
                               shape: const StadiumBorder(),
-                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 2,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
                               labelStyle: const TextStyle(
                                 color: _CreateNeedVisuals.navy,
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -424,8 +452,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     TextField(
                       controller: _detailsController,
                       enabled: !_publishing,
-                      maxLines: 3,
-                      minLines: 2,
+                      maxLines: 4,
+                      minLines: 3,
+                      style: const TextStyle(
+                        color: _CreateNeedVisuals.navy,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
                       scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                       onTapOutside: _isEditing
                           ? (_) => FocusManager.instance.primaryFocus?.unfocus()
@@ -433,19 +466,26 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       decoration: InputDecoration(
                         hintText: 'Ajouter un commentaire (optionnel)',
                         hintStyle: const TextStyle(
-                          color: _CreateNeedVisuals.textMuted,
+                          color: Color(0xFF747A78),
                           fontSize: 12,
                         ),
                         filled: true,
-                        fillColor: _CreateNeedVisuals.fieldBackground,
-                        contentPadding: const EdgeInsets.all(14),
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 14,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                          borderSide: const BorderSide(
+                            color: _CreateNeedVisuals.borderStrong,
+                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                          borderSide: const BorderSide(
+                            color: _CreateNeedVisuals.borderStrong,
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -483,7 +523,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     const SizedBox(height: 28),
                     SizedBox(
                       width: double.infinity,
-                      height: 54,
+                      height: 56,
                       child: FilledButton(
                         key: Key(
                           _isEditing ? 'update-mission' : 'publish-mission',
@@ -495,6 +535,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                               .withValues(alpha: 0.55),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 1,
+                          shadowColor: _CreateNeedVisuals.orange.withValues(
+                            alpha: 0.24,
                           ),
                           textStyle: const TextStyle(
                             fontSize: 14,
@@ -546,10 +590,15 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       child: TextButton.icon(
                         style: TextButton.styleFrom(
                           foregroundColor: _CreateNeedVisuals.textMuted,
-                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          minimumSize: const Size(0, 36),
+                          tapTargetSize: MaterialTapTargetSize.padded,
                           textStyle: const TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                         onPressed: _publishing
@@ -860,19 +909,31 @@ class _NeedSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final schedule = <String>[
-      if (date != null) 'Date · ${FrenchDateTime.date(date!)}',
-      if (startTime != null && endTime != null)
-        '${_formatTime(startTime!)}–${_formatTime(endTime!)}',
-    ];
+    final dateLabel = date == null
+        ? 'Date à définir'
+        : 'Date · ${FrenchDateTime.date(date!)}';
+    final timeLabel = switch ((startTime, endTime)) {
+      (final start?, final end?) => '${_formatTime(start)}–${_formatTime(end)}',
+      (final start?, null) => 'Début ${_formatTime(start)} · fin à définir',
+      (null, final end?) => 'Début à définir · fin ${_formatTime(end)}',
+      _ => 'Horaires à définir',
+    };
+    final professionLabel = requestedProfessionals == 1
+        ? 'professionnel'
+        : 'professionnels';
+    final requestedLabel =
+        '$requestedProfessionals $professionLabel '
+        '${requestedProfessionals == 1 ? 'demandé' : 'demandés'}';
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 11),
+      padding: const EdgeInsets.fromLTRB(13, 12, 13, 11),
       decoration: BoxDecoration(
         color: _CreateNeedVisuals.fieldBackground,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: _CreateNeedVisuals.border),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: Column(
@@ -892,9 +953,7 @@ class _NeedSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  schedule.isEmpty
-                      ? 'Date et horaires à définir'
-                      : schedule.join(' · '),
+                  '$dateLabel · $timeLabel',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -907,28 +966,33 @@ class _NeedSummaryCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-          Text.rich(
-            TextSpan(
-              text: '$requestedProfessionals\n',
-              style: const TextStyle(
-                color: _CreateNeedVisuals.navy,
-                fontSize: 22,
-                height: 0.9,
-                fontWeight: FontWeight.w800,
-              ),
-              children: const [
+          Semantics(
+            label: requestedLabel,
+            child: ExcludeSemantics(
+              child: Text.rich(
                 TextSpan(
-                  text: 'professionnels',
-                  style: TextStyle(
-                    color: _CreateNeedVisuals.textMuted,
-                    fontSize: 9,
-                    height: 1.8,
-                    fontWeight: FontWeight.w600,
+                  text: '$requestedProfessionals\n',
+                  style: const TextStyle(
+                    color: _CreateNeedVisuals.navy,
+                    fontSize: 22,
+                    height: 0.9,
+                    fontWeight: FontWeight.w800,
                   ),
+                  children: [
+                    TextSpan(
+                      text: professionLabel,
+                      style: const TextStyle(
+                        color: _CreateNeedVisuals.textMuted,
+                        fontSize: 9,
+                        height: 1.8,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+                textAlign: TextAlign.center,
+              ),
             ),
-            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -951,7 +1015,8 @@ class _FormDetailsCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _CreateNeedVisuals.border),
       ),
       child: Column(children: children),
     );
@@ -1290,60 +1355,81 @@ class _LocationInput extends StatelessWidget {
               .where((location) => access.locationIds.contains(location.id))
               .toList(growable: false)
         : displayed;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 10),
-        const _CreateNeedFieldLabel('Lieu'),
-        DropdownButtonFormField<String>(
-          key: const Key('mission-location'),
-          focusNode: focusNode,
-          isExpanded: true,
-          initialValue:
-              selectable.any((location) => location.id == selectedLocation?.id)
-              ? selectedLocation?.id
-              : null,
-          hint: const Text('Choisir un lieu'),
-          items: selectable
-              .map(
-                (location) => DropdownMenuItem(
-                  value: location.id,
-                  enabled: location.isOperational && location.isEnabled,
-                  child: Text(location.name, overflow: TextOverflow.ellipsis),
+    return SizedBox(
+      height: 62,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const _CreateNeedFieldLabel('Lieu'),
+          const SizedBox(height: 4),
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              key: const Key('mission-location'),
+              focusNode: focusNode,
+              isExpanded: true,
+              isDense: true,
+              initialValue:
+                  selectable.any(
+                    (location) => location.id == selectedLocation?.id,
+                  )
+                  ? selectedLocation?.id
+                  : null,
+              hint: const Text(
+                'Choisir un lieu',
+                style: TextStyle(
+                  color: _CreateNeedVisuals.textMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
-              )
-              .toList(),
-          onChanged: enabled
-              ? (id) => onSelected(
-                  selectable
-                      .where(
-                        (location) =>
-                            location.id == id &&
-                            location.isOperational &&
-                            location.isEnabled,
-                      )
-                      .firstOrNull,
-                )
-              : null,
-          icon: const Icon(
-            Icons.chevron_left_rounded,
-            size: 20,
-            color: _CreateNeedVisuals.navy,
+              ),
+              items: selectable
+                  .map(
+                    (location) => DropdownMenuItem(
+                      value: location.id,
+                      enabled: location.isOperational && location.isEnabled,
+                      child: Text(
+                        location.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: enabled
+                  ? (id) => onSelected(
+                      selectable
+                          .where(
+                            (location) =>
+                                location.id == id &&
+                                location.isOperational &&
+                                location.isEnabled,
+                          )
+                          .firstOrNull,
+                    )
+                  : null,
+              icon: const Icon(
+                Icons.chevron_left_rounded,
+                size: 20,
+                color: _CreateNeedVisuals.navy,
+              ),
+              style: const TextStyle(
+                color: _CreateNeedVisuals.navy,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                isCollapsed: true,
+                filled: false,
+                contentPadding: EdgeInsets.zero,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+              ),
+            ),
           ),
-          style: const TextStyle(
-            color: _CreateNeedVisuals.navy,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
-          decoration: const InputDecoration(
-            filled: false,
-            contentPadding: EdgeInsets.fromLTRB(0, 2, 0, 7),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1372,11 +1458,12 @@ class _LocationInput extends StatelessWidget {
     if (selectedLocation?.id != location.id) {
       WidgetsBinding.instance.addPostFrameCallback((_) => onSelected(location));
     }
-    return Padding(
+    return SizedBox(
       key: const Key('mission-location-locked'),
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      height: 62,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const _CreateNeedFieldLabel('Lieu'),
           const SizedBox(height: 5),
@@ -1429,11 +1516,12 @@ class _QuotaStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 48),
-      padding: const EdgeInsets.fromLTRB(13, 5, 8, 5),
+      constraints: const BoxConstraints(minHeight: 56),
+      padding: const EdgeInsets.fromLTRB(14, 7, 8, 7),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _CreateNeedVisuals.border),
       ),
       child: Row(
         children: [
@@ -1442,7 +1530,7 @@ class _QuotaStepper extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: _CreateNeedVisuals.navy,
-                fontSize: 12,
+                fontSize: 12.5,
                 height: 1.15,
                 fontWeight: FontWeight.w700,
               ),
@@ -1454,13 +1542,14 @@ class _QuotaStepper extends StatelessWidget {
             icon: Icons.remove_rounded,
           ),
           SizedBox(
-            width: 34,
+            width: 40,
             child: Text(
               '$value',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: _CreateNeedVisuals.navy,
-                fontSize: 18,
+                fontSize: 20,
+                height: 1,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1493,23 +1582,25 @@ class _QuotaIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
     return SizedBox.square(
-      dimension: 32,
+      dimension: 40,
       child: IconButton(
         focusNode: focusNode,
         onPressed: onPressed,
         padding: EdgeInsets.zero,
         style: IconButton.styleFrom(
           foregroundColor: _CreateNeedVisuals.navy,
-          disabledForegroundColor: _CreateNeedVisuals.textMuted,
+          backgroundColor: Colors.white,
+          disabledForegroundColor: _CreateNeedVisuals.textDisabled,
+          disabledBackgroundColor: _CreateNeedVisuals.fieldBackground,
           side: BorderSide(
             color: enabled
                 ? _CreateNeedVisuals.navy
-                : _CreateNeedVisuals.border,
+                : _CreateNeedVisuals.borderStrong,
             width: 1.2,
           ),
           shape: const CircleBorder(),
         ),
-        icon: Icon(icon, size: 17),
+        icon: Icon(icon, size: 19),
       ),
     );
   }
