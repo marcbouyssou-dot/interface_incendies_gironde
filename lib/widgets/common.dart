@@ -602,12 +602,24 @@ class _ProfessionQuotaRow extends StatelessWidget {
 }
 
 class _MissionCardSectionTitle extends StatelessWidget {
-  const _MissionCardSectionTitle(this.label);
+  const _MissionCardSectionTitle(this.label, {this.harmonized = false});
 
   final String label;
+  final bool harmonized;
 
   @override
   Widget build(BuildContext context) {
+    if (harmonized) {
+      return Text(
+        label,
+        style: const TextStyle(
+          color: AppColors.navy,
+          fontSize: 11,
+          letterSpacing: 0.65,
+          fontWeight: FontWeight.w800,
+        ),
+      );
+    }
     return Row(
       children: [
         Container(
@@ -636,13 +648,15 @@ class _MissionCardSectionTitle extends StatelessWidget {
 }
 
 class _MissionCardSectionDivider extends StatelessWidget {
-  const _MissionCardSectionDivider();
+  const _MissionCardSectionDivider({this.harmonized = false});
+
+  final bool harmonized;
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 20),
-      child: Divider(height: 1, thickness: 1, color: AppColors.border),
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: harmonized ? 16 : 20),
+      child: const Divider(height: 1, thickness: 1, color: AppColors.border),
     );
   }
 }
@@ -653,6 +667,7 @@ class NeedCard extends StatelessWidget {
     required this.need,
     this.location,
     this.compact = false,
+    this.harmonized = false,
     this.onEditMission,
     this.isMissionEditorOpening = false,
     this.isMissionEditorBlocked = false,
@@ -660,12 +675,176 @@ class NeedCard extends StatelessWidget {
   final CoordinationNeed need;
   final ResponsePlace? location;
   final bool compact;
+  final bool harmonized;
   final VoidCallback? onEditMission;
   final bool isMissionEditorOpening;
   final bool isMissionEditorBlocked;
 
   @override
   Widget build(BuildContext context) {
+    final content = Padding(
+      padding: harmonized
+          ? const EdgeInsets.fromLTRB(18, 18, 18, 20)
+          : const EdgeInsets.all(22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  need.place.toUpperCase(),
+                  style: harmonized
+                      ? const TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 18,
+                          height: 1.15,
+                          letterSpacing: -0.25,
+                          fontWeight: FontWeight.w800,
+                        )
+                      : Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              const SizedBox(width: 12),
+              MissionTimingPill(mission: need),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            location?.type.label ?? 'Lieu d’intervention',
+            key: const Key('mission-location-type'),
+            style: TextStyle(
+              color: harmonized ? AppColors.textMuted : AppColors.orange,
+              fontSize: harmonized ? 11 : 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          MissionLocationDetails(location: location),
+          SizedBox(height: harmonized ? 14 : 18),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: harmonized ? 11 : 12,
+            ),
+            decoration: BoxDecoration(
+              color: harmonized
+                  ? const Color(0xFFF1F1EF)
+                  : AppColors.background,
+              borderRadius: BorderRadius.circular(harmonized ? 12 : 14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  need.startAt == null
+                      ? need.date
+                      : FrenchDateTime.relativeDate(need.startAt!),
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: harmonized ? 12 : 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  need.time,
+                  style: TextStyle(
+                    color: AppColors.navy,
+                    fontSize: harmonized ? 20 : 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _MissionCardSectionDivider(harmonized: harmonized),
+          _MissionCardSectionTitle(
+            'PROFESSIONNELS RECHERCHÉS',
+            harmonized: harmonized,
+          ),
+          const SizedBox(height: 12),
+          _ProfessionQuotaRows(need: need, emphasized: true),
+          if (need.equipment
+              .where((item) => item.trim().isNotEmpty)
+              .isNotEmpty) ...[
+            _MissionCardSectionDivider(harmonized: harmonized),
+            _MissionCardSectionTitle(
+              'MATÉRIEL DEMANDÉ',
+              harmonized: harmonized,
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              key: const Key('mission-equipment-text'),
+              spacing: 7,
+              runSpacing: 7,
+              children: need.equipment
+                  .where((item) => item.trim().isNotEmpty)
+                  .map(
+                    (item) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: harmonized ? Colors.white : AppColors.background,
+                        borderRadius: BorderRadius.circular(
+                          harmonized ? 20 : 10,
+                        ),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Text(
+                        item,
+                        style: const TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 12,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ],
+          _MissionCardSectionDivider(harmonized: harmonized),
+          _NeedActions(need: need, location: location),
+          if (onEditMission != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: Key('edit-mission-${need.id}'),
+                style: harmonized
+                    ? OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.navy,
+                        minimumSize: const Size.fromHeight(52),
+                        side: const BorderSide(color: AppColors.border),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      )
+                    : null,
+                onPressed: isMissionEditorBlocked ? null : onEditMission,
+                icon: isMissionEditorOpening
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.edit_outlined),
+                label: Text(
+                  isMissionEditorOpening
+                      ? 'Modification en cours…'
+                      : 'Modifier la mission',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 380),
@@ -677,141 +856,23 @@ class NeedCard extends StatelessWidget {
           child: child,
         ),
       ),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      need.place.toUpperCase(),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
+      child: harmonized
+          ? Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE5E5E1)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0A173052),
+                    blurRadius: 14,
+                    offset: Offset(0, 4),
                   ),
-                  const SizedBox(width: 12),
-                  MissionTimingPill(mission: need),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                location?.type.label ?? 'Lieu d’intervention',
-                key: const Key('mission-location-type'),
-                style: const TextStyle(
-                  color: AppColors.orange,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              MissionLocationDetails(location: location),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      need.startAt == null
-                          ? need.date
-                          : FrenchDateTime.relativeDate(need.startAt!),
-                      style: TextStyle(
-                        color: AppColors.textMuted,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      need.time,
-                      style: const TextStyle(
-                        color: AppColors.navy,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const _MissionCardSectionDivider(),
-              const _MissionCardSectionTitle('PROFESSIONNELS RECHERCHÉS'),
-              const SizedBox(height: 12),
-              _ProfessionQuotaRows(need: need, emphasized: true),
-              if (need.equipment
-                  .where((item) => item.trim().isNotEmpty)
-                  .isNotEmpty) ...[
-                const _MissionCardSectionDivider(),
-                const _MissionCardSectionTitle('MATÉRIEL DEMANDÉ'),
-                const SizedBox(height: 10),
-                Wrap(
-                  key: const Key('mission-equipment-text'),
-                  spacing: 7,
-                  runSpacing: 7,
-                  children: need.equipment
-                      .where((item) => item.trim().isNotEmpty)
-                      .map(
-                        (item) => Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: Text(
-                            item,
-                            style: const TextStyle(
-                              color: AppColors.navy,
-                              fontSize: 12,
-                              height: 1.2,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-              ],
-              const _MissionCardSectionDivider(),
-              _NeedActions(need: need, location: location),
-              if (onEditMission != null) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    key: Key('edit-mission-${need.id}'),
-                    onPressed: isMissionEditorBlocked ? null : onEditMission,
-                    icon: isMissionEditorOpening
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.edit_outlined),
-                    label: Text(
-                      isMissionEditorOpening
-                          ? 'Modification en cours…'
-                          : 'Modifier la mission',
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+              child: content,
+            )
+          : Card(child: content),
     );
   }
 }
