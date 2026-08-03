@@ -465,6 +465,123 @@ class AnimatedCoverageIndicator extends StatelessWidget {
   }
 }
 
+class _MissionNeedStateBadge extends StatelessWidget {
+  const _MissionNeedStateBadge({required this.status});
+
+  final NeedStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon, color, background) = switch (status) {
+      NeedStatus.critical => (
+        'Besoin prioritaire',
+        Icons.priority_high_rounded,
+        AppColors.red,
+        AppColors.redSoft,
+      ),
+      NeedStatus.toComplete => (
+        'Renforts attendus',
+        Icons.groups_2_outlined,
+        AppColors.orange,
+        AppColors.orangeSoft,
+      ),
+      NeedStatus.complete => (
+        'Équipe complète',
+        Icons.check_circle_outline_rounded,
+        AppColors.green,
+        AppColors.greenSoft,
+      ),
+    };
+    return Container(
+      constraints: const BoxConstraints(minHeight: 36),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfessionNeedChips extends StatelessWidget {
+  const _ProfessionNeedChips({required this.need});
+
+  final CoordinationNeed need;
+
+  @override
+  Widget build(BuildContext context) {
+    final professions = HealthProfessionRegistry.values
+        .where(
+          (profession) =>
+              need.professionQuotas.quotaFor(profession.id).hasActivity,
+        )
+        .toList(growable: false);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final profession in professions)
+          Builder(
+            builder: (context) {
+              final quota = need.professionQuotas.quotaFor(profession.id);
+              final color = quota.isCovered
+                  ? AppColors.green
+                  : AppColors.orange;
+              return Container(
+                constraints: const BoxConstraints(minHeight: 38),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: color.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      quota.isCovered
+                          ? Icons.check_circle_rounded
+                          : Icons.add_circle_outline_rounded,
+                      color: color,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      profession.missionLabel,
+                      style: const TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
 class _ProfessionQuotaRows extends StatelessWidget {
   const _ProfessionQuotaRows({required this.need, this.emphasized = false});
 
@@ -602,20 +719,26 @@ class _ProfessionQuotaRow extends StatelessWidget {
 }
 
 class _MissionCardSectionTitle extends StatelessWidget {
-  const _MissionCardSectionTitle(this.label, {this.harmonized = false});
+  const _MissionCardSectionTitle(
+    this.label, {
+    this.harmonized = false,
+    this.professionalHome = false,
+  });
 
   final String label;
   final bool harmonized;
+  final bool professionalHome;
 
   @override
   Widget build(BuildContext context) {
     if (harmonized) {
       return Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           color: AppColors.navy,
-          fontSize: 11,
-          letterSpacing: 0.65,
+          fontSize: professionalHome ? 13 : 11,
+          height: professionalHome ? 1.2 : null,
+          letterSpacing: professionalHome ? 0.05 : 0.65,
           fontWeight: FontWeight.w800,
         ),
       );
@@ -668,6 +791,8 @@ class NeedCard extends StatelessWidget {
     this.location,
     this.compact = false,
     this.harmonized = false,
+    this.professionalHome = false,
+    this.featured = false,
     this.onEditMission,
     this.isMissionEditorOpening = false,
     this.isMissionEditorBlocked = false,
@@ -676,12 +801,17 @@ class NeedCard extends StatelessWidget {
   final ResponsePlace? location;
   final bool compact;
   final bool harmonized;
+  final bool professionalHome;
+  final bool featured;
   final VoidCallback? onEditMission;
   final bool isMissionEditorOpening;
   final bool isMissionEditorBlocked;
 
   @override
   Widget build(BuildContext context) {
+    if (professionalHome) {
+      return _animatedCard(_buildProfessionalHomeContent());
+    }
     final content = Padding(
       padding: harmonized
           ? const EdgeInsets.fromLTRB(18, 18, 18, 20)
@@ -845,6 +975,259 @@ class NeedCard extends StatelessWidget {
         ],
       ),
     );
+    return _animatedCard(content);
+  }
+
+  Widget _buildProfessionalHomeContent() {
+    final required = need.professionQuotas.requiredTotal;
+    final registered = need.professionQuotas.registeredTotal;
+    final remaining = (required - registered).clamp(0, required);
+    final remainingLabel = remaining == 0
+        ? 'L’équipe est au complet'
+        : remaining == 1
+        ? 'Il manque encore 1 professionnel'
+        : 'Il manque encore $remaining professionnels';
+    final equipment = need.equipment
+        .where((item) => item.trim().isNotEmpty)
+        .toList(growable: false);
+    final details = need.details?.trim();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _MissionNeedStateBadge(status: need.status),
+              const Spacer(),
+              const SizedBox(width: 10),
+              MissionTimingPill(mission: need),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            need.place,
+            style: const TextStyle(
+              color: AppColors.navy,
+              fontSize: 24,
+              height: 1.1,
+              letterSpacing: -0.6,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F5F4),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.calendar_month_outlined,
+                  color: AppColors.navy,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        need.startAt == null
+                            ? need.date
+                            : FrenchDateTime.relativeDate(need.startAt!),
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 13,
+                          height: 1.25,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        need.time,
+                        style: const TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 20,
+                          height: 1.15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 13),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+            decoration: BoxDecoration(
+              color: AppColors.orangeSoft,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.groups_2_rounded,
+                  color: AppColors.orange,
+                  size: 20,
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    remainingLabel,
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 15.5,
+                      height: 1.3,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          const _MissionCardSectionTitle(
+            'Professions concernées',
+            harmonized: true,
+            professionalHome: true,
+          ),
+          const SizedBox(height: 11),
+          _ProfessionNeedChips(need: need),
+          const SizedBox(height: 20),
+          _NeedActions(need: need, location: location, professionalHome: true),
+          const _MissionCardSectionDivider(harmonized: true),
+          const _MissionCardSectionTitle(
+            'Informations utiles',
+            harmonized: true,
+            professionalHome: true,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            location?.type.label ?? 'Lieu d’intervention',
+            key: const Key('mission-location-type'),
+            style: const TextStyle(
+              color: AppColors.navy,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          MissionLocationDetails(location: location, compact: true),
+          const _MissionCardSectionDivider(harmonized: true),
+          const _MissionCardSectionTitle(
+            'Le besoin en détail',
+            harmonized: true,
+            professionalHome: true,
+          ),
+          const SizedBox(height: 11),
+          _ProfessionQuotaRows(need: need),
+          if (equipment.isNotEmpty) ...[
+            const _MissionCardSectionDivider(harmonized: true),
+            const _MissionCardSectionTitle(
+              'Matériel à prévoir',
+              harmonized: true,
+              professionalHome: true,
+            ),
+            const SizedBox(height: 11),
+            Wrap(
+              key: const Key('mission-equipment-text'),
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                for (final item in equipment)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF4F5F4),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Text(
+                      item,
+                      style: const TextStyle(
+                        color: AppColors.navy,
+                        fontSize: 12,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          if (details != null && details.isNotEmpty) ...[
+            const _MissionCardSectionDivider(harmonized: true),
+            const _MissionCardSectionTitle(
+              'Message du centre',
+              harmonized: true,
+              professionalHome: true,
+            ),
+            const SizedBox(height: 10),
+            Container(
+              key: const Key('mission-comment-text'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F5F4),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Text(
+                details,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13,
+                  height: 1.45,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+          if (onEditMission != null) ...[
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: Key('edit-mission-${need.id}'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.navy,
+                  minimumSize: const Size.fromHeight(52),
+                  side: const BorderSide(color: AppColors.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: isMissionEditorBlocked ? null : onEditMission,
+                icon: isMissionEditorOpening
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.edit_outlined),
+                label: Text(
+                  isMissionEditorOpening
+                      ? 'Modification en cours…'
+                      : 'Modifier la mission',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _animatedCard(Widget content) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 380),
@@ -860,15 +1243,35 @@ class NeedCard extends StatelessWidget {
           ? Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFE5E5E1)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x0A173052),
-                    blurRadius: 14,
-                    offset: Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(professionalHome ? 22 : 18),
+                border: Border.all(
+                  color: featured ? AppColors.orange : const Color(0xFFE5E5E1),
+                  width: featured ? 1.35 : 1,
+                ),
+                boxShadow: professionalHome
+                    ? [
+                        BoxShadow(
+                          color: featured
+                              ? const Color(0x18F37A32)
+                              : const Color(0x0D173052),
+                          blurRadius: featured ? 24 : 18,
+                          offset: const Offset(0, 6),
+                        ),
+                        BoxShadow(
+                          color: featured
+                              ? const Color(0x0A173052)
+                              : const Color(0x06173052),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : const [
+                        BoxShadow(
+                          color: Color(0x0A173052),
+                          blurRadius: 14,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
               ),
               child: content,
             )
@@ -878,10 +1281,15 @@ class NeedCard extends StatelessWidget {
 }
 
 class _NeedActions extends StatefulWidget {
-  const _NeedActions({required this.need, required this.location});
+  const _NeedActions({
+    required this.need,
+    required this.location,
+    this.professionalHome = false,
+  });
 
   final CoordinationNeed need;
   final ResponsePlace? location;
+  final bool professionalHome;
 
   @override
   State<_NeedActions> createState() => _NeedActionsState();
@@ -922,9 +1330,13 @@ class _NeedActionsState extends State<_NeedActions> {
       stream: _engagement,
       builder: (context, engagementSnapshot) {
         if (engagementSnapshot.hasError) {
-          return const FilledButton(
+          return FilledButton(
             onPressed: null,
-            child: Text('Statut indisponible'),
+            child: Text(
+              widget.professionalHome
+                  ? 'Mobilisation temporairement indisponible'
+                  : 'Statut indisponible',
+            ),
           );
         }
         if (engagementSnapshot.connectionState == ConnectionState.waiting &&
@@ -939,12 +1351,19 @@ class _NeedActionsState extends State<_NeedActions> {
         }
         final engagement = engagementSnapshot.data;
         if (engagement != null) {
-          final actionLabel = switch (engagement.status) {
-            EngagementStatus.pending => 'CONFIRMER MA PARTICIPATION',
-            EngagementStatus.confirmed => 'PARTICIPATION CONFIRMÉE',
-            EngagementStatus.standby => 'RENFORT',
-            EngagementStatus.cancelled => 'JE M’ENGAGE À NOUVEAU',
-          };
+          final actionLabel = widget.professionalHome
+              ? switch (engagement.status) {
+                  EngagementStatus.pending => 'Finaliser ma participation',
+                  EngagementStatus.confirmed => 'Participation confirmée',
+                  EngagementStatus.standby => 'Renfort disponible',
+                  EngagementStatus.cancelled => 'Je me mobilise à nouveau',
+                }
+              : switch (engagement.status) {
+                  EngagementStatus.pending => 'CONFIRMER MA PARTICIPATION',
+                  EngagementStatus.confirmed => 'PARTICIPATION CONFIRMÉE',
+                  EngagementStatus.standby => 'RENFORT',
+                  EngagementStatus.cancelled => 'JE M’ENGAGE À NOUVEAU',
+                };
           final actionIcon = switch (engagement.status) {
             EngagementStatus.pending => Icons.schedule_rounded,
             EngagementStatus.confirmed => Icons.check_circle_rounded,
@@ -979,8 +1398,22 @@ class _NeedActionsState extends State<_NeedActions> {
                   disabledBackgroundColor: AppColors.greenSoft,
                   disabledForegroundColor: AppColors.green,
                   minimumSize: const Size.fromHeight(56),
+                  shape: widget.professionalHome
+                      ? RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        )
+                      : null,
+                  textStyle: widget.professionalHome
+                      ? const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        )
+                      : null,
                 ),
-                icon: Icon(actionIcon),
+                icon: Icon(
+                  actionIcon,
+                  size: widget.professionalHome ? 21 : null,
+                ),
                 label: Text(actionLabel),
               ),
               if (engagement.status == EngagementStatus.standby) ...[
@@ -1001,7 +1434,11 @@ class _NeedActionsState extends State<_NeedActions> {
                       engagement: engagement,
                     ),
                   ),
-                  child: const Text('Annuler mon engagement'),
+                  child: Text(
+                    widget.professionalHome
+                        ? 'Je ne suis plus disponible'
+                        : 'Annuler mon engagement',
+                  ),
                 ),
               ],
             ],
@@ -1024,17 +1461,27 @@ class _NeedActionsState extends State<_NeedActions> {
             disabledForegroundColor: AppColors.green,
             minimumSize: const Size.fromHeight(56),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(
+                widget.professionalHome ? 16 : 15,
+              ),
             ),
+            textStyle: widget.professionalHome
+                ? const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)
+                : null,
           ),
           icon: Icon(
             need.status == NeedStatus.complete
                 ? Icons.check_circle_rounded
                 : Icons.bolt_rounded,
+            size: widget.professionalHome ? 21 : null,
           ),
           label: Text(
             need.status == NeedStatus.complete
-                ? 'MISSION COMPLÈTE'
+                ? widget.professionalHome
+                      ? 'Équipe au complet'
+                      : 'MISSION COMPLÈTE'
+                : widget.professionalHome
+                ? 'Je me mobilise'
                 : '❤️ JE M’ENGAGE',
           ),
         );

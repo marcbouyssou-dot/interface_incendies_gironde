@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../config/app_identity.dart';
 import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
@@ -140,95 +139,98 @@ class _SlotsScreenState extends State<SlotsScreen> {
                     horizontalPadding,
                     16,
                     horizontalPadding,
-                    14,
+                    16,
                   ),
                   sliver: SliverList.list(
                     children: [
                       _CrisisHeader(missions: missions),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 20),
                       Container(
-                        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+                        padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
                         decoration: BoxDecoration(
                           color: _MissionsVisuals.surface,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: _MissionsVisuals.border),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x09173052),
+                              blurRadius: 14,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Filtrer les missions',
-                              style: TextStyle(
-                                color: _MissionsVisuals.navy,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 48,
+                                    child: TerritorialGroupFilter(
+                                      key: const Key(
+                                        'slots-territorial-filter',
+                                      ),
+                                      fieldKey: ValueKey(
+                                        'slots-territorial-${_group?.name ?? 'all'}',
+                                      ),
+                                      value: _group,
+                                      onChanged: _selectGroup,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  key: const Key('reset-mission-filters'),
+                                  tooltip: 'Réinitialiser les filtres',
+                                  style: IconButton.styleFrom(
+                                    foregroundColor: _MissionsVisuals.textMuted,
+                                    disabledForegroundColor:
+                                        _MissionsVisuals.border,
+                                    minimumSize: const Size(44, 44),
+                                  ),
+                                  onPressed: _hasActiveFilters
+                                      ? _resetFilters
+                                      : null,
+                                  icon: const Icon(
+                                    Icons.restart_alt_rounded,
+                                    size: 20,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 10),
-                            TerritorialGroupFilter(
-                              key: const Key('slots-territorial-filter'),
-                              fieldKey: ValueKey(
-                                'slots-territorial-${_group?.name ?? 'all'}',
-                              ),
-                              value: _group,
-                              onChanged: _selectGroup,
-                            ),
-                            const SizedBox(height: 11),
+                            const SizedBox(height: 8),
                             SizedBox(
-                              height: 42,
+                              height: 40,
                               child: ListView(
                                 scrollDirection: Axis.horizontal,
                                 children: [
                                   _FilterChip(
-                                    label: 'Tous',
+                                    label: 'Toutes',
                                     selected: _filter == 0,
                                     onTap: () => _select(0),
                                   ),
                                   _FilterChip(
-                                    label: 'Critiques',
+                                    label: 'Prioritaires',
                                     selected: _filter == 1,
                                     onTap: () => _select(1),
                                   ),
                                   _FilterChip(
-                                    label: 'À compléter',
+                                    label: 'Renforts attendus',
                                     selected: _filter == 2,
                                     onTap: () => _select(2),
                                   ),
                                   _FilterChip(
-                                    label: 'Complets',
+                                    label: 'Équipes complètes',
                                     selected: _filter == 3,
                                     onTap: () => _select(3),
                                   ),
                                 ],
                               ),
                             ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                key: const Key('reset-mission-filters'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: _MissionsVisuals.textMuted,
-                                  minimumSize: const Size(0, 40),
-                                  visualDensity: VisualDensity.compact,
-                                  textStyle: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                onPressed: _hasActiveFilters
-                                    ? _resetFilters
-                                    : null,
-                                icon: const Icon(
-                                  Icons.restart_alt_rounded,
-                                  size: 17,
-                                ),
-                                label: const Text('Réinitialiser les filtres'),
-                              ),
-                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 20),
                       _MissionResultsHeader(
                         count: visibleNeeds.length,
                         filtered: _hasActiveFilters,
@@ -273,6 +275,8 @@ class _SlotsScreenState extends State<SlotsScreen> {
                           need: need,
                           location: location,
                           harmonized: true,
+                          professionalHome: true,
+                          featured: index == 0,
                           isMissionEditorOpening: _editingMissionId == need.id,
                           isMissionEditorBlocked: _editingMissionId != null,
                           onEditMission: canEdit
@@ -280,7 +284,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                               : null,
                         );
                       },
-                      separatorBuilder: (_, _) => const SizedBox(height: 14),
+                      separatorBuilder: (_, _) => const SizedBox(height: 18),
                     ),
                   ),
               ],
@@ -341,9 +345,11 @@ class _CrisisHeader extends StatelessWidget {
     final mobilized = totalQuotas.registeredTotal;
     final remaining = (required - mobilized).clamp(0, required);
     final coverage = required == 0 ? 0.0 : totalQuotas.coverage;
-    final remainingLabel = remaining == 1
-        ? 'Encore 1 professionnel à mobiliser'
-        : 'Encore $remaining professionnels à mobiliser';
+    final remainingLabel = remaining == 0
+        ? 'Toutes les équipes sont constituées'
+        : remaining == 1
+        ? '1 renfort encore attendu'
+        : '$remaining renforts encore attendus';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -365,39 +371,47 @@ class _CrisisHeader extends StatelessWidget {
                   ),
                   SizedBox(height: 5),
                   Text(
-                    'Missions',
+                    'Votre mobilisation compte',
                     style: TextStyle(
                       color: _MissionsVisuals.navy,
                       fontSize: 26,
-                      height: 1.08,
-                      letterSpacing: -0.6,
+                      height: 1.1,
+                      letterSpacing: -0.65,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   SizedBox(height: 4),
                   Text(
-                    AppIdentity.productSubtitle,
+                    'Choisissez une mission où votre présence fera la différence.',
                     style: TextStyle(
                       color: _MissionsVisuals.textMuted,
-                      fontSize: 12,
+                      fontSize: 13,
+                      height: 1.38,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
-            SizedBox(width: 14),
-            BrandMark(size: 44),
+            SizedBox(width: 16),
+            BrandMark(size: 46),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+          padding: const EdgeInsets.fromLTRB(15, 14, 15, 13),
           decoration: BoxDecoration(
             color: _MissionsVisuals.surface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: _MissionsVisuals.border),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x09173052),
+                blurRadius: 14,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -406,16 +420,17 @@ class _CrisisHeader extends StatelessWidget {
                 children: [
                   const Icon(
                     Icons.groups_2_outlined,
-                    size: 18,
+                    size: 20,
                     color: _MissionsVisuals.navy,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       remainingLabel,
                       style: const TextStyle(
                         color: _MissionsVisuals.navy,
-                        fontSize: 15,
+                        fontSize: 15.5,
+                        height: 1.25,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -425,17 +440,17 @@ class _CrisisHeader extends StatelessWidget {
                     '${(coverage * 100).round()} %',
                     style: const TextStyle(
                       color: AppColors.orange,
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 11),
+              const SizedBox(height: 12),
               AnimatedCoverageIndicator(value: coverage, minHeight: 10),
-              const SizedBox(height: 7),
+              const SizedBox(height: 8),
               Text(
-                '${(coverage * 100).round()} % de couverture',
+                'Mobilisation couverte à ${(coverage * 100).round()} %',
                 style: const TextStyle(
                   color: _MissionsVisuals.textMuted,
                   fontSize: 11,
@@ -463,25 +478,28 @@ class _MissionResultsHeader extends StatelessWidget {
       children: [
         Expanded(
           child: Text(
-            filtered ? 'Résultats' : 'Missions disponibles',
+            filtered
+                ? 'Missions correspondant à vos choix'
+                : 'Les missions qui ont besoin de vous',
             style: const TextStyle(
               color: _MissionsVisuals.navy,
-              fontSize: 15,
+              fontSize: 16,
+              height: 1.25,
               fontWeight: FontWeight.w800,
             ),
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: _MissionsVisuals.fieldBackground,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             label,
             style: const TextStyle(
               color: _MissionsVisuals.textMuted,
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -500,39 +518,49 @@ class _MissionsEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 30),
       decoration: BoxDecoration(
         color: _MissionsVisuals.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _MissionsVisuals.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08173052),
+            blurRadius: 14,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
           const Icon(
             Icons.search_off_rounded,
             color: _MissionsVisuals.textMuted,
-            size: 28,
+            size: 30,
           ),
-          const SizedBox(height: 9),
-          const Text(
-            'Aucune mission à afficher',
+          const SizedBox(height: 11),
+          Text(
+            filtered
+                ? 'Aucune mission ne correspond à vos choix'
+                : 'Aucune mission n’attend de renfort',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: _MissionsVisuals.navy,
-              fontSize: 14,
+              fontSize: 15,
+              height: 1.25,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 7),
           Text(
             filtered
-                ? 'Modifiez les filtres pour élargir les résultats.'
-                : 'Aucune mission n’est disponible pour le moment.',
+                ? 'Essayez un autre secteur ou un autre niveau de besoin.'
+                : 'Revenez bientôt pour découvrir les prochains besoins.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: _MissionsVisuals.textMuted,
-              fontSize: 11,
-              height: 1.35,
+              fontSize: 12,
+              height: 1.4,
             ),
           ),
         ],
@@ -580,13 +608,13 @@ class _FilterChip extends StatelessWidget {
             onTap: onTap,
             customBorder: const StadiumBorder(),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
+              padding: const EdgeInsets.symmetric(horizontal: 13),
               child: Center(
                 child: Text(
                   label,
                   style: TextStyle(
                     color: selected ? Colors.white : _MissionsVisuals.textMuted,
-                    fontSize: 12,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
