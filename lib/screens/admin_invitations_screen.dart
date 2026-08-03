@@ -16,6 +16,17 @@ import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
 import 'responsible_access_form_screen.dart';
 
+abstract final class _ResponsibleVisuals {
+  static const background = Color(0xFFF5F5F3);
+  static const surface = Colors.white;
+  static const navy = Color(0xFF173052);
+  static const fieldBackground = Color(0xFFF1F1EF);
+  static const border = Color(0xFFE5E5E1);
+  static const textMuted = Color(0xFF7C817F);
+  static const orange = Color(0xFFF25C05);
+  static const orangeSoft = Color(0xFFFFE8D9);
+}
+
 class AdminInvitationsScreen extends StatefulWidget {
   const AdminInvitationsScreen({super.key});
 
@@ -42,7 +53,20 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Responsables')),
+      backgroundColor: _ResponsibleVisuals.background,
+      appBar: AppBar(
+        title: const Text('Responsables'),
+        backgroundColor: _ResponsibleVisuals.background,
+        foregroundColor: _ResponsibleVisuals.navy,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleTextStyle: const TextStyle(
+          color: _ResponsibleVisuals.navy,
+          fontSize: 17,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
       body: SafeArea(
         top: false,
         child: StreamBuilder<ResponsibleAccess?>(
@@ -56,7 +80,7 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
             }
             if (!snapshot.hasData) {
               return snapshot.connectionState == ConnectionState.waiting
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const _ManagementLoading()
                   : const _AccessDenied();
             }
             if (snapshot.data?.isCoordinator != true) {
@@ -81,12 +105,38 @@ class _AccessDenied extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          'Accès réservé au coordinateur départemental.',
-          textAlign: TextAlign.center,
+    return const ColoredBox(
+      color: _ResponsibleVisuals.background,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Accès réservé au coordinateur départemental.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _ResponsibleVisuals.textMuted,
+              fontSize: 14,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ManagementLoading extends StatelessWidget {
+  const _ManagementLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: _ResponsibleVisuals.background,
+      child: Center(
+        child: CircularProgressIndicator(
+          color: _ResponsibleVisuals.orange,
+          strokeWidth: 3,
         ),
       ),
     );
@@ -199,7 +249,7 @@ class _CoordinatorInvitationsContentState
           );
         }
         if (!locationSnapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const _ManagementLoading();
         }
         final locations = locationSnapshot.data!;
         final locationsById = {for (final value in locations) value.id: value};
@@ -209,99 +259,127 @@ class _CoordinatorInvitationsContentState
             final invitations = snapshot.data
                 ?.where((invitation) => invitation.isUnused)
                 .toList(growable: false);
-            return PageContainer(
-              child: ListView(
-                key: const Key('admin-invitations-list'),
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
-                children: [
-                  PageHeader(
-                    eyebrow: 'Administration',
-                    title: 'Responsables',
-                    subtitle: 'Invitations et accès aux centres',
-                    trailing: IconButton.filled(
-                      key: const Key('invite-admin-button'),
-                      tooltip: 'Inviter un responsable',
-                      onPressed: () => _openForm(locations),
-                      icon: const Icon(Icons.person_add_alt_1_rounded),
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final horizontalPadding = constraints.maxWidth <= 596
+                    ? 18.0
+                    : (constraints.maxWidth - 560) / 2;
+                return Material(
+                  color: _ResponsibleVisuals.background,
+                  child: ListView(
+                    key: const Key('admin-invitations-list'),
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      12,
+                      horizontalPadding,
+                      36,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: ExpansionTile(
-                      key: const Key('responsible-accounts-section'),
-                      title: const Text('Accès existants'),
-                      subtitle: const Text('Comptes, rôles et centres'),
-                      childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
-                      children: [
-                        FutureBuilder<List<ResponsibleAccount>>(
-                          future: _accounts,
-                          builder: (context, accountSnapshot) {
-                            if (accountSnapshot.hasError) {
-                              return _AccessListError(onRetry: _reloadAccounts);
-                            }
-                            if (!accountSnapshot.hasData) {
-                              return const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(20),
-                                  child: CircularProgressIndicator(),
-                                ),
-                              );
-                            }
-                            return Column(
-                              children: accountSnapshot.data!
-                                  .map(
-                                    (account) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: 10,
-                                      ),
-                                      child: _ResponsibleAccountCard(
-                                        account: account,
-                                        currentUid: widget.currentUid,
-                                        locationsById: locationsById,
-                                        onManage: () =>
-                                            _manageAccess(account, locations),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(growable: false),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const SectionTitle(title: 'Invitations'),
-                  const SizedBox(height: 10),
-                  if (snapshot.hasError)
-                    const _ErrorState(
-                      message: 'Les invitations ne sont pas disponibles.',
-                    )
-                  else if (!snapshot.hasData)
-                    const Center(child: CircularProgressIndicator())
-                  else if (invitations!.isEmpty)
-                    const _EmptyInvitations()
-                  else
-                    ...invitations.map(
-                      (invitation) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _InvitationCard(
-                          invitation: invitation,
-                          locationsById: locationsById,
-                          onEdit: () => _edit(invitation, locations),
-                          onCancel: () => _cancel(invitation),
-                          onReactivate: () => _reactivate(invitation),
-                          onResend: () => _resend(invitation),
-                          onDelete: () => _delete(invitation),
-                          provisioning: _provisioningIds.contains(
-                            invitation.id,
+                    children: [
+                      _ResponsibleHeader(onInvite: () => _openForm(locations)),
+                      const SizedBox(height: 22),
+                      Container(
+                        clipBehavior: Clip.antiAlias,
+                        decoration: _responsibleCardDecoration(),
+                        child: ExpansionTile(
+                          key: const Key('responsible-accounts-section'),
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: 17,
+                            vertical: 5,
                           ),
+                          childrenPadding: const EdgeInsets.fromLTRB(
+                            13,
+                            0,
+                            13,
+                            4,
+                          ),
+                          iconColor: _ResponsibleVisuals.navy,
+                          collapsedIconColor: _ResponsibleVisuals.textMuted,
+                          title: const Text(
+                            'Accès existants',
+                            style: TextStyle(
+                              color: _ResponsibleVisuals.navy,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Comptes, rôles et centres',
+                            style: TextStyle(
+                              color: _ResponsibleVisuals.textMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          children: [
+                            FutureBuilder<List<ResponsibleAccount>>(
+                              future: _accounts,
+                              builder: (context, accountSnapshot) {
+                                if (accountSnapshot.hasError) {
+                                  return _AccessListError(
+                                    onRetry: _reloadAccounts,
+                                  );
+                                }
+                                if (!accountSnapshot.hasData) {
+                                  return const _InlineLoading();
+                                }
+                                return Column(
+                                  children: accountSnapshot.data!
+                                      .map(
+                                        (account) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          child: _ResponsibleAccountCard(
+                                            account: account,
+                                            currentUid: widget.currentUid,
+                                            locationsById: locationsById,
+                                            onManage: () => _manageAccess(
+                                              account,
+                                              locations,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                ],
-              ),
+                      const SizedBox(height: 24),
+                      const _ManagementSectionTitle(title: 'Invitations'),
+                      const SizedBox(height: 11),
+                      if (snapshot.hasError)
+                        const _ErrorState(
+                          message: 'Les invitations ne sont pas disponibles.',
+                        )
+                      else if (!snapshot.hasData)
+                        const _InlineLoading()
+                      else if (invitations!.isEmpty)
+                        const _EmptyInvitations()
+                      else
+                        ...invitations.map(
+                          (invitation) => Padding(
+                            padding: const EdgeInsets.only(bottom: 13),
+                            child: _InvitationCard(
+                              invitation: invitation,
+                              locationsById: locationsById,
+                              onEdit: () => _edit(invitation, locations),
+                              onCancel: () => _cancel(invitation),
+                              onReactivate: () => _reactivate(invitation),
+                              onResend: () => _resend(invitation),
+                              onDelete: () => _delete(invitation),
+                              provisioning: _provisioningIds.contains(
+                                invitation.id,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             );
           },
         );
@@ -500,6 +578,126 @@ class _CoordinatorInvitationsContentState
   }
 }
 
+class _ResponsibleHeader extends StatelessWidget {
+  const _ResponsibleHeader({required this.onInvite});
+
+  final VoidCallback onInvite;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'ADMINISTRATION',
+                style: TextStyle(
+                  color: _ResponsibleVisuals.textMuted,
+                  fontSize: 10,
+                  letterSpacing: 1.25,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 7),
+              Text(
+                'Responsables',
+                style: TextStyle(
+                  color: _ResponsibleVisuals.navy,
+                  fontSize: 27,
+                  height: 1.12,
+                  letterSpacing: -0.7,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 7),
+              Text(
+                'Invitations et accès aux centres',
+                style: TextStyle(
+                  color: _ResponsibleVisuals.textMuted,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 14),
+        SizedBox(
+          width: 52,
+          height: 52,
+          child: IconButton.filled(
+            key: const Key('invite-admin-button'),
+            tooltip: 'Inviter un responsable',
+            onPressed: onInvite,
+            style: IconButton.styleFrom(
+              backgroundColor: _ResponsibleVisuals.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ManagementSectionTitle extends StatelessWidget {
+  const _ManagementSectionTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: _ResponsibleVisuals.navy,
+        fontSize: 19,
+        height: 1.15,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _InlineLoading extends StatelessWidget {
+  const _InlineLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.all(24),
+      child: Center(
+        child: SizedBox.square(
+          dimension: 30,
+          child: CircularProgressIndicator(
+            color: _ResponsibleVisuals.orange,
+            strokeWidth: 3,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+BoxDecoration _responsibleCardDecoration({Color? color}) {
+  return BoxDecoration(
+    color: color ?? _ResponsibleVisuals.surface,
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: _ResponsibleVisuals.border),
+    boxShadow: const [
+      BoxShadow(color: Color(0x08173052), blurRadius: 12, offset: Offset(0, 3)),
+    ],
+  );
+}
+
 class _ResponsibleAccountCard extends StatelessWidget {
   const _ResponsibleAccountCard({
     required this.account,
@@ -527,10 +725,13 @@ class _ResponsibleAccountCard extends StatelessWidget {
             .map((id) => locationsById[id]?.name ?? 'Lieu indisponible')
             .toList()
           ..sort();
-    return Card(
+    return Container(
       key: Key('responsible-account-${account.uid}'),
+      decoration: _responsibleCardDecoration(
+        color: _ResponsibleVisuals.fieldBackground,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(15),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -539,7 +740,12 @@ class _ResponsibleAccountCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     account.identityLabel,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: const TextStyle(
+                      color: _ResponsibleVisuals.navy,
+                      fontSize: 16,
+                      height: 1.2,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 _AccountStatusBadge(active: access.active),
@@ -547,16 +753,27 @@ class _ResponsibleAccountCard extends StatelessWidget {
             ),
             if (account.email case final email?) ...[
               const SizedBox(height: 4),
-              Text(email),
+              Text(
+                email,
+                style: const TextStyle(
+                  color: _ResponsibleVisuals.textMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
-            const SizedBox(height: 8),
-            Text(
-              roleLabel,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, color: _ResponsibleVisuals.border),
             ),
-            const SizedBox(height: 4),
-            Text(
-              access.locationIds.isEmpty
+            _ManagementDetailLine(
+              icon: Icons.admin_panel_settings_outlined,
+              text: roleLabel,
+            ),
+            const SizedBox(height: 8),
+            _ManagementDetailLine(
+              icon: Icons.location_on_outlined,
+              text: access.locationIds.isEmpty
                   ? 'Tous les centres'
                   : '${locations.length} centre${locations.length > 1 ? 's' : ''} · '
                         '${locations.join(' · ')}',
@@ -565,15 +782,29 @@ class _ResponsibleAccountCard extends StatelessWidget {
               const SizedBox(height: 10),
               const Text(
                 'Votre propre accès doit être géré par un autre coordinateur.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: TextStyle(
+                  color: _ResponsibleVisuals.textMuted,
+                  fontSize: 12,
+                  height: 1.4,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 13),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
                 key: Key('manage-responsible-${account.uid}'),
                 onPressed: isSelf ? null : onManage,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _ResponsibleVisuals.navy,
+                  minimumSize: const Size.fromHeight(48),
+                  side: const BorderSide(color: _ResponsibleVisuals.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                ),
                 icon: const Icon(Icons.manage_accounts_outlined),
                 label: const Text('Gérer l’accès'),
               ),
@@ -581,6 +812,35 @@ class _ResponsibleAccountCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ManagementDetailLine extends StatelessWidget {
+  const _ManagementDetailLine({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: _ResponsibleVisuals.textMuted, size: 18),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: _ResponsibleVisuals.navy,
+              fontSize: 13,
+              height: 1.4,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -598,6 +858,7 @@ class _AccountStatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: .22)),
       ),
       child: Text(
         active ? 'Actif' : 'Inactif',
@@ -618,14 +879,26 @@ class _AccessListError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7F6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFFDCD8)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             const Text(
               'Les accès responsables ne sont pas disponibles.',
               textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _ResponsibleVisuals.navy,
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             TextButton(onPressed: onRetry, child: const Text('Réessayer')),
@@ -672,10 +945,11 @@ class _InvitationCard extends StatelessWidget {
                       .toList())
             .toList()
           ..sort();
-    return Card(
+    return Container(
       key: Key('invitation-card-${invitation.id}'),
+      decoration: _responsibleCardDecoration(),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(17),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -685,78 +959,124 @@ class _InvitationCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     invitation.displayName,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: const TextStyle(
+                      color: _ResponsibleVisuals.navy,
+                      fontSize: 17,
+                      height: 1.2,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 _InvitationStatusBadge(status: effectiveStatus),
               ],
             ),
             const SizedBox(height: 5),
-            Text(invitation.email),
-            const SizedBox(height: 10),
             Text(
-              invitation.role == AdminInvitationDraft.coordinatorRole
-                  ? 'Coordinateur départemental'
-                  : 'Responsable de centre',
+              invitation.email,
               style: const TextStyle(
-                color: AppColors.navy,
-                fontWeight: FontWeight.w700,
+                color: _ResponsibleVisuals.textMuted,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 5),
-            Text(locationLabels.join(' · ')),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, color: _ResponsibleVisuals.border),
+            ),
+            _ManagementDetailLine(
+              icon: Icons.admin_panel_settings_outlined,
+              text: invitation.role == AdminInvitationDraft.coordinatorRole
+                  ? 'Coordinateur départemental'
+                  : 'Responsable de centre',
+            ),
             const SizedBox(height: 8),
+            _ManagementDetailLine(
+              icon: Icons.location_on_outlined,
+              text: locationLabels.join(' · '),
+            ),
+            const SizedBox(height: 10),
             Text(
               'Créée le ${FrenchDateTime.date(invitation.createdAt)} · '
               'Expire le ${FrenchDateTime.date(invitation.expiresAt)}',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+              style: const TextStyle(
+                color: _ResponsibleVisuals.textMuted,
+                fontSize: 11,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             if (effectiveStatus == AdminInvitationStatus.pending) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton(
+                  FilledButton.icon(
                     key: Key('resend-invitation-${invitation.id}'),
                     onPressed: provisioning ? null : onResend,
-                    child: Text(provisioning ? 'Envoi…' : 'Renvoyer'),
+                    style: _primaryInvitationButtonStyle(),
+                    icon: provisioning
+                        ? const SizedBox.square(
+                            dimension: 17,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.send_outlined, size: 19),
+                    label: Text(provisioning ? 'Envoi…' : 'Renvoyer'),
                   ),
-                  TextButton(
-                    key: Key('edit-invitation-${invitation.id}'),
-                    onPressed: provisioning ? null : onEdit,
-                    child: const Text('Modifier'),
-                  ),
-                  TextButton(
-                    key: Key('cancel-invitation-${invitation.id}'),
-                    onPressed: provisioning ? null : onCancel,
-                    child: const Text('Annuler'),
-                  ),
-                  TextButton(
-                    key: Key('delete-invitation-${invitation.id}'),
-                    onPressed: provisioning ? null : onDelete,
-                    child: const Text('Supprimer'),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 2,
+                    children: [
+                      TextButton(
+                        key: Key('edit-invitation-${invitation.id}'),
+                        onPressed: provisioning ? null : onEdit,
+                        child: const Text('Modifier'),
+                      ),
+                      TextButton(
+                        key: Key('cancel-invitation-${invitation.id}'),
+                        onPressed: provisioning ? null : onCancel,
+                        child: const Text('Annuler'),
+                      ),
+                      TextButton(
+                        key: Key('delete-invitation-${invitation.id}'),
+                        onPressed: provisioning ? null : onDelete,
+                        child: const Text('Supprimer'),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ] else if (effectiveStatus == AdminInvitationStatus.cancelled) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton(
+                  FilledButton.icon(
                     key: Key('reactivate-invitation-${invitation.id}'),
                     onPressed: onReactivate,
-                    child: const Text('Réactiver'),
+                    style: _primaryInvitationButtonStyle(),
+                    icon: const Icon(Icons.refresh_rounded, size: 19),
+                    label: const Text('Réactiver'),
                   ),
-                  TextButton(
-                    key: Key('edit-invitation-${invitation.id}'),
-                    onPressed: onEdit,
-                    child: const Text('Modifier'),
-                  ),
-                  TextButton(
-                    key: Key('delete-invitation-${invitation.id}'),
-                    onPressed: onDelete,
-                    child: const Text('Supprimer'),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 2,
+                    children: [
+                      TextButton(
+                        key: Key('edit-invitation-${invitation.id}'),
+                        onPressed: onEdit,
+                        child: const Text('Modifier'),
+                      ),
+                      TextButton(
+                        key: Key('delete-invitation-${invitation.id}'),
+                        onPressed: onDelete,
+                        child: const Text('Supprimer'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -786,6 +1106,7 @@ class _InvitationStatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: .1),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: .22)),
       ),
       child: Text(
         label,
@@ -799,19 +1120,42 @@ class _InvitationStatusBadge extends StatelessWidget {
   }
 }
 
+ButtonStyle _primaryInvitationButtonStyle() {
+  return FilledButton.styleFrom(
+    backgroundColor: _ResponsibleVisuals.orange,
+    foregroundColor: Colors.white,
+    minimumSize: const Size.fromHeight(50),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+  );
+}
+
 class _EmptyInvitations extends StatelessWidget {
   const _EmptyInvitations();
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(24),
+    return Container(
+      decoration: _responsibleCardDecoration(),
+      child: const Padding(
+        padding: EdgeInsets.all(26),
         child: Column(
           children: [
-            Icon(Icons.mark_email_unread_outlined, size: 36),
-            SizedBox(height: 10),
-            Text('Aucune invitation pour le moment.'),
+            Icon(
+              Icons.mark_email_unread_outlined,
+              color: _ResponsibleVisuals.textMuted,
+              size: 34,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Aucune invitation pour le moment.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: _ResponsibleVisuals.navy,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
@@ -826,10 +1170,23 @@ class _ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(message, textAlign: TextAlign.center),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7F6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFFDCD8)),
+      ),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: _ResponsibleVisuals.navy,
+          fontSize: 13,
+          height: 1.4,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -889,9 +1246,20 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _ResponsibleVisuals.background,
       appBar: AppBar(
         title: Text(
           _isEditing ? 'Modifier l’invitation' : 'Inviter un responsable',
+        ),
+        backgroundColor: _ResponsibleVisuals.background,
+        foregroundColor: _ResponsibleVisuals.navy,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleTextStyle: const TextStyle(
+          color: _ResponsibleVisuals.navy,
+          fontSize: 17,
+          fontWeight: FontWeight.w800,
         ),
       ),
       bottomNavigationBar: _InvitationSubmitBar(
@@ -900,96 +1268,134 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
         onSubmit: _submit,
         editing: _isEditing,
       ),
-      body: PageContainer(
-        child: Form(
-          key: _formKey,
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: ListView(
-            key: const Key('admin-invitation-form'),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: AppFormLayout.pagePadding,
-            children: [
-              TextFormField(
-                key: const Key('invitation-display-name'),
-                controller: _nameController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Nom complet'),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Saisissez le nom du responsable.'
-                    : null,
-                onChanged: (_) => setState(() {}),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = constraints.maxWidth <= 556
+              ? 18.0
+              : (constraints.maxWidth - 520) / 2;
+          return Form(
+            key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: ListView(
+              key: const Key('admin-invitation-form'),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                12,
+                horizontalPadding,
+                36,
               ),
-              const SizedBox(height: AppFormLayout.fieldSpacing),
-              TextFormField(
-                key: const Key('invitation-email'),
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                readOnly: _isEditing,
-                decoration: const InputDecoration(labelText: 'E-mail'),
-                validator: (value) {
-                  return _isValidInvitationEmail(value ?? '')
-                      ? null
-                      : 'Saisissez une adresse e-mail valide.';
-                },
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: AppFormLayout.fieldSpacing),
-              DropdownButtonFormField<String>(
-                key: const Key('invitation-role'),
-                initialValue: _role,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Rôle'),
-                items: const [
-                  DropdownMenuItem(
-                    value: AdminInvitationDraft.siteManagerRole,
-                    child: Text('Responsable de centre'),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(17),
+                  decoration: _responsibleCardDecoration(),
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        key: const Key('invitation-display-name'),
+                        controller: _nameController,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: _managementInputDecoration(
+                          labelText: 'Nom complet',
+                          icon: Icons.person_outline_rounded,
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Saisissez le nom du responsable.'
+                            : null,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      const SizedBox(height: AppFormLayout.fieldSpacing),
+                      TextFormField(
+                        key: const Key('invitation-email'),
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        autocorrect: false,
+                        readOnly: _isEditing,
+                        decoration: _managementInputDecoration(
+                          labelText: 'E-mail',
+                          icon: Icons.alternate_email_rounded,
+                          readOnly: _isEditing,
+                        ),
+                        validator: (value) {
+                          return _isValidInvitationEmail(value ?? '')
+                              ? null
+                              : 'Saisissez une adresse e-mail valide.';
+                        },
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      const SizedBox(height: AppFormLayout.fieldSpacing),
+                      DropdownButtonFormField<String>(
+                        key: const Key('invitation-role'),
+                        initialValue: _role,
+                        isExpanded: true,
+                        decoration: _managementInputDecoration(
+                          labelText: 'Rôle',
+                          icon: Icons.admin_panel_settings_outlined,
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: AdminInvitationDraft.siteManagerRole,
+                            child: Text('Responsable de centre'),
+                          ),
+                          DropdownMenuItem(
+                            value: AdminInvitationDraft.coordinatorRole,
+                            child: Text('Coordinateur départemental'),
+                          ),
+                        ],
+                        onChanged: (value) => setState(() {
+                          _role = value!;
+                          if (_role == AdminInvitationDraft.coordinatorRole) {
+                            _selectedLocations.clear();
+                          }
+                        }),
+                      ),
+                      if (!_isEditing) ...[
+                        const SizedBox(height: AppFormLayout.fieldSpacing),
+                        DropdownButtonFormField<int>(
+                          key: const Key('invitation-expiration'),
+                          initialValue: _expirationDays,
+                          decoration: _managementInputDecoration(
+                            labelText: 'Validité',
+                            icon: Icons.schedule_outlined,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 1,
+                              child: Text('24 heures'),
+                            ),
+                            DropdownMenuItem(value: 7, child: Text('7 jours')),
+                            DropdownMenuItem(
+                              value: 14,
+                              child: Text('14 jours'),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _expirationDays = value ?? 7),
+                        ),
+                      ],
+                      if (_role == AdminInvitationDraft.siteManagerRole) ...[
+                        const SizedBox(height: AppFormLayout.sectionSpacing),
+                        const FormSectionTitle(title: 'Centres autorisés'),
+                        const SizedBox(height: AppFormLayout.titleSpacing),
+                        LocationMultiSelector(
+                          locations: widget.locations,
+                          selectedIds: _selectedLocations,
+                          enabled: !_submitting,
+                          onChanged: (selectedIds) => setState(() {
+                            _selectedLocations
+                              ..clear()
+                              ..addAll(selectedIds);
+                          }),
+                        ),
+                      ],
+                    ],
                   ),
-                  DropdownMenuItem(
-                    value: AdminInvitationDraft.coordinatorRole,
-                    child: Text('Coordinateur départemental'),
-                  ),
-                ],
-                onChanged: (value) => setState(() {
-                  _role = value!;
-                  if (_role == AdminInvitationDraft.coordinatorRole) {
-                    _selectedLocations.clear();
-                  }
-                }),
-              ),
-              if (!_isEditing) ...[
-                const SizedBox(height: AppFormLayout.fieldSpacing),
-                DropdownButtonFormField<int>(
-                  key: const Key('invitation-expiration'),
-                  initialValue: _expirationDays,
-                  decoration: const InputDecoration(labelText: 'Validité'),
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('24 heures')),
-                    DropdownMenuItem(value: 7, child: Text('7 jours')),
-                    DropdownMenuItem(value: 14, child: Text('14 jours')),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _expirationDays = value ?? 7),
                 ),
               ],
-              if (_role == AdminInvitationDraft.siteManagerRole) ...[
-                const SizedBox(height: AppFormLayout.sectionSpacing),
-                const FormSectionTitle(title: 'Centres autorisés'),
-                const SizedBox(height: AppFormLayout.titleSpacing),
-                LocationMultiSelector(
-                  locations: widget.locations,
-                  selectedIds: _selectedLocations,
-                  enabled: !_submitting,
-                  onChanged: (selectedIds) => setState(() {
-                    _selectedLocations
-                      ..clear()
-                      ..addAll(selectedIds);
-                  }),
-                ),
-              ],
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1082,6 +1488,38 @@ bool _isValidInvitationEmail(String value) {
       RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
 }
 
+InputDecoration _managementInputDecoration({
+  required String labelText,
+  required IconData icon,
+  bool readOnly = false,
+}) {
+  return InputDecoration(
+    labelText: labelText,
+    labelStyle: const TextStyle(
+      color: _ResponsibleVisuals.textMuted,
+      fontWeight: FontWeight.w600,
+    ),
+    prefixIcon: Icon(
+      icon,
+      color: readOnly
+          ? _ResponsibleVisuals.textMuted
+          : _ResponsibleVisuals.navy,
+      size: 21,
+    ),
+    filled: true,
+    fillColor: _ResponsibleVisuals.fieldBackground,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _ResponsibleVisuals.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _ResponsibleVisuals.navy, width: 1.5),
+    ),
+  );
+}
+
 class _InvitationSubmitBar extends StatelessWidget {
   const _InvitationSubmitBar({
     required this.submitting,
@@ -1098,8 +1536,9 @@ class _InvitationSubmitBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
-      elevation: 10,
+      color: _ResponsibleVisuals.surface,
+      elevation: 6,
+      shadowColor: const Color(0x24173052),
       child: AnimatedPadding(
         duration: const Duration(milliseconds: 160),
         curve: Curves.easeOut,
@@ -1109,26 +1548,47 @@ class _InvitationSubmitBar extends StatelessWidget {
         child: SafeArea(
           top: false,
           minimum: AppFormLayout.actionBarPadding,
-          child: SizedBox(
-            height: AppFormLayout.actionHeight,
-            child: FilledButton.icon(
-              key: Key(
-                editing ? 'save-admin-invitation' : 'create-admin-invitation',
-              ),
-              onPressed: enabled ? onSubmit : null,
-              icon: submitting
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send_rounded),
-              label: Text(
-                submitting
-                    ? (editing ? 'Enregistrement…' : 'Création…')
-                    : (editing ? 'Enregistrer' : 'Créer l’invitation'),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: FilledButton.icon(
+                  key: Key(
+                    editing
+                        ? 'save-admin-invitation'
+                        : 'create-admin-invitation',
+                  ),
+                  onPressed: enabled ? onSubmit : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _ResponsibleVisuals.orange,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: _ResponsibleVisuals.orangeSoft,
+                    disabledForegroundColor: _ResponsibleVisuals.orange,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  icon: submitting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  label: Text(
+                    submitting
+                        ? (editing ? 'Enregistrement…' : 'Création…')
+                        : (editing ? 'Enregistrer' : 'Créer l’invitation'),
+                  ),
+                ),
               ),
             ),
           ),
