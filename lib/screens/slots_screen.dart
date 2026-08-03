@@ -371,7 +371,7 @@ class _CrisisHeader extends StatelessWidget {
                   ),
                   SizedBox(height: 5),
                   Text(
-                    'Votre mobilisation compte',
+                    'Où pouvez-vous être utile aujourd’hui ?',
                     style: TextStyle(
                       color: _MissionsVisuals.navy,
                       fontSize: 26,
@@ -382,7 +382,7 @@ class _CrisisHeader extends StatelessWidget {
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Choisissez une mission où votre présence fera la différence.',
+                    'Des équipes recherchent encore des professionnels.',
                     style: TextStyle(
                       color: _MissionsVisuals.textMuted,
                       fontSize: 13,

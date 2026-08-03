@@ -525,12 +525,21 @@ class _ProfessionNeedChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final professions = HealthProfessionRegistry.values
+    final professionsWithActivity = HealthProfessionRegistry.values
         .where(
           (profession) =>
               need.professionQuotas.quotaFor(profession.id).hasActivity,
         )
         .toList(growable: false);
+    final professionsStillNeeded = professionsWithActivity
+        .where(
+          (profession) =>
+              !need.professionQuotas.quotaFor(profession.id).isCovered,
+        )
+        .toList(growable: false);
+    final professions = professionsStillNeeded.isEmpty
+        ? professionsWithActivity
+        : professionsStillNeeded;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -735,10 +744,10 @@ class _MissionCardSectionTitle extends StatelessWidget {
       return Text(
         label,
         style: TextStyle(
-          color: AppColors.navy,
-          fontSize: professionalHome ? 13 : 11,
+          color: professionalHome ? AppColors.textMuted : AppColors.navy,
+          fontSize: professionalHome ? 12 : 11,
           height: professionalHome ? 1.2 : null,
-          letterSpacing: professionalHome ? 0.05 : 0.65,
+          letterSpacing: professionalHome ? 0.15 : 0.65,
           fontWeight: FontWeight.w800,
         ),
       );
@@ -983,10 +992,10 @@ class NeedCard extends StatelessWidget {
     final registered = need.professionQuotas.registeredTotal;
     final remaining = (required - registered).clamp(0, required);
     final remainingLabel = remaining == 0
-        ? 'L’équipe est au complet'
+        ? 'L’équipe est désormais au complet.'
         : remaining == 1
-        ? 'Il manque encore 1 professionnel'
-        : 'Il manque encore $remaining professionnels';
+        ? '1 professionnel est encore attendu.'
+        : '$remaining professionnels sont encore attendus.';
     final equipment = need.equipment
         .where((item) => item.trim().isNotEmpty)
         .toList(growable: false);
@@ -997,23 +1006,35 @@ class NeedCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _MissionNeedStateBadge(status: need.status),
-              const Spacer(),
-              const SizedBox(width: 10),
-              MissionTimingPill(mission: need),
-            ],
+          const Text(
+            'LIEU DE MOBILISATION',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 10,
+              letterSpacing: 1.05,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Text(
-            need.place,
+            location?.type.label ?? 'Lieu d’intervention',
+            key: const Key('mission-location-type'),
             style: const TextStyle(
               color: AppColors.navy,
               fontSize: 24,
               height: 1.1,
               letterSpacing: -0.6,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            need.place,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 15,
+              height: 1.3,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 16),
@@ -1061,6 +1082,8 @@ class NeedCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(width: 10),
+                MissionTimingPill(mission: need),
               ],
             ),
           ),
@@ -1072,127 +1095,153 @@ class NeedCard extends StatelessWidget {
               color: AppColors.orangeSoft,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(
-                  Icons.groups_2_rounded,
-                  color: AppColors.orange,
-                  size: 20,
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Text(
-                    remainingLabel,
-                    style: const TextStyle(
-                      color: AppColors.navy,
-                      fontSize: 15.5,
-                      height: 1.3,
-                      fontWeight: FontWeight.w900,
+                _MissionNeedStateBadge(status: need.status),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.groups_2_rounded,
+                      color: AppColors.orange,
+                      size: 20,
                     ),
-                  ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Text(
+                        remainingLabel,
+                        style: const TextStyle(
+                          color: AppColors.navy,
+                          fontSize: 15.5,
+                          height: 1.3,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          const _MissionCardSectionTitle(
-            'Professions concernées',
-            harmonized: true,
-            professionalHome: true,
+          Text(
+            remaining > 0 ? 'Qui est attendu ?' : 'Qui s’est mobilisé ?',
+            style: const TextStyle(
+              color: AppColors.navy,
+              fontSize: 18,
+              height: 1.2,
+              letterSpacing: -0.2,
+              fontWeight: FontWeight.w900,
+            ),
           ),
           const SizedBox(height: 11),
           _ProfessionNeedChips(need: need),
           const SizedBox(height: 20),
           _NeedActions(need: need, location: location, professionalHome: true),
-          const _MissionCardSectionDivider(harmonized: true),
-          const _MissionCardSectionTitle(
-            'Informations utiles',
-            harmonized: true,
-            professionalHome: true,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            location?.type.label ?? 'Lieu d’intervention',
-            key: const Key('mission-location-type'),
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
+          const SizedBox(height: 22),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F8F7),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
             ),
-          ),
-          MissionLocationDetails(location: location, compact: true),
-          const _MissionCardSectionDivider(harmonized: true),
-          const _MissionCardSectionTitle(
-            'Le besoin en détail',
-            harmonized: true,
-            professionalHome: true,
-          ),
-          const SizedBox(height: 11),
-          _ProfessionQuotaRows(need: need),
-          if (equipment.isNotEmpty) ...[
-            const _MissionCardSectionDivider(harmonized: true),
-            const _MissionCardSectionTitle(
-              'Matériel à prévoir',
-              harmonized: true,
-              professionalHome: true,
-            ),
-            const SizedBox(height: 11),
-            Wrap(
-              key: const Key('mission-equipment-text'),
-              spacing: 7,
-              runSpacing: 7,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final item in equipment)
+                const Text(
+                  'Détails de la mission',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                    letterSpacing: 0.25,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const _MissionCardSectionTitle(
+                  'Accès et contact',
+                  harmonized: true,
+                  professionalHome: true,
+                ),
+                MissionLocationDetails(location: location, compact: true),
+                const _MissionCardSectionDivider(harmonized: true),
+                const _MissionCardSectionTitle(
+                  'Répartition des renforts',
+                  harmonized: true,
+                  professionalHome: true,
+                ),
+                const SizedBox(height: 10),
+                _ProfessionQuotaRows(need: need),
+                if (equipment.isNotEmpty) ...[
+                  const _MissionCardSectionDivider(harmonized: true),
+                  const _MissionCardSectionTitle(
+                    'Matériel à prévoir',
+                    harmonized: true,
+                    professionalHome: true,
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    key: const Key('mission-equipment-text'),
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: [
+                      for (final item in equipment)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Text(
+                            item,
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 11.5,
+                              height: 1.2,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                if (details != null && details.isNotEmpty) ...[
+                  const _MissionCardSectionDivider(harmonized: true),
+                  const _MissionCardSectionTitle(
+                    'Message du centre',
+                    harmonized: true,
+                    professionalHome: true,
+                  ),
+                  const SizedBox(height: 9),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
+                    key: const Key('mission-comment-text'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(13),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF4F5F4),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: AppColors.border),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(
-                      item,
+                      details,
                       style: const TextStyle(
-                        color: AppColors.navy,
+                        color: AppColors.textMuted,
                         fontSize: 12,
-                        height: 1.2,
-                        fontWeight: FontWeight.w700,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
+                ],
               ],
             ),
-          ],
-          if (details != null && details.isNotEmpty) ...[
-            const _MissionCardSectionDivider(harmonized: true),
-            const _MissionCardSectionTitle(
-              'Message du centre',
-              harmonized: true,
-              professionalHome: true,
-            ),
-            const SizedBox(height: 10),
-            Container(
-              key: const Key('mission-comment-text'),
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F5F4),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Text(
-                details,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                  height: 1.45,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+          ),
           if (onEditMission != null) ...[
             const SizedBox(height: 18),
             SizedBox(
