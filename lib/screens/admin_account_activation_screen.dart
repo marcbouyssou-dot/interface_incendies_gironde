@@ -9,7 +9,17 @@ import '../firebase_startup_gate.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/brand_mark.dart';
-import '../widgets/common.dart';
+
+abstract final class _ActivationVisuals {
+  static const background = Color(0xFFF5F5F3);
+  static const surface = Colors.white;
+  static const navy = Color(0xFF173052);
+  static const fieldBackground = Color(0xFFF1F1EF);
+  static const border = Color(0xFFE5E5E1);
+  static const textMuted = Color(0xFF7C817F);
+  static const orange = Color(0xFFF25C05);
+  static const orangeSoft = Color(0xFFFFE8D9);
+}
 
 enum ActivationFailure { invalid, expired, alreadyUsed, unavailable }
 
@@ -339,39 +349,85 @@ class _ActivationFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _ActivationVisuals.background,
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: ListView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(24, 28, 24, 36),
-              children: [
-                const Center(child: BrandMark(size: 72)),
-                const SizedBox(height: 16),
-                Text(
-                  'MobSanté',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineLarge,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final horizontalPadding = constraints.maxWidth <= 568
+                ? 20.0
+                : (constraints.maxWidth - 520) / 2;
+            return Material(
+              color: _ActivationVisuals.background,
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  24,
+                  horizontalPadding,
+                  36,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Activation de votre accès responsable',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 28),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(22),
+                children: [
+                  const _ActivationHeader(),
+                  const SizedBox(height: 24),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: _ActivationVisuals.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _ActivationVisuals.border),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x0A173052),
+                          blurRadius: 18,
+                          offset: Offset(0, 5),
+                        ),
+                      ],
+                    ),
                     child: child,
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          },
         ),
       ),
+    );
+  }
+}
+
+class _ActivationHeader extends StatelessWidget {
+  const _ActivationHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        BrandMark(size: 58),
+        SizedBox(height: 18),
+        Text(
+          'MobSanté',
+          style: TextStyle(
+            color: _ActivationVisuals.navy,
+            fontSize: 29,
+            height: 1.08,
+            letterSpacing: -0.8,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: 7),
+        Text(
+          'Activation de votre accès responsable',
+          style: TextStyle(
+            color: _ActivationVisuals.textMuted,
+            fontSize: 15,
+            height: 1.4,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -384,13 +440,28 @@ class _ActivationLoading extends StatelessWidget {
     return const Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 32,
-          height: 32,
-          child: CircularProgressIndicator(strokeWidth: 3),
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 6),
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(
+              color: _ActivationVisuals.orange,
+              strokeWidth: 3,
+            ),
+          ),
         ),
         SizedBox(height: 18),
-        Text('Vérification de votre invitation…', textAlign: TextAlign.center),
+        Text(
+          'Vérification de votre invitation…',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: _ActivationVisuals.navy,
+            fontSize: 15,
+            height: 1.4,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ],
     );
   }
@@ -427,17 +498,33 @@ class _ActivationForm extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const FormSectionTitle(title: 'Définissez votre mot de passe'),
+          const Text(
+            'Définissez votre mot de passe',
+            style: TextStyle(
+              color: _ActivationVisuals.navy,
+              fontSize: 18,
+              height: 1.2,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           if (email != null && email!.isNotEmpty) ...[
-            const SizedBox(height: AppFormLayout.titleSpacing),
+            const SizedBox(height: 17),
             TextFormField(
               key: const Key('activation-email'),
               initialValue: email,
               readOnly: true,
-              decoration: const InputDecoration(labelText: 'Adresse email'),
+              style: const TextStyle(
+                color: _ActivationVisuals.navy,
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: _activationInputDecoration(
+                labelText: 'Adresse email',
+                prefixIcon: Icons.alternate_email_rounded,
+                readOnly: true,
+              ),
             ),
           ],
-          const SizedBox(height: AppFormLayout.fieldSpacing),
+          const SizedBox(height: 14),
           TextField(
             key: const Key('activation-password'),
             controller: password,
@@ -445,11 +532,17 @@ class _ActivationForm extends StatelessWidget {
             enableSuggestions: false,
             autocorrect: false,
             autofillHints: const [AutofillHints.newPassword],
-            decoration: InputDecoration(
+            style: const TextStyle(
+              color: _ActivationVisuals.navy,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: _activationInputDecoration(
               labelText: 'Nouveau mot de passe',
+              prefixIcon: Icons.lock_outline_rounded,
               suffixIcon: IconButton(
                 tooltip: showPassword ? 'Masquer' : 'Afficher',
                 onPressed: onTogglePassword,
+                color: _ActivationVisuals.navy,
                 icon: Icon(
                   showPassword
                       ? Icons.visibility_off_rounded
@@ -458,7 +551,7 @@ class _ActivationForm extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: AppFormLayout.fieldSpacing),
+          const SizedBox(height: 14),
           TextField(
             key: const Key('activation-confirmation'),
             controller: confirmation,
@@ -467,11 +560,17 @@ class _ActivationForm extends StatelessWidget {
             autocorrect: false,
             autofillHints: const [AutofillHints.newPassword],
             onSubmitted: (_) => submitting ? null : onSubmit(),
-            decoration: InputDecoration(
+            style: const TextStyle(
+              color: _ActivationVisuals.navy,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: _activationInputDecoration(
               labelText: 'Confirmer le mot de passe',
+              prefixIcon: Icons.lock_reset_rounded,
               suffixIcon: IconButton(
                 tooltip: showConfirmation ? 'Masquer' : 'Afficher',
                 onPressed: onToggleConfirmation,
+                color: _ActivationVisuals.navy,
                 icon: Icon(
                   showConfirmation
                       ? Icons.visibility_off_rounded
@@ -482,21 +581,45 @@ class _ActivationForm extends StatelessWidget {
           ),
           if (formError != null) ...[
             const SizedBox(height: 12),
-            Text(
-              formError!,
-              key: const Key('activation-form-error'),
-              style: const TextStyle(
-                color: AppColors.red,
-                fontWeight: FontWeight.w700,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F0),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFFD6D2)),
+              ),
+              child: Text(
+                formError!,
+                key: const Key('activation-form-error'),
+                style: const TextStyle(
+                  color: AppColors.red,
+                  fontSize: 13,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
-          const SizedBox(height: AppFormLayout.sectionSpacing),
+          const SizedBox(height: 22),
           SizedBox(
-            height: AppFormLayout.actionHeight,
+            height: 56,
             child: FilledButton(
               key: const Key('activate-account'),
               onPressed: submitting ? null : onSubmit,
+              style: FilledButton.styleFrom(
+                backgroundColor: _ActivationVisuals.orange,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: _ActivationVisuals.orangeSoft,
+                disabledForegroundColor: _ActivationVisuals.orange,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               child: Text(submitting ? 'Activation…' : 'Activer mon accès'),
             ),
           ),
@@ -504,6 +627,38 @@ class _ActivationForm extends StatelessWidget {
       ),
     );
   }
+}
+
+InputDecoration _activationInputDecoration({
+  required String labelText,
+  required IconData prefixIcon,
+  Widget? suffixIcon,
+  bool readOnly = false,
+}) {
+  return InputDecoration(
+    labelText: labelText,
+    labelStyle: const TextStyle(
+      color: _ActivationVisuals.textMuted,
+      fontWeight: FontWeight.w600,
+    ),
+    prefixIcon: Icon(
+      prefixIcon,
+      color: readOnly ? _ActivationVisuals.textMuted : _ActivationVisuals.navy,
+      size: 21,
+    ),
+    suffixIcon: suffixIcon,
+    filled: true,
+    fillColor: _ActivationVisuals.fieldBackground,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _ActivationVisuals.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _ActivationVisuals.navy, width: 1.5),
+    ),
+  );
 }
 
 class _ActivationMessage extends StatelessWidget {
@@ -528,18 +683,58 @@ class _ActivationMessage extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 44, color: iconColor),
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Icon(icon, size: 32, color: iconColor),
+        ),
         const SizedBox(height: 16),
         Text(
           title,
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.titleLarge,
+          style: const TextStyle(
+            color: _ActivationVisuals.navy,
+            fontSize: 19,
+            height: 1.25,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         const SizedBox(height: 8),
-        Text(message, textAlign: TextAlign.center),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: _ActivationVisuals.textMuted,
+            fontSize: 14,
+            height: 1.5,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         if (actionLabel != null && onAction != null) ...[
           const SizedBox(height: 22),
-          FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: FilledButton(
+              onPressed: onAction,
+              style: FilledButton.styleFrom(
+                backgroundColor: _ActivationVisuals.orange,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              child: Text(actionLabel!),
+            ),
+          ),
         ],
       ],
     );
