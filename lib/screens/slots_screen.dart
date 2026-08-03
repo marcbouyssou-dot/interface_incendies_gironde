@@ -7,16 +7,8 @@ import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
+import '../widgets/mobilization_design_system.dart';
 import 'create_need_screen.dart';
-
-abstract final class _MissionsVisuals {
-  static const background = Color(0xFFF5F5F3);
-  static const surface = Colors.white;
-  static const navy = Color(0xFF173052);
-  static const fieldBackground = Color(0xFFF1F1EF);
-  static const border = Color(0xFFE5E5E1);
-  static const textMuted = Color(0xFF7C817F);
-}
 
 class _MissionFilterMemory {
   static int status = 0;
@@ -130,7 +122,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
               ? 18.0
               : (constraints.maxWidth - 520) / 2;
           return Material(
-            color: _MissionsVisuals.background,
+            color: MobilizationTokens.pageBackground,
             child: CustomScrollView(
               key: const PageStorageKey('slots'),
               slivers: [
@@ -148,16 +140,12 @@ class _SlotsScreenState extends State<SlotsScreen> {
                       Container(
                         padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
                         decoration: BoxDecoration(
-                          color: _MissionsVisuals.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: _MissionsVisuals.border),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x09173052),
-                              blurRadius: 14,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(
+                            MobilizationTokens.radiusSection,
+                          ),
+                          border: Border.all(color: AppColors.border),
+                          boxShadow: MobilizationTokens.subtleShadow,
                         ),
                         child: Column(
                           children: [
@@ -183,9 +171,8 @@ class _SlotsScreenState extends State<SlotsScreen> {
                                   key: const Key('reset-mission-filters'),
                                   tooltip: 'Réinitialiser les filtres',
                                   style: IconButton.styleFrom(
-                                    foregroundColor: _MissionsVisuals.textMuted,
-                                    disabledForegroundColor:
-                                        _MissionsVisuals.border,
+                                    foregroundColor: AppColors.textMuted,
+                                    disabledForegroundColor: AppColors.border,
                                     minimumSize: const Size(44, 44),
                                   ),
                                   onPressed: _hasActiveFilters
@@ -363,7 +350,7 @@ class _CrisisHeader extends StatelessWidget {
                   Text(
                     'MOBSANTÉ',
                     style: TextStyle(
-                      color: _MissionsVisuals.textMuted,
+                      color: AppColors.textMuted,
                       fontSize: 10,
                       letterSpacing: 1.1,
                       fontWeight: FontWeight.w800,
@@ -373,7 +360,7 @@ class _CrisisHeader extends StatelessWidget {
                   Text(
                     'Où pouvez-vous être utile aujourd’hui ?',
                     style: TextStyle(
-                      color: _MissionsVisuals.navy,
+                      color: AppColors.navy,
                       fontSize: 26,
                       height: 1.1,
                       letterSpacing: -0.65,
@@ -384,7 +371,7 @@ class _CrisisHeader extends StatelessWidget {
                   Text(
                     'Des équipes recherchent encore des professionnels.',
                     style: TextStyle(
-                      color: _MissionsVisuals.textMuted,
+                      color: AppColors.textMuted,
                       fontSize: 13,
                       height: 1.38,
                       fontWeight: FontWeight.w600,
@@ -398,61 +385,31 @@ class _CrisisHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 18),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(15, 14, 15, 13),
-          decoration: BoxDecoration(
-            color: _MissionsVisuals.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _MissionsVisuals.border),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x09173052),
-                blurRadius: 14,
-                offset: Offset(0, 4),
-              ),
-            ],
+        ImpactBanner(
+          type: ImpactBannerType.mobilizationCovered,
+          message: remainingLabel,
+          messageIcon: Icons.groups_2_outlined,
+          trailing: Text(
+            '${(coverage * 100).round()} %',
+            style: const TextStyle(
+              color: AppColors.green,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-          child: Column(
+          footer: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.groups_2_outlined,
-                    size: 20,
-                    color: _MissionsVisuals.navy,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      remainingLabel,
-                      style: const TextStyle(
-                        color: _MissionsVisuals.navy,
-                        fontSize: 15.5,
-                        height: 1.25,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '${(coverage * 100).round()} %',
-                    style: const TextStyle(
-                      color: AppColors.orange,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
+              AnimatedCoverageIndicator(
+                value: coverage,
+                color: AppColors.green,
+                minHeight: 10,
               ),
-              const SizedBox(height: 12),
-              AnimatedCoverageIndicator(value: coverage, minHeight: 10),
-              const SizedBox(height: 8),
+              const SizedBox(height: MobilizationTokens.spaceSm),
               Text(
                 'Mobilisation couverte à ${(coverage * 100).round()} %',
                 style: const TextStyle(
-                  color: _MissionsVisuals.textMuted,
+                  color: AppColors.textMuted,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -482,7 +439,7 @@ class _MissionResultsHeader extends StatelessWidget {
                 ? 'Missions correspondant à vos choix'
                 : 'Les missions qui ont besoin de vous',
             style: const TextStyle(
-              color: _MissionsVisuals.navy,
+              color: AppColors.navy,
               fontSize: 16,
               height: 1.25,
               fontWeight: FontWeight.w800,
@@ -492,13 +449,13 @@ class _MissionResultsHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: _MissionsVisuals.fieldBackground,
-            borderRadius: BorderRadius.circular(999),
+            color: MobilizationTokens.fieldBackground,
+            borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
           ),
           child: Text(
             label,
             style: const TextStyle(
-              color: _MissionsVisuals.textMuted,
+              color: AppColors.textMuted,
               fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
@@ -520,22 +477,16 @@ class _MissionsEmptyState extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 30),
       decoration: BoxDecoration(
-        color: _MissionsVisuals.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _MissionsVisuals.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08173052),
-            blurRadius: 14,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(MobilizationTokens.radiusCard),
+        border: Border.all(color: AppColors.border),
+        boxShadow: MobilizationTokens.subtleShadow,
       ),
       child: Column(
         children: [
           const Icon(
             Icons.search_off_rounded,
-            color: _MissionsVisuals.textMuted,
+            color: AppColors.textMuted,
             size: 30,
           ),
           const SizedBox(height: 11),
@@ -545,7 +496,7 @@ class _MissionsEmptyState extends StatelessWidget {
                 : 'Aucune mission n’attend de renfort',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: _MissionsVisuals.navy,
+              color: AppColors.navy,
               fontSize: 15,
               height: 1.25,
               fontWeight: FontWeight.w800,
@@ -558,7 +509,7 @@ class _MissionsEmptyState extends StatelessWidget {
                 : 'Revenez bientôt pour découvrir les prochains besoins.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: _MissionsVisuals.textMuted,
+              color: AppColors.textMuted,
               fontSize: 12,
               height: 1.4,
             ),
@@ -576,7 +527,7 @@ class _MissionsPageSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(color: _MissionsVisuals.background, child: child);
+    return ColoredBox(color: MobilizationTokens.pageBackground, child: child);
   }
 }
 
@@ -598,10 +549,10 @@ class _FilterChip extends StatelessWidget {
         button: true,
         selected: selected,
         child: Material(
-          color: selected ? _MissionsVisuals.navy : Colors.white,
+          color: selected ? AppColors.navy : Colors.white,
           shape: StadiumBorder(
             side: BorderSide(
-              color: selected ? _MissionsVisuals.navy : _MissionsVisuals.border,
+              color: selected ? AppColors.navy : AppColors.border,
             ),
           ),
           child: InkWell(
@@ -613,7 +564,7 @@ class _FilterChip extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: selected ? Colors.white : _MissionsVisuals.textMuted,
+                    color: selected ? Colors.white : AppColors.textMuted,
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                   ),

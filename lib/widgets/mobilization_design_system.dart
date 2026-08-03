@@ -1,0 +1,456 @@
+import 'package:flutter/material.dart';
+
+import '../theme/app_theme.dart';
+
+/// Shared visual tokens for the MobSanté mobilization experience.
+abstract final class MobilizationTokens {
+  static const Color pageBackground = Color(0xFFF5F5F3);
+  static const Color fieldBackground = Color(0xFFF1F1EF);
+
+  static const double spaceXs = 6;
+  static const double spaceSm = 8;
+  static const double spaceMd = 12;
+  static const double spaceLg = 16;
+  static const double spaceXl = 20;
+  static const double spaceXxl = 24;
+
+  static const double radiusCompact = 12;
+  static const double radiusSection = 16;
+  static const double radiusContentCard = 18;
+  static const double radiusCard = 22;
+  static const double radiusPill = 999;
+
+  static const double actionHeight = 56;
+  static const double iconSize = 20;
+  static const double actionIconSize = 21;
+
+  static const EdgeInsets heroPadding = EdgeInsets.fromLTRB(20, 20, 20, 24);
+  static const EdgeInsets sectionPadding = EdgeInsets.all(15);
+  static const EdgeInsets bannerPadding = EdgeInsets.symmetric(
+    horizontal: 15,
+    vertical: 13,
+  );
+
+  static const List<BoxShadow> cardShadow = [
+    BoxShadow(color: Color(0x0D173052), blurRadius: 18, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x06173052), blurRadius: 6, offset: Offset(0, 2)),
+  ];
+
+  static const List<BoxShadow> featuredCardShadow = [
+    BoxShadow(color: Color(0x18F37A32), blurRadius: 24, offset: Offset(0, 6)),
+    BoxShadow(color: Color(0x0A173052), blurRadius: 6, offset: Offset(0, 2)),
+  ];
+
+  static const List<BoxShadow> subtleShadow = [
+    BoxShadow(color: Color(0x09173052), blurRadius: 14, offset: Offset(0, 4)),
+  ];
+}
+
+enum ImpactBannerType {
+  priority,
+  reinforcementsExpected,
+  teamComplete,
+  mobilizationCovered,
+}
+
+class ImpactBanner extends StatelessWidget {
+  const ImpactBanner({
+    super.key,
+    required this.type,
+    this.message,
+    this.messageIcon,
+    this.trailing,
+    this.footer,
+  });
+
+  final ImpactBannerType type;
+  final String? message;
+  final IconData? messageIcon;
+  final Widget? trailing;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon, color, background) = switch (type) {
+      ImpactBannerType.priority => (
+        'Besoin prioritaire',
+        Icons.priority_high_rounded,
+        AppColors.red,
+        AppColors.redSoft,
+      ),
+      ImpactBannerType.reinforcementsExpected => (
+        'Renforts attendus',
+        Icons.groups_2_outlined,
+        AppColors.orange,
+        AppColors.orangeSoft,
+      ),
+      ImpactBannerType.teamComplete => (
+        'Équipe complète',
+        Icons.check_circle_outline_rounded,
+        AppColors.green,
+        AppColors.greenSoft,
+      ),
+      ImpactBannerType.mobilizationCovered => (
+        'Mobilisation couverte',
+        Icons.verified_outlined,
+        AppColors.green,
+        AppColors.greenSoft,
+      ),
+    };
+    final resolvedMessage = message?.trim();
+
+    return Container(
+      width: double.infinity,
+      padding: MobilizationTokens.bannerPadding,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(MobilizationTokens.radiusSection),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            constraints: const BoxConstraints(minHeight: 36),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(
+                MobilizationTokens.radiusPill,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 18),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (resolvedMessage != null && resolvedMessage.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  messageIcon ?? icon,
+                  color: color,
+                  size: MobilizationTokens.iconSize,
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    resolvedMessage,
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 15.5,
+                      height: 1.3,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: MobilizationTokens.spaceSm),
+                  trailing!,
+                ],
+              ],
+            ),
+          ],
+          if (footer != null) ...[
+            const SizedBox(height: MobilizationTokens.spaceMd),
+            footer!,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+enum ProfessionChipState { needed, covered }
+
+class ProfessionChip extends StatelessWidget {
+  const ProfessionChip({
+    super.key,
+    required this.label,
+    this.state = ProfessionChipState.needed,
+  });
+
+  final String label;
+  final ProfessionChipState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final covered = state == ProfessionChipState.covered;
+    final color = covered ? AppColors.green : AppColors.orange;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 38),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            covered
+                ? Icons.check_circle_rounded
+                : Icons.add_circle_outline_rounded,
+            color: color,
+            size: 18,
+          ),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.navy,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SectionCard extends StatelessWidget {
+  const SectionCard({
+    super.key,
+    required this.title,
+    required this.child,
+    this.icon,
+    this.backgroundColor = const Color(0xFFF8F8F7),
+  });
+
+  final String title;
+  final Widget child;
+  final IconData? icon;
+  final Color backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: MobilizationTokens.sectionPadding,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(MobilizationTokens.radiusSection),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, color: AppColors.textMuted, size: 17),
+                const SizedBox(width: MobilizationTokens.spaceSm),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                    letterSpacing: 0.25,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class MobilizationHeroCard extends StatelessWidget {
+  const MobilizationHeroCard({
+    super.key,
+    required this.locationType,
+    required this.locationName,
+    required this.dateLabel,
+    required this.timeLabel,
+    required this.impactBanner,
+    required this.professionTitle,
+    required this.professions,
+    required this.primaryAction,
+    required this.secondaryDetails,
+    this.locationTypeKey,
+    this.timingBadge,
+    this.secondaryAction,
+    this.featured = false,
+  });
+
+  final String locationType;
+  final String locationName;
+  final String dateLabel;
+  final String timeLabel;
+  final Key? locationTypeKey;
+  final Widget impactBanner;
+  final String professionTitle;
+  final List<Widget> professions;
+  final Widget primaryAction;
+  final Widget secondaryDetails;
+  final Widget? timingBadge;
+  final Widget? secondaryAction;
+  final bool featured;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOut,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - value)),
+          child: child,
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(MobilizationTokens.radiusCard),
+          border: Border.all(
+            color: featured ? AppColors.orange : AppColors.border,
+            width: featured ? 1.35 : 1,
+          ),
+          boxShadow: featured
+              ? MobilizationTokens.featuredCardShadow
+              : MobilizationTokens.cardShadow,
+        ),
+        child: Padding(
+          padding: MobilizationTokens.heroPadding,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'LIEU DE MOBILISATION',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                  letterSpacing: 1.05,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: MobilizationTokens.spaceXs),
+              Text(
+                locationType,
+                key: locationTypeKey,
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 24,
+                  height: 1.1,
+                  letterSpacing: -0.6,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                locationName,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 15,
+                  height: 1.3,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: MobilizationTokens.spaceLg),
+              Container(
+                width: double.infinity,
+                padding: MobilizationTokens.bannerPadding,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF4F5F4),
+                  borderRadius: BorderRadius.circular(
+                    MobilizationTokens.radiusSection,
+                  ),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_month_outlined,
+                      color: AppColors.navy,
+                      size: MobilizationTokens.iconSize,
+                    ),
+                    const SizedBox(width: MobilizationTokens.spaceMd),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            dateLabel,
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 13,
+                              height: 1.25,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            timeLabel,
+                            style: const TextStyle(
+                              color: AppColors.navy,
+                              fontSize: 20,
+                              height: 1.15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (timingBadge != null) ...[
+                      const SizedBox(width: 10),
+                      timingBadge!,
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 13),
+              impactBanner,
+              const SizedBox(height: MobilizationTokens.spaceXl),
+              Text(
+                professionTitle,
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontSize: 18,
+                  height: 1.2,
+                  letterSpacing: -0.2,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 11),
+              Wrap(
+                spacing: MobilizationTokens.spaceSm,
+                runSpacing: MobilizationTokens.spaceSm,
+                children: professions,
+              ),
+              const SizedBox(height: MobilizationTokens.spaceXl),
+              primaryAction,
+              const SizedBox(height: 22),
+              secondaryDetails,
+              if (secondaryAction != null) ...[
+                const SizedBox(height: 18),
+                secondaryAction!,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
