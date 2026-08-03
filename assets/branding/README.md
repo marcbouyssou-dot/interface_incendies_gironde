@@ -1,9 +1,9 @@
 # Identité visuelle MobSanté
 
-Le composant `BrandMark` utilise `mobsante_pictogram_256.png`, optimisé pour
-l’interface. `mobsante_pictogram_master.png` est la source haute définition
-commune aux déclinaisons Flutter et web ; elle n’est pas embarquée dans le
-build Flutter.
+Le composant `BrandMark` compose `mobsante_pictogram_transparent.png` et
+`mobilization_flame.png`. Ces deux ressources restent séparées dans Flutter
+afin que le symbole de mobilisation puisse évoluer indépendamment du
+pictogramme principal.
 
 Le pictogramme applicatif réunit uniquement :
 
@@ -11,7 +11,8 @@ Le pictogramme applicatif réunit uniquement :
 - la figure humaine ;
 - les deux courbes rouge et bleue.
 
-Le symbole de mobilisation, actuellement une flamme, est configuré et affiché
-séparément par Flutter. Les anciens fichiers `logo_hd.png` et
-`logo_ui_256.png` restent des sources institutionnelles distinctes et ne sont
-pas utilisés comme icône applicative.
+`mobsante_app_icon_master.png` est la source haute définition des icônes web et
+PWA. Elle réunit le pictogramme et la flamme sur le fond bleu nuit. Les anciens
+fichiers `logo_hd.png` et `logo_ui_256.png` restent des sources
+institutionnelles distinctes et ne sont pas utilisés directement comme icône
+applicative.

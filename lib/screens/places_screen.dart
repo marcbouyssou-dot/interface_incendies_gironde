@@ -5,6 +5,7 @@ import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'about_screen.dart';
@@ -188,39 +189,48 @@ class _PlacesHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return const Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          'DISPOSITIF TERRITORIAL',
-          style: TextStyle(
-            color: _PlacesVisuals.textMuted,
-            fontSize: 10,
-            letterSpacing: 1.3,
-            fontWeight: FontWeight.w800,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'DISPOSITIF TERRITORIAL',
+                style: TextStyle(
+                  color: _PlacesVisuals.textMuted,
+                  fontSize: 10,
+                  letterSpacing: 1.3,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 7),
+              Text(
+                'Lieux',
+                style: TextStyle(
+                  color: _PlacesVisuals.navy,
+                  fontSize: 28,
+                  height: 1.1,
+                  letterSpacing: -0.7,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Les points d’intervention mobilisés en Gironde.',
+                style: TextStyle(
+                  color: _PlacesVisuals.textMuted,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
-        SizedBox(height: 7),
-        Text(
-          'Lieux',
-          style: TextStyle(
-            color: _PlacesVisuals.navy,
-            fontSize: 28,
-            height: 1.1,
-            letterSpacing: -0.7,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        SizedBox(height: 8),
-        Text(
-          'Les points d’intervention mobilisés en Gironde.',
-          style: TextStyle(
-            color: _PlacesVisuals.textMuted,
-            fontSize: 14,
-            height: 1.4,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        SizedBox(width: 16),
+        BrandMark(size: 46),
       ],
     );
   }

@@ -63,7 +63,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/branding/mobsante_pictogram_256.png
+    - assets/branding/mobsante_pictogram_transparent.png
+    - assets/branding/mobilization_flame.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

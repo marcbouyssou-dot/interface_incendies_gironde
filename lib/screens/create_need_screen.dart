@@ -270,15 +270,26 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       ),
                       const SizedBox(height: 5),
                     ],
-                    Text(
-                      _isEditing ? 'Modifier la mission' : 'Créer un besoin',
-                      style: const TextStyle(
-                        color: _CreateNeedVisuals.navy,
-                        fontSize: 24,
-                        height: 1.12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.55,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _isEditing
+                                ? 'Modifier la mission'
+                                : 'Créer un besoin',
+                            style: const TextStyle(
+                              color: _CreateNeedVisuals.navy,
+                              fontSize: 24,
+                              height: 1.12,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.55,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        const BrandMark(size: 46),
+                      ],
                     ),
                     const SizedBox(height: 14),
                     _NeedSummaryCard(

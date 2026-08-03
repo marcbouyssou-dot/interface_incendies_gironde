@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 abstract final class AppIdentity {
   static const technicalName = 'InterfaceRecup33';
   static const productName = 'MobSanté';
@@ -7,8 +5,10 @@ abstract final class AppIdentity {
   static const productSubtitle = mobilizationSubtitle;
   static const shortName = productName;
   static const institutionalSignature = 'URPS MK NA';
-  static const pictogramAsset = 'assets/branding/mobsante_pictogram_256.png';
-  static const mobilizationSymbol = Icons.local_fire_department_rounded;
+  static const pictogramAsset =
+      'assets/branding/mobsante_pictogram_transparent.png';
+  static const mobilizationSymbolAsset =
+      'assets/branding/mobilization_flame.png';
   static const splashMinimumDuration = Duration(milliseconds: 2500);
   static const version = '1.0.0+1';
 

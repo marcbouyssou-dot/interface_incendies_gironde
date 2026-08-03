@@ -8,6 +8,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/csv_export.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'create_need_screen.dart';
@@ -518,39 +519,48 @@ class _StatisticsPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return const Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          'SITUATION',
-          style: TextStyle(
-            color: _StatisticsVisuals.textMuted,
-            fontSize: 10,
-            letterSpacing: 1.3,
-            fontWeight: FontWeight.w800,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'SITUATION',
+                style: TextStyle(
+                  color: _StatisticsVisuals.textMuted,
+                  fontSize: 10,
+                  letterSpacing: 1.3,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 7),
+              Text(
+                'Statistiques',
+                style: TextStyle(
+                  color: _StatisticsVisuals.navy,
+                  fontSize: 28,
+                  height: 1.1,
+                  letterSpacing: -0.7,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Couverture opérationnelle des missions.',
+                style: TextStyle(
+                  color: _StatisticsVisuals.textMuted,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
-        SizedBox(height: 7),
-        Text(
-          'Statistiques',
-          style: TextStyle(
-            color: _StatisticsVisuals.navy,
-            fontSize: 28,
-            height: 1.1,
-            letterSpacing: -0.7,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        SizedBox(height: 8),
-        Text(
-          'Couverture opérationnelle des missions.',
-          style: TextStyle(
-            color: _StatisticsVisuals.textMuted,
-            fontSize: 14,
-            height: 1.4,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        SizedBox(width: 16),
+        BrandMark(size: 46),
       ],
     );
   }

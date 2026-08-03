@@ -6,6 +6,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import 'admin_invitations_screen.dart';
 import 'create_need_screen.dart';
@@ -274,43 +275,52 @@ class _AdministrationHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Text(
-          'ESPACE RESPONSABLE',
-          style: TextStyle(
-            color: _AdministrationVisuals.textMuted,
-            fontSize: 10,
-            letterSpacing: 1.3,
-            fontWeight: FontWeight.w800,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ESPACE RESPONSABLE',
+                style: TextStyle(
+                  color: _AdministrationVisuals.textMuted,
+                  fontSize: 10,
+                  letterSpacing: 1.3,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                access.isCoordinator
+                    ? 'Coordination départementale'
+                    : 'Votre accès responsable',
+                style: const TextStyle(
+                  color: _AdministrationVisuals.navy,
+                  fontSize: 27,
+                  height: 1.12,
+                  letterSpacing: -0.7,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                access.isCoordinator
+                    ? 'Pilotez les besoins et les accès aux centres.'
+                    : 'Gérez les besoins de votre périmètre.',
+                style: const TextStyle(
+                  color: _AdministrationVisuals.textMuted,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 7),
-        Text(
-          access.isCoordinator
-              ? 'Coordination départementale'
-              : 'Votre accès responsable',
-          style: const TextStyle(
-            color: _AdministrationVisuals.navy,
-            fontSize: 27,
-            height: 1.12,
-            letterSpacing: -0.7,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          access.isCoordinator
-              ? 'Pilotez les besoins et les accès aux centres.'
-              : 'Gérez les besoins de votre périmètre.',
-          style: const TextStyle(
-            color: _AdministrationVisuals.textMuted,
-            fontSize: 14,
-            height: 1.4,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        const SizedBox(width: 16),
+        const BrandMark(size: 46),
       ],
     );
   }

@@ -80,47 +80,11 @@ class _SplashPictogram extends StatelessWidget {
       label: 'Pictogramme MobSanté',
       image: true,
       child: SizedBox.square(
-        dimension: 224,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            const Positioned.fill(
-              child: BrandMark(
-                key: Key('splash-pictogram'),
-                size: 224,
-                onDarkBackground: true,
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 5,
-              child: Container(
-                key: const Key('splash-mobilization-symbol'),
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  color: AppColors.orangeSoft,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    width: 2,
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x33000000),
-                      blurRadius: 18,
-                      offset: Offset(0, 7),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  AppIdentity.mobilizationSymbol,
-                  color: AppColors.orange,
-                  size: 32,
-                ),
-              ),
-            ),
-          ],
+        dimension: 246,
+        child: const BrandMark(
+          key: Key('splash-pictogram'),
+          size: 246,
+          onDarkBackground: true,
         ),
       ),
     );

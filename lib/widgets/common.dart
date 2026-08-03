@@ -13,6 +13,7 @@ import '../screens/information_consent_screen.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
+import 'brand_mark.dart';
 import 'mission_location_details.dart';
 import 'mobilization_design_system.dart';
 
@@ -1855,35 +1856,49 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'PROFIL PROFESSIONNEL',
-                      style: TextStyle(
-                        color: _ProfessionalProfileVisuals.textMuted,
-                        fontSize: 10,
-                        letterSpacing: 1.2,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'S’inscrire à la mission',
-                      style: TextStyle(
-                        color: _ProfessionalProfileVisuals.navy,
-                        fontSize: 24,
-                        height: 1.12,
-                        letterSpacing: -0.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.need.place,
-                      style: const TextStyle(
-                        color: _ProfessionalProfileVisuals.textMuted,
-                        fontSize: 13,
-                        height: 1.35,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'PROFIL PROFESSIONNEL',
+                                style: TextStyle(
+                                  color: _ProfessionalProfileVisuals.textMuted,
+                                  fontSize: 10,
+                                  letterSpacing: 1.2,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'S’inscrire à la mission',
+                                style: TextStyle(
+                                  color: _ProfessionalProfileVisuals.navy,
+                                  fontSize: 24,
+                                  height: 1.12,
+                                  letterSpacing: -0.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                widget.need.place,
+                                style: const TextStyle(
+                                  color: _ProfessionalProfileVisuals.textMuted,
+                                  fontSize: 13,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        const BrandMark(size: 46),
+                      ],
                     ),
                     const SizedBox(height: AppFormLayout.sectionSpacing),
                     if (_isProfessionalIdentifierReady)
