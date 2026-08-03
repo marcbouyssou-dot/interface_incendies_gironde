@@ -9,6 +9,7 @@ import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 
 abstract final class _CreateNeedVisuals {
@@ -1234,68 +1235,227 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
   @override
   Widget build(BuildContext context) {
     return PageContainer(
-      child: ListView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: AppFormLayout.pagePadding,
-        children: [
-          const PageHeader(
-            eyebrow: 'Espace responsable',
-            title: 'Se connecter',
-            subtitle: 'Vous devez vous connecter pour déclarer un besoin.',
-          ),
-          const SizedBox(height: AppFormLayout.sectionSpacing),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  TextField(
-                    key: const Key('manager-email'),
-                    controller: _email,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Adresse email',
-                    ),
-                  ),
-                  const SizedBox(height: AppFormLayout.fieldSpacing),
-                  TextField(
-                    key: const Key('manager-password'),
-                    controller: _password,
-                    obscureText: true,
-                    autofillHints: const [AutofillHints.password],
-                    onSubmitted: (_) => _loading ? null : _signIn(),
-                    decoration: const InputDecoration(
-                      labelText: 'Mot de passe',
-                    ),
-                  ),
-                  if (_message != null) ...[
-                    const SizedBox(height: AppFormLayout.fieldSpacing),
-                    Text(
-                      _message!,
-                      style: const TextStyle(
-                        color: AppColors.red,
-                        fontWeight: FontWeight.w700,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = constraints.maxWidth <= 556
+              ? 18.0
+              : (constraints.maxWidth - 520) / 2;
+          return Material(
+            color: _CreateNeedVisuals.background,
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                20,
+                horizontalPadding,
+                36,
+              ),
+              children: [
+                const _ResponsibleLoginHeader(),
+                const SizedBox(height: 24),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _CreateNeedVisuals.border),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0A173052),
+                        blurRadius: 18,
+                        offset: Offset(0, 5),
                       ),
+                    ],
+                  ),
+                  child: AutofillGroup(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextField(
+                          key: const Key('manager-email'),
+                          controller: _email,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.email],
+                          style: const TextStyle(
+                            color: _CreateNeedVisuals.navy,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: _responsibleLoginInputDecoration(
+                            labelText: 'Adresse email',
+                            icon: Icons.alternate_email_rounded,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(
+                          key: const Key('manager-password'),
+                          controller: _password,
+                          obscureText: true,
+                          autofillHints: const [AutofillHints.password],
+                          onSubmitted: (_) => _loading ? null : _signIn(),
+                          style: const TextStyle(
+                            color: _CreateNeedVisuals.navy,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: _responsibleLoginInputDecoration(
+                            labelText: 'Mot de passe',
+                            icon: Icons.lock_outline_rounded,
+                          ),
+                        ),
+                        if (_message != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F0),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFFFD6D2),
+                              ),
+                            ),
+                            child: Text(
+                              _message!,
+                              style: const TextStyle(
+                                color: AppColors.red,
+                                fontSize: 13,
+                                height: 1.35,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 22),
+                        SizedBox(
+                          height: 56,
+                          child: FilledButton(
+                            key: const Key('manager-sign-in'),
+                            onPressed: _loading ? null : _signIn,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _CreateNeedVisuals.orange,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor:
+                                  _CreateNeedVisuals.orangeSoft,
+                              disabledForegroundColor:
+                                  _CreateNeedVisuals.orange,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            child: Text(
+                              _loading ? 'Connexion…' : 'Se connecter',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                  const SizedBox(height: AppFormLayout.sectionSpacing),
-                  SizedBox(
-                    height: AppFormLayout.actionHeight,
-                    child: FilledButton(
-                      key: const Key('manager-sign-in'),
-                      onPressed: _loading ? null : _signIn,
-                      child: Text(_loading ? 'Connexion…' : 'Se connecter'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ResponsibleLoginHeader extends StatelessWidget {
+  const _ResponsibleLoginHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            BrandMark(size: 52),
+            SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'MobSanté',
+                    style: TextStyle(
+                      color: _CreateNeedVisuals.navy,
+                      fontSize: 22,
+                      height: 1.1,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'ESPACE RESPONSABLE',
+                    style: TextStyle(
+                      color: _CreateNeedVisuals.textMuted,
+                      fontSize: 9,
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
               ),
             ),
+          ],
+        ),
+        SizedBox(height: 22),
+        Text(
+          'Se connecter',
+          style: TextStyle(
+            color: _CreateNeedVisuals.navy,
+            fontSize: 27,
+            height: 1.12,
+            letterSpacing: -0.7,
+            fontWeight: FontWeight.w800,
           ),
-        ],
-      ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          'Vous devez vous connecter pour déclarer un besoin.',
+          style: TextStyle(
+            color: _CreateNeedVisuals.textMuted,
+            fontSize: 14,
+            height: 1.4,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
+}
+
+InputDecoration _responsibleLoginInputDecoration({
+  required String labelText,
+  required IconData icon,
+}) {
+  return InputDecoration(
+    labelText: labelText,
+    labelStyle: const TextStyle(
+      color: _CreateNeedVisuals.textMuted,
+      fontWeight: FontWeight.w600,
+    ),
+    prefixIcon: Icon(icon, color: _CreateNeedVisuals.navy, size: 21),
+    filled: true,
+    fillColor: _CreateNeedVisuals.fieldBackground,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _CreateNeedVisuals.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _CreateNeedVisuals.navy, width: 1.5),
+    ),
+  );
 }
 
 class _PublishedMission {
