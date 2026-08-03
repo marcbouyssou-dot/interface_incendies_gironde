@@ -2,8 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
-import '../theme/app_theme.dart';
 import '../widgets/mission_location_details.dart';
+
+abstract final class _ConfirmationVisuals {
+  static const background = Color(0xFFF5F5F3);
+  static const surface = Colors.white;
+  static const navy = Color(0xFF173052);
+  static const fieldBackground = Color(0xFFF1F1EF);
+  static const border = Color(0xFFE5E5E1);
+  static const textMuted = Color(0xFF7C817F);
+  static const orange = Color(0xFFF25C05);
+  static const orangeSoft = Color(0xFFFFE8D9);
+}
 
 class EngagementConfirmationScreen extends StatelessWidget {
   const EngagementConfirmationScreen({
@@ -20,86 +30,156 @@ class EngagementConfirmationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _ConfirmationVisuals.background,
       body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: CustomScrollView(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final horizontalPadding = constraints.maxWidth <= 556
+                ? 18.0
+                : (constraints.maxWidth - 520) / 2;
+            return CustomScrollView(
               slivers: [
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      22,
+                      horizontalPadding,
+                      28,
+                    ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Spacer(),
-                        const Text('❤️', style: TextStyle(fontSize: 48)),
-                        const SizedBox(height: 16),
-                        Text(
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            width: 64,
+                            height: 64,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _ConfirmationVisuals.orangeSoft,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              '❤️',
+                              style: TextStyle(fontSize: 31),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
                           'Merci !',
-                          style: Theme.of(context).textTheme.headlineLarge,
+                          style: TextStyle(
+                            color: _ConfirmationVisuals.navy,
+                            fontSize: 29,
+                            height: 1.08,
+                            letterSpacing: -0.8,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           result.existingMessage ??
                               'Votre engagement est confirmé.',
-                          style: Theme.of(context).textTheme.bodyLarge,
+                          style: const TextStyle(
+                            color: _ConfirmationVisuals.navy,
+                            fontSize: 15,
+                            height: 1.45,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         if (result ==
                             EngagementCreationResult.alreadyPending) ...[
-                          const SizedBox(height: 4),
-                          Text(
+                          const SizedBox(height: 6),
+                          const Text(
                             'Une ancienne demande est encore en attente.',
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            style: TextStyle(
+                              color: _ConfirmationVisuals.textMuted,
+                              fontSize: 13,
+                              height: 1.4,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
-                        const SizedBox(height: 32),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _ConfirmationDetail(
-                                  icon: Icons.location_on_outlined,
-                                  label: 'Lieu',
-                                  value: need.place,
-                                ),
-                                if (location?.verifiedAddress != null) ...[
-                                  const SizedBox(height: 6),
-                                  LocationAddressLine(location: location),
-                                ],
-                                const SizedBox(height: 18),
-                                _ConfirmationDetail(
-                                  icon: Icons.schedule_rounded,
-                                  label: 'Horaires',
-                                  value: need.time,
-                                ),
-                                const SizedBox(height: 18),
-                                _ConfirmationDetail(
-                                  icon: Icons.medical_services_outlined,
-                                  label: 'Matériel demandé',
-                                  value: need.equipment.join(' • '),
+                        const SizedBox(height: 26),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(17),
+                          decoration: BoxDecoration(
+                            color: _ConfirmationVisuals.surface,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: _ConfirmationVisuals.border,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x08173052),
+                                blurRadius: 14,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _ConfirmationDetail(
+                                icon: Icons.location_on_outlined,
+                                label: 'Lieu',
+                                value: need.place,
+                              ),
+                              if (location?.verifiedAddress != null) ...[
+                                const SizedBox(height: 9),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 52),
+                                  child: LocationAddressLine(
+                                    location: location,
+                                  ),
                                 ),
                               ],
-                            ),
+                              const _ConfirmationDivider(),
+                              _ConfirmationDetail(
+                                icon: Icons.schedule_rounded,
+                                label: 'Horaires',
+                                value: need.time,
+                              ),
+                              const _ConfirmationDivider(),
+                              _ConfirmationDetail(
+                                icon: Icons.medical_services_outlined,
+                                label: 'Matériel demandé',
+                                value: need.equipment.join(' • '),
+                              ),
+                            ],
                           ),
                         ),
                         const Spacer(),
                         const SizedBox(height: 24),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Retour aux interventions'),
+                        SizedBox(
+                          height: 56,
+                          child: FilledButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _ConfirmationVisuals.orange,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              textStyle: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            child: const Text('Retour aux interventions'),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -122,19 +202,55 @@ class _ConfirmationDetail extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: AppColors.orange, size: 22),
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _ConfirmationVisuals.fieldBackground,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: _ConfirmationVisuals.navy, size: 20),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 3),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: _ConfirmationVisuals.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 0.7,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: _ConfirmationVisuals.navy,
+                  fontSize: 14,
+                  height: 1.35,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ConfirmationDivider extends StatelessWidget {
+  const _ConfirmationDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 14),
+      child: Divider(height: 1, color: _ConfirmationVisuals.border),
     );
   }
 }
