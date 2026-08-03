@@ -12,6 +12,15 @@ import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'create_need_screen.dart';
 
+abstract final class _StatisticsVisuals {
+  static const background = Color(0xFFF5F5F3);
+  static const surface = Colors.white;
+  static const navy = Color(0xFF173052);
+  static const fieldBackground = Color(0xFFF1F1EF);
+  static const border = Color(0xFFE5E5E1);
+  static const textMuted = Color(0xFF7C817F);
+}
+
 @visibleForTesting
 List<CoordinationNeed> missionsVisibleToResponsible({
   required List<CoordinationNeed> missions,
@@ -361,136 +370,131 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     final timingCounts = _missionTimingCounts(dashboardMissions, now);
     final locationStats = _locationDashboardStats(dashboardMissions, locations);
     return PageContainer(
-      child: CustomScrollView(
-        key: const PageStorageKey('coordination'),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-            sliver: SliverList.list(
-              children: [
-                const PageHeader(
-                  eyebrow: 'Situation',
-                  title: 'Statistiques',
-                  subtitle: 'Couverture opérationnelle des missions.',
-                ),
-                if (access?.isCoordinator == true) ...[
-                  const SizedBox(height: 24),
-                  _CoordinatorGlobalDashboard(
-                    totalMissions: dashboardMissions.length,
-                    pastMissions: timingCounts.past,
-                    currentMissions: timingCounts.current,
-                    upcomingMissions: timingCounts.upcoming,
-                    mobilizedProfessionals: mobilized,
-                    remainingProfessionals: remaining,
-                    coverage: coverage,
-                    professionQuotas: totalQuotas,
-                    locationStats: locationStats,
-                    selectedPeriod: _dashboardPeriod,
-                    onPeriodChanged: (period) {
-                      setState(() => _dashboardPeriod = period);
-                    },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = constraints.maxWidth <= 556
+              ? 18.0
+              : (constraints.maxWidth - 520) / 2;
+          return Material(
+            color: _StatisticsVisuals.background,
+            child: CustomScrollView(
+              key: const PageStorageKey('coordination'),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    16,
+                    horizontalPadding,
+                    18,
                   ),
-                ] else ...[
-                  const SizedBox(height: 24),
-                  const Text(
-                    'COUVERTURE',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                      letterSpacing: 1.4,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '${(coverage * 100).round()} %',
-                    style: const TextStyle(
-                      color: AppColors.navy,
-                      fontSize: 64,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -2,
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  AnimatedCoverageIndicator(value: coverage, minHeight: 22),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Encore $remaining professionnels',
-                    style: const TextStyle(
-                      color: AppColors.orange,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatusMetric(
-                        label: 'Critiques',
-                        value: critical,
-                        color: AppColors.red,
-                        background: AppColors.redSoft,
+                  sliver: SliverList.list(
+                    children: [
+                      const _StatisticsPageHeader(),
+                      const SizedBox(height: 20),
+                      if (access?.isCoordinator == true)
+                        _CoordinatorGlobalDashboard(
+                          totalMissions: dashboardMissions.length,
+                          pastMissions: timingCounts.past,
+                          currentMissions: timingCounts.current,
+                          upcomingMissions: timingCounts.upcoming,
+                          mobilizedProfessionals: mobilized,
+                          remainingProfessionals: remaining,
+                          coverage: coverage,
+                          professionQuotas: totalQuotas,
+                          locationStats: locationStats,
+                          selectedPeriod: _dashboardPeriod,
+                          onPeriodChanged: (period) {
+                            setState(() => _dashboardPeriod = period);
+                          },
+                        )
+                      else
+                        _SiteCoverageOverview(
+                          coverage: coverage,
+                          remainingProfessionals: remaining,
+                        ),
+                      const SizedBox(height: 14),
+                      _StatisticsCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const _StatisticsSectionHeader(
+                              eyebrow: 'VUE GLOBALE',
+                              title: 'État des missions',
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _StatusMetric(
+                                    label: 'Critiques',
+                                    value: critical,
+                                    color: AppColors.red,
+                                    background: AppColors.redSoft,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _StatusMetric(
+                                    label: 'À compléter',
+                                    value: incomplete,
+                                    color: AppColors.orange,
+                                    background: AppColors.orangeSoft,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _StatusMetric(
+                                    label: 'Complets',
+                                    value: complete,
+                                    color: AppColors.green,
+                                    background: AppColors.greenSoft,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: _StatusMetric(
-                        label: 'À compléter',
-                        value: incomplete,
-                        color: AppColors.orange,
-                        background: AppColors.orangeSoft,
+                      const SizedBox(height: 24),
+                      _StatisticsSectionHeader(
+                        eyebrow: 'MISSIONS',
+                        title: 'Toutes les missions',
+                        trailing: '${visibleMissions.length}',
                       ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: _StatusMetric(
-                        label: 'Complets',
-                        value: complete,
-                        color: AppColors.green,
-                        background: AppColors.greenSoft,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                const Text(
-                  'MISSIONS',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 12,
-                    letterSpacing: 1.4,
-                    fontWeight: FontWeight.w800,
+                      const SizedBox(height: 11),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    0,
+                    horizontalPadding,
+                    36,
+                  ),
+                  sliver: SliverList.separated(
+                    itemCount: visibleMissions.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) => _SituationRow(
+                      key: ValueKey(visibleMissions[index].id),
+                      need: visibleMissions[index],
+                      location: responsePlaceForNeed(
+                        visibleMissions[index],
+                        locations,
+                      ),
+                      access: access,
+                      isMissionEditorOpening:
+                          _editingMissionId == visibleMissions[index].id,
+                      isMissionEditorBlocked: _editingMissionId != null,
+                      onEditMission: () =>
+                          _openMissionEditor(context, visibleMissions[index]),
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-            sliver: SliverList.separated(
-              itemCount: visibleMissions.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) => _SituationRow(
-                key: ValueKey(visibleMissions[index].id),
-                need: visibleMissions[index],
-                location: responsePlaceForNeed(
-                  visibleMissions[index],
-                  locations,
-                ),
-                access: access,
-                isMissionEditorOpening:
-                    _editingMissionId == visibleMissions[index].id,
-                isMissionEditorBlocked: _editingMissionId != null,
-                onEditMission: () =>
-                    _openMissionEditor(context, visibleMissions[index]),
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -506,6 +510,205 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     } finally {
       if (mounted) setState(() => _editingMissionId = null);
     }
+  }
+}
+
+class _StatisticsPageHeader extends StatelessWidget {
+  const _StatisticsPageHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'SITUATION',
+          style: TextStyle(
+            color: _StatisticsVisuals.textMuted,
+            fontSize: 10,
+            letterSpacing: 1.3,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: 7),
+        Text(
+          'Statistiques',
+          style: TextStyle(
+            color: _StatisticsVisuals.navy,
+            fontSize: 28,
+            height: 1.1,
+            letterSpacing: -0.7,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          'Couverture opérationnelle des missions.',
+          style: TextStyle(
+            color: _StatisticsVisuals.textMuted,
+            fontSize: 14,
+            height: 1.4,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatisticsSectionHeader extends StatelessWidget {
+  const _StatisticsSectionHeader({
+    required this.eyebrow,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String? subtitle;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                eyebrow,
+                style: const TextStyle(
+                  color: _StatisticsVisuals.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 1.05,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: _StatisticsVisuals.navy,
+                  fontSize: 19,
+                  height: 1.15,
+                  letterSpacing: -0.2,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle!,
+                  style: const TextStyle(
+                    color: _StatisticsVisuals.textMuted,
+                    fontSize: 11,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: _StatisticsVisuals.fieldBackground,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: _StatisticsVisuals.border),
+            ),
+            child: Text(
+              trailing!,
+              style: const TextStyle(
+                color: _StatisticsVisuals.navy,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StatisticsCard extends StatelessWidget {
+  const _StatisticsCard({required this.child, this.padding = 17});
+
+  final Widget child;
+  final double padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(padding),
+      decoration: BoxDecoration(
+        color: _StatisticsVisuals.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _StatisticsVisuals.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A173052),
+            blurRadius: 14,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _SiteCoverageOverview extends StatelessWidget {
+  const _SiteCoverageOverview({
+    required this.coverage,
+    required this.remainingProfessionals,
+  });
+
+  final double coverage;
+  final int remainingProfessionals;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StatisticsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _StatisticsSectionHeader(
+            eyebrow: 'VUE GLOBALE',
+            title: 'Taux de couverture',
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '${(coverage * 100).round()} %',
+            style: const TextStyle(
+              color: _StatisticsVisuals.navy,
+              fontSize: 52,
+              height: 1,
+              letterSpacing: -1.6,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 16),
+          AnimatedCoverageIndicator(value: coverage, minHeight: 12),
+          const SizedBox(height: 11),
+          Text(
+            'Encore $remainingProfessionals professionnels',
+            style: const TextStyle(
+              color: AppColors.orange,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -615,265 +818,256 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Column(
       key: const Key('coordinator-global-dashboard'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D1B2A41),
-            blurRadius: 18,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _StatisticsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.dashboard_customize_outlined,
-                color: AppColors.orange,
-                size: 22,
-              ),
-              SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  'TABLEAU DE BORD GLOBAL',
-                  style: TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 13,
-                    letterSpacing: 1,
-                    fontWeight: FontWeight.w900,
+              Row(
+                children: [
+                  const Expanded(
+                    child: _StatisticsSectionHeader(
+                      eyebrow: 'TABLEAU DE BORD GLOBAL',
+                      title: 'Période observée',
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    key: const Key('dashboard-export-csv'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _StatisticsVisuals.navy,
+                      minimumSize: const Size(0, 46),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      side: const BorderSide(color: _StatisticsVisuals.border),
+                    ),
+                    onPressed: () => _exportCsv(context),
+                    icon: const Icon(Icons.download_outlined, size: 18),
+                    label: const Text('Exporter en CSV'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: [
+                  for (final period in _DashboardPeriod.values)
+                    ChoiceChip(
+                      key: Key('dashboard-period-${period.name}'),
+                      label: Text(period.label),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      selected: selectedPeriod == period,
+                      showCheckmark: false,
+                      selectedColor: AppColors.orange,
+                      backgroundColor: _StatisticsVisuals.fieldBackground,
+                      side: BorderSide(
+                        color: selectedPeriod == period
+                            ? AppColors.orange
+                            : _StatisticsVisuals.border,
+                      ),
+                      labelStyle: TextStyle(
+                        color: selectedPeriod == period
+                            ? Colors.white
+                            : _StatisticsVisuals.navy,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      onSelected: (selected) {
+                        if (selected) onPeriodChanged(period);
+                      },
+                    ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
+        ),
+        const SizedBox(height: 12),
+        _StatisticsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final period in _DashboardPeriod.values)
-                ChoiceChip(
-                  key: Key('dashboard-period-${period.name}'),
-                  label: Text(period.label),
-                  selected: selectedPeriod == period,
-                  showCheckmark: false,
-                  selectedColor: AppColors.orangeSoft,
-                  side: BorderSide(
-                    color: selectedPeriod == period
-                        ? AppColors.orange.withValues(alpha: 0.35)
-                        : AppColors.border,
-                  ),
-                  labelStyle: TextStyle(
-                    color: selectedPeriod == period
-                        ? AppColors.orange
-                        : AppColors.textMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  onSelected: (selected) {
-                    if (selected) onPeriodChanged(period);
-                  },
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              key: const Key('dashboard-export-csv'),
-              onPressed: () => _exportCsv(context),
-              icon: const Icon(Icons.download_outlined, size: 18),
-              label: const Text('Exporter en CSV'),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$totalMissions',
-                key: const Key('dashboard-total-missions'),
-                style: const TextStyle(
-                  color: AppColors.navy,
-                  fontSize: 44,
-                  height: 0.9,
-                  fontWeight: FontWeight.w900,
-                ),
+              const _StatisticsSectionHeader(
+                eyebrow: 'VUE GLOBALE',
+                title: 'Chiffres clés',
               ),
-              const SizedBox(width: 10),
-              const Expanded(
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$totalMissions',
+                    key: const Key('dashboard-total-missions'),
+                    style: const TextStyle(
+                      color: _StatisticsVisuals.navy,
+                      fontSize: 50,
+                      height: 0.9,
+                      letterSpacing: -1.2,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: 3),
+                      child: Text(
+                        'missions au total',
+                        style: TextStyle(
+                          color: _StatisticsVisuals.textMuted,
+                          fontSize: 13,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${(coverage * 100).round()} %',
+                    key: const Key('dashboard-global-coverage'),
+                    style: const TextStyle(
+                      color: AppColors.orange,
+                      fontSize: 25,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              AnimatedCoverageIndicator(value: coverage, minHeight: 10),
+              const SizedBox(height: 7),
+              const Align(
+                alignment: Alignment.centerRight,
                 child: Text(
-                  'missions au total',
+                  'Taux global de couverture',
                   style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 14,
+                    color: _StatisticsVisuals.textMuted,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: _DashboardMetric(
-                  metricKey: const Key('dashboard-past-missions'),
-                  label: 'Passées',
-                  value: pastMissions,
-                  color: AppColors.textMuted,
-                  background: AppColors.background,
-                ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _DashboardMetric(
+                      metricKey: const Key('dashboard-past-missions'),
+                      label: 'Passées',
+                      value: pastMissions,
+                      color: _StatisticsVisuals.textMuted,
+                      background: _StatisticsVisuals.fieldBackground,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _DashboardMetric(
+                      metricKey: const Key('dashboard-current-missions'),
+                      label: 'En cours',
+                      value: currentMissions,
+                      color: AppColors.green,
+                      background: AppColors.greenSoft,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _DashboardMetric(
+                      metricKey: const Key('dashboard-upcoming-missions'),
+                      label: 'À venir',
+                      value: upcomingMissions,
+                      color: AppColors.orange,
+                      background: AppColors.orangeSoft,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DashboardMetric(
-                  metricKey: const Key('dashboard-current-missions'),
-                  label: 'En cours',
-                  value: currentMissions,
-                  color: AppColors.green,
-                  background: AppColors.greenSoft,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DashboardMetric(
-                  metricKey: const Key('dashboard-upcoming-missions'),
-                  label: 'À venir',
-                  value: upcomingMissions,
-                  color: AppColors.orange,
-                  background: AppColors.orangeSoft,
-                ),
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 18),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: _DashboardMetric(
-                  metricKey: const Key('dashboard-mobilized-professionals'),
-                  label: 'Professionnels mobilisés',
-                  value: mobilizedProfessionals,
-                  color: AppColors.green,
-                  background: AppColors.greenSoft,
-                  compactLabel: false,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _DashboardMetric(
-                  metricKey: const Key('dashboard-remaining-professionals'),
-                  label: 'Encore recherchés',
-                  value: remainingProfessionals,
-                  color: AppColors.orange,
-                  background: AppColors.orangeSoft,
-                  compactLabel: false,
-                ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _DashboardMetric(
+                      metricKey: const Key('dashboard-mobilized-professionals'),
+                      label: 'Professionnels mobilisés',
+                      value: mobilizedProfessionals,
+                      color: AppColors.green,
+                      background: AppColors.greenSoft,
+                      compactLabel: false,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _DashboardMetric(
+                      metricKey: const Key('dashboard-remaining-professionals'),
+                      label: 'Encore recherchés',
+                      value: remainingProfessionals,
+                      color: AppColors.orange,
+                      background: AppColors.orangeSoft,
+                      compactLabel: false,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          Row(
+        ),
+        const SizedBox(height: 12),
+        _StatisticsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
-                child: Text(
-                  'Taux global de couverture',
-                  style: TextStyle(
-                    color: AppColors.navy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+              const _StatisticsSectionHeader(
+                eyebrow: 'COUVERTURE PAR PROFESSION',
+                title: 'Couverture des métiers',
+              ),
+              const SizedBox(height: 14),
+              for (
+                var index = 0;
+                index < HealthProfessionRegistry.values.length;
+                index++
+              ) ...[
+                _ProfessionDashboardRow(
+                  profession: HealthProfessionRegistry.values[index],
+                  quota: professionQuotas.quotaFor(
+                    HealthProfessionRegistry.values[index].id,
                   ),
                 ),
-              ),
-              Text(
-                '${(coverage * 100).round()} %',
-                key: const Key('dashboard-global-coverage'),
-                style: const TextStyle(
-                  color: AppColors.orange,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+                if (index < HealthProfessionRegistry.values.length - 1)
+                  const SizedBox(height: 9),
+              ],
             ],
           ),
-          const SizedBox(height: 9),
-          AnimatedCoverageIndicator(value: coverage, minHeight: 10),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 18),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          const Text(
-            'COUVERTURE PAR PROFESSION',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              letterSpacing: 1.1,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 12),
-          for (
-            var index = 0;
-            index < HealthProfessionRegistry.values.length;
-            index++
-          ) ...[
-            _ProfessionDashboardRow(
-              profession: HealthProfessionRegistry.values[index],
-              quota: professionQuotas.quotaFor(
-                HealthProfessionRegistry.values[index].id,
+        ),
+        const SizedBox(height: 12),
+        _StatisticsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _StatisticsSectionHeader(
+                eyebrow: 'COUVERTURE PAR LIEU',
+                title: 'Couverture des centres',
+                subtitle: 'Du moins couvert au mieux couvert',
               ),
-            ),
-            if (index < HealthProfessionRegistry.values.length - 1)
-              const SizedBox(height: 10),
-          ],
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 18),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          const Text(
-            'COUVERTURE PAR LIEU',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              letterSpacing: 1.1,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Du moins couvert au mieux couvert',
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (locationStats.isEmpty)
-            const Text(
-              'Aucune mission associée à un lieu.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-            )
-          else
-            for (var index = 0; index < locationStats.length; index++) ...[
-              _LocationDashboardRow(stats: locationStats[index]),
-              if (index < locationStats.length - 1) const SizedBox(height: 10),
+              const SizedBox(height: 14),
+              if (locationStats.isEmpty)
+                const Text(
+                  'Aucune mission associée à un lieu.',
+                  style: TextStyle(
+                    color: _StatisticsVisuals.textMuted,
+                    fontSize: 12,
+                  ),
+                )
+              else
+                for (var index = 0; index < locationStats.length; index++) ...[
+                  _LocationDashboardRow(stats: locationStats[index]),
+                  if (index < locationStats.length - 1)
+                    const SizedBox(height: 9),
+                ],
             ],
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -971,7 +1165,7 @@ class _ProfessionDashboardRow extends StatelessWidget {
           AnimatedCoverageIndicator(
             value: coverage,
             color: color,
-            minHeight: 6,
+            minHeight: 8,
           ),
         ],
       ),
@@ -1071,7 +1265,7 @@ class _LocationDashboardRow extends StatelessWidget {
           AnimatedCoverageIndicator(
             value: stats.coverage,
             color: color,
-            minHeight: 6,
+            minHeight: 8,
           ),
         ],
       ),
@@ -1200,6 +1394,7 @@ class _StatusMetric extends StatelessWidget {
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
       ),
       child: Column(
         children: [
@@ -1247,59 +1442,74 @@ class _SituationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    need.place,
-                    style: Theme.of(context).textTheme.titleMedium,
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _StatisticsVisuals.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _StatisticsVisuals.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08173052),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  need.place,
+                  style: const TextStyle(
+                    color: _StatisticsVisuals.navy,
+                    fontSize: 16,
+                    height: 1.2,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(width: 8),
-                StatusPill(status: need.status),
-              ],
-            ),
-            const SizedBox(height: 5),
-            MissionTimingPill(mission: need),
-            const SizedBox(height: 5),
-            Text(
-              need.group.label,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
               ),
+              const SizedBox(width: 8),
+              StatusPill(status: need.status),
+            ],
+          ),
+          const SizedBox(height: 7),
+          MissionTimingPill(mission: need),
+          const SizedBox(height: 6),
+          Text(
+            need.group.label,
+            style: const TextStyle(
+              color: _StatisticsVisuals.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 4),
-            Text(
-              location?.type.label ?? 'Lieu d’intervention',
-              style: const TextStyle(
-                color: AppColors.orange,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            location?.type.label ?? 'Lieu d’intervention',
+            style: const TextStyle(
+              color: _StatisticsVisuals.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
             ),
-            MissionLocationDetails(location: location, compact: true),
-            const SizedBox(height: 14),
-            CoverageBar(need: need),
-            const SizedBox(height: 14),
-            if (access?.isCoordinator == true) _MissionEngagements(need: need),
-            _ResponsibleMissionActions(
-              need: need,
-              location: location,
-              access: access,
-              isMissionEditorOpening: isMissionEditorOpening,
-              isMissionEditorBlocked: isMissionEditorBlocked,
-              onEditMission: onEditMission,
-            ),
-          ],
-        ),
+          ),
+          MissionLocationDetails(location: location, compact: true),
+          const SizedBox(height: 14),
+          CoverageBar(need: need),
+          const SizedBox(height: 14),
+          if (access?.isCoordinator == true) _MissionEngagements(need: need),
+          _ResponsibleMissionActions(
+            need: need,
+            location: location,
+            access: access,
+            isMissionEditorOpening: isMissionEditorOpening,
+            isMissionEditorBlocked: isMissionEditorBlocked,
+            onEditMission: onEditMission,
+          ),
+        ],
       ),
     );
   }
@@ -1344,6 +1554,14 @@ class _ResponsibleMissionActions extends StatelessWidget {
         children: [
           OutlinedButton.icon(
             key: Key('edit-mission-${need.id}'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _StatisticsVisuals.navy,
+              minimumSize: const Size(0, 48),
+              side: const BorderSide(color: _StatisticsVisuals.border),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
             onPressed: isMissionEditorBlocked ? null : onEditMission,
             icon: isMissionEditorOpening
                 ? const SizedBox.square(
