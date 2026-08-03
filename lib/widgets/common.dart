@@ -1292,6 +1292,15 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
   }
 }
 
+abstract final class _ProfessionalProfileVisuals {
+  static const background = Color(0xFFF5F5F3);
+  static const surface = Colors.white;
+  static const navy = Color(0xFF173052);
+  static const fieldBackground = Color(0xFFF1F1EF);
+  static const border = Color(0xFFE5E5E1);
+  static const textMuted = Color(0xFF7C817F);
+}
+
 class _RegistrationSheet extends StatefulWidget {
   const _RegistrationSheet({required this.need, required this.location});
   final CoordinationNeed need;
@@ -1500,362 +1509,539 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   Widget build(BuildContext context) {
     if (_loadingProfile) {
       return const SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(child: CircularProgressIndicator()),
+        child: ColoredBox(
+          color: _ProfessionalProfileVisuals.background,
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(child: CircularProgressIndicator()),
+          ),
         ),
       );
     }
     if (_profileError != null) {
       return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_profileError!),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () {
-                  setState(() {
-                    _loadingProfile = true;
-                    _profileError = null;
-                  });
-                  _loadProfile();
-                },
-                child: const Text('Réessayer'),
+        child: ColoredBox(
+          color: _ProfessionalProfileVisuals.background,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Container(
+                margin: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.redSoft,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppColors.red.withValues(alpha: 0.24),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: AppColors.red,
+                      size: 30,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _profileError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: _ProfessionalProfileVisuals.navy,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.orange,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _loadingProfile = true;
+                          _profileError = null;
+                        });
+                        _loadProfile();
+                      },
+                      child: const Text('Réessayer'),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       );
     }
     return SafeArea(
-      child: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.fromLTRB(
-          20,
-          4,
-          20,
-          24 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'S’inscrire à la mission',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 5),
-              Text(
-                widget.need.place,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: AppFormLayout.sectionSpacing),
-              if (_isProfessionalIdentifierReady)
-                const _ProfessionalIdentifierReadyNotice()
-              else
-                _ProfessionalIdentifierRequiredNotice(
-                  ordinalOnly: _isVeterinarian,
-                ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  key: const Key('profile-information-consent-entry'),
-                  onPressed: () => Navigator.of(context).push(
-                    AppPageRoute<void>(
-                      builder: (_) => const InformationConsentScreen(),
-                    ),
-                  ),
-                  icon: const Icon(Icons.fact_check_outlined, size: 17),
-                  label: const Text('Informations et consentement'),
-                ),
-              ),
-              const SizedBox(height: AppFormLayout.fieldSpacing),
-              if (_profile != null && !_editingProfile) ...[
-                _ProfileSummary(profile: _profile!),
-                const SizedBox(height: 6),
-                TextButton(
-                  onPressed: () => setState(() => _editingProfile = true),
-                  child: Text(
-                    _isProfessionalIdentifierReady
-                        ? 'Modifier mes informations'
-                        : 'Compléter mon profil',
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (_editingProfile) ...[
-                const FormSectionTitle(title: 'Profession'),
-                const SizedBox(height: AppFormLayout.titleSpacing),
-                RadioGroup<VolunteerProfession>(
-                  groupValue: _profession,
-                  onChanged: (value) => _selectProfession(value!),
-                  child: Column(
-                    children: [
-                      for (final profession in _professions)
-                        RadioListTile<VolunteerProfession>(
-                          key: Key('profession-${profession.canonicalId}'),
-                          contentPadding: EdgeInsets.zero,
-                          value: profession,
-                          enabled: _isAvailable(profession),
-                          title: Text(profession.label),
-                          subtitle: _isAvailable(profession)
-                              ? null
-                              : const Text('Aucun besoin disponible'),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppFormLayout.fieldSpacing),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final firstNameField = TextFormField(
-                      controller: _firstNameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Prénom'),
-                      validator: _required,
-                    );
-                    final lastNameField = TextFormField(
-                      controller: _lastNameController,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Nom'),
-                      validator: _required,
-                    );
-                    if (constraints.maxWidth < 300) {
-                      return Column(
-                        children: [
-                          firstNameField,
-                          const SizedBox(height: AppFormLayout.fieldSpacing),
-                          lastNameField,
-                        ],
-                      );
-                    }
-                    return Row(
-                      children: [
-                        Expanded(child: firstNameField),
-                        const SizedBox(width: 12),
-                        Expanded(child: lastNameField),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: AppFormLayout.fieldSpacing),
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Téléphone'),
-                  validator: _phone,
-                ),
-                const SizedBox(height: AppFormLayout.fieldSpacing),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.email],
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  validator: _email,
-                ),
-                const SizedBox(height: AppFormLayout.fieldSpacing),
-                KeyedSubtree(
-                  key: ValueKey(
-                    'professional-id-type-${_isVeterinarian ? 'ordinal' : 'all'}',
-                  ),
-                  child: DropdownButtonFormField<ProfessionalIdType>(
-                    key: const Key('professional-id-type'),
-                    initialValue: _professionalIdType,
-                    decoration: const InputDecoration(
-                      labelText: 'Identifiant professionnel *',
-                      helperText: 'Obligatoire pour participer.',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                    ),
-                    items: _professionalIdTypeOptions
-                        .map(
-                          (type) => DropdownMenuItem(
-                            value: type,
-                            child: Text(type.label),
-                          ),
-                        )
-                        .toList(),
-                    validator: (type) {
-                      if (_isVeterinarian) {
-                        return type == ProfessionalIdType.ordinal
-                            ? null
-                            : 'Le numéro ordinal est obligatoire.';
-                      }
-                      return type == ProfessionalIdType.rpps ||
-                              type == ProfessionalIdType.ordinal
-                          ? null
-                          : 'Choisissez un identifiant RPPS ou ordinal.';
-                    },
-                    onChanged: (type) {
-                      if (type == null) return;
-                      setState(() {
-                        _professionalIdType = type;
-                        if (type == ProfessionalIdType.none) {
-                          _professionalIdController.clear();
-                        }
-                      });
-                    },
-                  ),
-                ),
-                if (_professionalIdType != ProfessionalIdType.none) ...[
-                  const SizedBox(height: AppFormLayout.fieldSpacing),
-                  TextFormField(
-                    key: const Key('professional-id-value'),
-                    controller: _professionalIdController,
-                    keyboardType: _professionalIdType == ProfessionalIdType.rpps
-                        ? TextInputType.number
-                        : TextInputType.text,
-                    textInputAction: TextInputAction.next,
-                    inputFormatters: [
-                      if (_professionalIdType == ProfessionalIdType.rpps)
-                        FilteringTextInputFormatter.digitsOnly
-                      else
-                        FilteringTextInputFormatter.deny(RegExp(r'^\s+')),
-                      LengthLimitingTextInputFormatter(
-                        _professionalIdentifierMaxLength,
+      child: ColoredBox(
+        color: _ProfessionalProfileVisuals.background,
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(
+            18,
+            8,
+            18,
+            28 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'PROFIL PROFESSIONNEL',
+                      style: TextStyle(
+                        color: _ProfessionalProfileVisuals.textMuted,
+                        fontSize: 10,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w800,
                       ),
-                    ],
-                    decoration: InputDecoration(
-                      labelText: _professionalIdType == ProfessionalIdType.rpps
-                          ? 'Numéro RPPS *'
-                          : 'Numéro ordinal *',
-                      helperText: _professionalIdType == ProfessionalIdType.rpps
-                          ? '11 chiffres.'
-                          : '32 caractères maximum, délivré par votre ordre.',
-                      counterText: '',
                     ),
-                    validator: _professionalId,
-                    onChanged: (_) => setState(() {}),
-                    onTapOutside: (_) {
-                      _trimProfessionalIdentifier();
-                      setState(() {});
-                      FocusManager.instance.primaryFocus?.unfocus();
-                    },
-                    onFieldSubmitted: (_) {
-                      _trimProfessionalIdentifier();
-                      setState(() {});
-                      FocusScope.of(context).nextFocus();
-                    },
-                  ),
-                ],
-                const SizedBox(height: AppFormLayout.fieldSpacing),
-                DropdownButtonFormField<bool>(
-                  key: const Key('cpts-choice'),
-                  initialValue: _hasCpts,
-                  decoration: const InputDecoration(labelText: 'CPTS'),
-                  items: const [
-                    DropdownMenuItem(value: false, child: Text('Aucune')),
-                    DropdownMenuItem(
-                      value: true,
-                      child: Text('Renseigner une CPTS'),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'S’inscrire à la mission',
+                      style: TextStyle(
+                        color: _ProfessionalProfileVisuals.navy,
+                        fontSize: 24,
+                        height: 1.12,
+                        letterSpacing: -0.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.need.place,
+                      style: const TextStyle(
+                        color: _ProfessionalProfileVisuals.textMuted,
+                        fontSize: 13,
+                        height: 1.35,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AppFormLayout.sectionSpacing),
+                    if (_isProfessionalIdentifierReady)
+                      const _ProfessionalIdentifierReadyNotice()
+                    else
+                      _ProfessionalIdentifierRequiredNotice(
+                        ordinalOnly: _isVeterinarian,
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const Key('profile-information-consent-entry'),
+                        onPressed: () => Navigator.of(context).push(
+                          AppPageRoute<void>(
+                            builder: (_) => const InformationConsentScreen(),
+                          ),
+                        ),
+                        icon: const Icon(Icons.fact_check_outlined, size: 17),
+                        label: const Text('Informations et consentement'),
+                      ),
+                    ),
+                    const SizedBox(height: AppFormLayout.fieldSpacing),
+                    if (_profile != null && !_editingProfile) ...[
+                      _ProfileSummary(profile: _profile!),
+                      const SizedBox(height: 6),
+                      TextButton(
+                        onPressed: () => setState(() => _editingProfile = true),
+                        child: Text(
+                          _isProfessionalIdentifierReady
+                              ? 'Modifier mes informations'
+                              : 'Compléter mon profil',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (_editingProfile) ...[
+                      _ProfileFormCard(
+                        eyebrow: 'PROFESSION ET IDENTIFIANT',
+                        title: 'Profession',
+                        icon: Icons.medical_services_outlined,
+                        child: RadioGroup<VolunteerProfession>(
+                          groupValue: _profession,
+                          onChanged: (value) => _selectProfession(value!),
+                          child: Column(
+                            children: [
+                              for (final profession in _professions)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 7),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: _ProfessionalProfileVisuals
+                                          .fieldBackground,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color:
+                                            _ProfessionalProfileVisuals.border,
+                                      ),
+                                    ),
+                                    child: RadioListTile<VolunteerProfession>(
+                                      key: Key(
+                                        'profession-${profession.canonicalId}',
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                      value: profession,
+                                      enabled: _isAvailable(profession),
+                                      title: Text(profession.label),
+                                      subtitle: _isAvailable(profession)
+                                          ? null
+                                          : const Text(
+                                              'Aucun besoin disponible',
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _ProfileFormCard(
+                        eyebrow: 'INFORMATIONS OBLIGATOIRES',
+                        title: 'Identité',
+                        icon: Icons.person_outline_rounded,
+                        child: Column(
+                          children: [
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final firstNameField = TextFormField(
+                                  controller: _firstNameController,
+                                  textCapitalization: TextCapitalization.words,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Prénom',
+                                  ),
+                                  validator: _required,
+                                );
+                                final lastNameField = TextFormField(
+                                  controller: _lastNameController,
+                                  textCapitalization: TextCapitalization.words,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Nom',
+                                  ),
+                                  validator: _required,
+                                );
+                                if (constraints.maxWidth < 300) {
+                                  return Column(
+                                    children: [
+                                      firstNameField,
+                                      const SizedBox(
+                                        height: AppFormLayout.fieldSpacing,
+                                      ),
+                                      lastNameField,
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  children: [
+                                    Expanded(child: firstNameField),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: lastNameField),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: AppFormLayout.fieldSpacing),
+                            TextFormField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              decoration: const InputDecoration(
+                                labelText: 'Téléphone',
+                              ),
+                              validator: _phone,
+                            ),
+                            const SizedBox(height: AppFormLayout.fieldSpacing),
+                            TextFormField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              autofillHints: const [AutofillHints.email],
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                              ),
+                              validator: _email,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _ProfileFormCard(
+                        eyebrow: 'EXERCICE PROFESSIONNEL',
+                        title: 'Identifiant professionnel',
+                        icon: Icons.badge_outlined,
+                        child: Column(
+                          children: [
+                            KeyedSubtree(
+                              key: ValueKey(
+                                'professional-id-type-${_isVeterinarian ? 'ordinal' : 'all'}',
+                              ),
+                              child: DropdownButtonFormField<ProfessionalIdType>(
+                                key: const Key('professional-id-type'),
+                                initialValue: _professionalIdType,
+                                decoration: const InputDecoration(
+                                  labelText: 'Identifiant professionnel *',
+                                  helperText: 'Obligatoire pour participer.',
+                                  prefixIcon: Icon(Icons.badge_outlined),
+                                ),
+                                items: _professionalIdTypeOptions
+                                    .map(
+                                      (type) => DropdownMenuItem(
+                                        value: type,
+                                        child: Text(type.label),
+                                      ),
+                                    )
+                                    .toList(),
+                                validator: (type) {
+                                  if (_isVeterinarian) {
+                                    return type == ProfessionalIdType.ordinal
+                                        ? null
+                                        : 'Le numéro ordinal est obligatoire.';
+                                  }
+                                  return type == ProfessionalIdType.rpps ||
+                                          type == ProfessionalIdType.ordinal
+                                      ? null
+                                      : 'Choisissez un identifiant RPPS ou ordinal.';
+                                },
+                                onChanged: (type) {
+                                  if (type == null) return;
+                                  setState(() {
+                                    _professionalIdType = type;
+                                    if (type == ProfessionalIdType.none) {
+                                      _professionalIdController.clear();
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                            if (_professionalIdType !=
+                                ProfessionalIdType.none) ...[
+                              const SizedBox(
+                                height: AppFormLayout.fieldSpacing,
+                              ),
+                              TextFormField(
+                                key: const Key('professional-id-value'),
+                                controller: _professionalIdController,
+                                keyboardType:
+                                    _professionalIdType ==
+                                        ProfessionalIdType.rpps
+                                    ? TextInputType.number
+                                    : TextInputType.text,
+                                textInputAction: TextInputAction.next,
+                                inputFormatters: [
+                                  if (_professionalIdType ==
+                                      ProfessionalIdType.rpps)
+                                    FilteringTextInputFormatter.digitsOnly
+                                  else
+                                    FilteringTextInputFormatter.deny(
+                                      RegExp(r'^\s+'),
+                                    ),
+                                  LengthLimitingTextInputFormatter(
+                                    _professionalIdentifierMaxLength,
+                                  ),
+                                ],
+                                decoration: InputDecoration(
+                                  labelText:
+                                      _professionalIdType ==
+                                          ProfessionalIdType.rpps
+                                      ? 'Numéro RPPS *'
+                                      : 'Numéro ordinal *',
+                                  helperText:
+                                      _professionalIdType ==
+                                          ProfessionalIdType.rpps
+                                      ? '11 chiffres.'
+                                      : '32 caractères maximum, délivré par votre ordre.',
+                                  counterText: '',
+                                ),
+                                validator: _professionalId,
+                                onChanged: (_) => setState(() {}),
+                                onTapOutside: (_) {
+                                  _trimProfessionalIdentifier();
+                                  setState(() {});
+                                  FocusManager.instance.primaryFocus?.unfocus();
+                                },
+                                onFieldSubmitted: (_) {
+                                  _trimProfessionalIdentifier();
+                                  setState(() {});
+                                  FocusScope.of(context).nextFocus();
+                                },
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _ProfileFormCard(
+                        eyebrow: 'RATTACHEMENT TERRITORIAL',
+                        title: 'CPTS',
+                        icon: Icons.hub_outlined,
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<bool>(
+                              key: const Key('cpts-choice'),
+                              initialValue: _hasCpts,
+                              decoration: const InputDecoration(
+                                labelText: 'CPTS',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: false,
+                                  child: Text('Aucune'),
+                                ),
+                                DropdownMenuItem(
+                                  value: true,
+                                  child: Text('Renseigner une CPTS'),
+                                ),
+                              ],
+                              onChanged: (hasCpts) {
+                                if (hasCpts == null) return;
+                                setState(() {
+                                  _hasCpts = hasCpts;
+                                  if (!hasCpts) {
+                                    _cptsIdController.clear();
+                                    _cptsController.clear();
+                                  }
+                                });
+                              },
+                            ),
+                            if (_hasCpts) ...[
+                              const SizedBox(
+                                height: AppFormLayout.fieldSpacing,
+                              ),
+                              TextFormField(
+                                controller: _cptsIdController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Identifiant CPTS',
+                                ),
+                                validator: _required,
+                              ),
+                              const SizedBox(
+                                height: AppFormLayout.fieldSpacing,
+                              ),
+                              TextFormField(
+                                controller: _cptsController,
+                                textCapitalization: TextCapitalization.words,
+                                decoration: const InputDecoration(
+                                  labelText: 'CPTS',
+                                ),
+                                validator: _required,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _ProfileFormCard(
+                        eyebrow: 'MATÉRIEL DISPONIBLE',
+                        title: 'Matériel que je peux apporter',
+                        icon: Icons.medical_services_outlined,
+                        child: Column(
+                          children: [
+                            for (final equipment in _equipmentOptions)
+                              CheckboxListTile(
+                                key: Key('equipment-${equipment.id}'),
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                title: Text(equipment.label),
+                                value: _selectedEquipment.contains(
+                                  equipment.id,
+                                ),
+                                onChanged: (selected) => setState(() {
+                                  if (selected ?? false) {
+                                    _selectedEquipment.add(equipment.id);
+                                  } else {
+                                    _selectedEquipment.remove(equipment.id);
+                                  }
+                                }),
+                              ),
+                            if (_incompatibleEquipment.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Équipement déjà enregistré',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(height: 2),
+                              for (final equipment in _incompatibleEquipment)
+                                CheckboxListTile(
+                                  key: Key('legacy-equipment-$equipment'),
+                                  contentPadding: EdgeInsets.zero,
+                                  dense: true,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  title: Text(
+                                    ProfessionalEquipmentRegistry.displayLabel(
+                                      equipment,
+                                    ),
+                                  ),
+                                  subtitle: const Text(
+                                    'Non proposé pour cette profession',
+                                  ),
+                                  value: true,
+                                  onChanged: (selected) {
+                                    if (selected == false) {
+                                      setState(
+                                        () => _selectedEquipment.remove(
+                                          equipment,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                            ],
+                            if (_equipmentDetailsRequired)
+                              TextFormField(
+                                key: const Key('other-equipment-details'),
+                                controller: _otherEquipmentController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Précisez le matériel',
+                                ),
+                                validator: _required,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppFormLayout.actionHeight,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.orange,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: AppColors.border,
+                          disabledForegroundColor: AppColors.textMuted,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        onPressed: _submitting || !_hasAvailableProfession
+                            ? null
+                            : _submit,
+                        child: _submitting
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('CONFIRMER MA PARTICIPATION'),
+                      ),
                     ),
                   ],
-                  onChanged: (hasCpts) {
-                    if (hasCpts == null) return;
-                    setState(() {
-                      _hasCpts = hasCpts;
-                      if (!hasCpts) {
-                        _cptsIdController.clear();
-                        _cptsController.clear();
-                      }
-                    });
-                  },
-                ),
-                if (_hasCpts) ...[
-                  const SizedBox(height: AppFormLayout.fieldSpacing),
-                  TextFormField(
-                    controller: _cptsIdController,
-                    decoration: const InputDecoration(
-                      labelText: 'Identifiant CPTS',
-                    ),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: AppFormLayout.fieldSpacing),
-                  TextFormField(
-                    controller: _cptsController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(labelText: 'CPTS'),
-                    validator: _required,
-                  ),
-                ],
-                const SizedBox(height: AppFormLayout.sectionSpacing),
-                const FormSectionTitle(title: 'Matériel que je peux apporter'),
-                const SizedBox(height: AppFormLayout.titleSpacing),
-                for (final equipment in _equipmentOptions)
-                  CheckboxListTile(
-                    key: Key('equipment-${equipment.id}'),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(equipment.label),
-                    value: _selectedEquipment.contains(equipment.id),
-                    onChanged: (selected) => setState(() {
-                      if (selected ?? false) {
-                        _selectedEquipment.add(equipment.id);
-                      } else {
-                        _selectedEquipment.remove(equipment.id);
-                      }
-                    }),
-                  ),
-                if (_incompatibleEquipment.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Équipement déjà enregistré',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 2),
-                  for (final equipment in _incompatibleEquipment)
-                    CheckboxListTile(
-                      key: Key('legacy-equipment-$equipment'),
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(
-                        ProfessionalEquipmentRegistry.displayLabel(equipment),
-                      ),
-                      subtitle: const Text('Non proposé pour cette profession'),
-                      value: true,
-                      onChanged: (selected) {
-                        if (selected == false) {
-                          setState(() => _selectedEquipment.remove(equipment));
-                        }
-                      },
-                    ),
-                ],
-                if (_equipmentDetailsRequired)
-                  TextFormField(
-                    key: const Key('other-equipment-details'),
-                    controller: _otherEquipmentController,
-                    decoration: const InputDecoration(
-                      labelText: 'Précisez le matériel',
-                    ),
-                    validator: _required,
-                  ),
-                const SizedBox(height: AppFormLayout.sectionSpacing),
-              ],
-              SizedBox(
-                width: double.infinity,
-                height: AppFormLayout.actionHeight,
-                child: FilledButton(
-                  onPressed: _submitting || !_hasAvailableProfession
-                      ? null
-                      : _submit,
-                  child: _submitting
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('CONFIRMER MA PARTICIPATION'),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1976,6 +2162,91 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   }
 }
 
+class _ProfileFormCard extends StatelessWidget {
+  const _ProfileFormCard({
+    required this.eyebrow,
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
+
+  final String eyebrow;
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _ProfessionalProfileVisuals.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _ProfessionalProfileVisuals.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08173052),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: _ProfessionalProfileVisuals.fieldBackground,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  icon,
+                  color: _ProfessionalProfileVisuals.navy,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      eyebrow,
+                      style: const TextStyle(
+                        color: _ProfessionalProfileVisuals.textMuted,
+                        fontSize: 9,
+                        letterSpacing: 0.9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: _ProfessionalProfileVisuals.navy,
+                        fontSize: 17,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
   const _ProfessionalIdentifierRequiredNotice({required this.ordinalOnly});
 
@@ -1986,32 +2257,58 @@ class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
     return Container(
       key: const Key('professional-identifier-required'),
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.orangeSoft,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(17),
         border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.badge_outlined, color: AppColors.orange, size: 20),
-          const SizedBox(width: 10),
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.badge_outlined,
+              color: AppColors.orange,
+              size: 21,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              ordinalOnly
-                  ? 'Votre numéro ordinal est obligatoire pour participer. '
-                        'Complétez votre profil avant de confirmer votre '
-                        'participation.'
-                  : 'Un numéro RPPS ou ordinal est obligatoire pour '
-                        'participer. Complétez votre profil avant de confirmer '
-                        'votre participation.',
-              style: const TextStyle(
-                color: AppColors.navy,
-                fontSize: 13,
-                height: 1.35,
-                fontWeight: FontWeight.w700,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Profil à compléter',
+                  style: TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  ordinalOnly
+                      ? 'Votre numéro ordinal est obligatoire pour participer. '
+                            'Complétez votre profil avant de confirmer votre '
+                            'participation.'
+                      : 'Un numéro RPPS ou ordinal est obligatoire pour '
+                            'participer. Complétez votre profil avant de '
+                            'confirmer votre participation.',
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontSize: 12,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -2028,18 +2325,30 @@ class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
     return Container(
       key: const Key('professional-identifier-ready'),
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.greenSoft,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(17),
         border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.check_circle_outline, color: AppColors.green, size: 20),
-          SizedBox(width: 10),
-          Expanded(
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.78),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: const Icon(
+              Icons.check_circle_rounded,
+              color: AppColors.green,
+              size: 23,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2047,11 +2356,11 @@ class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
                   'Profil prêt à participer',
                   style: TextStyle(
                     color: AppColors.navy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                SizedBox(height: 2),
+                SizedBox(height: 4),
                 Text(
                   'Votre identifiant professionnel est renseigné.',
                   style: TextStyle(
@@ -2080,41 +2389,176 @@ class _ProfileSummary extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(14),
+        color: _ProfessionalProfileVisuals.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _ProfessionalProfileVisuals.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x08173052),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            profile.displayName,
-            style: Theme.of(context).textTheme.titleMedium,
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _ProfessionalProfileVisuals.fieldBackground,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(
+                  Icons.person_outline_rounded,
+                  color: _ProfessionalProfileVisuals.navy,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MON PROFIL',
+                      style: TextStyle(
+                        color: _ProfessionalProfileVisuals.textMuted,
+                        fontSize: 9,
+                        letterSpacing: 0.9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      profile.displayName,
+                      style: const TextStyle(
+                        color: _ProfessionalProfileVisuals.navy,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(profile.profession.label),
-          Text(profile.phone),
-          if (profile.effectiveProfessionalIdType != ProfessionalIdType.none)
-            Text(
-              '${profile.effectiveProfessionalIdType.label} '
-              '${profile.effectiveProfessionalIdValue}',
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 14),
+            child: Divider(
+              height: 1,
+              color: _ProfessionalProfileVisuals.border,
             ),
-          Text(
-            profile.cptsLabel?.trim().isNotEmpty ?? false
+          ),
+          _ProfileSummaryItem(
+            icon: Icons.medical_services_outlined,
+            label: 'Profession',
+            value: profile.profession.label,
+          ),
+          const SizedBox(height: 10),
+          _ProfileSummaryItem(
+            icon: Icons.phone_outlined,
+            label: 'Téléphone',
+            value: profile.phone,
+          ),
+          if (profile.email?.trim().isNotEmpty ?? false) ...[
+            const SizedBox(height: 10),
+            _ProfileSummaryItem(
+              icon: Icons.mail_outline_rounded,
+              label: 'Email',
+              value: profile.email!.trim(),
+            ),
+          ],
+          if (profile.effectiveProfessionalIdType != ProfessionalIdType.none)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: _ProfileSummaryItem(
+                icon: Icons.badge_outlined,
+                label: profile.effectiveProfessionalIdType.label,
+                value: profile.effectiveProfessionalIdValue,
+              ),
+            ),
+          const SizedBox(height: 10),
+          _ProfileSummaryItem(
+            icon: Icons.hub_outlined,
+            label: 'CPTS',
+            value: profile.cptsLabel?.trim().isNotEmpty ?? false
                 ? profile.cptsLabel!
                 : 'Aucune CPTS',
           ),
           if (profile.equipment.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              ProfessionalEquipmentRegistry.normalizeStoredValues(
+            const SizedBox(height: 10),
+            _ProfileSummaryItem(
+              icon: Icons.medical_services_outlined,
+              label: 'Matériel disponible',
+              value: ProfessionalEquipmentRegistry.normalizeStoredValues(
                 profile.equipment,
               ).map(ProfessionalEquipmentRegistry.displayLabel).join(' • '),
             ),
             if (profile.otherEquipmentDetails?.trim().isNotEmpty ?? false)
-              Text(profile.otherEquipmentDetails!.trim()),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _ProfileSummaryItem(
+                  icon: Icons.add_box_outlined,
+                  label: 'Précision',
+                  value: profile.otherEquipmentDetails!.trim(),
+                ),
+              ),
           ],
         ],
       ),
+    );
+  }
+}
+
+class _ProfileSummaryItem extends StatelessWidget {
+  const _ProfileSummaryItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: _ProfessionalProfileVisuals.textMuted, size: 17),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: _ProfessionalProfileVisuals.textMuted,
+                  fontSize: 9,
+                  letterSpacing: 0.45,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: _ProfessionalProfileVisuals.navy,
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
