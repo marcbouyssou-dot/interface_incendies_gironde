@@ -94,6 +94,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
   final Set<String> _equipment = {};
+  final List<String> _equipmentProfessionHistory = [];
   final _detailsController = TextEditingController();
   bool _publishing = false;
   String? _errorMessage;
@@ -121,6 +122,11 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         : TimeOfDay.fromDateTime(mission.endAt!);
     for (final quota in mission.professionQuotas.values) {
       _requiredByProfession[quota.professionId] = quota.required;
+    }
+    for (final profession in HealthProfessionRegistry.values) {
+      if (_requiredByProfession[profession.id]! > 0) {
+        _equipmentProfessionHistory.add(profession.id);
+      }
     }
     _equipment
       ..clear()
@@ -226,6 +232,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       0,
       (total, quota) => total + quota,
     );
+    final equipmentProfession = _equipmentProfession;
+    final displayedEquipment = _displayedEquipment;
     return PageContainer(
       child: Material(
         color: _CreateNeedVisuals.background,
@@ -368,9 +376,9 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                         const SizedBox(height: 8),
                     ],
                     const SizedBox(height: 20),
-                    const _CreateNeedSectionTitle('Matériel demandé'),
+                    const _CreateNeedSectionTitle('Matériel conseillé'),
                     const SizedBox(height: 9),
-                    if (_availableEquipment.isEmpty)
+                    if (equipmentProfession == null)
                       const Padding(
                         key: Key('mission-equipment-empty'),
                         padding: EdgeInsets.symmetric(vertical: 2),
@@ -400,12 +408,16 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                           ],
                         ),
                       )
-                    else
+                    else ...[
+                      _EquipmentProfessionContext(
+                        professionLabel: equipmentProfession.missionLabel,
+                      ),
+                      const SizedBox(height: 9),
                       Wrap(
                         spacing: 7,
                         runSpacing: 7,
                         children: [
-                          for (final equipment in _availableEquipment)
+                          for (final equipment in displayedEquipment)
                             FilterChip(
                               key: Key('mission-equipment-${equipment.id}'),
                               label: Text(equipment.label),
@@ -446,6 +458,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             ),
                         ],
                       ),
+                    ],
                     const SizedBox(height: 20),
                     const _CreateNeedFieldLabel('Commentaire facultatif'),
                     const SizedBox(height: 8),
@@ -824,6 +837,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       for (final profession in _requiredByProfession.keys) {
         _requiredByProfession[profession] = 0;
       }
+      _equipmentProfessionHistory.clear();
       _equipment.clear();
       _detailsController.clear();
       _errorMessage = null;
@@ -834,10 +848,39 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   void _changeQuota(String professionId, int delta) {
     setState(() {
       final current = _requiredByProfession[professionId]!;
-      _requiredByProfession[professionId] = current + delta;
+      final updated = current + delta;
+      _requiredByProfession[professionId] = updated;
+      _equipmentProfessionHistory.remove(professionId);
+      if (updated > 0) _equipmentProfessionHistory.add(professionId);
       _retainCompatibleEquipment();
       _errorMessage = null;
     });
+  }
+
+  HealthProfessionDefinition? get _equipmentProfession {
+    for (final professionId in _equipmentProfessionHistory.reversed) {
+      if (_requiredByProfession[professionId]! > 0) {
+        return HealthProfessionRegistry.byId(professionId);
+      }
+    }
+    for (final profession in HealthProfessionRegistry.values.reversed) {
+      if (_requiredByProfession[profession.id]! > 0) return profession;
+    }
+    return null;
+  }
+
+  List<ProfessionalEquipmentDefinition> get _displayedEquipment {
+    final profession = _equipmentProfession;
+    if (profession == null) return const [];
+    final seenIds = <String>{};
+    final seenLabels = <String>{};
+    return ProfessionalEquipmentRegistry.forProfession(profession.id)
+        .where(
+          (equipment) =>
+              seenIds.add(equipment.id) &&
+              seenLabels.add(equipment.label.trim().toLowerCase()),
+        )
+        .toList(growable: false);
   }
 
   List<ProfessionalEquipmentDefinition> get _availableEquipment {
@@ -1050,6 +1093,64 @@ class _CreateNeedSectionTitle extends StatelessWidget {
         fontSize: 14,
         fontWeight: FontWeight.w800,
       ),
+    );
+  }
+}
+
+class _EquipmentProfessionContext extends StatelessWidget {
+  const _EquipmentProfessionContext({required this.professionLabel});
+
+  final String professionLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Text(
+          'pour :',
+          style: TextStyle(
+            color: _CreateNeedVisuals.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(width: 7),
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: _CreateNeedVisuals.orangeSoft,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _CreateNeedVisuals.orange.withValues(alpha: 0.28),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.medical_services_outlined,
+                  size: 13,
+                  color: _CreateNeedVisuals.orange,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    professionLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _CreateNeedVisuals.navy,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
