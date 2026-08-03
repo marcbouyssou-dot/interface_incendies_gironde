@@ -10,6 +10,16 @@ import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
 import 'admin_location_form_screen.dart';
 
+abstract final class _LocationAdminVisuals {
+  static const background = Color(0xFFF5F5F3);
+  static const surface = Colors.white;
+  static const navy = Color(0xFF173052);
+  static const fieldBackground = Color(0xFFF1F1EF);
+  static const border = Color(0xFFE5E5E1);
+  static const textMuted = Color(0xFF7C817F);
+  static const orange = Color(0xFFF25C05);
+}
+
 enum _LocationStatusFilter { all, active, inactive }
 
 class LocationAdministrationScreen extends StatefulWidget {
@@ -48,7 +58,20 @@ class _LocationAdministrationScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Lieux')),
+      backgroundColor: _LocationAdminVisuals.background,
+      appBar: AppBar(
+        title: const Text('Lieux'),
+        backgroundColor: _LocationAdminVisuals.background,
+        foregroundColor: _LocationAdminVisuals.navy,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleTextStyle: const TextStyle(
+          color: _LocationAdminVisuals.navy,
+          fontSize: 17,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
       body: SafeArea(
         top: false,
         child: StreamBuilder<ResponsibleAccess?>(
@@ -59,7 +82,7 @@ class _LocationAdministrationScreenState
             }
             if (!accessSnapshot.hasData &&
                 accessSnapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const _LocationAdminLoading();
             }
             final access = accessSnapshot.data;
             if (access == null || !access.active || !access.isCoordinator) {
@@ -73,7 +96,7 @@ class _LocationAdministrationScreenState
                   return _LoadError(onRetry: _reload);
                 }
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const _LocationAdminLoading();
                 }
                 return _content(snapshot.data!);
               },
@@ -102,117 +125,137 @@ class _LocationAdministrationScreenState
           };
         })
         .toList(growable: false);
-    return RefreshIndicator(
-      onRefresh: _reload,
-      child: ListView(
-        key: const Key('admin-location-list'),
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
-        children: [
-          FilledButton.icon(
-            key: const Key('admin-location-create'),
-            onPressed: _openCreate,
-            icon: const Icon(Icons.add_location_alt_outlined),
-            label: const Text('Créer un lieu'),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            key: const Key('admin-location-search'),
-            decoration: const InputDecoration(
-              labelText: 'Rechercher un lieu',
-              prefixIcon: Icon(Icons.search),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth <= 596
+            ? 18.0
+            : (constraints.maxWidth - 560) / 2;
+        return RefreshIndicator(
+          color: _LocationAdminVisuals.orange,
+          onRefresh: _reload,
+          child: ListView(
+            key: const Key('admin-location-list'),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              12,
+              horizontalPadding,
+              36,
             ),
-            onChanged: (value) => setState(() => _query = value),
-          ),
-          const SizedBox(height: 12),
-          Column(children: [_groupFilter(), _typeFilter(), _statusFilter()]),
-          const SizedBox(height: 14),
-          Text(
-            '${filtered.length} lieu${filtered.length > 1 ? 'x' : ''}',
-            key: const Key('admin-location-result-count'),
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (filtered.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text('Aucun lieu ne correspond aux filtres.'),
+            children: [
+              _LocationAdminHeader(onCreate: _openCreate),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(15),
+                decoration: _locationAdminCardDecoration(),
+                child: Column(
+                  children: [
+                    TextField(
+                      key: const Key('admin-location-search'),
+                      decoration: _locationAdminSearchDecoration(),
+                      onChanged: (value) => setState(() => _query = value),
+                    ),
+                    const SizedBox(height: 12),
+                    _groupFilter(),
+                    const SizedBox(height: 9),
+                    _typeFilter(),
+                    const SizedBox(height: 9),
+                    _statusFilter(),
+                  ],
+                ),
               ),
-            ),
-          for (final location in filtered) ...[
-            _LocationCard(
-              location: location,
-              onEdit: () => _openEdit(location),
-              onToggle: () => _toggle(location),
-              onDelete: location.canDelete ? () => _delete(location) : null,
-            ),
-            const SizedBox(height: 10),
-          ],
-        ],
-      ),
+              const SizedBox(height: 22),
+              Text(
+                '${filtered.length} lieu${filtered.length > 1 ? 'x' : ''}',
+                key: const Key('admin-location-result-count'),
+                style: const TextStyle(
+                  color: _LocationAdminVisuals.navy,
+                  fontSize: 19,
+                  height: 1.15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 11),
+              if (filtered.isEmpty) const _EmptyLocationAdminState(),
+              for (final location in filtered) ...[
+                _LocationCard(
+                  location: location,
+                  onEdit: () => _openEdit(location),
+                  onToggle: () => _toggle(location),
+                  onDelete: location.canDelete ? () => _delete(location) : null,
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _groupFilter() => SizedBox(
-    width: double.infinity,
-    child: DropdownButton<TerritorialGroup?>(
-      key: const Key('admin-location-group-filter'),
-      value: _group,
-      isExpanded: true,
-      hint: const Text('Tous les territoires'),
-      items: [
-        const DropdownMenuItem(
-          value: null,
-          child: Text('Tous les territoires'),
-        ),
-        for (final value in TerritorialGroup.values)
-          DropdownMenuItem(value: value, child: Text(value.label)),
-      ],
-      onChanged: (value) => setState(() => _group = value),
+  Widget _groupFilter() => _LocationAdminFilter(
+    icon: Icons.map_outlined,
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<TerritorialGroup?>(
+        key: const Key('admin-location-group-filter'),
+        value: _group,
+        isExpanded: true,
+        hint: const Text('Tous les territoires'),
+        items: [
+          const DropdownMenuItem(
+            value: null,
+            child: Text('Tous les territoires'),
+          ),
+          for (final value in TerritorialGroup.values)
+            DropdownMenuItem(value: value, child: Text(value.label)),
+        ],
+        onChanged: (value) => setState(() => _group = value),
+      ),
     ),
   );
 
-  Widget _typeFilter() => SizedBox(
-    width: double.infinity,
-    child: DropdownButton<ResponsePlaceType?>(
-      key: const Key('admin-location-type-filter'),
-      value: _type,
-      isExpanded: true,
-      hint: const Text('Tous les types'),
-      items: [
-        const DropdownMenuItem(value: null, child: Text('Tous les types')),
-        for (final value in ResponsePlaceType.values)
-          DropdownMenuItem(value: value, child: Text(value.label)),
-      ],
-      onChanged: (value) => setState(() => _type = value),
+  Widget _typeFilter() => _LocationAdminFilter(
+    icon: Icons.category_outlined,
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<ResponsePlaceType?>(
+        key: const Key('admin-location-type-filter'),
+        value: _type,
+        isExpanded: true,
+        hint: const Text('Tous les types'),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('Tous les types')),
+          for (final value in ResponsePlaceType.values)
+            DropdownMenuItem(value: value, child: Text(value.label)),
+        ],
+        onChanged: (value) => setState(() => _type = value),
+      ),
     ),
   );
 
-  Widget _statusFilter() => SizedBox(
-    width: double.infinity,
-    child: DropdownButton<_LocationStatusFilter>(
-      key: const Key('admin-location-status-filter'),
-      value: _status,
-      isExpanded: true,
-      items: const [
-        DropdownMenuItem(
-          value: _LocationStatusFilter.all,
-          child: Text('Tous les statuts'),
-        ),
-        DropdownMenuItem(
-          value: _LocationStatusFilter.active,
-          child: Text('Actifs'),
-        ),
-        DropdownMenuItem(
-          value: _LocationStatusFilter.inactive,
-          child: Text('Désactivés'),
-        ),
-      ],
-      onChanged: (value) => setState(() => _status = value!),
+  Widget _statusFilter() => _LocationAdminFilter(
+    icon: Icons.toggle_on_outlined,
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<_LocationStatusFilter>(
+        key: const Key('admin-location-status-filter'),
+        value: _status,
+        isExpanded: true,
+        items: const [
+          DropdownMenuItem(
+            value: _LocationStatusFilter.all,
+            child: Text('Tous les statuts'),
+          ),
+          DropdownMenuItem(
+            value: _LocationStatusFilter.active,
+            child: Text('Actifs'),
+          ),
+          DropdownMenuItem(
+            value: _LocationStatusFilter.inactive,
+            child: Text('Désactivés'),
+          ),
+        ],
+        onChanged: (value) => setState(() => _status = value!),
+      ),
     ),
   );
 
@@ -330,6 +373,189 @@ class _LocationAdministrationScreenState
   }
 }
 
+class _LocationAdminHeader extends StatelessWidget {
+  const _LocationAdminHeader({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'ADMINISTRATION',
+          style: TextStyle(
+            color: _LocationAdminVisuals.textMuted,
+            fontSize: 10,
+            letterSpacing: 1.25,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 7),
+        const Text(
+          'Gestion des lieux',
+          style: TextStyle(
+            color: _LocationAdminVisuals.navy,
+            fontSize: 27,
+            height: 1.12,
+            letterSpacing: -0.7,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Centres actifs et lieux historiques',
+          style: TextStyle(
+            color: _LocationAdminVisuals.textMuted,
+            fontSize: 14,
+            height: 1.4,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 17),
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: FilledButton.icon(
+            key: const Key('admin-location-create'),
+            onPressed: onCreate,
+            style: FilledButton.styleFrom(
+              backgroundColor: _LocationAdminVisuals.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            icon: const Icon(Icons.add_location_alt_outlined),
+            label: const Text('Créer un lieu'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LocationAdminFilter extends StatelessWidget {
+  const _LocationAdminFilter({required this.icon, required this.child});
+
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 13),
+      decoration: BoxDecoration(
+        color: _LocationAdminVisuals.fieldBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _LocationAdminVisuals.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: _LocationAdminVisuals.navy, size: 20),
+          const SizedBox(width: 11),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyLocationAdminState extends StatelessWidget {
+  const _EmptyLocationAdminState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: _locationAdminCardDecoration(),
+      child: const Column(
+        children: [
+          Icon(
+            Icons.location_off_outlined,
+            color: _LocationAdminVisuals.textMuted,
+            size: 34,
+          ),
+          SizedBox(height: 11),
+          Text(
+            'Aucun lieu ne correspond aux filtres.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _LocationAdminVisuals.navy,
+              fontSize: 14,
+              height: 1.4,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LocationAdminLoading extends StatelessWidget {
+  const _LocationAdminLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: _LocationAdminVisuals.background,
+      child: Center(
+        child: CircularProgressIndicator(
+          color: _LocationAdminVisuals.orange,
+          strokeWidth: 3,
+        ),
+      ),
+    );
+  }
+}
+
+BoxDecoration _locationAdminCardDecoration({Color? color}) {
+  return BoxDecoration(
+    color: color ?? _LocationAdminVisuals.surface,
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: _LocationAdminVisuals.border),
+    boxShadow: const [
+      BoxShadow(color: Color(0x08173052), blurRadius: 12, offset: Offset(0, 3)),
+    ],
+  );
+}
+
+InputDecoration _locationAdminSearchDecoration() {
+  return InputDecoration(
+    labelText: 'Rechercher un lieu',
+    labelStyle: const TextStyle(
+      color: _LocationAdminVisuals.textMuted,
+      fontWeight: FontWeight.w600,
+    ),
+    prefixIcon: const Icon(
+      Icons.search_rounded,
+      color: _LocationAdminVisuals.navy,
+    ),
+    filled: true,
+    fillColor: _LocationAdminVisuals.fieldBackground,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _LocationAdminVisuals.border),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(
+        color: _LocationAdminVisuals.navy,
+        width: 1.5,
+      ),
+    ),
+  );
+}
+
 class _LocationCard extends StatelessWidget {
   const _LocationCard({
     required this.location,
@@ -345,51 +571,90 @@ class _LocationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Container(
       key: Key('admin-location-${location.id}'),
+      decoration: _locationAdminCardDecoration(
+        color: location.active
+            ? _LocationAdminVisuals.surface
+            : _LocationAdminVisuals.fieldBackground,
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(17),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Text(
                     location.name,
                     style: const TextStyle(
-                      fontSize: 16,
+                      color: _LocationAdminVisuals.navy,
+                      fontSize: 17,
+                      height: 1.2,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
+                const SizedBox(width: 10),
                 _StatusBadge(active: location.active),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(location.addressLabel),
-            const SizedBox(height: 4),
-            Text(
-              '${location.group.label} · ${location.type.label}',
-              style: const TextStyle(color: AppColors.textMuted),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, color: _LocationAdminVisuals.border),
+            ),
+            _LocationAdminDetail(
+              icon: Icons.location_on_outlined,
+              value: location.addressLabel,
+            ),
+            const SizedBox(height: 8),
+            _LocationAdminDetail(
+              icon: Icons.map_outlined,
+              value: location.group.label,
+            ),
+            const SizedBox(height: 8),
+            _LocationAdminDetail(
+              icon: Icons.category_outlined,
+              value: location.type.label,
             ),
             if (!location.isOperational) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 10),
               const Text(
                 'Lieu non opérationnel dans le référentiel',
-                style: TextStyle(color: AppColors.orange),
+                style: TextStyle(
+                  color: _LocationAdminVisuals.orange,
+                  fontSize: 12,
+                  height: 1.4,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: onEdit,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _LocationAdminVisuals.navy,
+                  side: const BorderSide(color: _LocationAdminVisuals.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                icon: const Icon(Icons.edit_outlined, size: 19),
+                label: const Text('Modifier'),
+              ),
+            ),
+            const SizedBox(height: 4),
             Wrap(
+              alignment: WrapAlignment.center,
               spacing: 8,
               runSpacing: 4,
               children: [
-                TextButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Modifier'),
-                ),
                 TextButton.icon(
                   key: Key('admin-location-toggle-${location.id}'),
                   onPressed: onToggle,
@@ -397,6 +662,7 @@ class _LocationCard extends StatelessWidget {
                     location.active
                         ? Icons.pause_circle_outline
                         : Icons.play_circle_outline,
+                    size: 18,
                   ),
                   label: Text(location.active ? 'Désactiver' : 'Réactiver'),
                 ),
@@ -404,7 +670,7 @@ class _LocationCard extends StatelessWidget {
                   TextButton.icon(
                     key: Key('admin-location-delete-${location.id}'),
                     onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline),
+                    icon: const Icon(Icons.delete_outline, size: 18),
                     label: const Text('Supprimer'),
                   )
                 else
@@ -413,8 +679,10 @@ class _LocationCard extends StatelessWidget {
                     child: Text(
                       'Lieu utilisé : désactivation uniquement',
                       style: TextStyle(
-                        color: AppColors.textMuted,
+                        color: _LocationAdminVisuals.textMuted,
                         fontSize: 12,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -423,6 +691,35 @@ class _LocationCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LocationAdminDetail extends StatelessWidget {
+  const _LocationAdminDetail({required this.icon, required this.value});
+
+  final IconData icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: _LocationAdminVisuals.textMuted, size: 18),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: _LocationAdminVisuals.navy,
+              fontSize: 13,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -436,8 +733,13 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: active ? AppColors.greenSoft : Colors.black12,
+      color: active ? AppColors.greenSoft : _LocationAdminVisuals.surface,
       borderRadius: BorderRadius.circular(999),
+      border: Border.all(
+        color: active
+            ? AppColors.green.withValues(alpha: .22)
+            : _LocationAdminVisuals.border,
+      ),
     ),
     child: Text(
       active ? 'Actif' : 'Désactivé',
@@ -456,19 +758,68 @@ class _LoadError extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('Les lieux ne sont pas disponibles.'),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
-        ],
-      ),
+  Widget build(BuildContext context) => _LocationAdminMessageState(
+    icon: Icons.cloud_off_outlined,
+    message: 'Les lieux ne sont pas disponibles.',
+    action: FilledButton(
+      onPressed: onRetry,
+      style: _locationAdminMessageButtonStyle(),
+      child: const Text('Réessayer'),
     ),
   );
+}
+
+class _LocationAdminMessageState extends StatelessWidget {
+  const _LocationAdminMessageState({
+    required this.icon,
+    required this.message,
+    this.action,
+  });
+
+  final IconData icon;
+  final String message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: _LocationAdminVisuals.background,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(22),
+              decoration: _locationAdminCardDecoration(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: _LocationAdminVisuals.textMuted, size: 36),
+                  const SizedBox(height: 13),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: _LocationAdminVisuals.navy,
+                      fontSize: 15,
+                      height: 1.4,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (action != null) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(width: double.infinity, child: action),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AccessRefused extends StatelessWidget {
@@ -477,20 +828,26 @@ class _AccessRefused extends StatelessWidget {
   final VoidCallback? onRetry;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text('Accès coordinateur actif requis.'),
-          if (onRetry != null) ...[
-            const SizedBox(height: 12),
-            FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
-          ],
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => _LocationAdminMessageState(
+    icon: Icons.lock_outline_rounded,
+    message: 'Accès coordinateur actif requis.',
+    action: onRetry == null
+        ? null
+        : FilledButton(
+            onPressed: onRetry,
+            style: _locationAdminMessageButtonStyle(),
+            child: const Text('Réessayer'),
+          ),
+  );
+}
+
+ButtonStyle _locationAdminMessageButtonStyle() {
+  return FilledButton.styleFrom(
+    backgroundColor: _LocationAdminVisuals.orange,
+    foregroundColor: Colors.white,
+    minimumSize: const Size.fromHeight(52),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    textStyle: const TextStyle(fontWeight: FontWeight.w800),
   );
 }
 
