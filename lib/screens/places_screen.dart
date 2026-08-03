@@ -478,26 +478,34 @@ class _PlaceCard extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 13),
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
                   children: [
                     _ActivityStatus(
                       active: place.isActive,
                       operational: place.isOperational,
                     ),
-                    const Spacer(),
-                    const Text(
-                      'Voir le lieu',
-                      style: TextStyle(
-                        color: _PlacesVisuals.navy,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      color: _PlacesVisuals.navy,
-                      size: 16,
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Voir le lieu',
+                          style: TextStyle(
+                            color: _PlacesVisuals.navy,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        SizedBox(width: 3),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          color: _PlacesVisuals.navy,
+                          size: 16,
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -1786,6 +1786,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                               child: DropdownButtonFormField<ProfessionalIdType>(
                                 key: const Key('professional-id-type'),
                                 initialValue: _professionalIdType,
+                                isExpanded: true,
                                 decoration: const InputDecoration(
                                   labelText: 'Identifiant professionnel *',
                                   helperText: 'Obligatoire pour participer.',
@@ -1795,7 +1796,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                     .map(
                                       (type) => DropdownMenuItem(
                                         value: type,
-                                        child: Text(type.label),
+                                        child: Text(
+                                          type.label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     )
                                     .toList(),
@@ -1887,17 +1892,26 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                             DropdownButtonFormField<bool>(
                               key: const Key('cpts-choice'),
                               initialValue: _hasCpts,
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'CPTS',
                               ),
                               items: const [
                                 DropdownMenuItem(
                                   value: false,
-                                  child: Text('Aucune'),
+                                  child: Text(
+                                    'Aucune',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                                 DropdownMenuItem(
                                   value: true,
-                                  child: Text('Renseigner une CPTS'),
+                                  child: Text(
+                                    'Renseigner une CPTS',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ],
                               onChanged: (hasCpts) {
