@@ -37,6 +37,7 @@ class FireCoordinationApp extends StatelessWidget {
               supportedLocales: const [Locale('fr', 'FR')],
               localizationsDelegates: GlobalMaterialLocalizations.delegates,
               theme: AppTheme.light,
+              builder: AppTheme.lightSystemSurface,
               home: AppShell(initialIndex: initialTab),
             ),
           ),

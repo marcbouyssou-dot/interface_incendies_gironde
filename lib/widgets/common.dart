@@ -246,11 +246,13 @@ class TerritorialGroupFilter extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.fieldKey,
+    this.compact = false,
   });
 
   final TerritorialGroup? value;
   final ValueChanged<TerritorialGroup?> onChanged;
   final Key? fieldKey;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -258,9 +260,16 @@ class TerritorialGroupFilter extends StatelessWidget {
       key: fieldKey,
       initialValue: value?.name ?? 'all',
       isExpanded: true,
-      decoration: const InputDecoration(
-        prefixIcon: Icon(Icons.map_outlined, size: 20),
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: InputDecoration(
+        isDense: compact,
+        prefixIcon: Icon(Icons.map_outlined, size: compact ? 18 : 20),
+        prefixIconConstraints: compact
+            ? const BoxConstraints(minWidth: 38, minHeight: 38)
+            : null,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: compact ? 11 : 14,
+          vertical: compact ? 9 : 12,
+        ),
       ),
       items: [
         const DropdownMenuItem(value: 'all', child: Text('Tous les secteurs')),

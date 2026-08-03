@@ -15,30 +15,29 @@ abstract final class MobilizationTokens {
   static const double spaceXxl = 24;
 
   static const double radiusCompact = 12;
-  static const double radiusSection = 16;
+  static const double radiusSection = 14;
   static const double radiusContentCard = 18;
-  static const double radiusCard = 22;
+  static const double radiusCard = 18;
   static const double radiusPill = 999;
 
   static const double actionHeight = 56;
   static const double iconSize = 20;
   static const double actionIconSize = 21;
 
-  static const EdgeInsets heroPadding = EdgeInsets.fromLTRB(20, 20, 20, 24);
+  static const EdgeInsets heroPadding = EdgeInsets.fromLTRB(20, 22, 20, 24);
   static const EdgeInsets sectionPadding = EdgeInsets.all(15);
   static const EdgeInsets bannerPadding = EdgeInsets.symmetric(
-    horizontal: 15,
-    vertical: 13,
+    horizontal: 12,
+    vertical: 10,
   );
 
   static const List<BoxShadow> cardShadow = [
-    BoxShadow(color: Color(0x0D173052), blurRadius: 18, offset: Offset(0, 6)),
-    BoxShadow(color: Color(0x06173052), blurRadius: 6, offset: Offset(0, 2)),
+    BoxShadow(color: Color(0x0A173052), blurRadius: 16, offset: Offset(0, 5)),
   ];
 
   static const List<BoxShadow> featuredCardShadow = [
-    BoxShadow(color: Color(0x18F37A32), blurRadius: 24, offset: Offset(0, 6)),
-    BoxShadow(color: Color(0x0A173052), blurRadius: 6, offset: Offset(0, 2)),
+    BoxShadow(color: Color(0x12F37A32), blurRadius: 20, offset: Offset(0, 5)),
+    BoxShadow(color: Color(0x07173052), blurRadius: 8, offset: Offset(0, 2)),
   ];
 
   static const List<BoxShadow> subtleShadow = [
@@ -61,6 +60,7 @@ class ImpactBanner extends StatelessWidget {
     this.messageIcon,
     this.trailing,
     this.footer,
+    this.compact = false,
   });
 
   final ImpactBannerType type;
@@ -68,6 +68,7 @@ class ImpactBanner extends StatelessWidget {
   final IconData? messageIcon;
   final Widget? trailing;
   final Widget? footer;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -103,69 +104,62 @@ class ImpactBanner extends StatelessWidget {
       width: double.infinity,
       padding: MobilizationTokens.bannerPadding,
       decoration: BoxDecoration(
-        color: background,
+        color: Color.alphaBlend(
+          Colors.white.withValues(alpha: 0.32),
+          background,
+        ),
         borderRadius: BorderRadius.circular(MobilizationTokens.radiusSection),
+        border: Border.all(color: color.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            constraints: const BoxConstraints(minHeight: 36),
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(
-                MobilizationTokens.radiusPill,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: color, size: 18),
-                const SizedBox(width: 7),
-                Text(
+          Row(
+            children: [
+              Icon(icon, color: color, size: 15),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
                   label,
                   style: TextStyle(
                     color: color,
-                    fontSize: 11.5,
+                    fontSize: 10.5,
+                    letterSpacing: 0.05,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+              ),
+              if (compact && trailing != null) ...[
+                const SizedBox(width: MobilizationTokens.spaceSm),
+                trailing!,
               ],
-            ),
+            ],
           ),
           if (resolvedMessage != null && resolvedMessage.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 7),
             Row(
               children: [
-                Icon(
-                  messageIcon ?? icon,
-                  color: color,
-                  size: MobilizationTokens.iconSize,
-                ),
-                const SizedBox(width: 11),
+                Icon(messageIcon ?? icon, color: color, size: 17),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     resolvedMessage,
                     style: const TextStyle(
                       color: AppColors.navy,
-                      fontSize: 15.5,
-                      height: 1.3,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      height: 1.25,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                if (trailing != null) ...[
+                if (!compact && trailing != null) ...[
                   const SizedBox(width: MobilizationTokens.spaceSm),
                   trailing!,
                 ],
               ],
             ),
           ],
-          if (footer != null) ...[
-            const SizedBox(height: MobilizationTokens.spaceMd),
-            footer!,
-          ],
+          if (footer != null) ...[const SizedBox(height: 9), footer!],
         ],
       ),
     );
@@ -189,8 +183,8 @@ class ProfessionChip extends StatelessWidget {
     final covered = state == ProfessionChipState.covered;
     final color = covered ? AppColors.green : AppColors.orange;
     return Container(
-      constraints: const BoxConstraints(minHeight: 38),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      constraints: const BoxConstraints(minHeight: 34),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
@@ -204,14 +198,14 @@ class ProfessionChip extends StatelessWidget {
                 ? Icons.check_circle_rounded
                 : Icons.add_circle_outline_rounded,
             color: color,
-            size: 18,
+            size: 16,
           ),
-          const SizedBox(width: 7),
+          const SizedBox(width: 6),
           Text(
             label,
             style: const TextStyle(
               color: AppColors.navy,
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -227,7 +221,7 @@ class SectionCard extends StatelessWidget {
     required this.title,
     required this.child,
     this.icon,
-    this.backgroundColor = const Color(0xFFF8F8F7),
+    this.backgroundColor = Colors.transparent,
   });
 
   final String title;
@@ -239,11 +233,10 @@ class SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: MobilizationTokens.sectionPadding,
+      padding: const EdgeInsets.only(top: 18),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(MobilizationTokens.radiusSection),
-        border: Border.all(color: AppColors.border),
+        border: const Border(top: BorderSide(color: AppColors.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -352,7 +345,7 @@ class MobilizationHeroCard extends StatelessWidget {
                 key: locationTypeKey,
                 style: const TextStyle(
                   color: AppColors.navy,
-                  fontSize: 24,
+                  fontSize: 23,
                   height: 1.1,
                   letterSpacing: -0.6,
                   fontWeight: FontWeight.w900,
@@ -363,12 +356,12 @@ class MobilizationHeroCard extends StatelessWidget {
                 locationName,
                 style: const TextStyle(
                   color: AppColors.textMuted,
-                  fontSize: 15,
+                  fontSize: 14,
                   height: 1.3,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: MobilizationTokens.spaceLg),
+              const SizedBox(height: 18),
               Container(
                 width: double.infinity,
                 padding: MobilizationTokens.bannerPadding,
@@ -377,7 +370,6 @@ class MobilizationHeroCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(
                     MobilizationTokens.radiusSection,
                   ),
-                  border: Border.all(color: AppColors.border),
                 ),
                 child: Row(
                   children: [
@@ -395,7 +387,7 @@ class MobilizationHeroCard extends StatelessWidget {
                             dateLabel,
                             style: const TextStyle(
                               color: AppColors.textMuted,
-                              fontSize: 13,
+                              fontSize: 12,
                               height: 1.25,
                               fontWeight: FontWeight.w700,
                             ),
@@ -405,7 +397,7 @@ class MobilizationHeroCard extends StatelessWidget {
                             timeLabel,
                             style: const TextStyle(
                               color: AppColors.navy,
-                              fontSize: 20,
+                              fontSize: 18,
                               height: 1.15,
                               fontWeight: FontWeight.w900,
                             ),
@@ -420,28 +412,28 @@ class MobilizationHeroCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 13),
-              impactBanner,
-              const SizedBox(height: MobilizationTokens.spaceXl),
+              const SizedBox(height: 20),
               Text(
                 professionTitle,
                 style: const TextStyle(
                   color: AppColors.navy,
-                  fontSize: 18,
+                  fontSize: 16,
                   height: 1.2,
                   letterSpacing: -0.2,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 11),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: MobilizationTokens.spaceSm,
                 runSpacing: MobilizationTokens.spaceSm,
                 children: professions,
               ),
-              const SizedBox(height: MobilizationTokens.spaceXl),
+              const SizedBox(height: 18),
+              impactBanner,
+              const SizedBox(height: 20),
               primaryAction,
-              const SizedBox(height: 22),
+              const SizedBox(height: 26),
               secondaryDetails,
               if (secondaryAction != null) ...[
                 const SizedBox(height: 18),

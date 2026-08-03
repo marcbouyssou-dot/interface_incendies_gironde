@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
@@ -9,62 +10,65 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.navy,
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            const horizontalPadding = 28.0;
-            final contentHeight = constraints.maxHeight - 40;
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: horizontalPadding,
-                vertical: 20,
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: contentHeight),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _SplashPictogram(),
-                        SizedBox(height: 30),
-                        Text(
-                          AppIdentity.productName,
-                          key: Key('splash-product-name'),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 42,
-                            height: 1.05,
-                            letterSpacing: -1.1,
-                            fontWeight: FontWeight.w900,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.darkSystemUiOverlayStyle,
+      child: Scaffold(
+        backgroundColor: AppColors.navy,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const horizontalPadding = 28.0;
+              final contentHeight = constraints.maxHeight - 40;
+              return SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: 20,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: contentHeight),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _SplashPictogram(),
+                          SizedBox(height: 30),
+                          Text(
+                            AppIdentity.productName,
+                            key: Key('splash-product-name'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 42,
+                              height: 1.05,
+                              letterSpacing: -1.1,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          AppIdentity.mobilizationSubtitle,
-                          key: Key('splash-mobilization-subtitle'),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFFD9E3F1),
-                            fontSize: 20,
-                            height: 1.25,
-                            letterSpacing: 0.2,
-                            fontWeight: FontWeight.w600,
+                          SizedBox(height: 10),
+                          Text(
+                            AppIdentity.mobilizationSubtitle,
+                            key: Key('splash-mobilization-subtitle'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFFD9E3F1),
+                              fontSize: 20,
+                              height: 1.25,
+                              letterSpacing: 0.2,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 58),
-                        _InstitutionalSignature(),
-                      ],
+                          SizedBox(height: 58),
+                          _InstitutionalSignature(),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

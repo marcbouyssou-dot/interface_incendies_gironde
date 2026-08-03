@@ -131,21 +131,20 @@ class _SlotsScreenState extends State<SlotsScreen> {
                     horizontalPadding,
                     16,
                     horizontalPadding,
-                    16,
+                    18,
                   ),
                   sliver: SliverList.list(
                     children: [
                       _CrisisHeader(missions: missions),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       Container(
-                        padding: const EdgeInsets.fromLTRB(10, 10, 8, 8),
+                        padding: const EdgeInsets.fromLTRB(8, 7, 6, 6),
                         decoration: BoxDecoration(
                           color: AppColors.surface,
                           borderRadius: BorderRadius.circular(
-                            MobilizationTokens.radiusSection,
+                            MobilizationTokens.radiusCompact,
                           ),
                           border: Border.all(color: AppColors.border),
-                          boxShadow: MobilizationTokens.subtleShadow,
                         ),
                         child: Column(
                           children: [
@@ -153,7 +152,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                               children: [
                                 Expanded(
                                   child: SizedBox(
-                                    height: 48,
+                                    height: 40,
                                     child: TerritorialGroupFilter(
                                       key: const Key(
                                         'slots-territorial-filter',
@@ -163,6 +162,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                                       ),
                                       value: _group,
                                       onChanged: _selectGroup,
+                                      compact: true,
                                     ),
                                   ),
                                 ),
@@ -173,7 +173,8 @@ class _SlotsScreenState extends State<SlotsScreen> {
                                   style: IconButton.styleFrom(
                                     foregroundColor: AppColors.textMuted,
                                     disabledForegroundColor: AppColors.border,
-                                    minimumSize: const Size(44, 44),
+                                    minimumSize: const Size(38, 38),
+                                    padding: EdgeInsets.zero,
                                   ),
                                   onPressed: _hasActiveFilters
                                       ? _resetFilters
@@ -185,9 +186,9 @@ class _SlotsScreenState extends State<SlotsScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 5),
                             SizedBox(
-                              height: 40,
+                              height: 32,
                               child: ListView(
                                 scrollDirection: Axis.horizontal,
                                 children: [
@@ -217,7 +218,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 22),
                       _MissionResultsHeader(
                         count: visibleNeeds.length,
                         filtered: _hasActiveFilters,
@@ -231,7 +232,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                       horizontalPadding,
                       0,
                       horizontalPadding,
-                      32,
+                      36,
                     ),
                     sliver: SliverToBoxAdapter(
                       child: _MissionsEmptyState(filtered: _hasActiveFilters),
@@ -243,7 +244,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                       horizontalPadding,
                       0,
                       horizontalPadding,
-                      32,
+                      36,
                     ),
                     sliver: SliverList.separated(
                       itemCount: visibleNeeds.length,
@@ -271,7 +272,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                               : null,
                         );
                       },
-                      separatorBuilder: (_, _) => const SizedBox(height: 18),
+                      separatorBuilder: (_, _) => const SizedBox(height: 24),
                     ),
                   ),
               ],
@@ -384,9 +385,10 @@ class _CrisisHeader extends StatelessWidget {
             BrandMark(size: 46),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
         ImpactBanner(
           type: ImpactBannerType.mobilizationCovered,
+          compact: true,
           message: remainingLabel,
           messageIcon: Icons.groups_2_outlined,
           trailing: Text(
@@ -403,16 +405,7 @@ class _CrisisHeader extends StatelessWidget {
               AnimatedCoverageIndicator(
                 value: coverage,
                 color: AppColors.green,
-                minHeight: 10,
-              ),
-              const SizedBox(height: MobilizationTokens.spaceSm),
-              Text(
-                'Mobilisation couverte à ${(coverage * 100).round()} %',
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
+                minHeight: 4,
               ),
             ],
           ),
@@ -447,7 +440,7 @@ class _MissionResultsHeader extends StatelessWidget {
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
           decoration: BoxDecoration(
             color: MobilizationTokens.fieldBackground,
             borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
@@ -456,7 +449,7 @@ class _MissionResultsHeader extends StatelessWidget {
             label,
             style: const TextStyle(
               color: AppColors.textMuted,
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -544,7 +537,7 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.only(right: 6),
       child: Semantics(
         button: true,
         selected: selected,
@@ -559,13 +552,13 @@ class _FilterChip extends StatelessWidget {
             onTap: onTap,
             customBorder: const StadiumBorder(),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 13),
+              padding: const EdgeInsets.symmetric(horizontal: 11),
               child: Center(
                 child: Text(
                   label,
                   style: TextStyle(
                     color: selected ? Colors.white : AppColors.textMuted,
-                    fontSize: 11.5,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

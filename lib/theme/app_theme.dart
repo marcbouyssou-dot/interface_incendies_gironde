@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 abstract final class AppColors {
   static const navy = Color(0xFF10233E);
@@ -16,6 +17,29 @@ abstract final class AppColors {
 }
 
 abstract final class AppTheme {
+  static const lightSystemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.white,
+    systemNavigationBarIconBrightness: Brightness.dark,
+  );
+
+  static const darkSystemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: AppColors.navy,
+    systemNavigationBarIconBrightness: Brightness.light,
+  );
+
+  static Widget lightSystemSurface(BuildContext context, Widget? child) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: lightSystemUiOverlayStyle,
+      child: child ?? const SizedBox.shrink(),
+    );
+  }
+
   static ThemeData get light {
     const scheme = ColorScheme.light(
       primary: AppColors.navy,

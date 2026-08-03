@@ -120,6 +120,7 @@ class _AdminAccountActivationAppState extends State<AdminAccountActivationApp> {
       title: 'Activation responsable — MobSanté',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      builder: AppTheme.lightSystemSurface,
       home: FutureBuilder<AdminAccountActivationService>(
         future: _service.timeout(const Duration(seconds: 20)),
         builder: (context, snapshot) {

@@ -136,6 +136,7 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
+          builder: AppTheme.lightSystemSurface,
           home: Scaffold(
             backgroundColor: _StartupVisuals.background,
             body: snapshot.hasError
