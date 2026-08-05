@@ -701,6 +701,7 @@ class NeedCard extends StatelessWidget {
     this.compact = false,
     this.harmonized = false,
     this.professionalHome = false,
+    this.professionalJourney = false,
     this.professionalDetailsExpanded = true,
     this.featured = false,
     this.onEditMission,
@@ -712,6 +713,7 @@ class NeedCard extends StatelessWidget {
   final bool compact;
   final bool harmonized;
   final bool professionalHome;
+  final bool professionalJourney;
   final bool professionalDetailsExpanded;
   final bool featured;
   final VoidCallback? onEditMission;
@@ -962,6 +964,7 @@ class NeedCard extends StatelessWidget {
         need: need,
         location: location,
         professionalHome: true,
+        showActionIcon: !professionalJourney,
       ),
       secondaryDetailsExpanded: professionalDetailsExpanded,
       secondaryDetailsToggleKey: Key('mission-details-${need.id}'),
@@ -1127,11 +1130,13 @@ class _NeedActions extends StatefulWidget {
     required this.need,
     required this.location,
     this.professionalHome = false,
+    this.showActionIcon = true,
   });
 
   final CoordinationNeed need;
   final ResponsePlace? location;
   final bool professionalHome;
+  final bool showActionIcon;
 
   @override
   State<_NeedActions> createState() => _NeedActionsState();
@@ -1164,6 +1169,32 @@ class _NeedActionsState extends State<_NeedActions> {
       _liveData = liveData;
       _engagement = liveData.watchMyEngagement(need.id);
     }
+  }
+
+  Widget _actionButton({
+    required VoidCallback? onPressed,
+    required ButtonStyle style,
+    required IconData icon,
+    required String label,
+  }) {
+    if (!widget.showActionIcon) {
+      return FilledButton(
+        onPressed: onPressed,
+        style: style,
+        child: Text(label),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: onPressed,
+      style: style,
+      icon: Icon(
+        icon,
+        size: widget.professionalHome
+            ? MobilizationTokens.actionIconSize
+            : null,
+      ),
+      label: Text(label),
+    );
   }
 
   @override
@@ -1220,7 +1251,7 @@ class _NeedActionsState extends State<_NeedActions> {
                 child: _EngagementStatusBadge(status: engagement.status),
               ),
               const SizedBox(height: 8),
-              FilledButton.icon(
+              _actionButton(
                 onPressed:
                     engagement.status == EngagementStatus.cancelled ||
                         engagement.status == EngagementStatus.pending
@@ -1256,13 +1287,8 @@ class _NeedActionsState extends State<_NeedActions> {
                         )
                       : null,
                 ),
-                icon: Icon(
-                  actionIcon,
-                  size: widget.professionalHome
-                      ? MobilizationTokens.actionIconSize
-                      : null,
-                ),
-                label: Text(actionLabel),
+                icon: actionIcon,
+                label: actionLabel,
               ),
               if (engagement.status == EngagementStatus.standby) ...[
                 const SizedBox(height: 8),
@@ -1292,7 +1318,7 @@ class _NeedActionsState extends State<_NeedActions> {
             ],
           );
         }
-        return FilledButton.icon(
+        return _actionButton(
           onPressed: need.status == NeedStatus.complete
               ? null
               : () => showModalBottomSheet<void>(
@@ -1317,23 +1343,16 @@ class _NeedActionsState extends State<_NeedActions> {
                 ? const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)
                 : null,
           ),
-          icon: Icon(
-            need.status == NeedStatus.complete
-                ? Icons.check_circle_rounded
-                : Icons.bolt_rounded,
-            size: widget.professionalHome
-                ? MobilizationTokens.actionIconSize
-                : null,
-          ),
-          label: Text(
-            need.status == NeedStatus.complete
-                ? widget.professionalHome
-                      ? 'Équipe au complet'
-                      : 'MISSION COMPLÈTE'
-                : widget.professionalHome
-                ? 'Je me mobilise'
-                : '❤️ JE M’ENGAGE',
-          ),
+          icon: need.status == NeedStatus.complete
+              ? Icons.check_circle_rounded
+              : Icons.bolt_rounded,
+          label: need.status == NeedStatus.complete
+              ? widget.professionalHome
+                    ? 'Équipe au complet'
+                    : 'MISSION COMPLÈTE'
+              : widget.professionalHome
+              ? 'Je me mobilise'
+              : '❤️ JE M’ENGAGE',
         );
       },
     );

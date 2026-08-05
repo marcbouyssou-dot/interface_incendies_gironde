@@ -31,7 +31,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   }
 
   Widget _createScreen(int index) => switch (index) {
-    0 => const SlotsScreen(),
+    0 => const SlotsScreen(professionalJourney: true),
     1 => const ProfessionalEngagementsScreen(),
     2 => ProfessionalProfileScreen(
       onOpenResponsibleAccess: _openResponsibleAccess,

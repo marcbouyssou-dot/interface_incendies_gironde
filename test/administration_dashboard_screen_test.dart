@@ -268,7 +268,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.signOutCalls, 1);
-    expect(find.text('Missions'), findsOneWidget);
+    expect(find.text('Missions'), findsWidgets);
     expect(find.text('Engagements'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
     expect(find.byKey(const Key('manager-email')), findsNothing);

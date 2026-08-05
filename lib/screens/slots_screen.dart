@@ -16,7 +16,9 @@ class _MissionFilterMemory {
 }
 
 class SlotsScreen extends StatefulWidget {
-  const SlotsScreen({super.key});
+  const SlotsScreen({super.key, this.professionalJourney = false});
+
+  final bool professionalJourney;
 
   @override
   State<SlotsScreen> createState() => _SlotsScreenState();
@@ -117,6 +119,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
         ? statusNeeds
         : statusNeeds.where((need) => need.group == _group).toList();
     final hasPrivilegedAccess = access?.hasPrivilegedAccess == true;
+    final professionalJourney = widget.professionalJourney;
     return PageContainer(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -139,7 +142,9 @@ class _SlotsScreenState extends State<SlotsScreen> {
                     children: [
                       _MissionDecisionHeader(
                         missions: missions,
-                        showOverview: hasPrivilegedAccess,
+                        professionalJourney: professionalJourney,
+                        showOverview:
+                            hasPrivilegedAccess && !professionalJourney,
                       ),
                       const SizedBox(height: 16),
                       _MissionFilters(
@@ -158,6 +163,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                       _MissionResultsHeader(
                         count: visibleNeeds.length,
                         filtered: _hasActiveFilters,
+                        professionalJourney: professionalJourney,
                       ),
                     ],
                   ),
@@ -200,11 +206,13 @@ class _SlotsScreenState extends State<SlotsScreen> {
                           location: location,
                           harmonized: true,
                           professionalHome: true,
-                          professionalDetailsExpanded: hasPrivilegedAccess,
+                          professionalJourney: professionalJourney,
+                          professionalDetailsExpanded:
+                              hasPrivilegedAccess && !professionalJourney,
                           featured: index == 0,
                           isMissionEditorOpening: _editingMissionId == need.id,
                           isMissionEditorBlocked: _editingMissionId != null,
-                          onEditMission: canEdit
+                          onEditMission: canEdit && !professionalJourney
                               ? () => _openMissionEditor(context, need)
                               : null,
                         );
@@ -260,10 +268,12 @@ class _SlotsScreenState extends State<SlotsScreen> {
 class _MissionDecisionHeader extends StatelessWidget {
   const _MissionDecisionHeader({
     required this.missions,
+    required this.professionalJourney,
     required this.showOverview,
   });
 
   final List<CoordinationNeed> missions;
+  final bool professionalJourney;
   final bool showOverview;
 
   @override
@@ -296,14 +306,37 @@ class _MissionDecisionHeader extends StatelessWidget {
       children: [
         DecisionHeader(
           state: decisionState,
-          verdict: missions.isEmpty
+          verdict: professionalJourney
+              ? "Où être utile aujourd'hui ?"
+              : missions.isEmpty
               ? 'Rien de nouveau pour l’instant'
               : 'Où aider aujourd’hui ?',
           secondary: secondary,
         ),
+        if (professionalJourney) ...[
+          const SizedBox(height: V5Spacing.md),
+          const Row(
+            children: [
+              Expanded(
+                child: _HeroFilterChip(
+                  icon: Icons.location_on_outlined,
+                  label: 'Où',
+                ),
+              ),
+              SizedBox(width: V5Spacing.sm),
+              Expanded(
+                child: _HeroFilterChip(
+                  icon: Icons.calendar_today_outlined,
+                  label: 'Quand',
+                ),
+              ),
+            ],
+          ),
+        ],
         if (showOverview) ...[
           const SizedBox(height: 14),
           ImpactBanner(
+            key: const Key('mission-coverage-overview'),
             type: ImpactBannerType.mobilizationCovered,
             compact: true,
             message: remainingLabel,
@@ -333,11 +366,53 @@ class _MissionDecisionHeader extends StatelessWidget {
   }
 }
 
+class _HeroFilterChip extends StatelessWidget {
+  const _HeroFilterChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      key: Key('professional-hero-${label.toLowerCase()}'),
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(V5Radius.control),
+        border: Border.all(color: colors.outline),
+        boxShadow: V5Elevation.level1(colors),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: colors.brand),
+          const SizedBox(width: V5Spacing.xs),
+          Text(
+            label,
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MissionResultsHeader extends StatelessWidget {
-  const _MissionResultsHeader({required this.count, required this.filtered});
+  const _MissionResultsHeader({
+    required this.count,
+    required this.filtered,
+    required this.professionalJourney,
+  });
 
   final int count;
   final bool filtered;
+  final bool professionalJourney;
 
   @override
   Widget build(BuildContext context) {
@@ -347,9 +422,14 @@ class _MissionResultsHeader extends StatelessWidget {
       children: [
         Expanded(
           child: Text(
-            filtered
+            professionalJourney
+                ? 'Missions'
+                : filtered
                 ? 'Missions correspondant à vos choix'
                 : 'Les missions qui ont besoin de vous',
+            key: professionalJourney
+                ? const Key('professional-missions-section-title')
+                : null,
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 16,

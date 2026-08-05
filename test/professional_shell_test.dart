@@ -36,11 +36,44 @@ void main() {
 
     expect(find.byType(ProfessionalShell), findsOneWidget);
     expect(find.byType(V5BottomNavigation), findsOneWidget);
+    expect(find.text('Bonjour'), findsNothing);
+    expect(find.text("Où être utile aujourd'hui ?"), findsOneWidget);
+    expect(find.byKey(const Key('professional-hero-où')), findsOneWidget);
+    expect(find.byKey(const Key('professional-hero-quand')), findsOneWidget);
+    expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
+    expect(find.text('Les missions qui ont besoin de vous'), findsNothing);
+    expect(
+      find.byKey(const Key('professional-missions-section-title')),
+      findsOneWidget,
+    );
+    expect(find.text('Voir les détails'), findsWidgets);
+    expect(find.text('Détails de la mission'), findsNothing);
+
+    final mobilizeButton = find.ancestor(
+      of: find.text('Je me mobilise').first,
+      matching: find.byType(FilledButton),
+    );
+    expect(mobilizeButton, findsOneWidget);
+    expect(
+      find.descendant(of: mobilizeButton, matching: find.byType(Icon)),
+      findsNothing,
+    );
+
+    final detailsDisclosure = find.text('Voir les détails').first;
+    await tester.drag(
+      find.byKey(const PageStorageKey('slots')),
+      const Offset(0, -500),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(detailsDisclosure);
+    await tester.pumpAndSettle();
+    expect(find.text('Détails de la mission'), findsOneWidget);
+
     final navigation = tester.widget<NavigationBar>(
       find.byKey(const Key('v5-bottom-navigation')),
     );
     expect(navigation.destinations, hasLength(3));
-    expect(find.text('Missions'), findsOneWidget);
+    expect(find.text('Missions'), findsWidgets);
     expect(find.text('Engagements'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
     expect(find.text('Déclarer'), findsNothing);
@@ -71,6 +104,9 @@ void main() {
 
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(V5BottomNavigation), findsNothing);
+    expect(find.byKey(const Key('mission-coverage-overview')), findsOneWidget);
+    expect(find.text("Où être utile aujourd'hui ?"), findsNothing);
+    expect(find.text('Détails de la mission'), findsWidgets);
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navigation.destinations, hasLength(4));
     expect(find.text('Déclarer'), findsOneWidget);
@@ -117,6 +153,9 @@ void main() {
     await selectPreview(tester, 'Professionnel');
     await closeSettings(tester);
     expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.text("Où être utile aujourd'hui ?"), findsOneWidget);
+    expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
+    expect(find.text('Voir les détails'), findsWidgets);
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
