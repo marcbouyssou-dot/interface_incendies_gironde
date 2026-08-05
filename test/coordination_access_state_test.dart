@@ -6,6 +6,7 @@ import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 
 void main() {
   const coordinator = ResponsibleAccess(
@@ -221,7 +222,8 @@ void main() {
     repository.emit(null);
     await pumpAccessUpdate(tester);
 
-    expect(find.byKey(const PageStorageKey('coordination')), findsOneWidget);
+    expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.byKey(const PageStorageKey('coordination')), findsNothing);
     expectNoPrivilegedSituationContent();
   });
 

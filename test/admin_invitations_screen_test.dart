@@ -49,8 +49,10 @@ void main() {
     );
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Déclarer'));
-    await tester.pumpAndSettle();
+    if (access != null) {
+      await tester.tap(find.text('Déclarer'));
+      await tester.pumpAndSettle();
+    }
     return repository;
   }
 
@@ -68,10 +70,7 @@ void main() {
     expect(find.byKey(const Key('admin-invitation-form')), findsOneWidget);
   }
 
-  Future<void> revealInvitationControl(
-    WidgetTester tester,
-    Key key,
-  ) async {
+  Future<void> revealInvitationControl(WidgetTester tester, Key key) async {
     final control = find.byKey(key);
     await tester.scrollUntilVisible(
       control,
@@ -692,9 +691,7 @@ void main() {
     addTearDown(repository.dispose);
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
-    final editButton = find.byKey(
-      const Key('edit-invitation-cancelled'),
-    );
+    final editButton = find.byKey(const Key('edit-invitation-cancelled'));
     await tester.ensureVisible(editButton);
     await tester.pumpAndSettle();
     await tester.tap(editButton);

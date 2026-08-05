@@ -1191,10 +1191,12 @@ class ResponsibleLogin extends StatefulWidget {
     super.key,
     required this.repository,
     this.initialMessage,
+    this.onSignedIn,
   });
 
   final CoordinationRepository repository;
   final String? initialMessage;
+  final VoidCallback? onSignedIn;
 
   @override
   State<ResponsibleLogin> createState() => _ResponsibleLoginState();
@@ -1232,6 +1234,7 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
       await widget.repository
           .signInResponsible(email: _email.text, password: _password.text)
           .timeout(const Duration(seconds: 15));
+      widget.onSignedIn?.call();
     } on RepositoryException catch (error) {
       if (mounted) setState(() => _message = error.message);
     } catch (error, stackTrace) {

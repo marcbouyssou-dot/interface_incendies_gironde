@@ -39,7 +39,13 @@ void main() {
     addTearDown(repository.disposeDashboard);
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Déclarer').last);
+    if (access == null && accessError == null) {
+      await tester.tap(find.text('Profil'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('open-responsible-access')));
+    } else {
+      await tester.tap(find.text('Déclarer').last);
+    }
     await tester.pumpAndSettle();
     return repository;
   }
@@ -242,7 +248,7 @@ void main() {
     expect(find.text(deniedMission.place), findsNothing);
   });
 
-  testWidgets('sign out returns to the responsible login', (tester) async {
+  testWidgets('sign out returns to the professional journey', (tester) async {
     final repository = await pumpDashboard(tester);
 
     final signOut = find.byKey(const Key('administration-sign-out'));
@@ -251,9 +257,7 @@ void main() {
       250,
       scrollable: find
           .descendant(
-            of: find.byKey(
-              const PageStorageKey('administration-dashboard'),
-            ),
+            of: find.byKey(const PageStorageKey('administration-dashboard')),
             matching: find.byType(Scrollable),
           )
           .first,
@@ -264,7 +268,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.signOutCalls, 1);
-    expect(find.byKey(const Key('manager-email')), findsOneWidget);
+    expect(find.text('Missions'), findsOneWidget);
+    expect(find.text('Engagements'), findsOneWidget);
+    expect(find.text('Profil'), findsOneWidget);
+    expect(find.byKey(const Key('manager-email')), findsNothing);
     expect(find.byKey(const Key('administration-create-need')), findsNothing);
   });
 

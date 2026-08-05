@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import 'administration_dashboard_screen.dart';
 import 'coordination_screen.dart';
 import 'places_screen.dart';
+import 'professional_shell.dart';
 import 'slots_screen.dart';
 
 class AppShell extends StatefulWidget {
@@ -25,6 +26,8 @@ class _AppShellState extends State<AppShell> {
   final List<Widget?> _screens = List<Widget?>.filled(4, null);
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
+  StreamSubscription<ResponsibleAccess?>? _accessSubscription;
+  bool _useProfessionalShell = false;
 
   @override
   void initState() {
@@ -38,16 +41,33 @@ class _AppShellState extends State<AppShell> {
     super.didChangeDependencies();
     final repository = RepositoryScope.of(context);
     if (!identical(repository, _repository)) {
+      unawaited(_accessSubscription?.cancel());
       _liveData?.dispose();
       _repository = repository;
       _liveData = LiveCoordinationData(repository);
+      _accessSubscription = _liveData!.watchResponsibleAccess().listen(
+        _handleAccess,
+        onError: (_, _) => _handleAccessError(),
+      );
     }
   }
 
   @override
   void dispose() {
+    unawaited(_accessSubscription?.cancel());
     _liveData?.dispose();
     super.dispose();
+  }
+
+  void _handleAccess(ResponsibleAccess? access) {
+    final useProfessionalShell = access == null;
+    if (!mounted || useProfessionalShell == _useProfessionalShell) return;
+    setState(() => _useProfessionalShell = useProfessionalShell);
+  }
+
+  void _handleAccessError() {
+    if (!mounted || !_useProfessionalShell) return;
+    setState(() => _useProfessionalShell = false);
   }
 
   Widget _createScreen(int index) => switch (index) {
@@ -71,7 +91,16 @@ class _AppShellState extends State<AppShell> {
 
   void _refreshLiveData() {
     final previous = _liveData;
-    setState(() => _liveData = LiveCoordinationData(_repository!));
+    unawaited(_accessSubscription?.cancel());
+    final next = LiveCoordinationData(_repository!);
+    setState(() {
+      _liveData = next;
+      _useProfessionalShell = false;
+    });
+    _accessSubscription = next.watchResponsibleAccess().listen(
+      _handleAccess,
+      onError: (_, _) => _handleAccessError(),
+    );
     if (previous != null) unawaited(previous.dispose());
   }
 
@@ -79,47 +108,53 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     return LiveCoordinationDataScope(
       data: _liveData!,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: SafeArea(
-          bottom: false,
-          child: IndexedStack(
-            index: _currentIndex,
-            children: List.generate(
-              _screens.length,
-              (index) => _screens[index] ?? const SizedBox.shrink(),
-            ),
+      child: _useProfessionalShell
+          ? ProfessionalShell(initialIndex: widget.initialIndex == 1 ? 2 : 0)
+          : _buildHistoricalShell(),
+    );
+  }
+
+  Widget _buildHistoricalShell() {
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        bottom: false,
+        child: IndexedStack(
+          index: _currentIndex,
+          children: List.generate(
+            _screens.length,
+            (index) => _screens[index] ?? const SizedBox.shrink(),
           ),
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex,
-          onDestinationSelected: _selectTab,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.local_fire_department_outlined),
-              selectedIcon: Icon(Icons.local_fire_department_rounded),
-              label: 'Missions',
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: _selectTab,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.local_fire_department_outlined),
+            selectedIcon: Icon(Icons.local_fire_department_rounded),
+            label: 'Missions',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.add_circle_outline_rounded),
+            selectedIcon: Icon(
+              Icons.add_circle_rounded,
+              color: AppColors.orange,
             ),
-            NavigationDestination(
-              icon: Icon(Icons.add_circle_outline_rounded),
-              selectedIcon: Icon(
-                Icons.add_circle_rounded,
-                color: AppColors.orange,
-              ),
-              label: 'Déclarer',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'Statistiques',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.location_on_outlined),
-              selectedIcon: Icon(Icons.location_on_rounded),
-              label: 'Plus',
-            ),
-          ],
-        ),
+            label: 'Déclarer',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard_rounded),
+            label: 'Statistiques',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.location_on_outlined),
+            selectedIcon: Icon(Icons.location_on_rounded),
+            label: 'Plus',
+          ),
+        ],
       ),
     );
   }
