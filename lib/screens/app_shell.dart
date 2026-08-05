@@ -6,7 +6,6 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
-import '../widgets/mobilization_design_system.dart';
 import 'administration_dashboard_screen.dart';
 import 'coordination_screen.dart';
 import 'places_screen.dart';
@@ -81,7 +80,7 @@ class _AppShellState extends State<AppShell> {
     return LiveCoordinationDataScope(
       data: _liveData!,
       child: Scaffold(
-        backgroundColor: MobilizationTokens.pageBackground,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: SafeArea(
           bottom: false,
           child: IndexedStack(

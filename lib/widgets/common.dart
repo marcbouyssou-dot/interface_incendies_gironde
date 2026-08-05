@@ -14,6 +14,7 @@ import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import 'brand_mark.dart';
+import 'mission_card.dart';
 import 'mission_location_details.dart';
 import 'mobilization_design_system.dart';
 
@@ -260,6 +261,13 @@ class TerritorialGroupFilter extends StatelessWidget {
       key: fieldKey,
       initialValue: value?.name ?? 'all',
       isExpanded: true,
+      style: compact
+          ? const TextStyle(
+              color: AppColors.navy,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            )
+          : null,
       decoration: InputDecoration(
         isDense: compact,
         prefixIcon: Icon(Icons.map_outlined, size: compact ? 18 : 20),
@@ -280,6 +288,13 @@ class TerritorialGroupFilter extends StatelessWidget {
           ),
         ),
       ],
+      selectedItemBuilder: compact
+          ? (context) => [
+              const Text('Tous'),
+              for (final group in TerritorialGroup.values)
+                Text(group.label, overflow: TextOverflow.ellipsis),
+            ]
+          : null,
       onChanged: (selected) {
         onChanged(
           selected == null || selected == 'all'
@@ -686,6 +701,7 @@ class NeedCard extends StatelessWidget {
     this.compact = false,
     this.harmonized = false,
     this.professionalHome = false,
+    this.professionalDetailsExpanded = true,
     this.featured = false,
     this.onEditMission,
     this.isMissionEditorOpening = false,
@@ -696,6 +712,7 @@ class NeedCard extends StatelessWidget {
   final bool compact;
   final bool harmonized;
   final bool professionalHome;
+  final bool professionalDetailsExpanded;
   final bool featured;
   final VoidCallback? onEditMission;
   final bool isMissionEditorOpening;
@@ -906,8 +923,16 @@ class NeedCard extends StatelessWidget {
       NeedStatus.complete => ImpactBannerType.teamComplete,
     };
 
-    return MobilizationHeroCard(
-      featured: featured,
+    final missionCardState = !need.isActive || need.isCancelled
+        ? MissionCardState.past
+        : switch (need.status) {
+            NeedStatus.critical => MissionCardState.urgent,
+            NeedStatus.toComplete => MissionCardState.almostComplete,
+            NeedStatus.complete => MissionCardState.complete,
+          };
+
+    return MissionCard(
+      state: missionCardState,
       locationType: location?.type.label ?? 'Lieu d’intervention',
       locationTypeKey: const Key('mission-location-type'),
       locationName: need.place,
@@ -916,7 +941,7 @@ class NeedCard extends StatelessWidget {
           : FrenchDateTime.relativeDate(need.startAt!),
       timeLabel: need.time,
       timingBadge: MissionTimingPill(mission: need),
-      impactBanner: ImpactBanner(
+      need: ImpactBanner(
         type: impactType,
         message: remainingLabel,
         messageIcon: Icons.groups_2_rounded,
@@ -938,6 +963,8 @@ class NeedCard extends StatelessWidget {
         location: location,
         professionalHome: true,
       ),
+      secondaryDetailsExpanded: professionalDetailsExpanded,
+      secondaryDetailsToggleKey: Key('mission-details-${need.id}'),
       secondaryDetails: SectionCard(
         title: 'Détails de la mission',
         child: Column(

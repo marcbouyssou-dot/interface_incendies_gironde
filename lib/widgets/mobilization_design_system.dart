@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 
 /// Shared visual tokens for the MobSanté mobilization experience.
 abstract final class MobilizationTokens {
@@ -72,30 +73,31 @@ class ImpactBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final (label, icon, color, background) = switch (type) {
       ImpactBannerType.priority => (
         'Besoin prioritaire',
         Icons.priority_high_rounded,
-        AppColors.red,
-        AppColors.redSoft,
+        colors.danger,
+        colors.dangerContainer,
       ),
       ImpactBannerType.reinforcementsExpected => (
         'Renforts attendus',
         Icons.groups_2_outlined,
-        AppColors.orange,
-        AppColors.orangeSoft,
+        colors.warning,
+        colors.warningContainer,
       ),
       ImpactBannerType.teamComplete => (
         'Équipe complète',
         Icons.check_circle_outline_rounded,
-        AppColors.green,
-        AppColors.greenSoft,
+        colors.success,
+        colors.successContainer,
       ),
       ImpactBannerType.mobilizationCovered => (
         'Mobilisation couverte',
         Icons.verified_outlined,
-        AppColors.green,
-        AppColors.greenSoft,
+        colors.success,
+        colors.successContainer,
       ),
     };
     final resolvedMessage = message?.trim();
@@ -105,7 +107,7 @@ class ImpactBanner extends StatelessWidget {
       padding: MobilizationTokens.bannerPadding,
       decoration: BoxDecoration(
         color: Color.alphaBlend(
-          Colors.white.withValues(alpha: 0.32),
+          colors.surface.withValues(alpha: 0.32),
           background,
         ),
         borderRadius: BorderRadius.circular(MobilizationTokens.radiusSection),
@@ -144,8 +146,8 @@ class ImpactBanner extends StatelessWidget {
                 Expanded(
                   child: Text(
                     resolvedMessage,
-                    style: const TextStyle(
-                      color: AppColors.navy,
+                    style: TextStyle(
+                      color: colors.textPrimary,
                       fontSize: 14,
                       height: 1.25,
                       fontWeight: FontWeight.w800,
@@ -180,8 +182,9 @@ class ProfessionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final covered = state == ProfessionChipState.covered;
-    final color = covered ? AppColors.green : AppColors.orange;
+    final color = covered ? colors.success : colors.warning;
     return Container(
       constraints: const BoxConstraints(minHeight: 34),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -201,12 +204,14 @@ class ProfessionChip extends StatelessWidget {
             size: 16,
           ),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.navy,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: colors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -231,12 +236,13 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.only(top: 18),
       decoration: BoxDecoration(
         color: backgroundColor,
-        border: const Border(top: BorderSide(color: AppColors.border)),
+        border: Border(top: BorderSide(color: colors.outline)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,14 +250,14 @@ class SectionCard extends StatelessWidget {
           Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, color: AppColors.textMuted, size: 17),
+                Icon(icon, color: colors.textSecondary, size: 17),
                 const SizedBox(width: MobilizationTokens.spaceSm),
               ],
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
+                  style: TextStyle(
+                    color: colors.textSecondary,
                     fontSize: 11,
                     letterSpacing: 0.25,
                     fontWeight: FontWeight.w800,
@@ -284,6 +290,8 @@ class MobilizationHeroCard extends StatelessWidget {
     this.timingBadge,
     this.secondaryAction,
     this.featured = false,
+    this.secondaryDetailsExpanded = true,
+    this.secondaryDetailsToggleKey,
   });
 
   final String locationType;
@@ -299,6 +307,8 @@ class MobilizationHeroCard extends StatelessWidget {
   final Widget? timingBadge;
   final Widget? secondaryAction;
   final bool featured;
+  final bool secondaryDetailsExpanded;
+  final Key? secondaryDetailsToggleKey;
 
   @override
   Widget build(BuildContext context) {
@@ -433,8 +443,16 @@ class MobilizationHeroCard extends StatelessWidget {
               impactBanner,
               const SizedBox(height: 20),
               primaryAction,
-              const SizedBox(height: 26),
-              secondaryDetails,
+              if (secondaryDetailsExpanded) ...[
+                const SizedBox(height: 26),
+                secondaryDetails,
+              ] else ...[
+                const SizedBox(height: 10),
+                _SecondaryDetailsDisclosure(
+                  toggleKey: secondaryDetailsToggleKey,
+                  child: secondaryDetails,
+                ),
+              ],
               if (secondaryAction != null) ...[
                 const SizedBox(height: 18),
                 secondaryAction!,
@@ -443,6 +461,57 @@ class MobilizationHeroCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SecondaryDetailsDisclosure extends StatefulWidget {
+  const _SecondaryDetailsDisclosure({required this.child, this.toggleKey});
+
+  final Widget child;
+  final Key? toggleKey;
+
+  @override
+  State<_SecondaryDetailsDisclosure> createState() =>
+      _SecondaryDetailsDisclosureState();
+}
+
+class _SecondaryDetailsDisclosureState
+    extends State<_SecondaryDetailsDisclosure> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          button: true,
+          expanded: _expanded,
+          child: TextButton.icon(
+            key: widget.toggleKey,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textMuted,
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
+              minimumSize: const Size(0, 42),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            onPressed: () => setState(() => _expanded = !_expanded),
+            icon: Icon(
+              _expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 18,
+            ),
+            label: Text(_expanded ? 'Masquer les détails' : 'Voir les détails'),
+          ),
+        ),
+        if (_expanded) ...[const SizedBox(height: 4), widget.child],
+      ],
     );
   }
 }

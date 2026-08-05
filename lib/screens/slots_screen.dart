@@ -4,9 +4,9 @@ import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
-import '../theme/app_theme.dart';
-import '../widgets/brand_mark.dart';
+import '../theme/v5_foundation.dart';
 import '../widgets/common.dart';
+import '../widgets/decision_header.dart';
 import '../widgets/mobilization_design_system.dart';
 import 'create_need_screen.dart';
 
@@ -25,6 +25,7 @@ class SlotsScreen extends StatefulWidget {
 class _SlotsScreenState extends State<SlotsScreen> {
   int _filter = _MissionFilterMemory.status;
   TerritorialGroup? _group = _MissionFilterMemory.group;
+  bool _showAdvancedFilters = _MissionFilterMemory.status != 0;
   String? _editingMissionId;
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
@@ -115,6 +116,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
     final visibleNeeds = _group == null
         ? statusNeeds
         : statusNeeds.where((need) => need.group == _group).toList();
+    final hasPrivilegedAccess = access?.hasPrivilegedAccess == true;
     return PageContainer(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -122,7 +124,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
               ? 18.0
               : (constraints.maxWidth - 520) / 2;
           return Material(
-            color: MobilizationTokens.pageBackground,
+            color: context.v5Colors.canvas,
             child: CustomScrollView(
               key: const PageStorageKey('slots'),
               slivers: [
@@ -135,88 +137,22 @@ class _SlotsScreenState extends State<SlotsScreen> {
                   ),
                   sliver: SliverList.list(
                     children: [
-                      _CrisisHeader(missions: missions),
+                      _MissionDecisionHeader(
+                        missions: missions,
+                        showOverview: hasPrivilegedAccess,
+                      ),
                       const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.fromLTRB(8, 7, 6, 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(
-                            MobilizationTokens.radiusCompact,
-                          ),
-                          border: Border.all(color: AppColors.border),
+                      _MissionFilters(
+                        group: _group,
+                        status: _filter,
+                        showAdvanced: _showAdvancedFilters,
+                        hasActiveFilters: _hasActiveFilters,
+                        onGroupChanged: _selectGroup,
+                        onStatusChanged: _select,
+                        onToggleAdvanced: () => setState(
+                          () => _showAdvancedFilters = !_showAdvancedFilters,
                         ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 40,
-                                    child: TerritorialGroupFilter(
-                                      key: const Key(
-                                        'slots-territorial-filter',
-                                      ),
-                                      fieldKey: ValueKey(
-                                        'slots-territorial-${_group?.name ?? 'all'}',
-                                      ),
-                                      value: _group,
-                                      onChanged: _selectGroup,
-                                      compact: true,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                IconButton(
-                                  key: const Key('reset-mission-filters'),
-                                  tooltip: 'Réinitialiser les filtres',
-                                  style: IconButton.styleFrom(
-                                    foregroundColor: AppColors.textMuted,
-                                    disabledForegroundColor: AppColors.border,
-                                    minimumSize: const Size(38, 38),
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                  onPressed: _hasActiveFilters
-                                      ? _resetFilters
-                                      : null,
-                                  icon: const Icon(
-                                    Icons.restart_alt_rounded,
-                                    size: 20,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 5),
-                            SizedBox(
-                              height: 32,
-                              child: ListView(
-                                scrollDirection: Axis.horizontal,
-                                children: [
-                                  _FilterChip(
-                                    label: 'Toutes',
-                                    selected: _filter == 0,
-                                    onTap: () => _select(0),
-                                  ),
-                                  _FilterChip(
-                                    label: 'Prioritaires',
-                                    selected: _filter == 1,
-                                    onTap: () => _select(1),
-                                  ),
-                                  _FilterChip(
-                                    label: 'Renforts attendus',
-                                    selected: _filter == 2,
-                                    onTap: () => _select(2),
-                                  ),
-                                  _FilterChip(
-                                    label: 'Équipes complètes',
-                                    selected: _filter == 3,
-                                    onTap: () => _select(3),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        onReset: _resetFilters,
                       ),
                       const SizedBox(height: 22),
                       _MissionResultsHeader(
@@ -264,6 +200,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                           location: location,
                           harmonized: true,
                           professionalHome: true,
+                          professionalDetailsExpanded: hasPrivilegedAccess,
                           featured: index == 0,
                           isMissionEditorOpening: _editingMissionId == need.id,
                           isMissionEditorBlocked: _editingMissionId != null,
@@ -302,6 +239,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
     setState(() {
       _filter = 0;
       _group = null;
+      _showAdvancedFilters = false;
     });
   }
 
@@ -319,13 +257,18 @@ class _SlotsScreenState extends State<SlotsScreen> {
   }
 }
 
-class _CrisisHeader extends StatelessWidget {
-  const _CrisisHeader({required this.missions});
+class _MissionDecisionHeader extends StatelessWidget {
+  const _MissionDecisionHeader({
+    required this.missions,
+    required this.showOverview,
+  });
 
   final List<CoordinationNeed> missions;
+  final bool showOverview;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final totalQuotas = ProfessionQuotas.aggregate(
       missions.map((mission) => mission.professionQuotas),
     );
@@ -338,78 +281,53 @@ class _CrisisHeader extends StatelessWidget {
         : remaining == 1
         ? '1 renfort encore attendu'
         : '$remaining renforts encore attendus';
+    final decisionState = missions.isEmpty
+        ? DecisionHeaderState.noUpdates
+        : missions.any((mission) => mission.status == NeedStatus.critical)
+        ? DecisionHeaderState.urgentMission
+        : DecisionHeaderState.newMissions;
+    final secondary = missions.isEmpty
+        ? 'Aucune équipe ne recherche de renfort pour le moment.'
+        : decisionState == DecisionHeaderState.urgentMission
+        ? 'Une mission prioritaire attend encore des renforts.'
+        : 'Des équipes ont besoin de vous.';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'MOBSANTÉ',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 10,
-                      letterSpacing: 1.1,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  SizedBox(height: 5),
-                  Text(
-                    'Où pouvez-vous être utile aujourd’hui ?',
-                    style: TextStyle(
-                      color: AppColors.navy,
-                      fontSize: 26,
-                      height: 1.1,
-                      letterSpacing: -0.65,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Des équipes recherchent encore des professionnels.',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 13,
-                      height: 1.38,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+        DecisionHeader(
+          state: decisionState,
+          verdict: missions.isEmpty
+              ? 'Rien de nouveau pour l’instant'
+              : 'Où aider aujourd’hui ?',
+          secondary: secondary,
+        ),
+        if (showOverview) ...[
+          const SizedBox(height: 14),
+          ImpactBanner(
+            type: ImpactBannerType.mobilizationCovered,
+            compact: true,
+            message: remainingLabel,
+            messageIcon: Icons.groups_2_outlined,
+            trailing: Text(
+              '${(coverage * 100).round()} %',
+              style: TextStyle(
+                color: colors.success,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
               ),
             ),
-            SizedBox(width: 16),
-            BrandMark(size: 46),
-          ],
-        ),
-        const SizedBox(height: 14),
-        ImpactBanner(
-          type: ImpactBannerType.mobilizationCovered,
-          compact: true,
-          message: remainingLabel,
-          messageIcon: Icons.groups_2_outlined,
-          trailing: Text(
-            '${(coverage * 100).round()} %',
-            style: const TextStyle(
-              color: AppColors.green,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
+            footer: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AnimatedCoverageIndicator(
+                  value: coverage,
+                  color: colors.success,
+                  minHeight: 4,
+                ),
+              ],
             ),
           ),
-          footer: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AnimatedCoverageIndicator(
-                value: coverage,
-                color: AppColors.green,
-                minHeight: 4,
-              ),
-            ],
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -423,6 +341,7 @@ class _MissionResultsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final label = count == 1 ? '1 mission' : '$count missions';
     return Row(
       children: [
@@ -431,8 +350,8 @@ class _MissionResultsHeader extends StatelessWidget {
             filtered
                 ? 'Missions correspondant à vos choix'
                 : 'Les missions qui ont besoin de vous',
-            style: const TextStyle(
-              color: AppColors.navy,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 16,
               height: 1.25,
               fontWeight: FontWeight.w800,
@@ -442,13 +361,13 @@ class _MissionResultsHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
           decoration: BoxDecoration(
-            color: MobilizationTokens.fieldBackground,
+            color: colors.surfaceMuted,
             borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              color: AppColors.textMuted,
+            style: TextStyle(
+              color: colors.textSecondary,
               fontSize: 10.5,
               fontWeight: FontWeight.w800,
             ),
@@ -466,22 +385,19 @@ class _MissionsEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 30),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(MobilizationTokens.radiusCard),
-        border: Border.all(color: AppColors.border),
-        boxShadow: MobilizationTokens.subtleShadow,
+        border: Border.all(color: colors.outline),
+        boxShadow: V5Elevation.level1(colors),
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.search_off_rounded,
-            color: AppColors.textMuted,
-            size: 30,
-          ),
+          Icon(Icons.search_off_rounded, color: colors.textSecondary, size: 30),
           const SizedBox(height: 11),
           Text(
             filtered
@@ -489,7 +405,7 @@ class _MissionsEmptyState extends StatelessWidget {
                 : 'Aucune mission n’attend de renfort',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: AppColors.navy,
+              color: colors.textPrimary,
               fontSize: 15,
               height: 1.25,
               fontWeight: FontWeight.w800,
@@ -502,7 +418,7 @@ class _MissionsEmptyState extends StatelessWidget {
                 : 'Revenez bientôt pour découvrir les prochains besoins.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: AppColors.textMuted,
+              color: colors.textSecondary,
               fontSize: 12,
               height: 1.4,
             ),
@@ -520,7 +436,122 @@ class _MissionsPageSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(color: MobilizationTokens.pageBackground, child: child);
+    return ColoredBox(color: context.v5Colors.canvas, child: child);
+  }
+}
+
+class _MissionFilters extends StatelessWidget {
+  const _MissionFilters({
+    required this.group,
+    required this.status,
+    required this.showAdvanced,
+    required this.hasActiveFilters,
+    required this.onGroupChanged,
+    required this.onStatusChanged,
+    required this.onToggleAdvanced,
+    required this.onReset,
+  });
+
+  final TerritorialGroup? group;
+  final int status;
+  final bool showAdvanced;
+  final bool hasActiveFilters;
+  final ValueChanged<TerritorialGroup?> onGroupChanged;
+  final ValueChanged<int> onStatusChanged;
+  final VoidCallback onToggleAdvanced;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: TerritorialGroupFilter(
+                  key: const Key('slots-territorial-filter'),
+                  fieldKey: ValueKey(
+                    'slots-territorial-${group?.name ?? 'all'}',
+                  ),
+                  value: group,
+                  onChanged: onGroupChanged,
+                  compact: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              key: const Key('toggle-advanced-mission-filters'),
+              tooltip: showAdvanced
+                  ? 'Masquer les filtres de statut'
+                  : 'Filtrer par statut',
+              style: IconButton.styleFrom(
+                foregroundColor: showAdvanced
+                    ? colors.accent
+                    : colors.textSecondary,
+                backgroundColor: showAdvanced
+                    ? colors.warningContainer
+                    : Colors.transparent,
+                minimumSize: const Size(36, 36),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: onToggleAdvanced,
+              icon: const Icon(Icons.tune_rounded, size: 18),
+            ),
+            const SizedBox(width: 2),
+            IconButton(
+              key: const Key('reset-mission-filters'),
+              tooltip: 'Réinitialiser les filtres',
+              style: IconButton.styleFrom(
+                foregroundColor: colors.textSecondary,
+                disabledForegroundColor: colors.outline,
+                minimumSize: const Size(36, 36),
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: hasActiveFilters ? onReset : null,
+              icon: const Icon(Icons.restart_alt_rounded, size: 18),
+            ),
+          ],
+        ),
+        if (showAdvanced) ...[
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 32,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _FilterChip(
+                  label: 'Toutes',
+                  selected: status == 0,
+                  onTap: () => onStatusChanged(0),
+                ),
+                _FilterChip(
+                  label: 'Prioritaires',
+                  selected: status == 1,
+                  onTap: () => onStatusChanged(1),
+                ),
+                _FilterChip(
+                  label: 'Renforts attendus',
+                  selected: status == 2,
+                  onTap: () => onStatusChanged(2),
+                ),
+                _FilterChip(
+                  label: 'Équipes complètes',
+                  selected: status == 3,
+                  onTap: () => onStatusChanged(3),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 
@@ -536,17 +567,16 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: Semantics(
         button: true,
         selected: selected,
         child: Material(
-          color: selected ? AppColors.navy : Colors.white,
+          color: selected ? colors.brand : colors.surface,
           shape: StadiumBorder(
-            side: BorderSide(
-              color: selected ? AppColors.navy : AppColors.border,
-            ),
+            side: BorderSide(color: selected ? colors.brand : colors.outline),
           ),
           child: InkWell(
             onTap: onTap,
@@ -557,7 +587,7 @@ class _FilterChip extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: selected ? Colors.white : AppColors.textMuted,
+                    color: selected ? colors.onBrand : colors.textSecondary,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                   ),

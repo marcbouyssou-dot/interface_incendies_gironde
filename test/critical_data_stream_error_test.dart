@@ -64,20 +64,20 @@ void main() {
     repository.emitLocations([_location('Ancien centre')]);
     await pumpEvents(tester);
 
-    expect(find.text('ANCIENNE MISSION'), findsOneWidget);
+    expect(find.text('Ancienne mission'), findsOneWidget);
 
     repository.emitMissionsError(StateError('missions unavailable'));
     await pumpEvents(tester);
 
     expect(find.text('Missions temporairement indisponibles'), findsOneWidget);
-    expect(find.text('ANCIENNE MISSION'), findsNothing);
+    expect(find.text('Ancienne mission'), findsNothing);
 
     repository.emitMissions([_mission('new', 'Nouvelle mission')]);
     await pumpEvents(tester);
 
     expect(find.text('Missions temporairement indisponibles'), findsNothing);
-    expect(find.text('NOUVELLE MISSION'), findsOneWidget);
-    expect(find.text('ANCIENNE MISSION'), findsNothing);
+    expect(find.text('Nouvelle mission'), findsOneWidget);
+    expect(find.text('Ancienne mission'), findsNothing);
   });
 
   testWidgets('Lieux clears stale data and recovers automatically', (

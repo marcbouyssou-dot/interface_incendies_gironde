@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'v5_foundation.dart';
+
 abstract final class AppColors {
   static const navy = Color(0xFF10233E);
   static const navySoft = Color(0xFF1E385B);
@@ -34,26 +36,48 @@ abstract final class AppTheme {
   );
 
   static Widget lightSystemSurface(BuildContext context, Widget? child) {
+    return systemSurface(context, child);
+  }
+
+  static Widget systemSurface(BuildContext context, Widget? child) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: lightSystemUiOverlayStyle,
+      value: isDark ? darkSystemUiOverlayStyle : lightSystemUiOverlayStyle,
       child: child ?? const SizedBox.shrink(),
     );
   }
 
-  static ThemeData get light {
-    const scheme = ColorScheme.light(
-      primary: AppColors.navy,
-      onPrimary: Colors.white,
-      secondary: AppColors.orange,
-      onSecondary: Colors.white,
-      error: AppColors.red,
-      surface: AppColors.surface,
-      onSurface: AppColors.navy,
+  static ThemeData get light =>
+      _build(brightness: Brightness.light, colors: V5Colors.light);
+
+  static ThemeData get dark =>
+      _build(brightness: Brightness.dark, colors: V5Colors.dark);
+
+  static ThemeData _build({
+    required Brightness brightness,
+    required V5Colors colors,
+  }) {
+    final scheme = ColorScheme(
+      brightness: brightness,
+      primary: colors.brand,
+      onPrimary: colors.onBrand,
+      secondary: colors.accent,
+      onSecondary: colors.onAccent,
+      error: colors.danger,
+      onError: brightness == Brightness.dark
+          ? const Color(0xFF2A080D)
+          : Colors.white,
+      surface: colors.surface,
+      onSurface: colors.textPrimary,
+      outline: colors.outline,
+      surfaceContainerHighest: colors.surfaceMuted,
     );
     return ThemeData(
       useMaterial3: true,
+      brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: AppColors.background,
+      extensions: [colors],
+      scaffoldBackgroundColor: colors.canvas,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
           TargetPlatform.android: _AppPageTransitionsBuilder(),
@@ -65,85 +89,56 @@ abstract final class AppTheme {
         },
       ),
       fontFamily: 'sans-serif',
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-          fontSize: 28,
-          height: 1.15,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.8,
-          color: AppColors.navy,
-        ),
-        headlineMedium: TextStyle(
-          fontSize: 22,
-          height: 1.2,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
-          color: AppColors.navy,
-        ),
-        titleLarge: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: AppColors.navy,
-        ),
-        titleMedium: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          color: AppColors.navy,
-        ),
-        bodyLarge: TextStyle(fontSize: 15, height: 1.45, color: AppColors.navy),
-        bodyMedium: TextStyle(
-          fontSize: 13,
-          height: 1.4,
-          color: AppColors.textMuted,
-        ),
-        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-      ),
-      cardTheme: const CardThemeData(
-        color: AppColors.surface,
+      textTheme: V5Typography.textTheme(colors),
+      cardTheme: CardThemeData(
+        color: colors.surface,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-          side: BorderSide(color: AppColors.border),
+          borderRadius: const BorderRadius.all(Radius.circular(V5Radius.card)),
+          side: BorderSide(color: colors.outline),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
+        fillColor: colors.surface,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 15,
+          horizontal: V5Spacing.md,
+          vertical: V5Spacing.sm,
         ),
-        hintStyle: const TextStyle(color: AppColors.textMuted),
-        labelStyle: const TextStyle(color: AppColors.textMuted),
+        hintStyle: TextStyle(color: colors.textSecondary),
+        labelStyle: TextStyle(color: colors.textSecondary),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(V5Radius.control),
+          borderSide: BorderSide(color: colors.outline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderRadius: BorderRadius.circular(V5Radius.control),
+          borderSide: BorderSide(color: colors.outline),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.orange, width: 1.5),
+          borderRadius: BorderRadius.circular(V5Radius.control),
+          borderSide: BorderSide(color: colors.accent, width: 1.5),
         ),
       ),
-      navigationBarTheme: const NavigationBarThemeData(
-        backgroundColor: Colors.white,
-        indicatorColor: AppColors.orangeSoft,
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: colors.surface,
+        indicatorColor: brightness == Brightness.dark
+            ? colors.warningContainer
+            : V5Colors.light.warningContainer,
         height: 72,
+        elevation: 0,
         labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+          V5Typography.textTheme(colors).labelSmall,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.navy,
-          foregroundColor: Colors.white,
+          backgroundColor: colors.brand,
+          foregroundColor: colors.onBrand,
           minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(V5Radius.control),
           ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),

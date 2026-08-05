@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:interface_incendies_gironde/config/app_identity.dart';
 import 'package:interface_incendies_gironde/firebase_startup_gate.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
@@ -17,15 +18,23 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SplashScreen), findsOneWidget);
-    final splashImage = tester.widget<Image>(find.byType(Image));
+    final splashImage = tester
+        .widgetList<Image>(find.byType(Image))
+        .firstWhere(
+          (image) =>
+              image.image is AssetImage &&
+              (image.image as AssetImage).assetName ==
+                  AppIdentity.pictogramAsset,
+        );
     expect(
       (splashImage.image as AssetImage).assetName,
-      'assets/images/splash_mobsante.png',
+      AppIdentity.pictogramAsset,
     );
     expect(find.text('InterfaceRecup33'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
 
     pending.complete(MockCoordinationRepository.instance);
+    await tester.pump(AppIdentity.splashMinimumDuration);
     await tester.pumpAndSettle();
     expect(find.byType(SplashScreen), findsNothing);
   });
@@ -41,6 +50,7 @@ void main() {
 
     await tester.pumpWidget(FirebaseStartupGate(startup: fail));
     await tester.pumpAndSettle();
+    await tester.pump(AppIdentity.splashMinimumDuration);
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(
@@ -52,6 +62,7 @@ void main() {
     await tester.tap(find.text('Réessayer'));
     await tester.pump();
     await tester.pumpAndSettle();
+    await tester.pump(AppIdentity.splashMinimumDuration);
     expect(attempts, 2);
     expect(find.text('Réessayer'), findsOneWidget);
   });

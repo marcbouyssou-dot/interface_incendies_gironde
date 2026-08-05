@@ -16,7 +16,7 @@ void main() {
     final index = File('web/index.html').readAsStringSync();
     final pubspec = File('pubspec.yaml').readAsStringSync();
 
-    expect(manifest['name'], 'MobSanté — Incendies Gironde');
+    expect(manifest['name'], AppIdentity.productName);
     expect(manifest['short_name'], 'MobSanté');
     expect(index, contains('name="application-name" content="MobSanté"'));
     expect(

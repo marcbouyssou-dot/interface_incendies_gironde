@@ -41,7 +41,14 @@ void main() {
       const MaterialApp(home: Scaffold(body: BrandMark(size: 92))),
     );
 
-    final image = tester.widget<Image>(find.byType(Image));
+    final image = tester
+        .widgetList<Image>(find.byType(Image))
+        .firstWhere(
+          (candidate) =>
+              candidate.image is AssetImage &&
+              (candidate.image as AssetImage).assetName ==
+                  BrandMark.officialAssetPath,
+        );
     final provider = image.image as AssetImage;
     expect(provider.assetName, BrandMark.officialAssetPath);
     expect(provider.assetName, isNot(contains('logo_hd.png')));
@@ -51,11 +58,13 @@ void main() {
     tester,
   ) async {
     await pumpIPhone(tester);
-    expect(find.text('MOBSANTÉ'), findsOneWidget);
-    expect(find.text('Incendies Gironde'), findsOneWidget);
-    expect(find.text('64 % de couverture'), findsOneWidget);
-    expect(find.text('MÉRIGNAC'), findsOneWidget);
-    expect(find.text('❤️ JE M’ENGAGE'), findsOneWidget);
+    expect(find.text('Où aider aujourd’hui ?'), findsOneWidget);
+    expect(
+      find.text('Une mission prioritaire attend encore des renforts.'),
+      findsOneWidget,
+    );
+    expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Je me mobilise'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -88,13 +97,13 @@ void main() {
   ) async {
     await pumpIPhone(tester);
     await tester.scrollUntilVisible(
-      find.text('❤️ JE M’ENGAGE'),
+      find.text('Je me mobilise'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.ensureVisible(find.text('❤️ JE M’ENGAGE').first);
+    await tester.ensureVisible(find.text('Je me mobilise').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('❤️ JE M’ENGAGE').first);
+    await tester.tap(find.text('Je me mobilise').first);
     await tester.pumpAndSettle();
 
     expect(find.text('Profession'), findsOneWidget);
@@ -139,7 +148,7 @@ void main() {
       );
     }
 
-    expect(find.text('MOBSANTÉ'), findsOneWidget);
+    expect(find.text('Où aider aujourd’hui ?'), findsOneWidget);
   });
 
   testWidgets('tabs are lazy and shared streams are created only once', (
@@ -159,7 +168,13 @@ void main() {
     expect(find.text('SITUATION'), findsNothing);
     expect(find.text('URPS MK Nouvelle-Aquitaine'), findsNothing);
 
-    await tester.tap(find.text('Critiques'));
+    if (find.text('Prioritaires').evaluate().isEmpty) {
+      await tester.tap(
+        find.byKey(const Key('toggle-advanced-mission-filters')),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Prioritaires'));
     await tester.pumpAndSettle();
     expect(repository.missionFactories, 1);
     expect(
@@ -186,7 +201,7 @@ void main() {
     expect(repository.accessFactories, 1);
 
     await selectNavigationTab(tester, 0);
-    expect(find.text('PARC DES EXPOSITIONS DE BORDEAUX'), findsNothing);
+    expect(find.text('Parc des Expositions de Bordeaux'), findsNothing);
     expect(repository.missionFactories, 1);
     expect(repository.locationFactories, 1);
     expect(repository.accessFactories, 1);
@@ -214,11 +229,17 @@ void main() {
 
   testWidgets('slot filters update visible cards', (tester) async {
     await pumpIPhone(tester);
-    await tester.tap(find.text('Critiques'));
+    if (find.text('Prioritaires').evaluate().isEmpty) {
+      await tester.tap(
+        find.byKey(const Key('toggle-advanced-mission-filters')),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Prioritaires'));
     await tester.pumpAndSettle();
 
-    expect(find.text('MÉRIGNAC'), findsOneWidget);
-    expect(find.text('PARC DES EXPOSITIONS DE BORDEAUX'), findsNothing);
+    expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Parc des Expositions de Bordeaux'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -249,14 +270,14 @@ void main() {
     await tester.tap(find.text('Sites partenaires').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('PARC DES EXPOSITIONS DE BORDEAUX'), findsOneWidget);
+    expect(find.text('Parc des Expositions de Bordeaux'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('CROIX-ROUGE BORDEAUX'),
+      find.text('Croix-Rouge Bordeaux'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('CROIX-ROUGE BORDEAUX'), findsOneWidget);
-    expect(find.text('MÉRIGNAC'), findsNothing);
+    expect(find.text('Croix-Rouge Bordeaux'), findsOneWidget);
+    expect(find.text('Mérignac'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

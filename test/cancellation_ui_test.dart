@@ -102,7 +102,7 @@ void main() {
   }
 
   Future<void> openEngagementForm(WidgetTester tester) async {
-    final action = find.text('❤️ JE M’ENGAGE');
+    final action = find.text('Je me mobilise');
     final missionScroll = find
         .descendant(
           of: find.byType(CustomScrollView).first,
@@ -136,7 +136,7 @@ void main() {
       initialLocations: const [],
     );
     await pumpApp(tester, repository);
-    expect(find.text('Annuler mon engagement'), findsNothing);
+    expect(find.text('Je ne suis plus disponible'), findsNothing);
 
     await repository.createEngagement(
       missionId: 'ui-mission',
@@ -151,7 +151,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Annuler mon engagement').first,
+      find.text('Je ne suis plus disponible').first,
       200,
       scrollable: find.byType(Scrollable).first,
     );
@@ -160,18 +160,18 @@ void main() {
       const Offset(0, -120),
     );
     await tester.pumpAndSettle();
-    expect(find.text('PARTICIPATION CONFIRMÉE'), findsOneWidget);
+    expect(find.text('Participation confirmée'), findsOneWidget);
     expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
     expect(find.text('Confirmé'), findsOneWidget);
 
-    await tester.tap(find.text('Annuler mon engagement'));
+    await tester.tap(find.text('Je ne suis plus disponible'));
     await tester.pumpAndSettle();
     expect(find.text('Se désengager de cette mission ?'), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
     expect(repository.engagements, hasLength(1));
 
-    await tester.tap(find.text('Annuler mon engagement'));
+    await tester.tap(find.text('Je ne suis plus disponible'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-cancel-engagement')));
     await tester.pumpAndSettle();
@@ -181,9 +181,9 @@ void main() {
     );
     expect(repository.debugMission('ui-mission')?.isActive, isTrue);
     expect(repository.debugMission('ui-mission')?.isCancelled, isFalse);
-    expect(find.text('JE M’ENGAGE À NOUVEAU'), findsOneWidget);
+    expect(find.text('Je me mobilise à nouveau'), findsOneWidget);
     expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
-    expect(find.text('Annuler mon engagement'), findsNothing);
+    expect(find.text('Je ne suis plus disponible'), findsNothing);
     expect(
       find.text('Votre désengagement a bien été enregistré.'),
       findsOneWidget,
@@ -191,10 +191,14 @@ void main() {
   });
 
   for (final (status, label, subtitle) in [
-    (EngagementStatus.pending, 'CONFIRMER MA PARTICIPATION', null),
-    (EngagementStatus.confirmed, 'PARTICIPATION CONFIRMÉE', null),
-    (EngagementStatus.standby, 'RENFORT', 'Vous serez contacté si nécessaire.'),
-    (EngagementStatus.cancelled, 'JE M’ENGAGE À NOUVEAU', null),
+    (EngagementStatus.pending, 'Finaliser ma participation', null),
+    (EngagementStatus.confirmed, 'Participation confirmée', null),
+    (
+      EngagementStatus.standby,
+      'Renfort disponible',
+      'Vous serez contacté si nécessaire.',
+    ),
+    (EngagementStatus.cancelled, 'Je me mobilise à nouveau', null),
   ]) {
     testWidgets('volunteer cancellation visibility for ${status.name}', (
       tester,
@@ -216,18 +220,18 @@ void main() {
       expect(find.text(label), findsOneWidget);
       expect(find.text(status.label), findsOneWidget);
       expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
-      expect(find.text('❤️ JE M’ENGAGE'), findsNothing);
+      expect(find.text('Je me mobilise'), findsNothing);
       if (subtitle != null) {
         expect(find.text(subtitle), findsOneWidget);
       }
       expect(
-        find.text('Annuler mon engagement'),
+        find.text('Je ne suis plus disponible'),
         status == EngagementStatus.cancelled ? findsNothing : findsOneWidget,
       );
       if (status == EngagementStatus.cancelled) {
-        await tester.ensureVisible(find.text('JE M’ENGAGE À NOUVEAU'));
+        await tester.ensureVisible(find.text('Je me mobilise à nouveau'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('JE M’ENGAGE À NOUVEAU'));
+        await tester.tap(find.text('Je me mobilise à nouveau'));
         await tester.pumpAndSettle();
         expect(find.text('CONFIRMER MA PARTICIPATION'), findsOneWidget);
       }
@@ -252,7 +256,7 @@ void main() {
 
     await pumpApp(tester, repository);
 
-    expect(find.text('Annuler mon engagement'), findsOneWidget);
+    expect(find.text('Je ne suis plus disponible'), findsOneWidget);
     expect(find.text('Annuler ce besoin'), findsNothing);
   });
 
@@ -268,7 +272,7 @@ void main() {
 
       await pumpApp(tester, repository, settle: false);
 
-      expect(find.text('❤️ JE M’ENGAGE'), findsNothing);
+      expect(find.text('Je me mobilise'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsWidgets);
     },
   );
@@ -285,8 +289,11 @@ void main() {
 
     await pumpApp(tester, repository);
 
-    expect(find.text('Statut indisponible'), findsOneWidget);
-    expect(find.text('❤️ JE M’ENGAGE'), findsNothing);
+    expect(
+      find.text('Mobilisation temporairement indisponible'),
+      findsOneWidget,
+    );
+    expect(find.text('Je me mobilise'), findsNothing);
   });
 
   testWidgets('covered profession is disabled in the engagement form', (
@@ -331,12 +338,12 @@ void main() {
         )
         .first;
     await tester.scrollUntilVisible(
-      find.text('❤️ JE M’ENGAGE'),
+      find.text('Je me mobilise'),
       300,
       scrollable: missionScroll,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('❤️ JE M’ENGAGE'));
+    await tester.tap(find.text('Je me mobilise'));
     await tester.pumpAndSettle();
 
     for (final label in [
