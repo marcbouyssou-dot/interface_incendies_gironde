@@ -114,7 +114,7 @@ void main() {
     final navigationTheme = NavigationBarTheme.of(
       tester.element(find.byType(NavigationBar)),
     );
-    expect(navigationTheme.indicatorColor, V5Colors.dark.infoContainer);
+    expect(navigationTheme.indicatorColor, Colors.transparent);
     expect(
       navigationTheme.iconTheme?.resolve({WidgetState.selected})?.color,
       V5Colors.dark.info,
@@ -125,10 +125,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('professional normal and complete cards use semantic borders', (
+  testWidgets('professional cards keep a calm borderless surface', (
     tester,
   ) async {
-    Future<Color> borderFor(MissionCardState state) async {
+    Future<BoxBorder?> borderFor(MissionCardState state) async {
       await tester.pumpWidget(
         app(
           MissionCard(
@@ -153,17 +153,11 @@ void main() {
         find.byKey(const Key('mission-card-surface')),
       );
       final decoration = surface.decoration! as BoxDecoration;
-      final border = decoration.border! as Border;
-      return border.top.color;
+      return decoration.border;
     }
 
-    expect(
-      await borderFor(MissionCardState.available),
-      V5Colors.light.info.withValues(alpha: 0.24),
-    );
-    expect(
-      await borderFor(MissionCardState.complete),
-      V5Colors.light.outline.withValues(alpha: 0.48),
-    );
+    expect(await borderFor(MissionCardState.available), isNull);
+    expect(await borderFor(MissionCardState.urgent), isNull);
+    expect(await borderFor(MissionCardState.complete), isNull);
   });
 }

@@ -38,7 +38,11 @@ void main() {
     expect(find.byType(ProfessionalShell), findsOneWidget);
     expect(find.byType(V5BottomNavigation), findsOneWidget);
     expect(find.text('Bonjour'), findsNothing);
-    expect(find.text("Où être utile aujourd'hui ?"), findsOneWidget);
+    expect(
+      find.text('1 mission urgente nécessite votre attention.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('decision-header-secondary')), findsNothing);
     expect(find.byKey(const Key('professional-hero-where')), findsOneWidget);
     expect(find.byKey(const Key('professional-hero-when')), findsOneWidget);
     expect(find.byKey(const Key('slots-territorial-filter')), findsNothing);
@@ -128,7 +132,7 @@ void main() {
     final navigationTheme = NavigationBarTheme.of(
       tester.element(find.byType(NavigationBar)),
     );
-    expect(navigationTheme.indicatorColor, colors.infoContainer);
+    expect(navigationTheme.indicatorColor, Colors.transparent);
     expect(
       navigationTheme.iconTheme?.resolve({WidgetState.selected})?.color,
       colors.info,
@@ -170,7 +174,10 @@ void main() {
       find.byKey(const Key('professional-secondary-filters')),
       findsNothing,
     );
-    expect(find.text("Où être utile aujourd'hui ?"), findsNothing);
+    expect(
+      find.text('1 mission urgente nécessite votre attention.'),
+      findsNothing,
+    );
     expect(find.text('Détails de la mission'), findsWidgets);
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navigation.destinations, hasLength(4));
@@ -218,7 +225,10 @@ void main() {
     await selectPreview(tester, 'Professionnel');
     await closeSettings(tester);
     expect(find.byType(ProfessionalShell), findsOneWidget);
-    expect(find.text("Où être utile aujourd'hui ?"), findsOneWidget);
+    expect(
+      find.text('1 mission urgente nécessite votre attention.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
     expect(find.text('Voir les détails'), findsWidgets);
 

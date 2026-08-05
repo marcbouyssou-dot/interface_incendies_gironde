@@ -11,12 +11,14 @@ class DecisionHeader extends StatelessWidget {
     this.verdict,
     this.secondary,
     this.verdictColor,
+    this.showSecondary = true,
   });
 
   final DecisionHeaderState state;
   final String? verdict;
   final String? secondary;
   final Color? verdictColor;
+  final bool showSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +40,9 @@ class DecisionHeader extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: state != DecisionHeaderState.noUpdates,
-      label: '${verdict ?? content.$1}. ${secondary ?? content.$2}',
+      label: showSecondary
+          ? '${verdict ?? content.$1}. ${secondary ?? content.$2}'
+          : verdict ?? content.$1,
       child: ExcludeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,12 +54,14 @@ class DecisionHeader extends StatelessWidget {
                 context,
               ).textTheme.headlineLarge?.copyWith(color: resolvedVerdictColor),
             ),
-            const SizedBox(height: V5Spacing.xs),
-            Text(
-              secondary ?? content.$2,
-              key: const Key('decision-header-secondary'),
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            if (showSecondary) ...[
+              const SizedBox(height: V5Spacing.xs),
+              Text(
+                secondary ?? content.$2,
+                key: const Key('decision-header-secondary'),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
           ],
         ),
       ),

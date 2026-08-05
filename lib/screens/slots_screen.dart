@@ -148,14 +148,14 @@ class _SlotsScreenState extends State<SlotsScreen> {
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    16,
+                    professionalJourney ? 24 : 16,
                     horizontalPadding,
                     18,
                   ),
                   sliver: SliverList.list(
                     children: [
                       _MissionDecisionHeader(
-                        missions: missions,
+                        missions: professionalJourney ? visibleNeeds : missions,
                         professionalJourney: professionalJourney,
                         showOverview:
                             hasPrivilegedAccess && !professionalJourney,
@@ -246,7 +246,8 @@ class _SlotsScreenState extends State<SlotsScreen> {
                               : null,
                         );
                       },
-                      separatorBuilder: (_, _) => const SizedBox(height: 24),
+                      separatorBuilder: (_, _) =>
+                          SizedBox(height: professionalJourney ? 16 : 24),
                     ),
                   ),
               ],
@@ -344,9 +345,12 @@ class _MissionDecisionHeader extends StatelessWidget {
         : remaining == 1
         ? '1 renfort encore attendu'
         : '$remaining renforts encore attendus';
+    final urgentCount = missions
+        .where((mission) => mission.status == NeedStatus.critical)
+        .length;
     final decisionState = missions.isEmpty
         ? DecisionHeaderState.noUpdates
-        : missions.any((mission) => mission.status == NeedStatus.critical)
+        : urgentCount > 0
         ? DecisionHeaderState.urgentMission
         : DecisionHeaderState.newMissions;
     final secondary = missions.isEmpty
@@ -360,58 +364,65 @@ class _MissionDecisionHeader extends StatelessWidget {
         DecisionHeader(
           state: decisionState,
           verdict: professionalJourney
-              ? "Où être utile aujourd'hui ?"
+              ? switch ((missions.isEmpty, decisionState)) {
+                  (true, _) =>
+                    'Aucune mission ne correspond actuellement à vos critères.',
+                  (false, DecisionHeaderState.urgentMission) =>
+                    urgentCount == 1
+                        ? '1 mission urgente nécessite votre attention.'
+                        : '$urgentCount missions urgentes nécessitent votre attention.',
+                  (false, _) when missions.length == 1 =>
+                    '1 mission correspond à vos critères.',
+                  (false, _) =>
+                    '${missions.length} missions correspondent à vos critères.',
+                }
               : missions.isEmpty
               ? 'Rien de nouveau pour l’instant'
               : 'Où aider aujourd’hui ?',
           secondary: secondary,
           verdictColor: professionalJourney ? colors.info : null,
+          showSecondary: !professionalJourney,
         ),
         if (professionalJourney) ...[
-          const SizedBox(height: V5Spacing.md),
-          Row(
+          const SizedBox(height: V5Spacing.lg),
+          Wrap(
+            spacing: V5Spacing.xs,
+            runSpacing: V5Spacing.xs,
             children: [
-              Expanded(
-                child: _HeroFilterChip(
-                  chipKey: const Key('professional-hero-where'),
-                  icon: Icons.location_on_outlined,
-                  label: 'Où',
-                  activeValue: group?.label,
-                  selectedValue: group?.name ?? 'all',
-                  options: [
-                    const _HeroFilterOption(
-                      value: 'all',
-                      label: 'Tous les secteurs',
-                    ),
-                    for (final value in TerritorialGroup.values)
-                      _HeroFilterOption(value: value.name, label: value.label),
-                  ],
-                  onSelected: (value) => onGroupChanged(
-                    value == 'all'
-                        ? null
-                        : TerritorialGroup.values.byName(value),
+              _HeroFilterChip(
+                chipKey: const Key('professional-hero-where'),
+                icon: Icons.location_on_outlined,
+                label: 'Où',
+                activeValue: group?.label,
+                selectedValue: group?.name ?? 'all',
+                options: [
+                  const _HeroFilterOption(
+                    value: 'all',
+                    label: 'Tous les secteurs',
                   ),
+                  for (final value in TerritorialGroup.values)
+                    _HeroFilterOption(value: value.name, label: value.label),
+                ],
+                onSelected: (value) => onGroupChanged(
+                  value == 'all' ? null : TerritorialGroup.values.byName(value),
                 ),
               ),
-              const SizedBox(width: V5Spacing.sm),
-              Expanded(
-                child: _HeroFilterChip(
-                  chipKey: const Key('professional-hero-when'),
-                  icon: Icons.calendar_today_outlined,
-                  label: 'Quand',
-                  activeValue: date,
-                  selectedValue: date ?? 'all',
-                  options: [
-                    const _HeroFilterOption(
-                      value: 'all',
-                      label: 'Toutes les dates',
-                    ),
-                    for (final value in availableDates)
-                      _HeroFilterOption(value: value, label: value),
-                  ],
-                  onSelected: (value) =>
-                      onDateChanged(value == 'all' ? null : value),
-                ),
+              _HeroFilterChip(
+                chipKey: const Key('professional-hero-when'),
+                icon: Icons.calendar_today_outlined,
+                label: 'Quand',
+                activeValue: date,
+                selectedValue: date ?? 'all',
+                options: [
+                  const _HeroFilterOption(
+                    value: 'all',
+                    label: 'Toutes les dates',
+                  ),
+                  for (final value in availableDates)
+                    _HeroFilterOption(value: value, label: value),
+                ],
+                onSelected: (value) =>
+                    onDateChanged(value == 'all' ? null : value),
               ),
             ],
           ),
@@ -491,55 +502,51 @@ class _HeroFilterChip extends StatelessWidget {
           ),
       ],
       child: Container(
-        height: 52,
+        constraints: const BoxConstraints(minHeight: 44, maxWidth: 236),
         padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
         decoration: BoxDecoration(
-          color: hasSelection ? colors.infoContainer : colors.surface,
-          borderRadius: BorderRadius.circular(V5Radius.control),
-          border: Border.all(
-            color: hasSelection
-                ? colors.info.withValues(alpha: 0.38)
-                : colors.outline,
-          ),
-          boxShadow: V5Elevation.level1(colors),
+          color: hasSelection
+              ? Color.alphaBlend(
+                  colors.info.withValues(alpha: 0.06),
+                  colors.surfaceElevated,
+                )
+              : colors.surfaceElevated,
+          borderRadius: BorderRadius.circular(V5Radius.pill),
+          boxShadow: [
+            BoxShadow(
+              color: colors.shadow.withValues(alpha: 0.035),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: colors.info),
-            const SizedBox(width: V5Spacing.xs),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (hasSelection)
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: colors.textSecondary,
-                        fontSize: 9.5,
-                        height: 1,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  Text(
-                    activeValue ?? label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontSize: 12.5,
-                      height: 1.2,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
+            Icon(
+              icon,
+              size: 16,
+              color: hasSelection ? colors.info : colors.textSecondary,
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                activeValue ?? label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: hasSelection ? colors.info : colors.textPrimary,
+                  fontSize: 12.5,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
+            const SizedBox(width: 4),
             Icon(
               Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: colors.textSecondary,
+              size: 16,
+              color: colors.textSecondary.withValues(alpha: 0.8),
             ),
           ],
         ),

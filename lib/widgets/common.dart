@@ -386,32 +386,41 @@ class MissionTimingPill extends StatelessWidget {
       label: 'Mission $label',
       child: Container(
         key: Key('mission-timing-${mission.id}'),
-        constraints: const BoxConstraints(minHeight: 32),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        constraints: BoxConstraints(minHeight: professionalPalette ? 26 : 32),
+        padding: EdgeInsets.symmetric(
+          horizontal: professionalPalette ? 7 : 10,
+          vertical: professionalPalette ? 4 : 6,
+        ),
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: color.withValues(alpha: 0.34), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          border: professionalPalette
+              ? null
+              : Border.all(color: color.withValues(alpha: 0.34), width: 1.2),
+          boxShadow: professionalPalette
+              ? null
+              : [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
+            Icon(icon, size: professionalPalette ? 13 : 16, color: color),
+            SizedBox(width: professionalPalette ? 4 : 6),
             Text(
               label,
               style: TextStyle(
                 color: color,
-                fontSize: 12,
+                fontSize: professionalPalette ? 10.5 : 12,
                 letterSpacing: 0.1,
-                fontWeight: FontWeight.w900,
+                fontWeight: professionalPalette
+                    ? FontWeight.w700
+                    : FontWeight.w900,
               ),
             ),
           ],
@@ -963,7 +972,9 @@ class NeedCard extends StatelessWidget {
         messageIcon: Icons.groups_2_rounded,
         professionalPalette: professionalJourney,
       ),
-      professionTitle: remaining > 0
+      professionTitle: professionalJourney
+          ? 'Profession recherchée'
+          : remaining > 0
           ? 'Qui est attendu ?'
           : 'Qui s’est mobilisé ?',
       professions: [
@@ -1305,10 +1316,20 @@ class _NeedActionsState extends State<_NeedActions> {
                             ? colors.success
                             : colors.textSecondary
                       : AppColors.green,
-                  minimumSize: const Size.fromHeight(
-                    MobilizationTokens.actionHeight,
+                  minimumSize: Size.fromHeight(
+                    widget.professionalJourney
+                        ? 49
+                        : MobilizationTokens.actionHeight,
                   ),
-                  shape: widget.professionalHome
+                  elevation: widget.professionalJourney ? 0 : null,
+                  shadowColor: widget.professionalJourney
+                      ? Colors.transparent
+                      : null,
+                  shape: widget.professionalJourney
+                      ? RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(V5Radius.control),
+                        )
+                      : widget.professionalHome
                       ? RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
                             MobilizationTokens.radiusSection,
@@ -1316,8 +1337,8 @@ class _NeedActionsState extends State<_NeedActions> {
                         )
                       : null,
                   textStyle: widget.professionalHome
-                      ? const TextStyle(
-                          fontSize: 16,
+                      ? TextStyle(
+                          fontSize: widget.professionalJourney ? 15 : 16,
                           fontWeight: FontWeight.w900,
                         )
                       : null,
@@ -1376,14 +1397,25 @@ class _NeedActionsState extends State<_NeedActions> {
             disabledForegroundColor: widget.professionalJourney
                 ? colors.textSecondary
                 : AppColors.green,
-            minimumSize: const Size.fromHeight(MobilizationTokens.actionHeight),
+            minimumSize: Size.fromHeight(
+              widget.professionalJourney ? 49 : MobilizationTokens.actionHeight,
+            ),
+            elevation: widget.professionalJourney ? 0 : null,
+            shadowColor: widget.professionalJourney ? Colors.transparent : null,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
-                widget.professionalHome ? MobilizationTokens.radiusSection : 15,
+                widget.professionalJourney
+                    ? V5Radius.control
+                    : widget.professionalHome
+                    ? MobilizationTokens.radiusSection
+                    : 15,
               ),
             ),
             textStyle: widget.professionalHome
-                ? const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)
+                ? TextStyle(
+                    fontSize: widget.professionalJourney ? 15 : 16,
+                    fontWeight: FontWeight.w900,
+                  )
                 : null,
           ),
           icon: need.status == NeedStatus.complete

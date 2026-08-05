@@ -104,6 +104,55 @@ class ImpactBanner extends StatelessWidget {
     };
     final resolvedMessage = message?.trim();
 
+    if (professionalPalette) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(
+            color.withValues(alpha: 0.065),
+            colors.surfaceElevated,
+          ),
+          borderRadius: BorderRadius.circular(V5Radius.compact),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 15),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: label,
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (resolvedMessage != null && resolvedMessage.isNotEmpty)
+                      TextSpan(
+                        text: ' · $resolvedMessage',
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+                style: const TextStyle(fontSize: 12.5, height: 1.25),
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: V5Spacing.xs),
+              trailing!,
+            ],
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: MobilizationTokens.bannerPadding,
@@ -194,12 +243,17 @@ class ProfessionChip extends StatelessWidget {
         ? colors.info
         : colors.warning;
     return Container(
-      constraints: const BoxConstraints(minHeight: 34),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      constraints: BoxConstraints(minHeight: professionalPalette ? 30 : 34),
+      padding: EdgeInsets.symmetric(
+        horizontal: professionalPalette ? 9 : 10,
+        vertical: professionalPalette ? 5 : 7,
+      ),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: color.withValues(alpha: professionalPalette ? 0.065 : 0.08),
         borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: professionalPalette
+            ? null
+            : Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -209,16 +263,18 @@ class ProfessionChip extends StatelessWidget {
                 ? Icons.check_circle_rounded
                 : Icons.add_circle_outline_rounded,
             color: color,
-            size: 16,
+            size: professionalPalette ? 14 : 16,
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: professionalPalette ? 5 : 6),
           Flexible(
             child: Text(
               label,
               style: TextStyle(
                 color: colors.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontSize: professionalPalette ? 11.5 : 12,
+                fontWeight: professionalPalette
+                    ? FontWeight.w700
+                    : FontWeight.w800,
               ),
             ),
           ),

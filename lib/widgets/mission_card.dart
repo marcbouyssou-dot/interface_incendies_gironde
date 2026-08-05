@@ -83,23 +83,35 @@ class MissionCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: colors.surfaceElevated,
           borderRadius: BorderRadius.circular(V5Radius.card),
-          border: Border.all(
-            color: accent.withValues(
-              alpha: state == MissionCardState.available ? 0.24 : 0.48,
-            ),
-            width: state == MissionCardState.urgent ? 1.5 : 1,
-          ),
-          boxShadow: state == MissionCardState.urgent
+          border: professionalPalette
+              ? null
+              : Border.all(
+                  color: accent.withValues(
+                    alpha: state == MissionCardState.available ? 0.24 : 0.48,
+                  ),
+                  width: state == MissionCardState.urgent ? 1.5 : 1,
+                ),
+          boxShadow: professionalPalette
+              ? [
+                  BoxShadow(
+                    color: colors.shadow.withValues(alpha: 0.045),
+                    blurRadius: 18,
+                    offset: const Offset(0, 5),
+                  ),
+                ]
+              : state == MissionCardState.urgent
               ? V5Elevation.level2(colors)
               : V5Elevation.level1(colors),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            V5Spacing.lg,
-            V5Spacing.xl,
-            V5Spacing.lg,
-            V5Spacing.xl,
-          ),
+          padding: professionalPalette
+              ? const EdgeInsets.fromLTRB(16, 17, 16, 14)
+              : const EdgeInsets.fromLTRB(
+                  V5Spacing.lg,
+                  V5Spacing.xl,
+                  V5Spacing.lg,
+                  V5Spacing.xl,
+                ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -110,39 +122,43 @@ class MissionCard extends StatelessWidget {
                   context,
                 ).textTheme.labelSmall?.copyWith(color: colors.textSecondary),
               ),
-              const SizedBox(height: V5Spacing.xs),
+              SizedBox(height: professionalPalette ? 4 : V5Spacing.xs),
               Text(
                 locationName,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              const SizedBox(height: V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 14 : V5Spacing.lg),
               _MissionSchedule(
                 dateLabel: dateLabel,
                 timeLabel: timeLabel,
                 timingBadge: timingBadge,
+                professionalPalette: professionalPalette,
               ),
-              const SizedBox(height: V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 14 : V5Spacing.lg),
               Text(
                 professionTitle,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontSize: professionalPalette ? 14 : null,
+                ),
               ),
-              const SizedBox(height: V5Spacing.sm),
+              SizedBox(height: professionalPalette ? 7 : V5Spacing.sm),
               Wrap(
                 spacing: V5Spacing.xs,
                 runSpacing: V5Spacing.xs,
                 children: professions,
               ),
-              const SizedBox(height: V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 13 : V5Spacing.lg),
               need,
-              const SizedBox(height: V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 14 : V5Spacing.lg),
               primaryAction,
               if (secondaryDetailsExpanded) ...[
-                const SizedBox(height: V5Spacing.xl),
+                SizedBox(height: professionalPalette ? 16 : V5Spacing.xl),
                 secondaryDetails,
               ] else ...[
-                const SizedBox(height: V5Spacing.xs),
+                SizedBox(height: professionalPalette ? 2 : V5Spacing.xs),
                 _MissionDetailsDisclosure(
                   toggleKey: secondaryDetailsToggleKey,
+                  professionalPalette: professionalPalette,
                   child: secondaryDetails,
                 ),
               ],
@@ -186,40 +202,61 @@ class _MissionSchedule extends StatelessWidget {
     required this.dateLabel,
     required this.timeLabel,
     this.timingBadge,
+    this.professionalPalette = false,
   });
 
   final String dateLabel;
   final String timeLabel;
   final Widget? timingBadge;
+  final bool professionalPalette;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: V5Spacing.md,
-        vertical: V5Spacing.sm,
+      padding: EdgeInsets.symmetric(
+        horizontal: professionalPalette ? 12 : V5Spacing.md,
+        vertical: professionalPalette ? 9 : V5Spacing.sm,
       ),
       decoration: BoxDecoration(
-        color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(V5Radius.section),
+        color: professionalPalette
+            ? Color.alphaBlend(
+                colors.surface.withValues(alpha: 0.64),
+                colors.surfaceMuted,
+              )
+            : colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(
+          professionalPalette ? V5Radius.control : V5Radius.section,
+        ),
       ),
       child: Row(
         children: [
           Icon(
             Icons.calendar_today_outlined,
-            color: colors.textPrimary,
-            size: 20,
+            color: professionalPalette
+                ? colors.textSecondary
+                : colors.textPrimary,
+            size: professionalPalette ? 16 : 20,
           ),
-          const SizedBox(width: V5Spacing.sm),
+          SizedBox(width: professionalPalette ? 9 : V5Spacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(dateLabel, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: V5Spacing.xxs),
-                Text(timeLabel, style: Theme.of(context).textTheme.titleLarge),
+                Text(
+                  dateLabel,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontSize: professionalPalette ? 11 : null,
+                  ),
+                ),
+                SizedBox(height: professionalPalette ? 1 : V5Spacing.xxs),
+                Text(
+                  timeLabel,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontSize: professionalPalette ? 17 : null,
+                  ),
+                ),
               ],
             ),
           ),
@@ -234,10 +271,15 @@ class _MissionSchedule extends StatelessWidget {
 }
 
 class _MissionDetailsDisclosure extends StatefulWidget {
-  const _MissionDetailsDisclosure({required this.child, this.toggleKey});
+  const _MissionDetailsDisclosure({
+    required this.child,
+    this.toggleKey,
+    this.professionalPalette = false,
+  });
 
   final Widget child;
   final Key? toggleKey;
+  final bool professionalPalette;
 
   @override
   State<_MissionDetailsDisclosure> createState() =>
@@ -257,15 +299,22 @@ class _MissionDetailsDisclosureState extends State<_MissionDetailsDisclosure> {
           key: widget.toggleKey,
           style: TextButton.styleFrom(
             foregroundColor: colors.textSecondary,
-            padding: const EdgeInsets.symmetric(vertical: V5Spacing.xs),
+            padding: EdgeInsets.symmetric(
+              vertical: widget.professionalPalette ? 2 : V5Spacing.xs,
+            ),
             minimumSize: const Size(0, 44),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle: TextStyle(
+              fontSize: widget.professionalPalette ? 12.5 : null,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           onPressed: () => setState(() => _expanded = !_expanded),
           icon: Icon(
             _expanded
                 ? Icons.keyboard_arrow_up_rounded
                 : Icons.keyboard_arrow_down_rounded,
+            size: widget.professionalPalette ? 17 : null,
           ),
           label: Text(_expanded ? 'Masquer les détails' : 'Voir les détails'),
         ),

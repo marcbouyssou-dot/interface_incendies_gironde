@@ -19,52 +19,69 @@ class V5BottomNavigation extends StatelessWidget {
     final colors = context.v5Colors;
     return Material(
       color: colors.surface,
-      child: SafeArea(
-        top: false,
-        child: NavigationBarTheme(
-          data: NavigationBarTheme.of(context).copyWith(
-            indicatorColor: colors.infoContainer,
-            iconTheme: WidgetStateProperty.resolveWith(
-              (states) => IconThemeData(
-                color: states.contains(WidgetState.selected)
-                    ? colors.info
-                    : colors.textSecondary,
-              ),
-            ),
-            labelTextStyle: WidgetStateProperty.resolveWith(
-              (states) => TextStyle(
-                color: states.contains(WidgetState.selected)
-                    ? colors.info
-                    : colors.textSecondary,
-                fontSize: 10,
-                height: 1.2,
-                letterSpacing: 0.8,
-                fontWeight: FontWeight.w800,
-              ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: colors.outline.withValues(alpha: 0.55),
+              width: 0.5,
             ),
           ),
-          child: NavigationBar(
-            key: const Key('v5-bottom-navigation'),
-            selectedIndex: selectedIndex,
-            onDestinationSelected: onDestinationSelected,
-            backgroundColor: colors.surface,
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.explore_outlined),
-                selectedIcon: Icon(Icons.explore_rounded),
-                label: 'Missions',
+        ),
+        child: SafeArea(
+          top: false,
+          child: NavigationBarTheme(
+            data: NavigationBarTheme.of(context).copyWith(
+              height: 64,
+              indicatorColor: Colors.transparent,
+              iconTheme: WidgetStateProperty.resolveWith(
+                (states) => IconThemeData(
+                  color: states.contains(WidgetState.selected)
+                      ? colors.info
+                      : colors.textSecondary,
+                ),
               ),
-              NavigationDestination(
-                icon: Icon(Icons.volunteer_activism_outlined),
-                selectedIcon: Icon(Icons.volunteer_activism_rounded),
-                label: 'Engagements',
+              labelTextStyle: WidgetStateProperty.resolveWith(
+                (states) => TextStyle(
+                  color: states.contains(WidgetState.selected)
+                      ? colors.info
+                      : colors.textSecondary,
+                  fontSize: 9.5,
+                  height: 1.15,
+                  letterSpacing: 0.1,
+                  fontWeight: states.contains(WidgetState.selected)
+                      ? FontWeight.w700
+                      : FontWeight.w600,
+                ),
               ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline_rounded),
-                selectedIcon: Icon(Icons.person_rounded),
-                label: 'Profil',
-              ),
-            ],
+            ),
+            child: NavigationBar(
+              key: const Key('v5-bottom-navigation'),
+              selectedIndex: selectedIndex,
+              onDestinationSelected: onDestinationSelected,
+              backgroundColor: colors.surface,
+              elevation: 0,
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.explore_outlined, size: 24),
+                  selectedIcon: Icon(Icons.explore_rounded, size: 25),
+                  label: 'Missions',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.volunteer_activism_outlined, size: 24),
+                  selectedIcon: Icon(
+                    Icons.volunteer_activism_rounded,
+                    size: 25,
+                  ),
+                  label: 'Engagements',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.person_outline_rounded, size: 24),
+                  selectedIcon: Icon(Icons.person_rounded, size: 25),
+                  label: 'Profil',
+                ),
+              ],
+            ),
           ),
         ),
       ),
