@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
@@ -483,24 +484,12 @@ class _HeroFilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final hasSelection = activeValue != null;
-    return PopupMenuButton<String>(
+    return CupertinoButton(
       key: chipKey,
-      tooltip: 'Filtrer par $label',
-      initialValue: selectedValue,
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final option in options)
-          PopupMenuItem(
-            value: option.value,
-            child: Row(
-              children: [
-                Expanded(child: Text(option.label)),
-                if (option.value == selectedValue)
-                  Icon(Icons.check_rounded, size: 18, color: colors.info),
-              ],
-            ),
-          ),
-      ],
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(44, 44),
+      pressedOpacity: 0.72,
+      onPressed: () => _showOptions(context),
       child: Container(
         constraints: const BoxConstraints(minHeight: 44, maxWidth: 236),
         padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
@@ -553,6 +542,31 @@ class _HeroFilterChip extends StatelessWidget {
       ),
     );
   }
+
+  void _showOptions(BuildContext context) {
+    final colors = context.v5Colors;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: colors.shadow.withValues(alpha: 0.28),
+      sheetAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 260),
+        reverseDuration: Duration(milliseconds: 210),
+      ),
+      builder: (sheetContext) => _ProfessionalFilterSheet(
+        title: label == 'Où' ? 'Où aider ?' : 'Quand aider ?',
+        selectedValue: selectedValue,
+        options: options,
+        onSelected: (value) {
+          onSelected(value);
+          Navigator.of(sheetContext).pop();
+        },
+      ),
+    );
+  }
 }
 
 class _HeroFilterOption {
@@ -560,6 +574,114 @@ class _HeroFilterOption {
 
   final String value;
   final String label;
+}
+
+class _ProfessionalFilterSheet extends StatelessWidget {
+  const _ProfessionalFilterSheet({
+    required this.title,
+    required this.selectedValue,
+    required this.options,
+    required this.onSelected,
+  });
+
+  final String title;
+  final String selectedValue;
+  final List<_HeroFilterOption> options;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.72;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: Material(
+        color: colors.surfaceElevated,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(V5Radius.card),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 36,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: colors.outline.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(V5Radius.pill),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 15, 20, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              Divider(height: 1, thickness: 0.5, color: colors.outline),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                  itemCount: options.length,
+                  separatorBuilder: (_, _) => Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    indent: 8,
+                    endIndent: 8,
+                    color: colors.outline.withValues(alpha: 0.7),
+                  ),
+                  itemBuilder: (context, index) {
+                    final option = options[index];
+                    final selected = option.value == selectedValue;
+                    return CupertinoButton(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size.fromHeight(52),
+                      pressedOpacity: 0.68,
+                      onPressed: () => onSelected(option.value),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              option.label,
+                              style: TextStyle(
+                                color: colors.textPrimary,
+                                fontSize: 16,
+                                height: 1.2,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (selected)
+                            Icon(
+                              CupertinoIcons.check_mark,
+                              size: 19,
+                              color: colors.info,
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _MissionResultsHeader extends StatelessWidget {
