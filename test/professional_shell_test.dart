@@ -3,12 +3,27 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
+import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/screens/development_settings_screen.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
+  Future<void> selectPreview(WidgetTester tester, String label) async {
+    await tester.tap(find.byKey(const Key('role-preview-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label).last);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> closeSettings(WidgetTester tester) async {
+    final context = tester.element(find.byType(DevelopmentSettingsScreen));
+    Navigator.of(context).pop();
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('professional journey exposes exactly the three V5 tabs', (
     tester,
   ) async {
@@ -84,6 +99,63 @@ void main() {
     expect(find.byType(ProfessionalShell), findsNothing);
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navigation.destinations, hasLength(4));
+  });
+
+  testWidgets('debug settings switch the displayed shell instantly', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Plus'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-development-settings')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mode Développement'), findsOneWidget);
+    expect(find.text('Automatique'), findsOneWidget);
+    await selectPreview(tester, 'Professionnel');
+    await closeSettings(tester);
+    expect(find.byType(ProfessionalShell), findsOneWidget);
+
+    await tester.tap(find.text('Profil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-development-settings')));
+    await tester.pumpAndSettle();
+    await selectPreview(tester, 'Responsable');
+    await closeSettings(tester);
+
+    expect(find.byType(ProfessionalShell), findsNothing);
+    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect(navigation.destinations, hasLength(4));
+  });
+
+  testWidgets('coordinator preview never elevates a real site manager', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      responsibleAccess: ResponsibleAccess(
+        uid: 'manager',
+        role: ResponsibleRole.siteManager,
+        locationIds: {places.first.id},
+        active: true,
+      ),
+    );
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Plus'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-development-settings')));
+    await tester.pumpAndSettle();
+    await selectPreview(tester, 'Coordinateur');
+    await closeSettings(tester);
+    await tester.tap(find.text('Déclarer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Votre accès responsable'), findsOneWidget);
+    expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
+    expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
   });
 }
 

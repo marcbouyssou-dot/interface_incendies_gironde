@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
@@ -9,6 +10,7 @@ import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import 'about_screen.dart';
+import 'development_settings_screen.dart';
 import 'legal_notice_screen.dart';
 import 'location_detail_screen.dart';
 
@@ -110,6 +112,14 @@ class _PlacesScreenState extends State<PlacesScreen> {
                             builder: (_) => const LegalNoticeScreen(),
                           ),
                         ),
+                        onOpenSettings: kDebugMode
+                            ? () => Navigator.of(context).push(
+                                AppPageRoute<void>(
+                                  builder: (_) =>
+                                      const DevelopmentSettingsScreen(),
+                                ),
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 16),
                       Container(
@@ -240,10 +250,12 @@ class _PlacesInfoLinks extends StatelessWidget {
   const _PlacesInfoLinks({
     required this.onOpenAbout,
     required this.onOpenLegalNotice,
+    this.onOpenSettings,
   });
 
   final VoidCallback onOpenAbout;
   final VoidCallback onOpenLegalNotice;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -264,6 +276,20 @@ class _PlacesInfoLinks extends StatelessWidget {
               onTap: onOpenAbout,
             ),
           ),
+          if (onOpenSettings != null) ...[
+            const SizedBox(
+              height: 32,
+              child: VerticalDivider(width: 1, color: _PlacesVisuals.border),
+            ),
+            Expanded(
+              child: _PlacesInfoLink(
+                key: const Key('open-development-settings'),
+                icon: Icons.settings_outlined,
+                label: 'Réglages',
+                onTap: onOpenSettings!,
+              ),
+            ),
+          ],
           const SizedBox(
             height: 32,
             child: VerticalDivider(width: 1, color: _PlacesVisuals.border),

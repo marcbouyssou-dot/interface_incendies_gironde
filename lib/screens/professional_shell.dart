@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../repositories/repository_scope.dart';
@@ -5,6 +6,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/v5_bottom_navigation.dart';
 import 'create_need_screen.dart';
+import 'development_settings_screen.dart';
 import 'slots_screen.dart';
 
 class ProfessionalShell extends StatefulWidget {
@@ -33,6 +35,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     1 => const ProfessionalEngagementsScreen(),
     2 => ProfessionalProfileScreen(
       onOpenResponsibleAccess: _openResponsibleAccess,
+      onOpenSettings: _openSettings,
     ),
     _ => throw RangeError.index(index, _screens),
   };
@@ -59,6 +62,12 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
           ),
         ),
       ),
+    );
+  }
+
+  void _openSettings() {
+    Navigator.of(context).push(
+      AppPageRoute<void>(builder: (_) => const DevelopmentSettingsScreen()),
     );
   }
 
@@ -99,19 +108,32 @@ class ProfessionalProfileScreen extends StatelessWidget {
   const ProfessionalProfileScreen({
     super.key,
     required this.onOpenResponsibleAccess,
+    required this.onOpenSettings,
   });
 
   final VoidCallback onOpenResponsibleAccess;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) => _ProfessionalPlaceholderScreen(
     icon: Icons.person_outline_rounded,
     title: 'Profil',
     message: 'Votre profil professionnel sera bientôt disponible ici.',
-    footer: TextButton(
-      key: const Key('open-responsible-access'),
-      onPressed: onOpenResponsibleAccess,
-      child: const Text('Accès responsable'),
+    footer: Column(
+      children: [
+        if (kDebugMode)
+          OutlinedButton.icon(
+            key: const Key('open-development-settings'),
+            onPressed: onOpenSettings,
+            icon: const Icon(Icons.settings_outlined),
+            label: const Text('Réglages'),
+          ),
+        TextButton(
+          key: const Key('open-responsible-access'),
+          onPressed: onOpenResponsibleAccess,
+          child: const Text('Accès responsable'),
+        ),
+      ],
     ),
   );
 }

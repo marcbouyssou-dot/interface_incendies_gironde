@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../dev/role_preview.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
@@ -106,9 +108,17 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final previewMode = kDebugMode
+        ? RolePreviewScope.of(context).mode
+        : RolePreviewMode.automatic;
+    final useProfessionalShell = switch (previewMode) {
+      RolePreviewMode.professional => true,
+      RolePreviewMode.responsible || RolePreviewMode.coordinator => false,
+      RolePreviewMode.automatic => _useProfessionalShell,
+    };
     return LiveCoordinationDataScope(
       data: _liveData!,
-      child: _useProfessionalShell
+      child: useProfessionalShell
           ? ProfessionalShell(initialIndex: widget.initialIndex == 1 ? 2 : 0)
           : _buildHistoricalShell(),
     );
