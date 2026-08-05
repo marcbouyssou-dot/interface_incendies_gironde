@@ -29,6 +29,7 @@ class MissionCard extends StatelessWidget {
     this.secondaryAction,
     this.secondaryDetailsExpanded = true,
     this.secondaryDetailsToggleKey,
+    this.professionalPalette = false,
   });
 
   const MissionCard.loading({super.key})
@@ -46,7 +47,8 @@ class MissionCard extends StatelessWidget {
       timingBadge = null,
       secondaryAction = null,
       secondaryDetailsExpanded = true,
-      secondaryDetailsToggleKey = null;
+      secondaryDetailsToggleKey = null,
+      professionalPalette = false;
 
   final MissionCardState state;
   final String locationType;
@@ -63,6 +65,7 @@ class MissionCard extends StatelessWidget {
   final Widget? secondaryAction;
   final bool secondaryDetailsExpanded;
   final Key? secondaryDetailsToggleKey;
+  final bool professionalPalette;
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +79,7 @@ class MissionCard extends StatelessWidget {
       container: true,
       label: _semanticLabel,
       child: Container(
+        key: const Key('mission-card-surface'),
         decoration: BoxDecoration(
           color: colors.surfaceElevated,
           borderRadius: BorderRadius.circular(V5Radius.card),
@@ -160,7 +164,8 @@ class MissionCard extends StatelessWidget {
     MissionCardState.available => colors.info,
     MissionCardState.urgent => colors.danger,
     MissionCardState.almostComplete => colors.warning,
-    MissionCardState.complete => colors.success,
+    MissionCardState.complete =>
+      professionalPalette ? colors.outline : colors.success,
     MissionCardState.past => colors.outline,
     MissionCardState.loading => colors.outline,
   };

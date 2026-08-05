@@ -8,6 +8,7 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/development_settings_screen.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
+import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
@@ -38,8 +39,14 @@ void main() {
     expect(find.byType(V5BottomNavigation), findsOneWidget);
     expect(find.text('Bonjour'), findsNothing);
     expect(find.text("Où être utile aujourd'hui ?"), findsOneWidget);
-    expect(find.byKey(const Key('professional-hero-où')), findsOneWidget);
-    expect(find.byKey(const Key('professional-hero-quand')), findsOneWidget);
+    expect(find.byKey(const Key('professional-hero-where')), findsOneWidget);
+    expect(find.byKey(const Key('professional-hero-when')), findsOneWidget);
+    expect(find.byKey(const Key('slots-territorial-filter')), findsNothing);
+    expect(
+      find.byKey(const Key('professional-secondary-filters')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('professional-status-filters')), findsNothing);
     expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
     expect(find.text('Les missions qui ont besoin de vous'), findsNothing);
     expect(
@@ -48,6 +55,14 @@ void main() {
     );
     expect(find.text('Voir les détails'), findsWidgets);
     expect(find.text('Détails de la mission'), findsNothing);
+
+    final colors = Theme.of(
+      tester.element(find.byType(ProfessionalShell)),
+    ).extension<V5Colors>()!;
+    final verdict = tester.widget<Text>(
+      find.byKey(const Key('decision-header-verdict')),
+    );
+    expect(verdict.style?.color, colors.info);
 
     final mobilizeButton = find.ancestor(
       of: find.text('Je me mobilise').first,
@@ -58,6 +73,43 @@ void main() {
       find.descendant(of: mobilizeButton, matching: find.byType(Icon)),
       findsNothing,
     );
+    final mobilize = tester.widget<FilledButton>(mobilizeButton);
+    expect(mobilize.style?.backgroundColor?.resolve({}), colors.info);
+
+    await tester.tap(find.byKey(const Key('professional-hero-where')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bordeaux Métropole').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('professional-hero-where')),
+        matching: find.text('Bordeaux Métropole'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('professional-hero-when')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('mardi 29 juillet').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('professional-hero-when')),
+        matching: find.text('mardi 29 juillet'),
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('professional-secondary-filters')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('professional-status-filters')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('professional-reset-filters')));
+    await tester.pumpAndSettle();
+    expect(find.text('Bordeaux Métropole'), findsNothing);
+    expect(find.text('mardi 29 juillet'), findsWidgets);
 
     final detailsDisclosure = find.text('Voir les détails').first;
     await tester.drag(
@@ -73,6 +125,14 @@ void main() {
       find.byKey(const Key('v5-bottom-navigation')),
     );
     expect(navigation.destinations, hasLength(3));
+    final navigationTheme = NavigationBarTheme.of(
+      tester.element(find.byType(NavigationBar)),
+    );
+    expect(navigationTheme.indicatorColor, colors.infoContainer);
+    expect(
+      navigationTheme.iconTheme?.resolve({WidgetState.selected})?.color,
+      colors.info,
+    );
     expect(find.text('Missions'), findsWidgets);
     expect(find.text('Engagements'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
@@ -105,6 +165,11 @@ void main() {
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(V5BottomNavigation), findsNothing);
     expect(find.byKey(const Key('mission-coverage-overview')), findsOneWidget);
+    expect(find.byKey(const Key('slots-territorial-filter')), findsOneWidget);
+    expect(
+      find.byKey(const Key('professional-secondary-filters')),
+      findsNothing,
+    );
     expect(find.text("Où être utile aujourd'hui ?"), findsNothing);
     expect(find.text('Détails de la mission'), findsWidgets);
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));

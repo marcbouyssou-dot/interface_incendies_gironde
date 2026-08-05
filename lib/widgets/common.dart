@@ -11,6 +11,7 @@ import '../repositories/repository_scope.dart';
 import '../screens/engagement_confirmation_screen.dart';
 import '../screens/information_consent_screen.dart';
 import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import 'brand_mark.dart';
@@ -344,9 +345,14 @@ class StatusPill extends StatelessWidget {
 enum _MissionTiming { past, current, upcoming }
 
 class MissionTimingPill extends StatelessWidget {
-  const MissionTimingPill({super.key, required this.mission});
+  const MissionTimingPill({
+    super.key,
+    required this.mission,
+    this.professionalPalette = false,
+  });
 
   final CoordinationNeed mission;
+  final bool professionalPalette;
 
   @override
   Widget build(BuildContext context) {
@@ -362,14 +368,18 @@ class MissionTimingPill extends StatelessWidget {
       _MissionTiming.current => (
         'En cours',
         Icons.play_circle_outline_rounded,
-        AppColors.green,
-        AppColors.greenSoft,
+        professionalPalette ? context.v5Colors.info : AppColors.green,
+        professionalPalette
+            ? context.v5Colors.infoContainer
+            : AppColors.greenSoft,
       ),
       _MissionTiming.upcoming => (
         'À venir',
         Icons.schedule_rounded,
-        AppColors.orange,
-        AppColors.orangeSoft,
+        professionalPalette ? context.v5Colors.info : AppColors.orange,
+        professionalPalette
+            ? context.v5Colors.infoContainer
+            : AppColors.orangeSoft,
       ),
     };
     return Semantics(
@@ -935,6 +945,7 @@ class NeedCard extends StatelessWidget {
 
     return MissionCard(
       state: missionCardState,
+      professionalPalette: professionalJourney,
       locationType: location?.type.label ?? 'Lieu d’intervention',
       locationTypeKey: const Key('mission-location-type'),
       locationName: need.place,
@@ -942,11 +953,15 @@ class NeedCard extends StatelessWidget {
           ? need.date
           : FrenchDateTime.relativeDate(need.startAt!),
       timeLabel: need.time,
-      timingBadge: MissionTimingPill(mission: need),
+      timingBadge: MissionTimingPill(
+        mission: need,
+        professionalPalette: professionalJourney,
+      ),
       need: ImpactBanner(
         type: impactType,
         message: remainingLabel,
         messageIcon: Icons.groups_2_rounded,
+        professionalPalette: professionalJourney,
       ),
       professionTitle: remaining > 0
           ? 'Qui est attendu ?'
@@ -955,6 +970,7 @@ class NeedCard extends StatelessWidget {
         for (final profession in visibleProfessions)
           ProfessionChip(
             label: profession.missionLabel,
+            professionalPalette: professionalJourney,
             state: need.professionQuotas.quotaFor(profession.id).isCovered
                 ? ProfessionChipState.covered
                 : ProfessionChipState.needed,
@@ -964,6 +980,7 @@ class NeedCard extends StatelessWidget {
         need: need,
         location: location,
         professionalHome: true,
+        professionalJourney: professionalJourney,
         showActionIcon: !professionalJourney,
       ),
       secondaryDetailsExpanded: professionalDetailsExpanded,
@@ -1130,12 +1147,14 @@ class _NeedActions extends StatefulWidget {
     required this.need,
     required this.location,
     this.professionalHome = false,
+    this.professionalJourney = false,
     this.showActionIcon = true,
   });
 
   final CoordinationNeed need;
   final ResponsePlace? location;
   final bool professionalHome;
+  final bool professionalJourney;
   final bool showActionIcon;
 
   @override
@@ -1199,6 +1218,7 @@ class _NeedActionsState extends State<_NeedActions> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return StreamBuilder<EngagementInfo?>(
       stream: _engagement,
       builder: (context, engagementSnapshot) {
@@ -1248,7 +1268,10 @@ class _NeedActionsState extends State<_NeedActions> {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: _EngagementStatusBadge(status: engagement.status),
+                child: _EngagementStatusBadge(
+                  status: engagement.status,
+                  professionalPalette: widget.professionalJourney,
+                ),
               ),
               const SizedBox(height: 8),
               _actionButton(
@@ -1266,10 +1289,22 @@ class _NeedActionsState extends State<_NeedActions> {
                       )
                     : null,
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.orange,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.greenSoft,
-                  disabledForegroundColor: AppColors.green,
+                  backgroundColor: widget.professionalJourney
+                      ? colors.info
+                      : AppColors.orange,
+                  foregroundColor: widget.professionalJourney
+                      ? _contrastingForeground(colors.info, colors)
+                      : Colors.white,
+                  disabledBackgroundColor: widget.professionalJourney
+                      ? engagement.status == EngagementStatus.confirmed
+                            ? colors.successContainer
+                            : colors.surfaceMuted
+                      : AppColors.greenSoft,
+                  disabledForegroundColor: widget.professionalJourney
+                      ? engagement.status == EngagementStatus.confirmed
+                            ? colors.success
+                            : colors.textSecondary
+                      : AppColors.green,
                   minimumSize: const Size.fromHeight(
                     MobilizationTokens.actionHeight,
                   ),
@@ -1329,10 +1364,18 @@ class _NeedActionsState extends State<_NeedActions> {
                       _RegistrationSheet(need: need, location: widget.location),
                 ),
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.orange,
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: AppColors.greenSoft,
-            disabledForegroundColor: AppColors.green,
+            backgroundColor: widget.professionalJourney
+                ? colors.info
+                : AppColors.orange,
+            foregroundColor: widget.professionalJourney
+                ? _contrastingForeground(colors.info, colors)
+                : Colors.white,
+            disabledBackgroundColor: widget.professionalJourney
+                ? colors.surfaceMuted
+                : AppColors.greenSoft,
+            disabledForegroundColor: widget.professionalJourney
+                ? colors.textSecondary
+                : AppColors.green,
             minimumSize: const Size.fromHeight(MobilizationTokens.actionHeight),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
@@ -1357,20 +1400,36 @@ class _NeedActionsState extends State<_NeedActions> {
       },
     );
   }
+
+  Color _contrastingForeground(Color background, V5Colors colors) {
+    return ThemeData.estimateBrightnessForColor(background) == Brightness.dark
+        ? Colors.white
+        : colors.canvas;
+  }
 }
 
 class _EngagementStatusBadge extends StatelessWidget {
-  const _EngagementStatusBadge({required this.status});
+  const _EngagementStatusBadge({
+    required this.status,
+    this.professionalPalette = false,
+  });
 
   final EngagementStatus status;
+  final bool professionalPalette;
 
   @override
   Widget build(BuildContext context) {
     final (color, background) = switch (status) {
       EngagementStatus.pending => (AppColors.orange, AppColors.orangeSoft),
       EngagementStatus.confirmed => (AppColors.green, AppColors.greenSoft),
-      EngagementStatus.standby => (AppColors.navy, AppColors.background),
-      EngagementStatus.cancelled => (AppColors.red, AppColors.redSoft),
+      EngagementStatus.standby =>
+        professionalPalette
+            ? (context.v5Colors.info, context.v5Colors.infoContainer)
+            : (AppColors.navy, AppColors.background),
+      EngagementStatus.cancelled =>
+        professionalPalette
+            ? (context.v5Colors.textSecondary, context.v5Colors.surfaceMuted)
+            : (AppColors.red, AppColors.redSoft),
     };
     return Container(
       key: Key('engagement-status-${status.name}'),

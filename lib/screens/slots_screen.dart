@@ -5,6 +5,7 @@ import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
+import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
 import '../widgets/decision_header.dart';
 import '../widgets/mobilization_design_system.dart';
@@ -13,6 +14,7 @@ import 'create_need_screen.dart';
 class _MissionFilterMemory {
   static int status = 0;
   static TerritorialGroup? group;
+  static String? date;
 }
 
 class SlotsScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class SlotsScreen extends StatefulWidget {
 class _SlotsScreenState extends State<SlotsScreen> {
   int _filter = _MissionFilterMemory.status;
   TerritorialGroup? _group = _MissionFilterMemory.group;
+  String? _date = _MissionFilterMemory.date;
   bool _showAdvancedFilters = _MissionFilterMemory.status != 0;
   String? _editingMissionId;
   LiveCoordinationData? _liveData;
@@ -112,14 +115,25 @@ class _SlotsScreenState extends State<SlotsScreen> {
     List<ResponsePlace> locations,
     ResponsibleAccess? access,
   ) {
+    final professionalJourney = widget.professionalJourney;
     final statusNeeds = _filter == 0
         ? missions
         : missions.where((need) => need.status.index == _filter - 1).toList();
-    final visibleNeeds = _group == null
+    final selectedDate = professionalJourney ? _date : null;
+    final dateNeeds = selectedDate == null
         ? statusNeeds
-        : statusNeeds.where((need) => need.group == _group).toList();
+        : statusNeeds
+              .where((need) => _missionDateLabel(need) == selectedDate)
+              .toList();
+    final visibleNeeds = _group == null
+        ? dateNeeds
+        : dateNeeds.where((need) => need.group == _group).toList();
+    final availableDateValues = <String>{
+      for (final mission in missions) _missionDateLabel(mission),
+    };
+    if (selectedDate != null) availableDateValues.add(selectedDate);
+    final availableDates = availableDateValues.toList(growable: false);
     final hasPrivilegedAccess = access?.hasPrivilegedAccess == true;
-    final professionalJourney = widget.professionalJourney;
     return PageContainer(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -145,25 +159,40 @@ class _SlotsScreenState extends State<SlotsScreen> {
                         professionalJourney: professionalJourney,
                         showOverview:
                             hasPrivilegedAccess && !professionalJourney,
-                      ),
-                      const SizedBox(height: 16),
-                      _MissionFilters(
                         group: _group,
-                        status: _filter,
-                        showAdvanced: _showAdvancedFilters,
-                        hasActiveFilters: _hasActiveFilters,
+                        date: _date,
+                        availableDates: availableDates,
                         onGroupChanged: _selectGroup,
-                        onStatusChanged: _select,
-                        onToggleAdvanced: () => setState(
-                          () => _showAdvancedFilters = !_showAdvancedFilters,
-                        ),
-                        onReset: _resetFilters,
+                        onDateChanged: _selectDate,
                       ),
+                      if (!professionalJourney) ...[
+                        const SizedBox(height: 16),
+                        _MissionFilters(
+                          group: _group,
+                          status: _filter,
+                          showAdvanced: _showAdvancedFilters,
+                          hasActiveFilters: _hasActiveFilters,
+                          onGroupChanged: _selectGroup,
+                          onStatusChanged: _select,
+                          onToggleAdvanced: () => setState(
+                            () => _showAdvancedFilters = !_showAdvancedFilters,
+                          ),
+                          onReset: _resetFilters,
+                        ),
+                      ],
                       const SizedBox(height: 22),
                       _MissionResultsHeader(
                         count: visibleNeeds.length,
                         filtered: _hasActiveFilters,
                         professionalJourney: professionalJourney,
+                        status: _filter,
+                        showAdvanced: _showAdvancedFilters,
+                        hasActiveFilters: _hasActiveFilters,
+                        onStatusChanged: _select,
+                        onToggleAdvanced: () => setState(
+                          () => _showAdvancedFilters = !_showAdvancedFilters,
+                        ),
+                        onReset: _resetFilters,
                       ),
                     ],
                   ),
@@ -228,7 +257,10 @@ class _SlotsScreenState extends State<SlotsScreen> {
     );
   }
 
-  bool get _hasActiveFilters => _filter != 0 || _group != null;
+  bool get _hasActiveFilters =>
+      _filter != 0 ||
+      _group != null ||
+      (widget.professionalJourney && _date != null);
 
   void _select(int index) {
     _MissionFilterMemory.status = index;
@@ -240,13 +272,20 @@ class _SlotsScreenState extends State<SlotsScreen> {
     setState(() => _group = group);
   }
 
+  void _selectDate(String? date) {
+    _MissionFilterMemory.date = date;
+    setState(() => _date = date);
+  }
+
   void _resetFilters() {
     if (!_hasActiveFilters) return;
     _MissionFilterMemory.status = 0;
     _MissionFilterMemory.group = null;
+    _MissionFilterMemory.date = null;
     setState(() {
       _filter = 0;
       _group = null;
+      _date = null;
       _showAdvancedFilters = false;
     });
   }
@@ -265,16 +304,30 @@ class _SlotsScreenState extends State<SlotsScreen> {
   }
 }
 
+String _missionDateLabel(CoordinationNeed mission) => mission.startAt == null
+    ? mission.date
+    : FrenchDateTime.relativeDate(mission.startAt!);
+
 class _MissionDecisionHeader extends StatelessWidget {
   const _MissionDecisionHeader({
     required this.missions,
     required this.professionalJourney,
     required this.showOverview,
+    required this.group,
+    required this.date,
+    required this.availableDates,
+    required this.onGroupChanged,
+    required this.onDateChanged,
   });
 
   final List<CoordinationNeed> missions;
   final bool professionalJourney;
   final bool showOverview;
+  final TerritorialGroup? group;
+  final String? date;
+  final List<String> availableDates;
+  final ValueChanged<TerritorialGroup?> onGroupChanged;
+  final ValueChanged<String?> onDateChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -312,22 +365,52 @@ class _MissionDecisionHeader extends StatelessWidget {
               ? 'Rien de nouveau pour l’instant'
               : 'Où aider aujourd’hui ?',
           secondary: secondary,
+          verdictColor: professionalJourney ? colors.info : null,
         ),
         if (professionalJourney) ...[
           const SizedBox(height: V5Spacing.md),
-          const Row(
+          Row(
             children: [
               Expanded(
                 child: _HeroFilterChip(
+                  chipKey: const Key('professional-hero-where'),
                   icon: Icons.location_on_outlined,
                   label: 'Où',
+                  activeValue: group?.label,
+                  selectedValue: group?.name ?? 'all',
+                  options: [
+                    const _HeroFilterOption(
+                      value: 'all',
+                      label: 'Tous les secteurs',
+                    ),
+                    for (final value in TerritorialGroup.values)
+                      _HeroFilterOption(value: value.name, label: value.label),
+                  ],
+                  onSelected: (value) => onGroupChanged(
+                    value == 'all'
+                        ? null
+                        : TerritorialGroup.values.byName(value),
+                  ),
                 ),
               ),
-              SizedBox(width: V5Spacing.sm),
+              const SizedBox(width: V5Spacing.sm),
               Expanded(
                 child: _HeroFilterChip(
+                  chipKey: const Key('professional-hero-when'),
                   icon: Icons.calendar_today_outlined,
                   label: 'Quand',
+                  activeValue: date,
+                  selectedValue: date ?? 'all',
+                  options: [
+                    const _HeroFilterOption(
+                      value: 'all',
+                      label: 'Toutes les dates',
+                    ),
+                    for (final value in availableDates)
+                      _HeroFilterOption(value: value, label: value),
+                  ],
+                  onSelected: (value) =>
+                      onDateChanged(value == 'all' ? null : value),
                 ),
               ),
             ],
@@ -367,40 +450,109 @@ class _MissionDecisionHeader extends StatelessWidget {
 }
 
 class _HeroFilterChip extends StatelessWidget {
-  const _HeroFilterChip({required this.icon, required this.label});
+  const _HeroFilterChip({
+    required this.chipKey,
+    required this.icon,
+    required this.label,
+    required this.activeValue,
+    required this.selectedValue,
+    required this.options,
+    required this.onSelected,
+  });
 
+  final Key chipKey;
   final IconData icon;
   final String label;
+  final String? activeValue;
+  final String selectedValue;
+  final List<_HeroFilterOption> options;
+  final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
-      key: Key('professional-hero-${label.toLowerCase()}'),
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(V5Radius.control),
-        border: Border.all(color: colors.outline),
-        boxShadow: V5Elevation.level1(colors),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: colors.brand),
-          const SizedBox(width: V5Spacing.xs),
-          Text(
-            label,
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
+    final hasSelection = activeValue != null;
+    return PopupMenuButton<String>(
+      key: chipKey,
+      tooltip: 'Filtrer par $label',
+      initialValue: selectedValue,
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final option in options)
+          PopupMenuItem(
+            value: option.value,
+            child: Row(
+              children: [
+                Expanded(child: Text(option.label)),
+                if (option.value == selectedValue)
+                  Icon(Icons.check_rounded, size: 18, color: colors.info),
+              ],
             ),
           ),
-        ],
+      ],
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
+        decoration: BoxDecoration(
+          color: hasSelection ? colors.infoContainer : colors.surface,
+          borderRadius: BorderRadius.circular(V5Radius.control),
+          border: Border.all(
+            color: hasSelection
+                ? colors.info.withValues(alpha: 0.38)
+                : colors.outline,
+          ),
+          boxShadow: V5Elevation.level1(colors),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: colors.info),
+            const SizedBox(width: V5Spacing.xs),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (hasSelection)
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: colors.textSecondary,
+                        fontSize: 9.5,
+                        height: 1,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  Text(
+                    activeValue ?? label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 12.5,
+                      height: 1.2,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: colors.textSecondary,
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _HeroFilterOption {
+  const _HeroFilterOption({required this.value, required this.label});
+
+  final String value;
+  final String label;
 }
 
 class _MissionResultsHeader extends StatelessWidget {
@@ -408,28 +560,128 @@ class _MissionResultsHeader extends StatelessWidget {
     required this.count,
     required this.filtered,
     required this.professionalJourney,
+    required this.status,
+    required this.showAdvanced,
+    required this.hasActiveFilters,
+    required this.onStatusChanged,
+    required this.onToggleAdvanced,
+    required this.onReset,
   });
 
   final int count;
   final bool filtered;
   final bool professionalJourney;
+  final int status;
+  final bool showAdvanced;
+  final bool hasActiveFilters;
+  final ValueChanged<int> onStatusChanged;
+  final VoidCallback onToggleAdvanced;
+  final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final label = count == 1 ? '1 mission' : '$count missions';
+    if (professionalJourney) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Missions',
+                  key: const Key('professional-missions-section-title'),
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 16,
+                    height: 1.25,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              _MissionCount(label: label),
+              const SizedBox(width: V5Spacing.xxs),
+              IconButton(
+                key: const Key('professional-secondary-filters'),
+                tooltip: showAdvanced
+                    ? 'Masquer les filtres secondaires'
+                    : 'Filtres secondaires',
+                style: IconButton.styleFrom(
+                  foregroundColor: showAdvanced
+                      ? colors.info
+                      : colors.textSecondary,
+                  backgroundColor: showAdvanced
+                      ? colors.infoContainer
+                      : Colors.transparent,
+                  minimumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: onToggleAdvanced,
+                icon: const Icon(Icons.tune_rounded, size: 18),
+              ),
+              if (hasActiveFilters)
+                IconButton(
+                  key: const Key('professional-reset-filters'),
+                  tooltip: 'Réinitialiser les filtres',
+                  style: IconButton.styleFrom(
+                    foregroundColor: colors.textSecondary,
+                    minimumSize: const Size(36, 36),
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: onReset,
+                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                ),
+            ],
+          ),
+          if (showAdvanced) ...[
+            const SizedBox(height: V5Spacing.xs),
+            SizedBox(
+              height: 32,
+              child: ListView(
+                key: const Key('professional-status-filters'),
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _FilterChip(
+                    label: 'Toutes',
+                    selected: status == 0,
+                    professionalPalette: true,
+                    onTap: () => onStatusChanged(0),
+                  ),
+                  _FilterChip(
+                    label: 'Prioritaires',
+                    selected: status == 1,
+                    professionalPalette: true,
+                    onTap: () => onStatusChanged(1),
+                  ),
+                  _FilterChip(
+                    label: 'Renforts attendus',
+                    selected: status == 2,
+                    professionalPalette: true,
+                    onTap: () => onStatusChanged(2),
+                  ),
+                  _FilterChip(
+                    label: 'Équipes complètes',
+                    selected: status == 3,
+                    professionalPalette: true,
+                    onTap: () => onStatusChanged(3),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      );
+    }
     return Row(
       children: [
         Expanded(
           child: Text(
-            professionalJourney
-                ? 'Missions'
-                : filtered
+            filtered
                 ? 'Missions correspondant à vos choix'
                 : 'Les missions qui ont besoin de vous',
-            key: professionalJourney
-                ? const Key('professional-missions-section-title')
-                : null,
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 16,
@@ -438,22 +690,34 @@ class _MissionResultsHeader extends StatelessWidget {
             ),
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            color: colors.surfaceMuted,
-            borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
+        _MissionCount(label: label),
       ],
+    );
+  }
+}
+
+class _MissionCount extends StatelessWidget {
+  const _MissionCount({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(MobilizationTokens.radiusPill),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: colors.textSecondary,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }
@@ -640,23 +904,30 @@ class _FilterChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.professionalPalette = false,
   });
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final bool professionalPalette;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final selectedColor = professionalPalette ? colors.info : colors.brand;
+    final selectedForeground =
+        ThemeData.estimateBrightnessForColor(selectedColor) == Brightness.dark
+        ? Colors.white
+        : colors.canvas;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: Semantics(
         button: true,
         selected: selected,
         child: Material(
-          color: selected ? colors.brand : colors.surface,
+          color: selected ? selectedColor : colors.surface,
           shape: StadiumBorder(
-            side: BorderSide(color: selected ? colors.brand : colors.outline),
+            side: BorderSide(color: selected ? selectedColor : colors.outline),
           ),
           child: InkWell(
             onTap: onTap,
@@ -667,7 +938,7 @@ class _FilterChip extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: selected ? colors.onBrand : colors.textSecondary,
+                    color: selected ? selectedForeground : colors.textSecondary,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
                   ),

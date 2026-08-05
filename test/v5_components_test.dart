@@ -111,9 +111,59 @@ void main() {
       ).extension<V5Colors>(),
       V5Colors.dark,
     );
+    final navigationTheme = NavigationBarTheme.of(
+      tester.element(find.byType(NavigationBar)),
+    );
+    expect(navigationTheme.indicatorColor, V5Colors.dark.infoContainer);
+    expect(
+      navigationTheme.iconTheme?.resolve({WidgetState.selected})?.color,
+      V5Colors.dark.info,
+    );
 
     await tester.tap(find.text('Engagements'));
     expect(selected, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('professional normal and complete cards use semantic borders', (
+    tester,
+  ) async {
+    Future<Color> borderFor(MissionCardState state) async {
+      await tester.pumpWidget(
+        app(
+          MissionCard(
+            state: state,
+            professionalPalette: true,
+            locationType: 'Centre de soins',
+            locationName: 'Mérignac',
+            dateLabel: 'Aujourd’hui',
+            timeLabel: '14:00 – 18:00',
+            need: const Text('2 renforts attendus'),
+            professionTitle: 'Professions recherchées',
+            professions: const [Text('Médecin')],
+            primaryAction: const FilledButton(
+              onPressed: null,
+              child: Text('Je me mobilise'),
+            ),
+            secondaryDetails: const SizedBox.shrink(),
+          ),
+        ),
+      );
+      final surface = tester.widget<Container>(
+        find.byKey(const Key('mission-card-surface')),
+      );
+      final decoration = surface.decoration! as BoxDecoration;
+      final border = decoration.border! as Border;
+      return border.top.color;
+    }
+
+    expect(
+      await borderFor(MissionCardState.available),
+      V5Colors.light.info.withValues(alpha: 0.24),
+    );
+    expect(
+      await borderFor(MissionCardState.complete),
+      V5Colors.light.outline.withValues(alpha: 0.48),
+    );
   });
 }

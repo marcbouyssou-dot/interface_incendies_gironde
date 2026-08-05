@@ -62,6 +62,7 @@ class ImpactBanner extends StatelessWidget {
     this.trailing,
     this.footer,
     this.compact = false,
+    this.professionalPalette = false,
   });
 
   final ImpactBannerType type;
@@ -70,6 +71,7 @@ class ImpactBanner extends StatelessWidget {
   final Widget? trailing;
   final Widget? footer;
   final bool compact;
+  final bool professionalPalette;
 
   @override
   Widget build(BuildContext context) {
@@ -90,8 +92,8 @@ class ImpactBanner extends StatelessWidget {
       ImpactBannerType.teamComplete => (
         'Équipe complète',
         Icons.check_circle_outline_rounded,
-        colors.success,
-        colors.successContainer,
+        professionalPalette ? colors.textSecondary : colors.success,
+        professionalPalette ? colors.surfaceMuted : colors.successContainer,
       ),
       ImpactBannerType.mobilizationCovered => (
         'Mobilisation couverte',
@@ -175,16 +177,22 @@ class ProfessionChip extends StatelessWidget {
     super.key,
     required this.label,
     this.state = ProfessionChipState.needed,
+    this.professionalPalette = false,
   });
 
   final String label;
   final ProfessionChipState state;
+  final bool professionalPalette;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final covered = state == ProfessionChipState.covered;
-    final color = covered ? colors.success : colors.warning;
+    final color = covered
+        ? colors.success
+        : professionalPalette
+        ? colors.info
+        : colors.warning;
     return Container(
       constraints: const BoxConstraints(minHeight: 34),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),

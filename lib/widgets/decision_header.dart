@@ -10,11 +10,13 @@ class DecisionHeader extends StatelessWidget {
     required this.state,
     this.verdict,
     this.secondary,
+    this.verdictColor,
   });
 
   final DecisionHeaderState state;
   final String? verdict;
   final String? secondary;
+  final Color? verdictColor;
 
   @override
   Widget build(BuildContext context) {
@@ -24,12 +26,14 @@ class DecisionHeader extends StatelessWidget {
     }
 
     final content = _contentFor(state);
-    final verdictColor = switch (state) {
-      DecisionHeaderState.urgentMission => colors.danger,
-      DecisionHeaderState.newMissions => colors.textPrimary,
-      DecisionHeaderState.noUpdates => colors.textPrimary,
-      DecisionHeaderState.loading => colors.textPrimary,
-    };
+    final resolvedVerdictColor =
+        verdictColor ??
+        switch (state) {
+          DecisionHeaderState.urgentMission => colors.danger,
+          DecisionHeaderState.newMissions => colors.textPrimary,
+          DecisionHeaderState.noUpdates => colors.textPrimary,
+          DecisionHeaderState.loading => colors.textPrimary,
+        };
 
     return Semantics(
       container: true,
@@ -44,7 +48,7 @@ class DecisionHeader extends StatelessWidget {
               key: const Key('decision-header-verdict'),
               style: Theme.of(
                 context,
-              ).textTheme.headlineLarge?.copyWith(color: verdictColor),
+              ).textTheme.headlineLarge?.copyWith(color: resolvedVerdictColor),
             ),
             const SizedBox(height: V5Spacing.xs),
             Text(
