@@ -751,7 +751,7 @@ void main() {
       ),
     );
     await pumpApp(tester, unauthorized);
-    await selectNavigationTab(tester, 2);
+    await selectNavigationTab(tester, 1);
     expect(find.text('Annuler ce besoin'), findsNothing);
 
     final authorized = MockCoordinationRepository(
@@ -768,7 +768,7 @@ void main() {
     await tester.pumpAndSettle();
     await selectNavigationTab(tester, 0);
     expect(find.text('Annuler ce besoin'), findsNothing);
-    await selectNavigationTab(tester, 2);
+    await selectNavigationTab(tester, 1);
     expect(find.text('Annuler ce besoin'), findsWidgets);
   });
 }

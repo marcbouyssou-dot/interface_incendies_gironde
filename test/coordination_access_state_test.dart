@@ -25,7 +25,9 @@ void main() {
   Future<void> selectNavigationTab(WidgetTester tester, int index) async {
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
     navigation.onDestinationSelected?.call(index);
-    await tester.pump();
+    for (var attempt = 0; attempt < 6; attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
   }
 
   Future<void> revealSituationContent(
@@ -62,7 +64,6 @@ void main() {
     addTearDown(repository.disposeAccess);
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
-    await selectNavigationTab(tester, 2);
     for (
       var attempt = 0;
       attempt < 5 && repository.accessFactories == 0;
@@ -74,10 +75,16 @@ void main() {
     if (emitInitialAccess) {
       repository.emit(initialAccess);
       await tester.pumpAndSettle();
+      final siteManagerJourney =
+          initialAccess?.roles.contains(ResponsibleRole.siteManager) == true &&
+          initialAccess?.roles.contains(ResponsibleRole.coordinator) != true;
+      await selectNavigationTab(tester, siteManagerJourney ? 1 : 2);
       if (initialAccess?.hasPrivilegedAccess == true &&
           initialAccess?.uid == createdBy) {
         await revealSituationContent(tester, find.text('Annuler ce besoin'));
       }
+    } else {
+      await selectNavigationTab(tester, 2);
     }
     return repository;
   }
@@ -172,7 +179,10 @@ void main() {
     repository.emitError(StateError('network unavailable'));
     await pumpAccessUpdate(tester);
 
-    expect(find.text('Accès temporairement indisponible'), findsOneWidget);
+    expect(
+      find.text('Les besoins sont temporairement indisponibles.'),
+      findsOneWidget,
+    );
     expect(find.text('Site A'), findsNothing);
     expectNoPrivilegedSituationContent();
   });
@@ -247,7 +257,10 @@ void main() {
     );
     await pumpAccessUpdate(tester);
 
-    expect(find.byKey(const PageStorageKey('coordination')), findsOneWidget);
+    expect(
+      find.byKey(const PageStorageKey('responsible-needs')),
+      findsOneWidget,
+    );
     expectNoPrivilegedSituationContent();
   });
 
@@ -321,9 +334,12 @@ void main() {
       repository.emitLocationsError(locationError);
     }
     await tester.pump();
-    await selectNavigationTab(tester, 2);
     repository.emitAccess(access);
     await pumpAccessUpdate(tester);
+    final siteManagerJourney =
+        access?.roles.contains(ResponsibleRole.siteManager) == true &&
+        access?.roles.contains(ResponsibleRole.coordinator) != true;
+    await selectNavigationTab(tester, siteManagerJourney ? 1 : 2);
     if (missionError == null &&
         locationError == null &&
         access?.hasPrivilegedAccess == true) {
@@ -521,7 +537,7 @@ void main() {
       await pumpAccessUpdate(tester);
 
       expect(
-        find.text('Informations des centres indisponibles'),
+        find.text('Les besoins sont temporairement indisponibles.'),
         findsOneWidget,
       );
       expectNoStaleSituation();
@@ -531,7 +547,10 @@ void main() {
       ]);
       await pumpAccessUpdate(tester);
 
-      expect(find.text('Informations des centres indisponibles'), findsNothing);
+      expect(
+        find.text('Les besoins sont temporairement indisponibles.'),
+        findsNothing,
+      );
       expect(find.text('Ancienne mission'), findsNothing);
       expect(find.text('Annuler ce besoin'), findsNothing);
     },

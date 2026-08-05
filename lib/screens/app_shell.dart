@@ -12,7 +12,10 @@ import 'administration_dashboard_screen.dart';
 import 'coordination_screen.dart';
 import 'places_screen.dart';
 import 'professional_shell.dart';
+import 'responsible_shell.dart';
 import 'slots_screen.dart';
+
+enum _AppJourney { professional, responsible, coordinator }
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key, this.initialIndex = 0});
@@ -29,7 +32,8 @@ class _AppShellState extends State<AppShell> {
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
   StreamSubscription<ResponsibleAccess?>? _accessSubscription;
-  bool _useProfessionalShell = false;
+  ResponsibleAccess? _access;
+  bool _accessResolved = false;
 
   @override
   void initState() {
@@ -62,14 +66,16 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _handleAccess(ResponsibleAccess? access) {
-    final useProfessionalShell = access == null;
-    if (!mounted || useProfessionalShell == _useProfessionalShell) return;
-    setState(() => _useProfessionalShell = useProfessionalShell);
+    if (!mounted) return;
+    setState(() {
+      _access = access;
+      _accessResolved = true;
+    });
   }
 
   void _handleAccessError() {
-    if (!mounted || !_useProfessionalShell) return;
-    setState(() => _useProfessionalShell = false);
+    if (!mounted) return;
+    if (_access == null) setState(() => _accessResolved = false);
   }
 
   Widget _createScreen(int index) => switch (index) {
@@ -97,7 +103,8 @@ class _AppShellState extends State<AppShell> {
     final next = LiveCoordinationData(_repository!);
     setState(() {
       _liveData = next;
-      _useProfessionalShell = false;
+      _access = null;
+      _accessResolved = false;
     });
     _accessSubscription = next.watchResponsibleAccess().listen(
       _handleAccess,
@@ -111,16 +118,32 @@ class _AppShellState extends State<AppShell> {
     final previewMode = kDebugMode
         ? RolePreviewScope.of(context).mode
         : RolePreviewMode.automatic;
-    final useProfessionalShell = switch (previewMode) {
-      RolePreviewMode.professional => true,
-      RolePreviewMode.responsible || RolePreviewMode.coordinator => false,
-      RolePreviewMode.automatic => _useProfessionalShell,
+    final automaticJourney = !_accessResolved
+        ? _AppJourney.coordinator
+        : _access == null
+        ? _AppJourney.professional
+        : _access!.roles.contains(ResponsibleRole.coordinator)
+        ? _AppJourney.coordinator
+        : _access!.roles.contains(ResponsibleRole.siteManager)
+        ? _AppJourney.responsible
+        : _AppJourney.coordinator;
+    final journey = switch (previewMode) {
+      RolePreviewMode.professional => _AppJourney.professional,
+      RolePreviewMode.responsible => _AppJourney.responsible,
+      RolePreviewMode.coordinator => _AppJourney.coordinator,
+      RolePreviewMode.automatic => automaticJourney,
     };
     return LiveCoordinationDataScope(
       data: _liveData!,
-      child: useProfessionalShell
-          ? ProfessionalShell(initialIndex: widget.initialIndex == 1 ? 2 : 0)
-          : _buildHistoricalShell(),
+      child: switch (journey) {
+        _AppJourney.professional => ProfessionalShell(
+          initialIndex: widget.initialIndex == 1 ? 2 : 0,
+        ),
+        _AppJourney.responsible => ResponsibleShell(
+          initialIndex: widget.initialIndex.clamp(0, 3),
+        ),
+        _AppJourney.coordinator => _buildHistoricalShell(),
+      },
     );
   }
 

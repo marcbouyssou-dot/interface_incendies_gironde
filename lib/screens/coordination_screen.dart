@@ -22,19 +22,19 @@ abstract final class _StatisticsVisuals {
   static const textMuted = Color(0xFF7C817F);
 }
 
-@visibleForTesting
 List<CoordinationNeed> missionsVisibleToResponsible({
   required List<CoordinationNeed> missions,
   required List<ResponsePlace> locations,
   required ResponsibleAccess? access,
 }) {
-  if (access?.isCoordinator == true) return missions;
-  if (access?.isSiteManager != true) return missions;
+  if (access == null || !access.active) return const [];
+  if (access.roles.contains(ResponsibleRole.coordinator)) return missions;
+  if (!access.roles.contains(ResponsibleRole.siteManager)) return const [];
   return missions
       .where((mission) {
         final location = responsePlaceForNeed(mission, locations);
         final locationId = location?.id ?? mission.locationId;
-        return locationId != null && access!.locationIds.contains(locationId);
+        return locationId != null && access.locationIds.contains(locationId);
       })
       .toList(growable: false);
 }

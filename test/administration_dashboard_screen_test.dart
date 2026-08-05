@@ -39,11 +39,14 @@ void main() {
     addTearDown(repository.disposeDashboard);
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
+    final siteManagerJourney =
+        access?.roles.contains(ResponsibleRole.siteManager) == true &&
+        access?.roles.contains(ResponsibleRole.coordinator) != true;
     if (access == null && accessError == null) {
       await tester.tap(find.text('Profil'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('open-responsible-access')));
-    } else {
+    } else if (!siteManagerJourney) {
       await tester.tap(find.text('Déclarer').last);
     }
     await tester.pumpAndSettle();
@@ -77,19 +80,13 @@ void main() {
       locations: [bazas, places.first],
     );
 
-    expect(find.text('Votre accès responsable'), findsOneWidget);
-    expect(find.text('Bazas'), findsOneWidget);
+    expect(find.text('Mon planning est-il sécurisé ?'), findsOneWidget);
     expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
-    expect(find.byKey(const Key('administration-statistics')), findsOneWidget);
-    final createRect = tester.getRect(
-      find.byKey(const Key('administration-create-need')),
-    );
-    final navigationRect = tester.getRect(find.byType(NavigationBar));
-    expect(createRect.bottom, lessThanOrEqualTo(navigationRect.top));
-    expect(createRect.height, greaterThanOrEqualTo(76));
-    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('administration-statistics')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('administration-create-need')));
+    await tester.tap(find.text('Besoins'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('responsible-needs-create')));
     await tester.pumpAndSettle();
 
     expect(find.text('Créer un besoin'), findsOneWidget);
@@ -111,7 +108,11 @@ void main() {
         ),
       );
 
-      expect(find.text('2 centres autorisés'), findsOneWidget);
+      await tester.tap(find.text('Profil'));
+      await tester.pumpAndSettle();
+      expect(find.text(places[0].name), findsOneWidget);
+      expect(find.text(places[1].name), findsOneWidget);
+      expect(find.text('Tous les centres'), findsNothing);
     },
   );
 
@@ -218,7 +219,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('statistics action opens Situation and preserves site scope', (
+  testWidgets('site manager has no statistics and keeps scoped needs', (
     tester,
   ) async {
     final allowedMission = needs.first;
@@ -240,10 +241,12 @@ void main() {
       locations: [allowedLocation, deniedLocation],
     );
 
-    await tester.tap(find.byKey(const Key('administration-statistics')));
+    expect(find.text('Statistiques'), findsNothing);
+    expect(find.byKey(const Key('administration-statistics')), findsNothing);
+
+    await tester.tap(find.text('Besoins'));
     await tester.pumpAndSettle();
 
-    expect(find.text('SITUATION'), findsOneWidget);
     expect(find.text(allowedMission.place), findsOneWidget);
     expect(find.text(deniedMission.place), findsNothing);
   });

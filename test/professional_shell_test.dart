@@ -8,7 +8,10 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/development_settings_screen.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
+import 'package:interface_incendies_gironde/screens/responsible_home_screen.dart';
+import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
+import 'package:interface_incendies_gironde/widgets/responsible_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
@@ -205,8 +208,78 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ProfessionalShell), findsNothing);
+    expect(find.byType(ResponsibleShell), findsOneWidget);
+    expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
+    expect(find.text('Mon planning est-il sécurisé ?'), findsOneWidget);
+    expect(find.text('Tout est couvert'), findsOneWidget);
+    expect(find.byKey(const Key('responsible-create-need')), findsOneWidget);
+    expect(find.text('Besoins ouverts'), findsOneWidget);
+    expect(find.text('Équipe'), findsWidgets);
+    expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navigation.destinations, hasLength(4));
+  });
+
+  testWidgets('responsible home answers the planning decision immediately', (
+    tester,
+  ) async {
+    final merignac = places.firstWhere((place) => place.name == 'Mérignac');
+    final repository = MockCoordinationRepository(
+      responsibleAccess: ResponsibleAccess(
+        uid: 'manager',
+        role: ResponsibleRole.siteManager,
+        locationIds: {merignac.id},
+        active: true,
+      ),
+    );
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
+    expect(find.text('3 postes restent à couvrir.'), findsOneWidget);
+    expect(
+      find.byKey(const Key('responsible-open-need-mission-merignac')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('1 professionnel est confirmé sur le planning actuel.'),
+      findsOneWidget,
+    );
+    expect(find.text('Statistiques'), findsNothing);
+    expect(find.text('Tableau de bord'), findsNothing);
+
+    await tester.tap(find.text('Besoins'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('responsible-need-mission-merignac')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('responsible-need-mission-langon')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('responsible-edit-need-mission-merignac')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Équipe').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('responsible-team-mission-merignac')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('responsible-team-mission-langon')),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('Profil'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Gestion des responsables'), findsNothing);
+    expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
   });
 
   testWidgets('debug settings switch the displayed shell instantly', (
@@ -240,8 +313,9 @@ void main() {
     await closeSettings(tester);
 
     expect(find.byType(ProfessionalShell), findsNothing);
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(navigation.destinations, hasLength(4));
+    expect(find.byType(ResponsibleShell), findsOneWidget);
+    expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
+    expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
   });
 
   testWidgets('coordinator preview never elevates a real site manager', (
@@ -258,9 +332,9 @@ void main() {
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Plus'));
+    await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('open-development-settings')));
+    await tester.tap(find.byKey(const Key('responsible-development-settings')));
     await tester.pumpAndSettle();
     await selectPreview(tester, 'Coordinateur');
     await closeSettings(tester);

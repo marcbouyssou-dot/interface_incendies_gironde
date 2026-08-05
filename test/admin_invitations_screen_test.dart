@@ -49,7 +49,7 @@ void main() {
     );
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
-    if (access != null) {
+    if (access?.roles.contains(ResponsibleRole.coordinator) == true) {
       await tester.tap(find.text('Déclarer'));
       await tester.pumpAndSettle();
     }
