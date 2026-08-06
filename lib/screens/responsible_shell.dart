@@ -38,8 +38,14 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
   }
 
   Widget _createScreen(int index) => switch (index) {
-    0 => ResponsibleHomeScreen(previewLocationId: widget.previewLocationId),
-    1 => ResponsibleNeedsScreen(previewLocationId: widget.previewLocationId),
+    0 => ResponsibleHomeScreen(
+      previewLocationId: widget.previewLocationId,
+      onOpenNeeds: () => _selectTab(1),
+    ),
+    1 => ResponsibleNeedsScreen(
+      previewLocationId: widget.previewLocationId,
+      onOpenTeam: () => _selectTab(2),
+    ),
     2 => ResponsibleTeamScreen(previewLocationId: widget.previewLocationId),
     3 => ResponsibleProfileScreen(previewLocationId: widget.previewLocationId),
     _ => throw RangeError.index(index, _screens),
@@ -130,6 +136,8 @@ class _ResponsiblePreviewBannerState extends State<_ResponsiblePreviewBanner> {
             label:
                 'Vue Responsable de centre · ${location?.name ?? 'centre sélectionné'}',
             exitLabel: 'Coordinateur',
+            accentColor: context.v5Colors.accent,
+            containerColor: context.v5Colors.warningContainer,
             onExit: controller.showActualRole,
             onChange: access == null || !locationsSnapshot.hasData
                 ? null

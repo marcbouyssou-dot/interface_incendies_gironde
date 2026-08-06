@@ -6,13 +6,30 @@ import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
+import '../widgets/responsible_mission_card.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
 
+enum _NeedsFilter { attention, inProgress, covered, past }
+
+extension on _NeedsFilter {
+  String get label => switch (this) {
+    _NeedsFilter.attention => 'À traiter',
+    _NeedsFilter.inProgress => 'En cours',
+    _NeedsFilter.covered => 'Couverts',
+    _NeedsFilter.past => 'Passés',
+  };
+}
+
 class ResponsibleNeedsScreen extends StatefulWidget {
-  const ResponsibleNeedsScreen({super.key, this.previewLocationId});
+  const ResponsibleNeedsScreen({
+    super.key,
+    this.previewLocationId,
+    required this.onOpenTeam,
+  });
 
   final String? previewLocationId;
+  final VoidCallback onOpenTeam;
 
   @override
   State<ResponsibleNeedsScreen> createState() => _ResponsibleNeedsScreenState();
@@ -24,6 +41,7 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
   Stream<List<ResponsePlace>>? _locations;
   Stream<ResponsibleAccess?>? _access;
   String? _editingMissionId;
+  _NeedsFilter _filter = _NeedsFilter.attention;
 
   @override
   void didChangeDependencies() {
@@ -73,9 +91,13 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
                       needs: needs,
                       locations: locations,
                       access: accessSnapshot.data,
+                      selectedFilter: _filter,
                       editingMissionId: _editingMissionId,
+                      onFilterChanged: (filter) =>
+                          setState(() => _filter = filter),
                       onCreateNeed: _openCreateNeed,
                       onEditNeed: _openEditor,
+                      onOpenTeam: widget.onOpenTeam,
                     );
                   },
                 ),
@@ -113,21 +135,30 @@ class _ResponsibleNeedsContent extends StatelessWidget {
     required this.needs,
     required this.locations,
     required this.access,
+    required this.selectedFilter,
     required this.editingMissionId,
+    required this.onFilterChanged,
     required this.onCreateNeed,
     required this.onEditNeed,
+    required this.onOpenTeam,
   });
 
   final List<CoordinationNeed> needs;
   final List<ResponsePlace> locations;
   final ResponsibleAccess? access;
+  final _NeedsFilter selectedFilter;
   final String? editingMissionId;
+  final ValueChanged<_NeedsFilter> onFilterChanged;
   final VoidCallback onCreateNeed;
   final ValueChanged<CoordinationNeed> onEditNeed;
+  final VoidCallback onOpenTeam;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final filteredNeeds = needs
+        .where((need) => _matchesFilter(need, selectedFilter))
+        .toList(growable: false);
     return ColoredBox(
       color: colors.canvas,
       child: CustomScrollView(
@@ -142,32 +173,53 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Besoins',
-                        style: Theme.of(context).textTheme.headlineLarge,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Besoins',
+                              style: Theme.of(context).textTheme.headlineLarge,
+                            ),
+                          ),
+                          FilledButton(
+                            key: const Key('responsible-needs-create'),
+                            onPressed: onCreateNeed,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colors.accent,
+                              foregroundColor: colors.onAccent,
+                              minimumSize: const Size(0, 44),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  V5Radius.control,
+                                ),
+                              ),
+                            ),
+                            child: const Text('Créer'),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: V5Spacing.xs),
                       Text(
                         'Suivez et ajustez les besoins de vos centres.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
-                      const SizedBox(height: V5Spacing.xl),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          key: const Key('responsible-needs-create'),
-                          onPressed: onCreateNeed,
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size.fromHeight(50),
-                            backgroundColor: colors.info,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                V5Radius.control,
+                      const SizedBox(height: V5Spacing.lg),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final filter in _NeedsFilter.values) ...[
+                              _FilterChip(
+                                filter: filter,
+                                selected: filter == selectedFilter,
+                                onSelected: () => onFilterChanged(filter),
                               ),
-                            ),
-                          ),
-                          child: const Text('Créer un besoin'),
+                              if (filter != _NeedsFilter.values.last)
+                                const SizedBox(width: V5Spacing.xs),
+                            ],
+                          ],
                         ),
                       ),
                     ],
@@ -176,20 +228,22 @@ class _ResponsibleNeedsContent extends StatelessWidget {
               ),
             ),
           ),
-          if (needs.isEmpty)
-            const SliverFillRemaining(
+          if (filteredNeeds.isEmpty)
+            SliverFillRemaining(
               hasScrollBody: false,
-              child: _NeedsMessage(message: 'Aucun besoin en cours.'),
+              child: _NeedsMessage(
+                message: 'Aucun besoin « ${selectedFilter.label} ».',
+              ),
             )
           else
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
               sliver: SliverList.separated(
-                itemCount: needs.length,
+                itemCount: filteredNeeds.length,
                 separatorBuilder: (_, _) =>
-                    const SizedBox(height: V5Spacing.md),
+                    const SizedBox(height: V5Spacing.sm),
                 itemBuilder: (context, index) {
-                  final need = needs[index];
+                  final need = filteredNeeds[index];
                   final location = responsePlaceForNeed(need, locations);
                   final locationId = need.locationId ?? location?.id;
                   final canManage =
@@ -202,13 +256,45 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   return Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 560),
-                      child: _ResponsibleNeedCard(
+                      child: ResponsibleMissionCard(
+                        key: Key('responsible-need-${need.id}'),
                         need: need,
-                        canEdit: canManage,
-                        canCancel: canCancel,
-                        editing: editingMissionId == need.id,
-                        editorBlocked: editingMissionId != null,
-                        onEdit: () => onEditNeed(need),
+                        tone: _toneForNeed(need),
+                        statusLabel: _statusForNeed(need),
+                        actions: [
+                          if (canManage)
+                            TextButton(
+                              key: Key('responsible-edit-need-${need.id}'),
+                              onPressed: editingMissionId == null
+                                  ? () => onEditNeed(need)
+                                  : null,
+                              style: TextButton.styleFrom(
+                                foregroundColor: colors.accent,
+                                minimumSize: const Size(0, 44),
+                              ),
+                              child: Text(
+                                editingMissionId == need.id
+                                    ? 'Ouverture…'
+                                    : 'Modifier',
+                              ),
+                            ),
+                          if (canCancel)
+                            MissionCancellationButton(
+                              need: need,
+                              label: 'Annuler',
+                              showIcon: false,
+                              foregroundColor: colors.textSecondary,
+                            ),
+                          TextButton(
+                            key: Key('responsible-view-team-${need.id}'),
+                            onPressed: onOpenTeam,
+                            style: TextButton.styleFrom(
+                              foregroundColor: colors.accent,
+                              minimumSize: const Size(0, 44),
+                            ),
+                            child: const Text('Voir l’équipe'),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -221,126 +307,84 @@ class _ResponsibleNeedsContent extends StatelessWidget {
   }
 }
 
-class _ResponsibleNeedCard extends StatelessWidget {
-  const _ResponsibleNeedCard({
-    required this.need,
-    required this.canEdit,
-    required this.canCancel,
-    required this.editing,
-    required this.editorBlocked,
-    required this.onEdit,
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.filter,
+    required this.selected,
+    required this.onSelected,
   });
 
-  final CoordinationNeed need;
-  final bool canEdit;
-  final bool canCancel;
-  final bool editing;
-  final bool editorBlocked;
-  final VoidCallback onEdit;
+  final _NeedsFilter filter;
+  final bool selected;
+  final VoidCallback onSelected;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final required = need.professionQuotas.requiredTotal;
-    final registered = need.professionQuotas.registeredTotal;
-    final remaining = need.professionQuotas.values.fold<int>(
-      0,
-      (total, quota) => total + quota.missing,
-    );
-    final progress = required == 0 ? 1.0 : need.professionQuotas.coverage;
-    return Container(
-      key: Key('responsible-need-${need.id}'),
-      padding: const EdgeInsets.all(V5Spacing.lg),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-        boxShadow: [
-          BoxShadow(
-            color: colors.shadow.withValues(alpha: 0.035),
-            blurRadius: 18,
-            offset: const Offset(0, 5),
-          ),
-        ],
+    return ChoiceChip(
+      key: Key('responsible-needs-filter-${filter.name}'),
+      label: Text(filter.label),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      showCheckmark: false,
+      selectedColor: colors.accent,
+      backgroundColor: colors.surfaceElevated,
+      side: BorderSide.none,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(V5Radius.pill),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(need.place, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: V5Spacing.xs),
-          Text(
-            '${need.date} · ${need.time}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: V5Spacing.lg),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '$registered sur $required postes couverts',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: colors.textPrimary),
-                ),
-              ),
-              Text(
-                remaining == 0
-                    ? 'Complet'
-                    : remaining == 1
-                    ? '1 à couvrir'
-                    : '$remaining à couvrir',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: remaining == 0 ? colors.success : colors.warning,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: V5Spacing.sm),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(V5Radius.pill),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 5,
-              backgroundColor: colors.surfaceMuted,
-              color: remaining == 0 ? colors.success : colors.info,
-            ),
-          ),
-          if (canEdit) ...[
-            const SizedBox(height: V5Spacing.lg),
-            Wrap(
-              spacing: V5Spacing.sm,
-              runSpacing: V5Spacing.sm,
-              children: [
-                OutlinedButton(
-                  key: Key('responsible-edit-need-${need.id}'),
-                  onPressed: editorBlocked ? null : onEdit,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: colors.info,
-                    minimumSize: const Size(0, 44),
-                    side: BorderSide(color: colors.outline),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(V5Radius.control),
-                    ),
-                  ),
-                  child: Text(editing ? 'Ouverture…' : 'Modifier'),
-                ),
-                if (canCancel) MissionCancellationButton(need: need),
-              ],
-            ),
-          ],
-        ],
+      labelStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+        color: selected ? colors.onAccent : colors.textSecondary,
       ),
     );
   }
+}
+
+bool _matchesFilter(CoordinationNeed need, _NeedsFilter filter) {
+  final isPast = need.endAt != null && need.endAt!.isBefore(DateTime.now());
+  if (filter == _NeedsFilter.past) return isPast;
+  if (isPast) return false;
+  return switch (filter) {
+    _NeedsFilter.attention => need.status == NeedStatus.critical,
+    _NeedsFilter.inProgress => need.status == NeedStatus.toComplete,
+    _NeedsFilter.covered => need.status == NeedStatus.complete,
+    _NeedsFilter.past => false,
+  };
+}
+
+ResponsibleMissionTone _toneForNeed(CoordinationNeed need) {
+  if (need.endAt != null && need.endAt!.isBefore(DateTime.now())) {
+    return ResponsibleMissionTone.past;
+  }
+  return switch (need.status) {
+    NeedStatus.critical => ResponsibleMissionTone.urgent,
+    NeedStatus.toComplete => ResponsibleMissionTone.attention,
+    NeedStatus.complete => ResponsibleMissionTone.covered,
+  };
+}
+
+String _statusForNeed(CoordinationNeed need) {
+  if (need.endAt != null && need.endAt!.isBefore(DateTime.now())) {
+    return 'Passé';
+  }
+  return switch (need.status) {
+    NeedStatus.critical => 'À traiter',
+    NeedStatus.toComplete => 'En cours',
+    NeedStatus.complete => 'Couvert',
+  };
 }
 
 class _NeedsLoading extends StatelessWidget {
   const _NeedsLoading();
 
   @override
-  Widget build(BuildContext context) => const Center(
+  Widget build(BuildContext context) => Center(
     child: SizedBox.square(
       dimension: 22,
-      child: CircularProgressIndicator(strokeWidth: 2),
+      child: CircularProgressIndicator(
+        color: context.v5Colors.accent,
+        strokeWidth: 2,
+      ),
     ),
   );
 }

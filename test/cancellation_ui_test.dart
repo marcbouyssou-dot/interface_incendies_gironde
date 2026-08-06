@@ -10,6 +10,7 @@ import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
+import 'package:interface_incendies_gironde/widgets/common.dart';
 
 void main() {
   CoordinationNeed mission() => const CoordinationNeed(
@@ -752,7 +753,7 @@ void main() {
     );
     await pumpApp(tester, unauthorized);
     await selectNavigationTab(tester, 1);
-    expect(find.text('Annuler ce besoin'), findsNothing);
+    expect(find.byType(MissionCancellationButton), findsNothing);
 
     final authorized = MockCoordinationRepository(
       initialMissions: [mission()],
@@ -767,9 +768,9 @@ void main() {
     await tester.pumpWidget(FireCoordinationApp(repository: authorized));
     await tester.pumpAndSettle();
     await selectNavigationTab(tester, 0);
-    expect(find.text('Annuler ce besoin'), findsNothing);
+    expect(find.byType(MissionCancellationButton), findsNothing);
     await selectNavigationTab(tester, 1);
-    expect(find.text('Annuler ce besoin'), findsWidgets);
+    expect(find.byType(MissionCancellationButton), findsWidgets);
   });
 }
 

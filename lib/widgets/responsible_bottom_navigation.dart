@@ -37,14 +37,14 @@ class ResponsibleBottomNavigation extends StatelessWidget {
               iconTheme: WidgetStateProperty.resolveWith(
                 (states) => IconThemeData(
                   color: states.contains(WidgetState.selected)
-                      ? colors.info
+                      ? colors.accent
                       : colors.textSecondary,
                 ),
               ),
               labelTextStyle: WidgetStateProperty.resolveWith(
                 (states) => TextStyle(
                   color: states.contains(WidgetState.selected)
-                      ? colors.info
+                      ? colors.accent
                       : colors.textSecondary,
                   fontSize: 9.5,
                   height: 1.15,

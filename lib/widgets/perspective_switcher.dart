@@ -11,6 +11,7 @@ class SiteManagerPerspectiveSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = CrossRolePerspectiveScope.of(context);
+    final accent = context.v5Colors.accent;
     return PerspectiveSection(
       title: 'Voir comme',
       children: [
@@ -19,12 +20,14 @@ class SiteManagerPerspectiveSection extends StatelessWidget {
           label: 'Responsable de centre',
           selected: controller.perspective != CrossRolePerspective.professional,
           onTap: controller.showActualRole,
+          accentColor: accent,
         ),
         PerspectiveOption(
           key: const Key('perspective-professional'),
           label: 'Professionnel',
           selected: controller.perspective == CrossRolePerspective.professional,
           onTap: controller.showProfessional,
+          accentColor: accent,
         ),
       ],
     );
@@ -37,11 +40,13 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
     required this.access,
     required this.locations,
     this.onSelectionComplete,
+    this.accentColor,
   });
 
   final ResponsibleAccess access;
   final List<ResponsePlace> locations;
   final VoidCallback? onSelectionComplete;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +58,7 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
           key: const Key('perspective-coordinator'),
           label: 'Coordinateur',
           selected: controller.perspective == CrossRolePerspective.actual,
+          accentColor: accentColor,
           onTap: () {
             controller.showActualRole();
             onSelectionComplete?.call();
@@ -62,12 +68,14 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
           key: const Key('perspective-responsible'),
           label: 'Responsable de centre',
           selected: controller.perspective == CrossRolePerspective.responsible,
+          accentColor: accentColor,
           onTap: () => _selectResponsibleCenter(context, controller),
         ),
         PerspectiveOption(
           key: const Key('perspective-professional'),
           label: 'Professionnel',
           selected: controller.perspective == CrossRolePerspective.professional,
+          accentColor: accentColor,
           onTap: () {
             controller.showProfessional();
             onSelectionComplete?.call();
@@ -144,11 +152,13 @@ class PerspectiveOption extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.accentColor,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +183,11 @@ class PerspectiveOption extends StatelessWidget {
                   ),
                 ),
                 if (selected)
-                  Icon(Icons.check_rounded, size: 20, color: colors.info),
+                  Icon(
+                    Icons.check_rounded,
+                    size: 20,
+                    color: accentColor ?? colors.info,
+                  ),
               ],
             ),
           ),
@@ -190,26 +204,34 @@ class CrossRolePreviewBanner extends StatelessWidget {
     required this.onExit,
     this.onChange,
     this.exitLabel = 'Revenir',
+    this.accentColor,
+    this.containerColor,
   });
 
   final String label;
   final VoidCallback onExit;
   final VoidCallback? onChange;
   final String exitLabel;
+  final Color? accentColor;
+  final Color? containerColor;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     return ColoredBox(
       key: const Key('cross-role-preview-banner'),
-      color: colors.infoContainer,
+      color: containerColor ?? colors.infoContainer,
       child: SafeArea(
         bottom: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
           child: Row(
             children: [
-              Icon(Icons.visibility_outlined, size: 16, color: colors.info),
+              Icon(
+                Icons.visibility_outlined,
+                size: 16,
+                color: accentColor ?? colors.info,
+              ),
               const SizedBox(width: V5Spacing.xs),
               Expanded(
                 child: Text(
@@ -225,11 +247,17 @@ class CrossRolePreviewBanner extends StatelessWidget {
                 TextButton(
                   key: const Key('change-preview-center'),
                   onPressed: onChange,
+                  style: accentColor == null
+                      ? null
+                      : TextButton.styleFrom(foregroundColor: accentColor),
                   child: const Text('Changer'),
                 ),
               TextButton(
                 key: const Key('exit-cross-role-preview'),
                 onPressed: onExit,
+                style: accentColor == null
+                    ? null
+                    : TextButton.styleFrom(foregroundColor: accentColor),
                 child: Text(exitLabel),
               ),
             ],

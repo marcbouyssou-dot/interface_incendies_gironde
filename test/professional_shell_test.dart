@@ -211,9 +211,10 @@ void main() {
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
     expect(find.text('Mon planning est-il sécurisé ?'), findsOneWidget);
-    expect(find.text('Tout est couvert'), findsOneWidget);
+    expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
     expect(find.byKey(const Key('responsible-create-need')), findsOneWidget);
-    expect(find.text('Besoins ouverts'), findsOneWidget);
+    expect(find.text('À traiter'), findsOneWidget);
+    expect(find.text('Sous contrôle'), findsOneWidget);
     expect(find.text('Équipe'), findsWidgets);
     expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
@@ -237,20 +238,52 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
-    expect(find.text('3 postes restent à couvrir.'), findsOneWidget);
+    expect(find.text('3 postes restent à couvrir demain.'), findsOneWidget);
     expect(
       find.byKey(const Key('responsible-open-need-mission-merignac')),
       findsOneWidget,
     );
-    expect(
-      find.text('1 professionnel est confirmé sur le planning actuel.'),
-      findsOneWidget,
-    );
+    expect(find.text('1 confirmé sur 4 attendus demain.'), findsOneWidget);
     expect(find.text('Statistiques'), findsNothing);
     expect(find.text('Tableau de bord'), findsNothing);
+    final colors = Theme.of(
+      tester.element(find.byType(ResponsibleShell)),
+    ).extension<V5Colors>()!;
+    final createButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Créer un besoin'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(createButton.style?.backgroundColor?.resolve({}), colors.accent);
+    final responsibleNavigationTheme = NavigationBarTheme.of(
+      tester.element(find.byKey(const Key('responsible-bottom-navigation'))),
+    );
+    expect(
+      responsibleNavigationTheme.iconTheme?.resolve({
+        WidgetState.selected,
+      })?.color,
+      colors.accent,
+    );
 
     await tester.tap(find.text('Besoins'));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('responsible-needs-filter-attention')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('responsible-needs-filter-inProgress')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('responsible-needs-filter-covered')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('responsible-needs-filter-past')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const Key('responsible-need-mission-merignac')),
       findsOneWidget,
@@ -261,6 +294,11 @@ void main() {
     );
     expect(
       find.byKey(const Key('responsible-edit-need-mission-merignac')),
+      findsOneWidget,
+    );
+    expect(find.text('1 / 4'), findsOneWidget);
+    expect(
+      find.byKey(const Key('responsible-view-team-mission-merignac')),
       findsOneWidget,
     );
 
@@ -274,10 +312,24 @@ void main() {
       find.byKey(const Key('responsible-team-mission-langon')),
       findsNothing,
     );
+    expect(
+      find.byKey(const Key('responsible-team-filter-confirmed')),
+      findsOneWidget,
+    );
+    expect(find.text('mock-confirmed'), findsOneWidget);
+    expect(
+      find.byKey(const Key('engagement-menu-mission-merignac_mock-confirmed')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('responsible-team-filter-pending')));
+    await tester.pumpAndSettle();
+    expect(find.text('mock-pending'), findsOneWidget);
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
     expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Voir comme'), findsOneWidget);
+    expect(find.text('Réglages'), findsOneWidget);
     expect(find.text('Gestion des responsables'), findsNothing);
     expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
   });

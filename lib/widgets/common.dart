@@ -1573,20 +1573,43 @@ class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
 }
 
 class MissionCancellationButton extends StatelessWidget {
-  const MissionCancellationButton({super.key, required this.need});
+  const MissionCancellationButton({
+    super.key,
+    required this.need,
+    this.label = 'Annuler ce besoin',
+    this.showIcon = true,
+    this.foregroundColor,
+  });
 
   final CoordinationNeed need;
+  final String label;
+  final bool showIcon;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      key: Key('cancel-mission-${need.id}'),
-      onPressed: () => showDialog<void>(
+    void onPressed() {
+      showDialog<void>(
         context: context,
         builder: (_) => _CancelMissionDialog(need: need),
-      ),
+      );
+    }
+
+    if (!showIcon) {
+      return TextButton(
+        key: Key('cancel-mission-${need.id}'),
+        onPressed: onPressed,
+        style: foregroundColor == null
+            ? null
+            : TextButton.styleFrom(foregroundColor: foregroundColor),
+        child: Text(label),
+      );
+    }
+    return OutlinedButton.icon(
+      key: Key('cancel-mission-${need.id}'),
+      onPressed: onPressed,
       icon: const Icon(Icons.cancel_outlined),
-      label: const Text('Annuler ce besoin'),
+      label: Text(label),
     );
   }
 }

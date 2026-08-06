@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
@@ -146,6 +145,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
                     CoordinatorPerspectiveSection(
                       access: access!,
                       locations: locations,
+                      accentColor: colors.accent,
                     ),
                   ] else if (access?.isSiteManager == true) ...[
                     const SizedBox(height: V5Spacing.xxl),
@@ -153,7 +153,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
                   ],
                   const SizedBox(height: V5Spacing.xxl),
                   Text(
-                    'Informations personnelles',
+                    'Identité',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: V5Spacing.sm),
@@ -193,22 +193,20 @@ class _ResponsibleProfileContent extends StatelessWidget {
                               _ProfileLine(label: 'Centre', value: location),
                           ],
                   ),
-                  if (kDebugMode) ...[
-                    const SizedBox(height: V5Spacing.xxl),
-                    OutlinedButton(
-                      key: const Key('responsible-development-settings'),
-                      onPressed: onOpenSettings,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        foregroundColor: colors.info,
-                        side: BorderSide(color: colors.outline),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(V5Radius.control),
-                        ),
+                  const SizedBox(height: V5Spacing.xxl),
+                  OutlinedButton(
+                    key: const Key('responsible-development-settings'),
+                    onPressed: onOpenSettings,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      foregroundColor: colors.accent,
+                      side: BorderSide(color: colors.outline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(V5Radius.control),
                       ),
-                      child: const Text('Mode Développement'),
                     ),
-                  ],
+                    child: const Text('Réglages'),
+                  ),
                   const SizedBox(height: V5Spacing.md),
                   SizedBox(
                     width: double.infinity,
@@ -217,7 +215,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
                       onPressed: signingOut ? null : onSignOut,
                       style: TextButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
-                        foregroundColor: colors.danger,
+                        foregroundColor: colors.textSecondary,
                       ),
                       child: Text(
                         signingOut ? 'Déconnexion…' : 'Se déconnecter',

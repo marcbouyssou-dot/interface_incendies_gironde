@@ -90,6 +90,13 @@ class _DevelopmentSettingsScreenState extends State<DevelopmentSettingsScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           );
                         }
+                        if (!kDebugMode && access?.isSiteManager == true) {
+                          return Text(
+                            'Aucun réglage supplémentaire n’est disponible '
+                            'pour le moment.',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          );
+                        }
                         return const SizedBox.shrink();
                       }
                       return CoordinatorPerspectiveSection(
