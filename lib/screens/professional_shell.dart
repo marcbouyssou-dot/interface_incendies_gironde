@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../repositories/live_data_scope.dart';
@@ -9,6 +8,8 @@ import '../widgets/v5_bottom_navigation.dart';
 import '../widgets/perspective_switcher.dart';
 import 'create_need_screen.dart';
 import 'development_settings_screen.dart';
+import 'professional_engagements_screen.dart';
+import 'professional_profile_screen.dart';
 import 'slots_screen.dart';
 
 class ProfessionalShell extends StatefulWidget {
@@ -47,6 +48,9 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     2 => ProfessionalProfileScreen(
       onOpenResponsibleAccess: _openResponsibleAccess,
       onOpenSettings: _openSettings,
+      onShowMissions: () => _selectTab(0),
+      onSignOut: _signOut,
+      onExitCrossRolePreview: widget.onExitCrossRolePreview,
     ),
     _ => throw RangeError.index(index, _screens),
   };
@@ -88,6 +92,8 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     );
   }
 
+  Future<void> _signOut() => RepositoryScope.of(context).signOutResponsible();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -95,9 +101,16 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
       body: Column(
         children: [
           if (widget.crossRolePreviewLabel case final label?)
-            CrossRolePreviewBanner(
-              label: label,
-              onExit: widget.onExitCrossRolePreview!,
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                child: CrossRolePreviewBanner(
+                  label: label,
+                  onExit: widget.onExitCrossRolePreview!,
+                  compact: true,
+                ),
+              ),
             ),
           Expanded(
             child: SafeArea(
@@ -117,105 +130,6 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
       bottomNavigationBar: V5BottomNavigation(
         selectedIndex: _currentIndex,
         onDestinationSelected: _selectTab,
-      ),
-    );
-  }
-}
-
-class ProfessionalEngagementsScreen extends StatelessWidget {
-  const ProfessionalEngagementsScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) => const _ProfessionalPlaceholderScreen(
-    icon: Icons.volunteer_activism_outlined,
-    title: 'Engagements',
-    message: 'Vos engagements seront bientôt disponibles ici.',
-  );
-}
-
-class ProfessionalProfileScreen extends StatelessWidget {
-  const ProfessionalProfileScreen({
-    super.key,
-    required this.onOpenResponsibleAccess,
-    required this.onOpenSettings,
-  });
-
-  final VoidCallback onOpenResponsibleAccess;
-  final VoidCallback onOpenSettings;
-
-  @override
-  Widget build(BuildContext context) => _ProfessionalPlaceholderScreen(
-    icon: Icons.person_outline_rounded,
-    title: 'Profil',
-    message: 'Votre profil professionnel sera bientôt disponible ici.',
-    footer: Column(
-      children: [
-        if (kDebugMode)
-          OutlinedButton.icon(
-            key: const Key('open-development-settings'),
-            onPressed: onOpenSettings,
-            icon: const Icon(Icons.settings_outlined),
-            label: const Text('Réglages'),
-          ),
-        TextButton(
-          key: const Key('open-responsible-access'),
-          onPressed: onOpenResponsibleAccess,
-          child: const Text('Accès responsable'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _ProfessionalPlaceholderScreen extends StatelessWidget {
-  const _ProfessionalPlaceholderScreen({
-    required this.icon,
-    required this.title,
-    required this.message,
-    this.footer,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final Widget? footer;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.v5Colors;
-    return ColoredBox(
-      color: colors.canvas,
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(V5Spacing.xl),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 40, color: colors.textSecondary),
-                const SizedBox(height: V5Spacing.lg),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: V5Spacing.sm),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
-                ),
-                if (footer != null) ...[
-                  const SizedBox(height: V5Spacing.xl),
-                  footer!,
-                ],
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

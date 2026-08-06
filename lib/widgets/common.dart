@@ -14,6 +14,7 @@ import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
+import '../utils/mission_timing.dart';
 import 'brand_mark.dart';
 import 'mission_card.dart';
 import 'mission_location_details.dart';
@@ -726,6 +727,7 @@ class NeedCard extends StatelessWidget {
     this.onEditMission,
     this.isMissionEditorOpening = false,
     this.isMissionEditorBlocked = false,
+    this.preferredProfession,
   });
   final CoordinationNeed need;
   final ResponsePlace? location;
@@ -738,6 +740,7 @@ class NeedCard extends StatelessWidget {
   final VoidCallback? onEditMission;
   final bool isMissionEditorOpening;
   final bool isMissionEditorBlocked;
+  final VolunteerProfession? preferredProfession;
 
   @override
   Widget build(BuildContext context) {
@@ -935,16 +938,30 @@ class NeedCard extends StatelessWidget {
               !need.professionQuotas.quotaFor(profession.id).isCovered,
         )
         .toList(growable: false);
-    final visibleProfessions = professionsStillNeeded.isEmpty
-        ? professionsWithActivity
-        : professionsStillNeeded;
-    final impactType = switch (need.status) {
-      NeedStatus.critical => ImpactBannerType.priority,
-      NeedStatus.toComplete => ImpactBannerType.reinforcementsExpected,
-      NeedStatus.complete => ImpactBannerType.teamComplete,
-    };
+    final matchingProfession = preferredProfession == null
+        ? null
+        : HealthProfessionRegistry.byId(preferredProfession!.canonicalId!);
+    final visibleProfessions =
+        matchingProfession != null &&
+            need.professionQuotas.quotaFor(matchingProfession.id).hasActivity
+        ? [matchingProfession]
+        : professionsStillNeeded.isEmpty
+        ? professionsWithActivity.take(1).toList(growable: false)
+        : professionsStillNeeded.take(1).toList(growable: false);
+    final past = isMissionPast(need);
+    final impactType = need.isCancelled || !need.isActive
+        ? ImpactBannerType.cancelled
+        : past
+        ? ImpactBannerType.past
+        : switch (need.status) {
+            NeedStatus.critical => ImpactBannerType.priority,
+            NeedStatus.toComplete => ImpactBannerType.reinforcementsExpected,
+            NeedStatus.complete => ImpactBannerType.teamComplete,
+          };
 
-    final missionCardState = !need.isActive || need.isCancelled
+    final missionCardState = need.isCancelled || !need.isActive
+        ? MissionCardState.cancelled
+        : past
         ? MissionCardState.past
         : switch (need.status) {
             NeedStatus.critical => MissionCardState.urgent,
@@ -1254,6 +1271,17 @@ class _NeedActionsState extends State<_NeedActions> {
           );
         }
         final engagement = engagementSnapshot.data;
+        if (!isMissionOperational(need)) {
+          return engagement == null
+              ? const SizedBox.shrink()
+              : Align(
+                  alignment: Alignment.centerLeft,
+                  child: _EngagementStatusBadge(
+                    status: engagement.status,
+                    professionalPalette: widget.professionalJourney,
+                  ),
+                );
+        }
         if (engagement != null) {
           final actionLabel = widget.professionalHome
               ? switch (engagement.status) {
@@ -1493,6 +1521,36 @@ class _CancelEngagementDialog extends StatefulWidget {
       _CancelEngagementDialogState();
 }
 
+class EngagementCancellationButton extends StatelessWidget {
+  const EngagementCancellationButton({
+    super.key,
+    required this.need,
+    required this.engagement,
+    this.label = 'Annuler mon engagement',
+  });
+
+  final CoordinationNeed need;
+  final EngagementInfo engagement;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isMissionOperational(need) ||
+        engagement.status == EngagementStatus.cancelled) {
+      return const SizedBox.shrink();
+    }
+    return TextButton(
+      key: Key('cancel-engagement-${need.id}'),
+      onPressed: () => showDialog<void>(
+        context: context,
+        builder: (_) =>
+            _CancelEngagementDialog(need: need, engagement: engagement),
+      ),
+      child: Text(label),
+    );
+  }
+}
+
 class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
   bool _submitting = false;
   String? _error;
@@ -1723,7 +1781,7 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
 }
 
 abstract final class _ProfessionalProfileVisuals {
-  static const background = Color(0xFFF5F5F3);
+  static const background = Color(0xFFF6F7F8);
   static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);

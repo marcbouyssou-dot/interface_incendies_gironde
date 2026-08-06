@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../widgets/common.dart';
 
 abstract final class _PrivacyVisuals {
-  static const background = Color(0xFFF5F5F3);
+  static const background = Color(0xFFF6F7F8);
   static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);

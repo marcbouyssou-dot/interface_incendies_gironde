@@ -4,12 +4,16 @@ import 'package:flutter/material.dart';
 import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
+import '../models/volunteer_profile.dart';
 import '../repositories/live_data_scope.dart';
+import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/french_date_time.dart';
+import '../utils/mission_timing.dart';
 import '../widgets/common.dart';
 import '../widgets/decision_header.dart';
 import '../widgets/mobilization_design_system.dart';
+import '../widgets/professional_page_header.dart';
 import 'create_need_screen.dart';
 
 class _MissionFilterMemory {
@@ -37,6 +41,8 @@ class _SlotsScreenState extends State<SlotsScreen> {
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
   Stream<ResponsibleAccess?>? _responsibleAccess;
+  Object? _repositoryIdentity;
+  Future<VolunteerProfile?>? _profile;
 
   @override
   void didChangeDependencies() {
@@ -48,65 +54,74 @@ class _SlotsScreenState extends State<SlotsScreen> {
       _locations = liveData.watchLocations();
       _responsibleAccess = liveData.watchResponsibleAccess();
     }
+    final repository = RepositoryScope.of(context);
+    if (!identical(repository, _repositoryIdentity)) {
+      _repositoryIdentity = repository;
+      _profile = repository.getVolunteerProfile();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<ResponsibleAccess?>(
       stream: _responsibleAccess,
-      builder: (context, accessSnapshot) => StreamBuilder<List<CoordinationNeed>>(
-        stream: _missions,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const _MissionsPageSurface(
-              child: CriticalDataUnavailableState(
-                stateKey: Key('missions-unavailable-state'),
-                eyebrow: 'Missions',
-                title: 'Missions temporairement indisponibles',
-                message:
-                    'Nous ne pouvons pas charger les missions pour le moment.',
-                safetyMessage:
-                    'Les dernières missions reçues ne sont pas affichées afin '
-                    'd’éviter toute information périmée.',
-              ),
-            );
-          }
-          if (!snapshot.hasData) {
-            return const _MissionsPageSurface(
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          return StreamBuilder<List<ResponsePlace>>(
-            stream: _locations,
-            builder: (context, locationsSnapshot) {
-              if (locationsSnapshot.hasError) {
-                return const _MissionsPageSurface(
-                  child: CriticalDataUnavailableState(
-                    stateKey: Key('mission-locations-unavailable-state'),
-                    eyebrow: 'Missions',
-                    title: 'Informations des centres indisponibles',
-                    message:
-                        'Nous ne pouvons pas charger les informations des '
-                        'centres pour le moment.',
-                    safetyMessage:
-                        'Les missions associées aux lieux ne sont pas affichées '
-                        'afin d’éviter toute information périmée.',
-                  ),
-                );
-              }
-              if (!locationsSnapshot.hasData) {
-                return const _MissionsPageSurface(
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              return _buildContent(
-                snapshot.data!,
-                locationsSnapshot.data!,
-                accessSnapshot.hasError ? null : accessSnapshot.data,
+      builder: (context, accessSnapshot) => FutureBuilder<VolunteerProfile?>(
+        future: _profile,
+        builder: (context, profileSnapshot) => StreamBuilder<List<CoordinationNeed>>(
+          stream: _missions,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return const _MissionsPageSurface(
+                child: CriticalDataUnavailableState(
+                  stateKey: Key('missions-unavailable-state'),
+                  eyebrow: 'Missions',
+                  title: 'Missions temporairement indisponibles',
+                  message:
+                      'Nous ne pouvons pas charger les missions pour le moment.',
+                  safetyMessage:
+                      'Les dernières missions reçues ne sont pas affichées afin '
+                      'd’éviter toute information périmée.',
+                ),
               );
-            },
-          );
-        },
+            }
+            if (!snapshot.hasData) {
+              return const _MissionsPageSurface(
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return StreamBuilder<List<ResponsePlace>>(
+              stream: _locations,
+              builder: (context, locationsSnapshot) {
+                if (locationsSnapshot.hasError) {
+                  return const _MissionsPageSurface(
+                    child: CriticalDataUnavailableState(
+                      stateKey: Key('mission-locations-unavailable-state'),
+                      eyebrow: 'Missions',
+                      title: 'Informations des centres indisponibles',
+                      message:
+                          'Nous ne pouvons pas charger les informations des '
+                          'centres pour le moment.',
+                      safetyMessage:
+                          'Les missions associées aux lieux ne sont pas affichées '
+                          'afin d’éviter toute information périmée.',
+                    ),
+                  );
+                }
+                if (!locationsSnapshot.hasData) {
+                  return const _MissionsPageSurface(
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return _buildContent(
+                  snapshot.data!,
+                  locationsSnapshot.data!,
+                  accessSnapshot.hasError ? null : accessSnapshot.data,
+                  profileSnapshot.hasError ? null : profileSnapshot.data,
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -115,9 +130,31 @@ class _SlotsScreenState extends State<SlotsScreen> {
     List<CoordinationNeed> missions,
     List<ResponsePlace> locations,
     ResponsibleAccess? access,
+    VolunteerProfile? profile,
   ) {
     final professionalJourney = widget.professionalJourney;
-    final statusNeeds = _filter == 0
+    final statusNeeds = professionalJourney
+        ? missions
+              .where((need) {
+                if (!need.isActive || need.isCancelled || isMissionPast(need)) {
+                  return false;
+                }
+                return switch (_filter) {
+                  0 =>
+                    need.status != NeedStatus.complete &&
+                        _isActionableForProfile(need, profile),
+                  1 =>
+                    need.status == NeedStatus.critical &&
+                        _isActionableForProfile(need, profile),
+                  2 =>
+                    need.status == NeedStatus.toComplete &&
+                        _isActionableForProfile(need, profile),
+                  3 => need.status == NeedStatus.complete,
+                  _ => false,
+                };
+              })
+              .toList(growable: false)
+        : _filter == 0
         ? missions
         : missions.where((need) => need.status.index == _filter - 1).toList();
     final selectedDate = professionalJourney ? _date : null;
@@ -130,7 +167,9 @@ class _SlotsScreenState extends State<SlotsScreen> {
         ? dateNeeds
         : dateNeeds.where((need) => need.group == _group).toList();
     final availableDateValues = <String>{
-      for (final mission in missions) _missionDateLabel(mission),
+      for (final mission in missions)
+        if (!professionalJourney || isMissionOperational(mission))
+          _missionDateLabel(mission),
     };
     if (selectedDate != null) availableDateValues.add(selectedDate);
     final availableDates = availableDateValues.toList(growable: false);
@@ -210,6 +249,22 @@ class _SlotsScreenState extends State<SlotsScreen> {
                       child: _MissionsEmptyState(filtered: _hasActiveFilters),
                     ),
                   )
+                else if (professionalJourney)
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontalPadding,
+                      0,
+                      horizontalPadding,
+                      36,
+                    ),
+                    sliver: SliverList.list(
+                      children: _professionalMissionSections(
+                        visibleNeeds,
+                        locations,
+                        profile,
+                      ),
+                    ),
+                  )
                 else
                   SliverPadding(
                     padding: EdgeInsets.fromLTRB(
@@ -239,6 +294,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                           professionalJourney: professionalJourney,
                           professionalDetailsExpanded:
                               hasPrivilegedAccess && !professionalJourney,
+                          preferredProfession: profile?.profession,
                           featured: index == 0,
                           isMissionEditorOpening: _editingMissionId == need.id,
                           isMissionEditorBlocked: _editingMissionId != null,
@@ -257,6 +313,71 @@ class _SlotsScreenState extends State<SlotsScreen> {
         },
       ),
     );
+  }
+
+  bool _isActionableForProfile(
+    CoordinationNeed need,
+    VolunteerProfile? profile,
+  ) {
+    if (profile == null) {
+      return need.professionQuotas.requiredTotal >
+          need.professionQuotas.registeredTotal;
+    }
+    final quota = need.professionQuotas.quotaFor(
+      profile.profession.canonicalId!,
+    );
+    return quota.required > quota.registered;
+  }
+
+  List<Widget> _professionalMissionSections(
+    List<CoordinationNeed> missions,
+    List<ResponsePlace> locations,
+    VolunteerProfile? profile,
+  ) {
+    final urgent = missions
+        .where(
+          (mission) =>
+              mission.status == NeedStatus.critical &&
+              _isActionableForProfile(mission, profile),
+        )
+        .toList(growable: false);
+    final urgentIds = urgent.map((mission) => mission.id).toSet();
+    final remaining = missions
+        .where((mission) => !urgentIds.contains(mission.id))
+        .toList(growable: false);
+    final nearby = _group == null
+        ? const <CoordinationNeed>[]
+        : remaining
+              .where((mission) => mission.group == _group)
+              .toList(growable: false);
+    final nearbyIds = nearby.map((mission) => mission.id).toSet();
+    final others = remaining
+        .where((mission) => !nearbyIds.contains(mission.id))
+        .toList(growable: false);
+    final sections = <Widget>[];
+
+    void addSection(
+      String title,
+      String keyName,
+      List<CoordinationNeed> items,
+    ) {
+      if (items.isEmpty) return;
+      if (sections.isNotEmpty) sections.add(const SizedBox(height: 24));
+      sections.add(
+        _ProfessionalMissionSection(
+          sectionKey: Key(keyName),
+          title: title,
+          missions: items,
+          locations: locations,
+          preferredProfession: profile?.profession,
+        ),
+      );
+    }
+
+    addSection('Missions urgentes', 'professional-urgent-missions', urgent);
+    addSection('Missions près de vous', 'professional-nearby-missions', nearby);
+    addSection('Autres missions', 'professional-other-missions', others);
+    return sections;
   }
 
   bool get _hasActiveFilters =>
@@ -310,6 +431,66 @@ String _missionDateLabel(CoordinationNeed mission) => mission.startAt == null
     ? mission.date
     : FrenchDateTime.relativeDate(mission.startAt!);
 
+class _ProfessionalMissionSection extends StatelessWidget {
+  const _ProfessionalMissionSection({
+    required this.sectionKey,
+    required this.title,
+    required this.missions,
+    required this.locations,
+    required this.preferredProfession,
+  });
+
+  final Key sectionKey;
+  final String title;
+  final List<CoordinationNeed> missions;
+  final List<ResponsePlace> locations;
+  final VolunteerProfession? preferredProfession;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Column(
+      key: sectionKey,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            Text(
+              '${missions.length}',
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: colors.textSecondary),
+            ),
+          ],
+        ),
+        const SizedBox(height: V5Spacing.sm),
+        for (var index = 0; index < missions.length; index++) ...[
+          NeedCard(
+            key: ValueKey(missions[index].id),
+            need: missions[index],
+            location: responsePlaceForNeed(missions[index], locations),
+            harmonized: true,
+            professionalHome: true,
+            professionalJourney: true,
+            professionalDetailsExpanded: false,
+            preferredProfession: preferredProfession,
+            featured: title == 'Missions urgentes' && index == 0,
+          ),
+          if (index < missions.length - 1) const SizedBox(height: 14),
+        ],
+      ],
+    );
+  }
+}
+
 class _MissionDecisionHeader extends StatelessWidget {
   const _MissionDecisionHeader({
     required this.missions,
@@ -359,71 +540,73 @@ class _MissionDecisionHeader extends StatelessWidget {
         : decisionState == DecisionHeaderState.urgentMission
         ? 'Une mission prioritaire attend encore des renforts.'
         : 'Des équipes ont besoin de vous.';
+    final professionalVerdict = missions.isEmpty
+        ? 'Aucune mission disponible pour le moment.'
+        : urgentCount == 1
+        ? '1 mission urgente nécessite votre attention.'
+        : urgentCount > 1
+        ? '$urgentCount missions urgentes nécessitent votre attention.'
+        : missions.length == 1
+        ? '1 mission correspond à vos critères.'
+        : '${missions.length} missions correspondent à vos critères.';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DecisionHeader(
-          state: decisionState,
-          verdict: professionalJourney
-              ? switch ((missions.isEmpty, decisionState)) {
-                  (true, _) =>
-                    'Aucune mission ne correspond actuellement à vos critères.',
-                  (false, DecisionHeaderState.urgentMission) =>
-                    urgentCount == 1
-                        ? '1 mission urgente nécessite votre attention.'
-                        : '$urgentCount missions urgentes nécessitent votre attention.',
-                  (false, _) when missions.length == 1 =>
-                    '1 mission correspond à vos critères.',
-                  (false, _) =>
-                    '${missions.length} missions correspondent à vos critères.',
-                }
-              : missions.isEmpty
-              ? 'Rien de nouveau pour l’instant'
-              : 'Où aider aujourd’hui ?',
-          secondary: secondary,
-          verdictColor: professionalJourney ? colors.info : null,
-          showSecondary: !professionalJourney,
-        ),
+        if (professionalJourney)
+          ProfessionalPageHeader(title: professionalVerdict)
+        else
+          DecisionHeader(
+            state: decisionState,
+            verdict: missions.isEmpty
+                ? 'Rien de nouveau pour l’instant'
+                : 'Où aider aujourd’hui ?',
+            secondary: secondary,
+          ),
         if (professionalJourney) ...[
           const SizedBox(height: V5Spacing.lg),
-          Wrap(
-            spacing: V5Spacing.xs,
-            runSpacing: V5Spacing.xs,
+          Row(
             children: [
-              _HeroFilterChip(
-                chipKey: const Key('professional-hero-where'),
-                icon: Icons.location_on_outlined,
-                label: 'Où',
-                activeValue: group?.label,
-                selectedValue: group?.name ?? 'all',
-                options: [
-                  const _HeroFilterOption(
-                    value: 'all',
-                    label: 'Tous les secteurs',
+              Expanded(
+                child: _HeroFilterChip(
+                  chipKey: const Key('professional-hero-where'),
+                  icon: Icons.location_on_outlined,
+                  label: 'Où',
+                  activeValue: group?.label,
+                  selectedValue: group?.name ?? 'all',
+                  options: [
+                    const _HeroFilterOption(
+                      value: 'all',
+                      label: 'Tous les secteurs',
+                    ),
+                    for (final value in TerritorialGroup.values)
+                      _HeroFilterOption(value: value.name, label: value.label),
+                  ],
+                  onSelected: (value) => onGroupChanged(
+                    value == 'all'
+                        ? null
+                        : TerritorialGroup.values.byName(value),
                   ),
-                  for (final value in TerritorialGroup.values)
-                    _HeroFilterOption(value: value.name, label: value.label),
-                ],
-                onSelected: (value) => onGroupChanged(
-                  value == 'all' ? null : TerritorialGroup.values.byName(value),
                 ),
               ),
-              _HeroFilterChip(
-                chipKey: const Key('professional-hero-when'),
-                icon: Icons.calendar_today_outlined,
-                label: 'Quand',
-                activeValue: date,
-                selectedValue: date ?? 'all',
-                options: [
-                  const _HeroFilterOption(
-                    value: 'all',
-                    label: 'Toutes les dates',
-                  ),
-                  for (final value in availableDates)
-                    _HeroFilterOption(value: value, label: value),
-                ],
-                onSelected: (value) =>
-                    onDateChanged(value == 'all' ? null : value),
+              const SizedBox(width: V5Spacing.xs),
+              Expanded(
+                child: _HeroFilterChip(
+                  chipKey: const Key('professional-hero-when'),
+                  icon: Icons.calendar_today_outlined,
+                  label: 'Quand',
+                  activeValue: date,
+                  selectedValue: date ?? 'all',
+                  options: [
+                    const _HeroFilterOption(
+                      value: 'all',
+                      label: 'Toutes les dates',
+                    ),
+                    for (final value in availableDates)
+                      _HeroFilterOption(value: value, label: value),
+                  ],
+                  onSelected: (value) =>
+                      onDateChanged(value == 'all' ? null : value),
+                ),
               ),
             ],
           ),
@@ -491,7 +674,8 @@ class _HeroFilterChip extends StatelessWidget {
       pressedOpacity: 0.72,
       onPressed: () => _showOptions(context),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 44, maxWidth: 236),
+        width: double.infinity,
+        constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
         decoration: BoxDecoration(
           color: hasSelection
@@ -510,7 +694,6 @@ class _HeroFilterChip extends StatelessWidget {
           ],
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,

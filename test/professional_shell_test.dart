@@ -68,10 +68,7 @@ void main() {
     final colors = Theme.of(
       tester.element(find.byType(ProfessionalShell)),
     ).extension<V5Colors>()!;
-    final verdict = tester.widget<Text>(
-      find.byKey(const Key('decision-header-verdict')),
-    );
-    expect(verdict.style?.color, colors.info);
+    expect(find.byKey(const Key('professional-page-title')), findsOneWidget);
 
     final mobilizeButton = find.ancestor(
       of: find.text('Je me mobilise').first,
@@ -151,16 +148,20 @@ void main() {
 
     await tester.tap(find.text('Engagements'));
     await tester.pumpAndSettle();
+    expect(find.text('Mes engagements'), findsOneWidget);
+    expect(find.text('Aucun engagement à venir.'), findsOneWidget);
     expect(
       find.text('Vos engagements seront bientôt disponibles ici.'),
-      findsOneWidget,
+      findsNothing,
     );
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
+    expect(find.text('Mon profil'), findsOneWidget);
+    expect(find.text('Identité professionnelle'), findsOneWidget);
     expect(
       find.text('Votre profil professionnel sera bientôt disponible ici.'),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.byKey(const Key('open-responsible-access')), findsOneWidget);
   });
@@ -376,10 +377,8 @@ void main() {
 
     expect(find.byType(ProfessionalShell), findsOneWidget);
     expect(find.byKey(const Key('cross-role-preview-banner')), findsOneWidget);
-    expect(
-      find.text('Vue Professionnel · rôle réel Responsable de centre'),
-      findsOneWidget,
-    );
+    expect(find.text('Perspective Professionnel'), findsOneWidget);
+    expect(find.text('Rôle réel : Responsable de centre'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
     await tester.pumpAndSettle();
@@ -506,10 +505,8 @@ void main() {
       await tester.tap(find.byKey(const Key('perspective-professional')));
       await tester.pumpAndSettle();
       expect(find.byType(ProfessionalShell), findsOneWidget);
-      expect(
-        find.text('Vue Professionnel · rôle réel Coordinateur'),
-        findsOneWidget,
-      );
+      expect(find.text('Perspective Professionnel'), findsOneWidget);
+      expect(find.text('Rôle réel : Coordinateur'), findsOneWidget);
     },
   );
 

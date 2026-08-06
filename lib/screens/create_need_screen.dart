@@ -16,7 +16,7 @@ abstract final class _CreateNeedVisuals {
   static const navy = Color(0xFF173052);
   static const orange = Color(0xFFF45A0A);
   static const orangeSoft = Color(0xFFFFE8DB);
-  static const background = Color(0xFFF5F5F3);
+  static const background = Color(0xFFF6F7F8);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const borderStrong = Color(0xFFD5D8D5);

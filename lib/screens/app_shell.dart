@@ -184,8 +184,8 @@ class _AppShellState extends State<AppShell> {
           initialIndex: widget.initialIndex == 1 ? 2 : 0,
           crossRolePreviewLabel: crossRolePreview
               ? automaticJourney == _AppJourney.coordinator
-                    ? 'Vue Professionnel · rôle réel Coordinateur'
-                    : 'Vue Professionnel · rôle réel Responsable de centre'
+                    ? 'Coordinateur'
+                    : 'Responsable de centre'
               : null,
           onExitCrossRolePreview: crossRolePreview
               ? perspectiveController.showActualRole

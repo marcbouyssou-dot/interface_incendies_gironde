@@ -211,6 +211,8 @@ class CrossRolePreviewBanner extends StatelessWidget {
     this.exitLabel = 'Revenir',
     this.accentColor,
     this.containerColor,
+    this.compact = false,
+    this.title,
   });
 
   final String label;
@@ -219,10 +221,71 @@ class CrossRolePreviewBanner extends StatelessWidget {
   final String exitLabel;
   final Color? accentColor;
   final Color? containerColor;
+  final bool compact;
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    if (compact) {
+      return Container(
+        key: const Key('cross-role-preview-banner'),
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.fromLTRB(12, 5, 4, 5),
+        decoration: BoxDecoration(
+          color: containerColor ?? colors.surfaceElevated,
+          borderRadius: BorderRadius.circular(V5Radius.control),
+          border: Border.all(color: colors.outline.withValues(alpha: 0.7)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.visibility_outlined,
+              size: 17,
+              color: accentColor ?? colors.info,
+            ),
+            const SizedBox(width: V5Spacing.xs),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title ?? 'Perspective Professionnel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    'Rôle réel : $label',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colors.textSecondary,
+                      letterSpacing: 0,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              key: const Key('exit-cross-role-preview'),
+              onPressed: onExit,
+              style: TextButton.styleFrom(
+                foregroundColor: accentColor ?? colors.info,
+                minimumSize: const Size(44, 44),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              child: Text(exitLabel),
+            ),
+          ],
+        ),
+      );
+    }
     return ColoredBox(
       key: const Key('cross-role-preview-banner'),
       color: containerColor ?? colors.infoContainer,

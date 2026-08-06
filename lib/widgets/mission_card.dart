@@ -7,6 +7,7 @@ enum MissionCardState {
   urgent,
   almostComplete,
   complete,
+  cancelled,
   past,
   loading,
 }
@@ -127,14 +128,14 @@ class MissionCard extends StatelessWidget {
                 locationName,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              SizedBox(height: professionalPalette ? 14 : V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 11 : V5Spacing.lg),
               _MissionSchedule(
                 dateLabel: dateLabel,
                 timeLabel: timeLabel,
                 timingBadge: timingBadge,
                 professionalPalette: professionalPalette,
               ),
-              SizedBox(height: professionalPalette ? 14 : V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 11 : V5Spacing.lg),
               Text(
                 professionTitle,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -147,9 +148,9 @@ class MissionCard extends StatelessWidget {
                 runSpacing: V5Spacing.xs,
                 children: professions,
               ),
-              SizedBox(height: professionalPalette ? 13 : V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 10 : V5Spacing.lg),
               need,
-              SizedBox(height: professionalPalette ? 14 : V5Spacing.lg),
+              SizedBox(height: professionalPalette ? 11 : V5Spacing.lg),
               primaryAction,
               if (secondaryDetailsExpanded) ...[
                 SizedBox(height: professionalPalette ? 16 : V5Spacing.xl),
@@ -182,6 +183,7 @@ class MissionCard extends StatelessWidget {
     MissionCardState.almostComplete => colors.warning,
     MissionCardState.complete =>
       professionalPalette ? colors.outline : colors.success,
+    MissionCardState.cancelled => colors.textSecondary,
     MissionCardState.past => colors.outline,
     MissionCardState.loading => colors.outline,
   };
@@ -192,6 +194,7 @@ class MissionCard extends StatelessWidget {
     MissionCardState.almostComplete =>
       'Mission presque complète à $locationName',
     MissionCardState.complete => 'Mission complète à $locationName',
+    MissionCardState.cancelled => 'Mission annulée à $locationName',
     MissionCardState.past => 'Mission passée à $locationName',
     MissionCardState.loading => 'Chargement de la mission',
   };

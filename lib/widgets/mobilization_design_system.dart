@@ -5,7 +5,7 @@ import '../theme/v5_foundation.dart';
 
 /// Shared visual tokens for the MobSanté mobilization experience.
 abstract final class MobilizationTokens {
-  static const Color pageBackground = Color(0xFFF5F5F3);
+  static const Color pageBackground = Color(0xFFF6F7F8);
   static const Color fieldBackground = Color(0xFFF1F1EF);
 
   static const double spaceXs = 6;
@@ -51,6 +51,8 @@ enum ImpactBannerType {
   reinforcementsExpected,
   teamComplete,
   mobilizationCovered,
+  past,
+  cancelled,
 }
 
 class ImpactBanner extends StatelessWidget {
@@ -100,6 +102,18 @@ class ImpactBanner extends StatelessWidget {
         Icons.verified_outlined,
         colors.success,
         colors.successContainer,
+      ),
+      ImpactBannerType.past => (
+        'Mission passée',
+        Icons.history_rounded,
+        colors.textSecondary,
+        colors.surfaceMuted,
+      ),
+      ImpactBannerType.cancelled => (
+        'Mission annulée',
+        Icons.cancel_outlined,
+        colors.textSecondary,
+        colors.surfaceMuted,
       ),
     };
     final resolvedMessage = message?.trim();

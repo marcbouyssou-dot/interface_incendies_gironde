@@ -12,7 +12,7 @@ abstract final class AppColors {
   static const greenSoft = Color(0xFFE0F3EB);
   static const red = Color(0xFFD94B4B);
   static const redSoft = Color(0xFFFFE8E8);
-  static const background = Color(0xFFF4F6F8);
+  static const background = Color(0xFFF6F7F8);
   static const surface = Color(0xFFFFFFFF);
   static const textMuted = Color(0xFF697586);
   static const border = Color(0xFFE4E8ED);
@@ -23,8 +23,11 @@ abstract final class AppTheme {
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.dark,
     statusBarBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.white,
+    systemNavigationBarColor: Color(0xFFF6F7F8),
     systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarDividerColor: Color(0xFFF6F7F8),
+    systemStatusBarContrastEnforced: false,
+    systemNavigationBarContrastEnforced: false,
   );
 
   static const darkSystemUiOverlayStyle = SystemUiOverlayStyle(
@@ -40,10 +43,12 @@ abstract final class AppTheme {
   }
 
   static Widget systemSurface(BuildContext context, Widget? child) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: isDark ? darkSystemUiOverlayStyle : lightSystemUiOverlayStyle,
-      child: child ?? const SizedBox.shrink(),
+      value: lightSystemUiOverlayStyle,
+      child: ColoredBox(
+        color: V5Colors.light.canvas,
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 

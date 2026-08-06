@@ -18,12 +18,12 @@ class V5BottomNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     return Material(
-      color: colors.surface,
+      color: colors.canvas,
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(
             top: BorderSide(
-              color: colors.outline.withValues(alpha: 0.55),
+              color: colors.outline.withValues(alpha: 0.32),
               width: 0.5,
             ),
           ),
@@ -59,7 +59,7 @@ class V5BottomNavigation extends StatelessWidget {
               key: const Key('v5-bottom-navigation'),
               selectedIndex: selectedIndex,
               onDestinationSelected: onDestinationSelected,
-              backgroundColor: colors.surface,
+              backgroundColor: colors.canvas,
               elevation: 0,
               destinations: const [
                 NavigationDestination(

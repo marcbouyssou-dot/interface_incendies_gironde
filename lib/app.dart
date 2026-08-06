@@ -50,7 +50,7 @@ class FireCoordinationApp extends StatelessWidget {
                   localizationsDelegates: GlobalMaterialLocalizations.delegates,
                   theme: AppTheme.light,
                   darkTheme: AppTheme.dark,
-                  themeMode: ThemeMode.system,
+                  themeMode: ThemeMode.light,
                   builder: AppTheme.systemSurface,
                   home: AppShell(
                     initialIndex: initialTab,
