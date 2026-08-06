@@ -10,7 +10,9 @@ import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
 
 class ResponsibleNeedsScreen extends StatefulWidget {
-  const ResponsibleNeedsScreen({super.key});
+  const ResponsibleNeedsScreen({super.key, this.previewLocationId});
+
+  final String? previewLocationId;
 
   @override
   State<ResponsibleNeedsScreen> createState() => _ResponsibleNeedsScreenState();
@@ -63,6 +65,7 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
                               missions: missionsSnapshot.data!,
                               locations: locations,
                               access: accessSnapshot.data,
+                              previewLocationId: widget.previewLocationId,
                             )
                             .where((need) => need.isActive && !need.isCancelled)
                             .toList(growable: false);

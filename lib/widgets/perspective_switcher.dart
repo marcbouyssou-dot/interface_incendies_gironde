@@ -1,0 +1,309 @@
+import 'package:flutter/material.dart';
+
+import '../models/need.dart';
+import '../models/responsible_access.dart';
+import '../perspective/cross_role_perspective.dart';
+import '../theme/v5_foundation.dart';
+
+class SiteManagerPerspectiveSection extends StatelessWidget {
+  const SiteManagerPerspectiveSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = CrossRolePerspectiveScope.of(context);
+    return PerspectiveSection(
+      title: 'Voir comme',
+      children: [
+        PerspectiveOption(
+          key: const Key('perspective-site-manager'),
+          label: 'Responsable de centre',
+          selected: controller.perspective != CrossRolePerspective.professional,
+          onTap: controller.showActualRole,
+        ),
+        PerspectiveOption(
+          key: const Key('perspective-professional'),
+          label: 'Professionnel',
+          selected: controller.perspective == CrossRolePerspective.professional,
+          onTap: controller.showProfessional,
+        ),
+      ],
+    );
+  }
+}
+
+class CoordinatorPerspectiveSection extends StatelessWidget {
+  const CoordinatorPerspectiveSection({
+    super.key,
+    required this.access,
+    required this.locations,
+    this.onSelectionComplete,
+  });
+
+  final ResponsibleAccess access;
+  final List<ResponsePlace> locations;
+  final VoidCallback? onSelectionComplete;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = CrossRolePerspectiveScope.of(context);
+    return PerspectiveSection(
+      title: 'Changer de perspective',
+      children: [
+        PerspectiveOption(
+          key: const Key('perspective-coordinator'),
+          label: 'Coordinateur',
+          selected: controller.perspective == CrossRolePerspective.actual,
+          onTap: () {
+            controller.showActualRole();
+            onSelectionComplete?.call();
+          },
+        ),
+        PerspectiveOption(
+          key: const Key('perspective-responsible'),
+          label: 'Responsable de centre',
+          selected: controller.perspective == CrossRolePerspective.responsible,
+          onTap: () => _selectResponsibleCenter(context, controller),
+        ),
+        PerspectiveOption(
+          key: const Key('perspective-professional'),
+          label: 'Professionnel',
+          selected: controller.perspective == CrossRolePerspective.professional,
+          onTap: () {
+            controller.showProfessional();
+            onSelectionComplete?.call();
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _selectResponsibleCenter(
+    BuildContext context,
+    CrossRolePerspectiveController controller,
+  ) async {
+    final location = await showResponsibleCenterPicker(
+      context,
+      access: access,
+      locations: locations,
+      selectedLocationId: controller.responsibleLocationId,
+    );
+    if (location != null) {
+      controller.showResponsible(location.id);
+      onSelectionComplete?.call();
+    }
+  }
+}
+
+class PerspectiveSection extends StatelessWidget {
+  const PerspectiveSection({
+    super.key,
+    required this.title,
+    required this.children,
+  });
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: V5Spacing.sm),
+        Container(
+          decoration: BoxDecoration(
+            color: colors.surfaceElevated,
+            borderRadius: BorderRadius.circular(V5Radius.card),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var index = 0; index < children.length; index++) ...[
+                children[index],
+                if (index < children.length - 1)
+                  Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    indent: V5Spacing.lg,
+                    color: colors.outline,
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class PerspectiveOption extends StatelessWidget {
+  const PerspectiveOption({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: V5Spacing.lg),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (selected)
+                  Icon(Icons.check_rounded, size: 20, color: colors.info),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CrossRolePreviewBanner extends StatelessWidget {
+  const CrossRolePreviewBanner({
+    super.key,
+    required this.label,
+    required this.onExit,
+    this.onChange,
+    this.exitLabel = 'Revenir',
+  });
+
+  final String label;
+  final VoidCallback onExit;
+  final VoidCallback? onChange;
+  final String exitLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return ColoredBox(
+      key: const Key('cross-role-preview-banner'),
+      color: colors.infoContainer,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
+          child: Row(
+            children: [
+              Icon(Icons.visibility_outlined, size: 16, color: colors.info),
+              const SizedBox(width: V5Spacing.xs),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: colors.textPrimary),
+                ),
+              ),
+              if (onChange != null)
+                TextButton(
+                  key: const Key('change-preview-center'),
+                  onPressed: onChange,
+                  child: const Text('Changer'),
+                ),
+              TextButton(
+                key: const Key('exit-cross-role-preview'),
+                onPressed: onExit,
+                child: Text(exitLabel),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<ResponsePlace?> showResponsibleCenterPicker(
+  BuildContext context, {
+  required ResponsibleAccess access,
+  required List<ResponsePlace> locations,
+  String? selectedLocationId,
+}) {
+  final allowedLocations =
+      locations
+          .where((location) => access.canManage(location.id))
+          .toList(growable: false)
+        ..sort((first, second) => first.name.compareTo(second.name));
+  return showModalBottomSheet<ResponsePlace>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    useSafeArea: true,
+    backgroundColor: context.v5Colors.surfaceElevated,
+    builder: (sheetContext) => ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 620),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+            child: Text(
+              'Choisir un centre',
+              style: Theme.of(sheetContext).textTheme.headlineSmall,
+            ),
+          ),
+          if (allowedLocations.isEmpty)
+            const Expanded(
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(V5Spacing.xl),
+                  child: Text('Aucun centre autorisé.'),
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                key: const Key('responsible-center-picker'),
+                padding: const EdgeInsets.only(bottom: V5Spacing.lg),
+                itemCount: allowedLocations.length,
+                itemBuilder: (context, index) {
+                  final location = allowedLocations[index];
+                  final selected = location.id == selectedLocationId;
+                  return ListTile(
+                    key: Key('preview-center-${location.id}'),
+                    minTileHeight: 52,
+                    title: Text(location.name),
+                    trailing: selected
+                        ? Icon(
+                            Icons.check_rounded,
+                            color: context.v5Colors.info,
+                          )
+                        : null,
+                    onTap: () => Navigator.of(context).pop(location),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}

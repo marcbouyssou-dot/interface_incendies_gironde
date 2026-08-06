@@ -7,10 +7,13 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
+import '../widgets/perspective_switcher.dart';
 import 'development_settings_screen.dart';
 
 class ResponsibleProfileScreen extends StatefulWidget {
-  const ResponsibleProfileScreen({super.key});
+  const ResponsibleProfileScreen({super.key, this.previewLocationId});
+
+  final String? previewLocationId;
 
   @override
   State<ResponsibleProfileScreen> createState() =>
@@ -59,6 +62,7 @@ class _ResponsibleProfileScreenState extends State<ResponsibleProfileScreen> {
             signingOut: _signingOut,
             onOpenSettings: _openSettings,
             onSignOut: _signOut,
+            previewLocationId: widget.previewLocationId,
           );
         },
       ),
@@ -66,8 +70,14 @@ class _ResponsibleProfileScreenState extends State<ResponsibleProfileScreen> {
   }
 
   void _openSettings() {
+    final liveData = LiveCoordinationDataScope.of(context);
     Navigator.of(context).push(
-      AppPageRoute<void>(builder: (_) => const DevelopmentSettingsScreen()),
+      AppPageRoute<void>(
+        builder: (_) => LiveCoordinationDataScope(
+          data: liveData,
+          child: const DevelopmentSettingsScreen(),
+        ),
+      ),
     );
   }
 
@@ -89,6 +99,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
     required this.signingOut,
     required this.onOpenSettings,
     required this.onSignOut,
+    required this.previewLocationId,
   });
 
   final ResponsibleAccess? access;
@@ -96,6 +107,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
   final bool signingOut;
   final VoidCallback onOpenSettings;
   final VoidCallback onSignOut;
+  final String? previewLocationId;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +115,9 @@ class _ResponsibleProfileContent extends StatelessWidget {
     final locationById = {
       for (final location in locations) location.id: location,
     };
-    final perimeter = access == null
+    final perimeter = previewLocationId != null
+        ? [locationById[previewLocationId]?.name ?? 'Centre sélectionné']
+        : access == null
         ? const <String>[]
         : access!.isCoordinator
         ? const ['Tous les centres — accès Coordinateur réel']
@@ -127,6 +141,16 @@ class _ResponsibleProfileContent extends StatelessWidget {
                     'Profil',
                     style: Theme.of(context).textTheme.headlineLarge,
                   ),
+                  if (access?.isCoordinator == true) ...[
+                    const SizedBox(height: V5Spacing.xxl),
+                    CoordinatorPerspectiveSection(
+                      access: access!,
+                      locations: locations,
+                    ),
+                  ] else if (access?.isSiteManager == true) ...[
+                    const SizedBox(height: V5Spacing.xxl),
+                    const SiteManagerPerspectiveSection(),
+                  ],
                   const SizedBox(height: V5Spacing.xxl),
                   Text(
                     'Informations personnelles',

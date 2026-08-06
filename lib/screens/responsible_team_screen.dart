@@ -8,7 +8,9 @@ import '../theme/v5_foundation.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 
 class ResponsibleTeamScreen extends StatefulWidget {
-  const ResponsibleTeamScreen({super.key});
+  const ResponsibleTeamScreen({super.key, this.previewLocationId});
+
+  final String? previewLocationId;
 
   @override
   State<ResponsibleTeamScreen> createState() => _ResponsibleTeamScreenState();
@@ -63,6 +65,7 @@ class _ResponsibleTeamScreenState extends State<ResponsibleTeamScreen> {
                               missions: missionsSnapshot.data!,
                               locations: locationsSnapshot.data!,
                               access: accessSnapshot.data,
+                              previewLocationId: widget.previewLocationId,
                             )
                             .where((need) => need.isActive && !need.isCancelled)
                             .toList(growable: false);

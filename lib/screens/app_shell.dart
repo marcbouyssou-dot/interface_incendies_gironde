@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
+import '../perspective/cross_role_perspective.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
@@ -118,6 +119,7 @@ class _AppShellState extends State<AppShell> {
     final previewMode = kDebugMode
         ? RolePreviewScope.of(context).mode
         : RolePreviewMode.automatic;
+    final perspectiveController = CrossRolePerspectiveScope.of(context);
     final automaticJourney = !_accessResolved
         ? _AppJourney.coordinator
         : _access == null
@@ -133,14 +135,58 @@ class _AppShellState extends State<AppShell> {
       RolePreviewMode.coordinator => _AppJourney.coordinator,
       RolePreviewMode.automatic => automaticJourney,
     };
+    var displayedJourney = journey;
+    String? responsiblePreviewLocationId;
+    var crossRolePreview = false;
+    final access = _access;
+    if (previewMode == RolePreviewMode.automatic &&
+        _accessResolved &&
+        access != null &&
+        access.active) {
+      switch (perspectiveController.perspective) {
+        case CrossRolePerspective.actual:
+          break;
+        case CrossRolePerspective.professional:
+          if (access.isCoordinator || access.isSiteManager) {
+            displayedJourney = _AppJourney.professional;
+            crossRolePreview = displayedJourney != automaticJourney;
+          }
+        case CrossRolePerspective.responsible:
+          final locationId = perspectiveController.responsibleLocationId;
+          if (access.isCoordinator &&
+              locationId != null &&
+              access.canManage(locationId)) {
+            displayedJourney = _AppJourney.responsible;
+            responsiblePreviewLocationId = locationId;
+            crossRolePreview = true;
+          }
+      }
+    }
     return LiveCoordinationDataScope(
       data: _liveData!,
-      child: switch (journey) {
+      child: switch (displayedJourney) {
         _AppJourney.professional => ProfessionalShell(
+          key: ValueKey(
+            crossRolePreview ? 'professional-perspective' : 'professional',
+          ),
           initialIndex: widget.initialIndex == 1 ? 2 : 0,
+          crossRolePreviewLabel: crossRolePreview
+              ? automaticJourney == _AppJourney.coordinator
+                    ? 'Vue Professionnel · rôle réel Coordinateur'
+                    : 'Vue Professionnel · rôle réel Responsable de centre'
+              : null,
+          onExitCrossRolePreview: crossRolePreview
+              ? perspectiveController.showActualRole
+              : null,
         ),
         _AppJourney.responsible => ResponsibleShell(
+          key: ValueKey(
+            responsiblePreviewLocationId == null
+                ? 'responsible'
+                : 'responsible-$responsiblePreviewLocationId',
+          ),
           initialIndex: widget.initialIndex.clamp(0, 3),
+          previewLocationId: responsiblePreviewLocationId,
         ),
         _AppJourney.coordinator => _buildHistoricalShell(),
       },

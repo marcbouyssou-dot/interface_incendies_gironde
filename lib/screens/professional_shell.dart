@@ -1,19 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/v5_bottom_navigation.dart';
+import '../widgets/perspective_switcher.dart';
 import 'create_need_screen.dart';
 import 'development_settings_screen.dart';
 import 'slots_screen.dart';
 
 class ProfessionalShell extends StatefulWidget {
-  const ProfessionalShell({super.key, this.initialIndex = 0})
-    : assert(initialIndex >= 0 && initialIndex < 3);
+  const ProfessionalShell({
+    super.key,
+    this.initialIndex = 0,
+    this.crossRolePreviewLabel,
+    this.onExitCrossRolePreview,
+  }) : assert(initialIndex >= 0 && initialIndex < 3),
+       assert(
+         (crossRolePreviewLabel == null) == (onExitCrossRolePreview == null),
+       );
 
   final int initialIndex;
+  final String? crossRolePreviewLabel;
+  final VoidCallback? onExitCrossRolePreview;
 
   @override
   State<ProfessionalShell> createState() => _ProfessionalShellState();
@@ -66,8 +77,14 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   }
 
   void _openSettings() {
+    final liveData = LiveCoordinationDataScope.of(context);
     Navigator.of(context).push(
-      AppPageRoute<void>(builder: (_) => const DevelopmentSettingsScreen()),
+      AppPageRoute<void>(
+        builder: (_) => LiveCoordinationDataScope(
+          data: liveData,
+          child: const DevelopmentSettingsScreen(),
+        ),
+      ),
     );
   }
 
@@ -75,15 +92,27 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.v5Colors.canvas,
-      body: SafeArea(
-        bottom: false,
-        child: IndexedStack(
-          index: _currentIndex,
-          children: List.generate(
-            _screens.length,
-            (index) => _screens[index] ?? const SizedBox.shrink(),
+      body: Column(
+        children: [
+          if (widget.crossRolePreviewLabel case final label?)
+            CrossRolePreviewBanner(
+              label: label,
+              onExit: widget.onExitCrossRolePreview!,
+            ),
+          Expanded(
+            child: SafeArea(
+              top: widget.crossRolePreviewLabel == null,
+              bottom: false,
+              child: IndexedStack(
+                index: _currentIndex,
+                children: List.generate(
+                  _screens.length,
+                  (index) => _screens[index] ?? const SizedBox.shrink(),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
       bottomNavigationBar: V5BottomNavigation(
         selectedIndex: _currentIndex,

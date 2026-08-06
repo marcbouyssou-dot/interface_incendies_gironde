@@ -26,8 +26,19 @@ List<CoordinationNeed> missionsVisibleToResponsible({
   required List<CoordinationNeed> missions,
   required List<ResponsePlace> locations,
   required ResponsibleAccess? access,
+  String? previewLocationId,
 }) {
   if (access == null || !access.active) return const [];
+  if (previewLocationId != null) {
+    if (!access.canManage(previewLocationId)) return const [];
+    return missions
+        .where((mission) {
+          final location = responsePlaceForNeed(mission, locations);
+          final locationId = location?.id ?? mission.locationId;
+          return locationId == previewLocationId;
+        })
+        .toList(growable: false);
+  }
   if (access.roles.contains(ResponsibleRole.coordinator)) return missions;
   if (!access.roles.contains(ResponsibleRole.siteManager)) return const [];
   return missions

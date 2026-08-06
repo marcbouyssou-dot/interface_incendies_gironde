@@ -282,6 +282,104 @@ void main() {
     expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
   });
 
+  testWidgets('site manager can view and immediately leave professional UI', (
+    tester,
+  ) async {
+    final merignac = places.firstWhere((place) => place.name == 'Mérignac');
+    final repository = MockCoordinationRepository(
+      responsibleAccess: ResponsibleAccess(
+        uid: 'manager',
+        role: ResponsibleRole.siteManager,
+        locationIds: {merignac.id},
+        active: true,
+      ),
+    );
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profil'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Voir comme'), findsOneWidget);
+    final professionalPerspective = find.byKey(
+      const Key('perspective-professional'),
+    );
+    await tester.ensureVisible(professionalPerspective);
+    await tester.tap(professionalPerspective);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.byKey(const Key('cross-role-preview-banner')), findsOneWidget);
+    expect(
+      find.text('Vue Professionnel · rôle réel Responsable de centre'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ResponsibleShell), findsOneWidget);
+    expect(find.byKey(const Key('cross-role-preview-banner')), findsNothing);
+  });
+
+  testWidgets(
+    'coordinator selects an authorized center before responsible preview',
+    (tester) async {
+      final selectedCenter = places.first;
+
+      await tester.pumpWidget(const FireCoordinationApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Plus'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('open-development-settings')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Changer de perspective'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('perspective-responsible')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choisir un centre'), findsOneWidget);
+      final center = find.byKey(Key('preview-center-${selectedCenter.id}'));
+      await tester.tap(center);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ResponsibleShell), findsOneWidget);
+      expect(
+        find.text('Vue Responsable de centre · ${selectedCenter.name}'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-mission-merignac')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-mission-langon')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const Key('change-preview-center')));
+      await tester.pumpAndSettle();
+      expect(find.text('Choisir un centre'), findsOneWidget);
+      Navigator.of(tester.element(find.text('Choisir un centre'))).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ResponsibleShell), findsNothing);
+      await tester.tap(find.byKey(const Key('open-development-settings')));
+      await tester.pumpAndSettle();
+      expect(find.text('Changer de perspective'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('perspective-professional')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfessionalShell), findsOneWidget);
+      expect(
+        find.text('Vue Professionnel · rôle réel Coordinateur'),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('debug settings switch the displayed shell instantly', (
     tester,
   ) async {
@@ -334,7 +432,15 @@ void main() {
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('responsible-development-settings')));
+    final developmentSettings = find.byKey(
+      const Key('responsible-development-settings'),
+    );
+    await tester.drag(
+      find.byKey(const PageStorageKey('responsible-profile')),
+      const Offset(0, -360),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(developmentSettings);
     await tester.pumpAndSettle();
     await selectPreview(tester, 'Coordinateur');
     await closeSettings(tester);

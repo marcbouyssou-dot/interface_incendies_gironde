@@ -219,6 +219,45 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test(
+    'responsible perspective only narrows the real authorized perimeter',
+    () {
+      final merignacMission = needs.firstWhere(
+        (mission) => mission.place == 'Mérignac',
+      );
+      final langonMission = needs.firstWhere(
+        (mission) => mission.place == 'Langon',
+      );
+      final merignac = responsePlaceForNeed(merignacMission, places)!;
+      final langon = responsePlaceForNeed(langonMission, places)!;
+      final missions = [merignacMission, langonMission];
+
+      expect(
+        missionsVisibleToResponsible(
+          missions: missions,
+          locations: [merignac, langon],
+          access: coordinator,
+          previewLocationId: merignac.id,
+        ),
+        [merignacMission],
+      );
+      expect(
+        missionsVisibleToResponsible(
+          missions: missions,
+          locations: [merignac, langon],
+          access: ResponsibleAccess(
+            uid: 'manager',
+            role: ResponsibleRole.siteManager,
+            locationIds: {merignac.id},
+            active: true,
+          ),
+          previewLocationId: langon.id,
+        ),
+        isEmpty,
+      );
+    },
+  );
+
   testWidgets('site manager has no statistics and keeps scoped needs', (
     tester,
   ) async {
