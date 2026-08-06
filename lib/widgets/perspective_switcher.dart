@@ -272,13 +272,24 @@ class CrossRolePreviewBanner extends StatelessWidget {
                 ],
               ),
             ),
+            if (onChange != null)
+              TextButton(
+                key: const Key('change-preview-center'),
+                onPressed: onChange,
+                style: TextButton.styleFrom(
+                  foregroundColor: accentColor ?? colors.info,
+                  minimumSize: const Size(44, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: const Text('Changer'),
+              ),
             TextButton(
               key: const Key('exit-cross-role-preview'),
               onPressed: onExit,
               style: TextButton.styleFrom(
                 foregroundColor: accentColor ?? colors.info,
                 minimumSize: const Size(44, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
               ),
               child: Text(exitLabel),
             ),

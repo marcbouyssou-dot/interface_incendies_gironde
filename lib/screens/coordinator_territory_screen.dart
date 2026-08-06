@@ -7,6 +7,7 @@ import '../repositories/live_data_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/territory_components.dart';
+import '../widgets/professional_page_header.dart';
 import 'coordinator_overview_screen.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 
@@ -137,14 +138,10 @@ class _TerritoryContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Territoire',
-                        style: Theme.of(context).textTheme.headlineLarge,
-                      ),
-                      const SizedBox(height: V5Spacing.xs),
-                      Text(
-                        'Lecture sectorielle des écarts opérationnels en Gironde.',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      const MobSantePageHeader(
+                        title: 'Territoire',
+                        subtitle:
+                            'Repérez les secteurs stables, sous surveillance ou critiques.',
                       ),
                       const SizedBox(height: V5Spacing.lg),
                       SingleChildScrollView(

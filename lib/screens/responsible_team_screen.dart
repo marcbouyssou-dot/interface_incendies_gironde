@@ -6,6 +6,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
+import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 
 extension on EngagementStatus {
@@ -145,14 +146,10 @@ class _ResponsibleTeamContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Équipe',
-                        style: Theme.of(context).textTheme.headlineLarge,
-                      ),
-                      const SizedBox(height: V5Spacing.xs),
-                      Text(
-                        'Les professionnels liés aux besoins de vos centres.',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      const MobSantePageHeader(
+                        title: 'Mon équipe',
+                        subtitle:
+                            'Retrouvez les professionnels mobilisés sur vos besoins.',
                       ),
                       const SizedBox(height: V5Spacing.lg),
                       SingleChildScrollView(

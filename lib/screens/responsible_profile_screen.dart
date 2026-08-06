@@ -7,6 +7,7 @@ import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/perspective_switcher.dart';
+import '../widgets/professional_page_header.dart';
 import 'development_settings_screen.dart';
 
 class ResponsibleProfileScreen extends StatefulWidget {
@@ -136,9 +137,10 @@ class _ResponsibleProfileContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Profil',
-                    style: Theme.of(context).textTheme.headlineLarge,
+                  const MobSantePageHeader(
+                    title: 'Mon profil responsable',
+                    subtitle:
+                        'Votre périmètre, vos réglages et vos perspectives.',
                   ),
                   if (access?.isCoordinator == true) ...[
                     const SizedBox(height: V5Spacing.xxl),

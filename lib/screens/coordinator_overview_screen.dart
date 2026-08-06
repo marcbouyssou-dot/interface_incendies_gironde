@@ -7,6 +7,7 @@ import '../repositories/live_data_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/territory_components.dart';
+import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 
 class CoordinatorOverviewScreen extends StatefulWidget {
@@ -144,6 +145,11 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const MobSantePageHeader(
+                        title: 'Pilotage territorial',
+                        subtitle: 'Suivez l’état de mobilisation en Gironde.',
+                      ),
+                      const SizedBox(height: V5Spacing.lg),
                       TerritoryVerdict(
                         verdict: verdict,
                         contextLine:

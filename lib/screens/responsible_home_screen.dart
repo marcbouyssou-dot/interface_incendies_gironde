@@ -7,6 +7,7 @@ import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/responsible_mission_card.dart';
+import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
 
@@ -184,6 +185,12 @@ class _ResponsibleHomeContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const MobSantePageHeader(
+                      title: 'Mon établissement',
+                      subtitle:
+                          'Suivez la couverture de vos besoins et de votre équipe.',
+                    ),
+                    const SizedBox(height: V5Spacing.lg),
                     _PlanningHero(
                       verdict: verdict,
                       centerContext: centerContext,
@@ -322,10 +329,8 @@ class _PlanningHero extends StatelessWidget {
                   child: Text(
                     verdict,
                     key: const Key('responsible-planning-verdict'),
-                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                       color: colors.textPrimary,
-                      fontSize: 34,
-                      height: 1.08,
                     ),
                   ),
                 ),

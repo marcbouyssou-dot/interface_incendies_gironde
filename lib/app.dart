@@ -12,6 +12,7 @@ import 'repositories/repository_scope.dart';
 import 'repositories/responsible_access_administration_repository_scope.dart';
 import 'screens/app_shell.dart';
 import 'theme/app_theme.dart';
+import 'utils/system_theme.dart';
 
 class FireCoordinationApp extends StatelessWidget {
   const FireCoordinationApp({
@@ -29,6 +30,7 @@ class FireCoordinationApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    activateLightApplicationChrome();
     final coordinationRepository =
         repository ?? MockCoordinationRepository.instance;
     return RepositoryScope(

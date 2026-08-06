@@ -7,6 +7,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import '../widgets/responsible_mission_card.dart';
+import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
 
@@ -173,37 +174,30 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Besoins',
-                              style: Theme.of(context).textTheme.headlineLarge,
-                            ),
-                          ),
-                          FilledButton(
-                            key: const Key('responsible-needs-create'),
-                            onPressed: onCreateNeed,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: colors.accent,
-                              foregroundColor: colors.onAccent,
-                              minimumSize: const Size(0, 44),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  V5Radius.control,
-                                ),
+                      const MobSantePageHeader(
+                        title: 'Mes besoins',
+                        subtitle:
+                            'Créez, suivez et ajustez les besoins de vos centres.',
+                      ),
+                      const SizedBox(height: V5Spacing.md),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          key: const Key('responsible-needs-create'),
+                          onPressed: onCreateNeed,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colors.accent,
+                            foregroundColor: colors.onAccent,
+                            minimumSize: const Size(0, 44),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                V5Radius.control,
                               ),
                             ),
-                            child: const Text('Créer'),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: V5Spacing.xs),
-                      Text(
-                        'Suivez et ajustez les besoins de vos centres.',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                          child: const Text('Créer'),
+                        ),
                       ),
                       const SizedBox(height: V5Spacing.lg),
                       SingleChildScrollView(

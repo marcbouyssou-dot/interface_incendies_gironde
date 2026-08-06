@@ -13,6 +13,7 @@ import 'repositories/firestore_coordination_repository.dart';
 import 'screens/splash_screen.dart';
 import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
+import 'utils/system_theme.dart';
 import 'widgets/brand_mark.dart';
 
 abstract final class _StartupVisuals {
@@ -127,6 +128,7 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     return FutureBuilder<CoordinationRepository>(
       future: _startup,
       builder: (context, snapshot) {
+        if (snapshot.hasError) activateLightApplicationChrome();
         if (snapshot.hasData) {
           return FireCoordinationApp(
             repository: snapshot.data,
@@ -136,9 +138,13 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
-          builder: AppTheme.lightSystemSurface,
+          builder: snapshot.hasError
+              ? AppTheme.lightSystemSurface
+              : AppTheme.darkSystemSurface,
           home: Scaffold(
-            backgroundColor: _StartupVisuals.background,
+            backgroundColor: snapshot.hasError
+                ? _StartupVisuals.background
+                : AppColors.navy,
             body: snapshot.hasError
                 ? _StartupError(onRetry: _retry)
                 : const SplashScreen(),

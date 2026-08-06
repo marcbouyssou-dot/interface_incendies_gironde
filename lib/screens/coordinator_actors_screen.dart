@@ -11,6 +11,7 @@ import '../repositories/responsible_access_administration_repository_scope.dart'
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
+import '../widgets/professional_page_header.dart';
 import 'coordinator_overview_screen.dart';
 
 class CoordinatorActorsScreen extends StatefulWidget {
@@ -159,14 +160,10 @@ class _CoordinatorActorsContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Acteurs',
-                    style: Theme.of(context).textTheme.headlineLarge,
-                  ),
-                  const SizedBox(height: V5Spacing.xs),
-                  Text(
-                    'Les accès opérationnels du territoire.',
-                    style: Theme.of(context).textTheme.bodyMedium,
+                  const MobSantePageHeader(
+                    title: 'Acteurs',
+                    subtitle:
+                        'Responsables, professionnels mobilisés et lieux du dispositif.',
                   ),
                   const SizedBox(height: V5Spacing.xxl),
                   _ActorSectionHeader(

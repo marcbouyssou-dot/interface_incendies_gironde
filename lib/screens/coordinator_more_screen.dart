@@ -6,6 +6,7 @@ import '../repositories/live_data_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
+import '../widgets/professional_page_header.dart';
 import 'coordinator_overview_screen.dart';
 
 class CoordinatorMoreScreen extends StatefulWidget {
@@ -117,9 +118,10 @@ class _CoordinatorMoreContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Plus',
-                    style: Theme.of(context).textTheme.headlineLarge,
+                  const MobSantePageHeader(
+                    title: 'Coordination',
+                    subtitle:
+                        'Perspectives, statistiques, réglages et administration.',
                   ),
                   const SizedBox(height: V5Spacing.xxl),
                   if (access?.isCoordinator == true)

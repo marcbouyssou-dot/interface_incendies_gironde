@@ -36,10 +36,23 @@ abstract final class AppTheme {
     statusBarBrightness: Brightness.dark,
     systemNavigationBarColor: AppColors.navy,
     systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarDividerColor: AppColors.navy,
+    systemStatusBarContrastEnforced: false,
+    systemNavigationBarContrastEnforced: false,
   );
 
   static Widget lightSystemSurface(BuildContext context, Widget? child) {
     return systemSurface(context, child);
+  }
+
+  static Widget darkSystemSurface(BuildContext context, Widget? child) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: darkSystemUiOverlayStyle,
+      child: ColoredBox(
+        color: AppColors.navy,
+        child: child ?? const SizedBox.shrink(),
+      ),
+    );
   }
 
   static Widget systemSurface(BuildContext context, Widget? child) {

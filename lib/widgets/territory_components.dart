@@ -47,10 +47,8 @@ class TerritoryVerdict extends StatelessWidget {
                   child: Text(
                     verdict,
                     key: const Key('territory-verdict'),
-                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                       color: colors.textPrimary,
-                      fontSize: 34,
-                      height: 1.08,
                     ),
                   ),
                 ),

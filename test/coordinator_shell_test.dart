@@ -24,6 +24,7 @@ void main() {
     expect(find.byType(CoordinatorShell), findsOneWidget);
     expect(find.byType(CoordinatorOverviewScreen), findsOneWidget);
     expect(find.byType(CoordinatorBottomNavigation), findsOneWidget);
+    expect(find.text('Pilotage territorial'), findsOneWidget);
     expect(find.byKey(const Key('territory-verdict')), findsOneWidget);
     expect(find.text('À surveiller'), findsWidgets);
     expect(find.text('Sous contrôle'), findsOneWidget);
@@ -55,6 +56,12 @@ void main() {
 
     expect(find.byType(CoordinatorTerritoryScreen), findsOneWidget);
     expect(
+      find.text(
+        'Repérez les secteurs stables, sous surveillance ou critiques.',
+      ),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const Key('coordinator-territory-filter-all')),
       findsOneWidget,
     );
@@ -77,6 +84,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorActorsScreen), findsOneWidget);
+    expect(
+      find.text(
+        'Responsables, professionnels mobilisés et lieux du dispositif.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Responsables'), findsOneWidget);
     expect(find.text('Professionnels'), findsOneWidget);
     expect(find.text('Lieux'), findsOneWidget);
@@ -87,6 +100,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorMoreScreen), findsOneWidget);
+    expect(find.text('Coordination'), findsOneWidget);
     expect(find.text('Changer de perspective'), findsOneWidget);
     expect(find.text('Statistiques globales'), findsOneWidget);
     expect(find.text('Réglages'), findsOneWidget);

@@ -475,9 +475,10 @@ void main() {
 
       expect(find.byType(ResponsibleShell), findsOneWidget);
       expect(
-        find.text('Vue Responsable de centre · ${selectedCenter.name}'),
+        find.text('Perspective Responsable · ${selectedCenter.name}'),
         findsOneWidget,
       );
+      expect(find.text('Rôle réel : Coordinateur'), findsOneWidget);
       expect(
         find.byKey(const Key('responsible-open-need-mission-merignac')),
         findsNothing,

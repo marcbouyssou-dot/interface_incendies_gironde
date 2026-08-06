@@ -4,11 +4,17 @@ import '../config/app_identity.dart';
 import '../theme/v5_foundation.dart';
 import 'brand_mark.dart';
 
-class ProfessionalPageHeader extends StatelessWidget {
-  const ProfessionalPageHeader({super.key, required this.title, this.subtitle});
+class MobSantePageHeader extends StatelessWidget {
+  const MobSantePageHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.titleKey = const Key('role-page-title'),
+  });
 
   final String title;
   final String? subtitle;
+  final Key titleKey;
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +52,7 @@ class ProfessionalPageHeader extends StatelessWidget {
         const SizedBox(height: V5Spacing.lg),
         Text(
           title,
-          key: const Key('professional-page-title'),
+          key: titleKey,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         if (subtitle case final value? when value.trim().isNotEmpty) ...[
@@ -61,4 +67,18 @@ class ProfessionalPageHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+class ProfessionalPageHeader extends StatelessWidget {
+  const ProfessionalPageHeader({super.key, required this.title, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) => MobSantePageHeader(
+    title: title,
+    subtitle: subtitle,
+    titleKey: const Key('professional-page-title'),
+  );
 }

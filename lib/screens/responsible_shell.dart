@@ -66,7 +66,13 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
       body: Column(
         children: [
           if (widget.previewLocationId case final locationId?)
-            _ResponsiblePreviewBanner(locationId: locationId),
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                child: _ResponsiblePreviewBanner(locationId: locationId),
+              ),
+            ),
           Expanded(
             child: SafeArea(
               top: widget.previewLocationId == null,
@@ -133,11 +139,12 @@ class _ResponsiblePreviewBannerState extends State<_ResponsiblePreviewBanner> {
           }
           final access = accessSnapshot.data;
           return CrossRolePreviewBanner(
-            label:
-                'Vue Responsable de centre · ${location?.name ?? 'centre sélectionné'}',
-            exitLabel: 'Coordinateur',
+            label: 'Coordinateur',
+            title:
+                'Perspective Responsable · ${location?.name ?? 'centre sélectionné'}',
+            exitLabel: 'Revenir',
             accentColor: context.v5Colors.accent,
-            containerColor: context.v5Colors.warningContainer,
+            compact: true,
             onExit: controller.showActualRole,
             onChange: access == null || !locationsSnapshot.hasData
                 ? null
