@@ -98,6 +98,7 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
       access: access,
       locations: locations,
       selectedLocationId: controller.responsibleLocationId,
+      accentColor: accentColor,
     );
     if (location != null) {
       controller.showResponsible(location.id);
@@ -277,6 +278,7 @@ Future<ResponsePlace?> showResponsibleCenterPicker(
   required ResponsibleAccess access,
   required List<ResponsePlace> locations,
   String? selectedLocationId,
+  Color? accentColor,
 }) {
   final allowedLocations =
       locations
@@ -326,7 +328,7 @@ Future<ResponsePlace?> showResponsibleCenterPicker(
                     trailing: selected
                         ? Icon(
                             Icons.check_rounded,
-                            color: context.v5Colors.info,
+                            color: accentColor ?? context.v5Colors.info,
                           )
                         : null,
                     onTap: () => Navigator.of(context).pop(location),

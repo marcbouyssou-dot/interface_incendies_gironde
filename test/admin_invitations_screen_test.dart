@@ -47,7 +47,12 @@ void main() {
           invitationRepository ?? MockAdminInvitationRepository(),
       responsibleAccessAdministrationRepository: accessRepository,
     );
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     await tester.pumpAndSettle();
     if (access?.roles.contains(ResponsibleRole.coordinator) == true) {
       await tester.tap(find.text('Déclarer'));

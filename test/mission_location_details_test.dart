@@ -109,6 +109,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       FireCoordinationApp(
+        useLegacyCoordinatorShellForTesting: true,
         repository: MockCoordinationRepository(
           initialMissions: const [mission],
           initialLocations: const [location],

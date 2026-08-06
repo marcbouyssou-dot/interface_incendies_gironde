@@ -29,7 +29,9 @@ void main() {
   });
 
   testWidgets('Flutter application exposes the MobSanté title', (tester) async {
-    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpWidget(
+      const FireCoordinationApp(useLegacyCoordinatorShellForTesting: true),
+    );
 
     final application = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(application.title, AppIdentity.productName);
@@ -121,7 +123,9 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpWidget(
+      const FireCoordinationApp(useLegacyCoordinatorShellForTesting: true),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Plus').last);

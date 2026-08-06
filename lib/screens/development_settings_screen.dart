@@ -5,6 +5,7 @@ import '../dev/role_preview.dart';
 import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
+import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
 
@@ -102,6 +103,7 @@ class _DevelopmentSettingsScreenState extends State<DevelopmentSettingsScreen> {
                       return CoordinatorPerspectiveSection(
                         access: access!,
                         locations: locationsSnapshot.data!,
+                        accentColor: CoordinatorIdentity.of(context).accent,
                         onSelectionComplete: () => Navigator.of(context).pop(),
                       );
                     },

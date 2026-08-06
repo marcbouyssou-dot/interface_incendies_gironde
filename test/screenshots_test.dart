@@ -7,7 +7,9 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpWidget(
+      const FireCoordinationApp(useLegacyCoordinatorShellForTesting: true),
+    );
     await tester.pumpAndSettle();
     if (tab != null) {
       await tester.tap(find.widgetWithText(NavigationDestination, tab));

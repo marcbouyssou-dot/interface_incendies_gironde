@@ -195,7 +195,12 @@ void main() {
         unknownLocation,
       ],
     );
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Plus').last);
     await tester.pumpAndSettle();

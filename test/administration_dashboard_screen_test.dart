@@ -37,7 +37,12 @@ void main() {
       locations: locations,
     );
     addTearDown(repository.disposeDashboard);
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     await tester.pumpAndSettle();
     final siteManagerJourney =
         access?.roles.contains(ResponsibleRole.siteManager) == true &&

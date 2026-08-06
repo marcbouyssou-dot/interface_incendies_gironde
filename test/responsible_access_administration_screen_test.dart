@@ -38,7 +38,12 @@ void main() {
       responsibleAccessAdministrationRepository: accessRepository,
     );
 
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Déclarer'));
     await tester.pumpAndSettle();
@@ -261,21 +266,14 @@ Future<void> _chooseRole(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _scrollToFormControl(
-  WidgetTester tester,
-  Finder control,
-) async {
+Future<void> _scrollToFormControl(WidgetTester tester, Finder control) async {
   final formScrollable = find
       .descendant(
         of: find.byKey(const Key('responsible-access-form')),
         matching: find.byType(Scrollable),
       )
       .first;
-  await tester.scrollUntilVisible(
-    control,
-    200,
-    scrollable: formScrollable,
-  );
+  await tester.scrollUntilVisible(control, 200, scrollable: formScrollable);
   await tester.ensureVisible(control);
   await tester.pumpAndSettle();
 }

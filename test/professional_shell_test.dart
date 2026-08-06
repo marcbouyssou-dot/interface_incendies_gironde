@@ -7,11 +7,13 @@ import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/development_settings_screen.dart';
+import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/screens/responsible_home_screen.dart';
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
 import 'package:interface_incendies_gironde/widgets/responsible_bottom_navigation.dart';
+import 'package:interface_incendies_gironde/widgets/coordinator_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
@@ -163,7 +165,7 @@ void main() {
     expect(find.byKey(const Key('open-responsible-access')), findsOneWidget);
   });
 
-  testWidgets('a real privileged role keeps the historical journey', (
+  testWidgets('a real coordinator receives the territorial V5 journey', (
     tester,
   ) async {
     await tester.pumpWidget(const FireCoordinationApp());
@@ -171,8 +173,10 @@ void main() {
 
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(V5BottomNavigation), findsNothing);
-    expect(find.byKey(const Key('mission-coverage-overview')), findsOneWidget);
-    expect(find.byKey(const Key('slots-territorial-filter')), findsOneWidget);
+    expect(find.byType(CoordinatorShell), findsOneWidget);
+    expect(find.byType(CoordinatorBottomNavigation), findsOneWidget);
+    expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
+    expect(find.byKey(const Key('slots-territorial-filter')), findsNothing);
     expect(
       find.byKey(const Key('professional-secondary-filters')),
       findsNothing,
@@ -181,10 +185,12 @@ void main() {
       find.text('1 mission urgente nécessite votre attention.'),
       findsNothing,
     );
-    expect(find.text('Détails de la mission'), findsWidgets);
     final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
     expect(navigation.destinations, hasLength(4));
-    expect(find.text('Déclarer'), findsOneWidget);
+    expect(find.text('Vue d’ensemble'), findsOneWidget);
+    expect(find.text('Territoire'), findsOneWidget);
+    expect(find.text('Acteurs'), findsOneWidget);
+    expect(find.text('Déclarer'), findsNothing);
   });
 
   testWidgets('the active journey follows responsible access changes', (
@@ -491,6 +497,8 @@ void main() {
       await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
       await tester.pumpAndSettle();
       expect(find.byType(ResponsibleShell), findsNothing);
+      await tester.tap(find.text('Plus'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('open-development-settings')));
       await tester.pumpAndSettle();
       expect(find.text('Changer de perspective'), findsOneWidget);
@@ -569,10 +577,8 @@ void main() {
     await tester.pumpAndSettle();
     await selectPreview(tester, 'Coordinateur');
     await closeSettings(tester);
-    await tester.tap(find.text('Déclarer'));
-    await tester.pumpAndSettle();
 
-    expect(find.text('Votre accès responsable'), findsOneWidget);
+    expect(find.byType(CoordinatorShell), findsOneWidget);
     expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
     expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
   });

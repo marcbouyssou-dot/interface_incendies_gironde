@@ -62,7 +62,12 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     if (settle) {
       await tester.pumpAndSettle();
     } else {
@@ -765,7 +770,12 @@ void main() {
         active: true,
       ),
     );
-    await tester.pumpWidget(FireCoordinationApp(repository: authorized));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: authorized,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     await tester.pumpAndSettle();
     await selectNavigationTab(tester, 0);
     expect(find.byType(MissionCancellationButton), findsNothing);

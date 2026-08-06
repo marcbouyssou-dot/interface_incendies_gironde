@@ -14,10 +14,18 @@ import 'screens/app_shell.dart';
 import 'theme/app_theme.dart';
 
 class FireCoordinationApp extends StatelessWidget {
-  const FireCoordinationApp({super.key, this.repository, this.initialTab = 0});
+  const FireCoordinationApp({
+    super.key,
+    this.repository,
+    this.initialTab = 0,
+    this.useLegacyCoordinatorShellForTesting = false,
+  });
 
   final CoordinationRepository? repository;
   final int initialTab;
+
+  /// Explicit regression harness for screens removed from the live V5 shell.
+  final bool useLegacyCoordinatorShellForTesting;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +52,11 @@ class FireCoordinationApp extends StatelessWidget {
                   darkTheme: AppTheme.dark,
                   themeMode: ThemeMode.system,
                   builder: AppTheme.systemSurface,
-                  home: AppShell(initialIndex: initialTab),
+                  home: AppShell(
+                    initialIndex: initialTab,
+                    useLegacyCoordinatorShellForTesting:
+                        useLegacyCoordinatorShellForTesting,
+                  ),
                 ),
               ),
             ),

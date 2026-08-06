@@ -65,7 +65,12 @@ void main() {
       createdBy: createdBy,
     );
     addTearDown(repository.disposeAccess);
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     await tester.pumpAndSettle();
     for (
       var attempt = 0;
@@ -321,7 +326,12 @@ void main() {
     addTearDown(tester.view.reset);
     final repository = _ControlledSituationDataRepository();
     addTearDown(repository.disposeControllers);
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        useLegacyCoordinatorShellForTesting: true,
+      ),
+    );
     await tester.pump();
     if (missionError == null) {
       repository.emitMissions([

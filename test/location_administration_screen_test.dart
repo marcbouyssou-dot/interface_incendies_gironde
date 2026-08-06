@@ -46,6 +46,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       FireCoordinationApp(
+        useLegacyCoordinatorShellForTesting: true,
         repository: MockCoordinationRepository(
           responsibleAccess: access,
           locationAdministrationRepository:
@@ -164,9 +165,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await scrollToLocation(tester, 'nouveau-centre');
-    final createdCard = find.byKey(
-      const Key('admin-location-nouveau-centre'),
-    );
+    final createdCard = find.byKey(const Key('admin-location-nouveau-centre'));
     expect(
       find.descendant(of: createdCard, matching: find.text('Nouveau centre')),
       findsOneWidget,

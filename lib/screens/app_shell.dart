@@ -10,6 +10,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import 'administration_dashboard_screen.dart';
+import 'coordinator_shell.dart';
 import 'coordination_screen.dart';
 import 'places_screen.dart';
 import 'professional_shell.dart';
@@ -19,17 +20,24 @@ import 'slots_screen.dart';
 enum _AppJourney { professional, responsible, coordinator }
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, this.initialIndex = 0});
+  const AppShell({
+    super.key,
+    this.initialIndex = 0,
+    this.useLegacyCoordinatorShellForTesting = false,
+  });
 
   final int initialIndex;
+
+  /// Never enabled by the application entry point outside regression tests.
+  final bool useLegacyCoordinatorShellForTesting;
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
-  int _currentIndex = 0;
-  final List<Widget?> _screens = List<Widget?>.filled(4, null);
+  late int _legacyCurrentIndex;
+  final List<Widget?> _legacyScreens = List<Widget?>.filled(4, null);
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
   StreamSubscription<ResponsibleAccess?>? _accessSubscription;
@@ -39,8 +47,12 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
-    _screens[_currentIndex] = _createScreen(_currentIndex);
+    _legacyCurrentIndex = widget.initialIndex.clamp(0, 3);
+    if (widget.useLegacyCoordinatorShellForTesting) {
+      _legacyScreens[_legacyCurrentIndex] = _createLegacyScreen(
+        _legacyCurrentIndex,
+      );
+    }
   }
 
   @override
@@ -79,22 +91,22 @@ class _AppShellState extends State<AppShell> {
     if (_access == null) setState(() => _accessResolved = false);
   }
 
-  Widget _createScreen(int index) => switch (index) {
+  Widget _createLegacyScreen(int index) => switch (index) {
     0 => const SlotsScreen(),
     1 => AdministrationDashboardScreen(
-      onViewMission: () => _selectTab(0),
-      onOpenStatistics: () => _selectTab(2),
+      onViewMission: () => _selectLegacyTab(0),
+      onOpenStatistics: () => _selectLegacyTab(2),
       onRetryAccess: _refreshLiveData,
     ),
     2 => const CoordinationScreen(),
     3 => const PlacesScreen(),
-    _ => throw RangeError.index(index, _screens),
+    _ => throw RangeError.index(index, _legacyScreens),
   };
 
-  void _selectTab(int index) {
+  void _selectLegacyTab(int index) {
     setState(() {
-      _screens[index] ??= _createScreen(index);
-      _currentIndex = index;
+      _legacyScreens[index] ??= _createLegacyScreen(index);
+      _legacyCurrentIndex = index;
     });
   }
 
@@ -188,27 +200,30 @@ class _AppShellState extends State<AppShell> {
           initialIndex: widget.initialIndex.clamp(0, 3),
           previewLocationId: responsiblePreviewLocationId,
         ),
-        _AppJourney.coordinator => _buildHistoricalShell(),
+        _AppJourney.coordinator =>
+          widget.useLegacyCoordinatorShellForTesting
+              ? _buildLegacyShell()
+              : CoordinatorShell(initialIndex: widget.initialIndex.clamp(0, 3)),
       },
     );
   }
 
-  Widget _buildHistoricalShell() {
+  Widget _buildLegacyShell() {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         bottom: false,
         child: IndexedStack(
-          index: _currentIndex,
+          index: _legacyCurrentIndex,
           children: List.generate(
-            _screens.length,
-            (index) => _screens[index] ?? const SizedBox.shrink(),
+            _legacyScreens.length,
+            (index) => _legacyScreens[index] ?? const SizedBox.shrink(),
           ),
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _selectTab,
+        selectedIndex: _legacyCurrentIndex,
+        onDestinationSelected: _selectLegacyTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.local_fire_department_outlined),
