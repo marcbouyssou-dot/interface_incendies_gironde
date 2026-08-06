@@ -210,8 +210,12 @@ void main() {
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
-    expect(find.text('Mon planning est-il sécurisé ?'), findsOneWidget);
+    expect(find.text('Mon planning est-il sécurisé ?'), findsNothing);
     expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
+    expect(
+      find.byKey(const Key('responsible-planning-context')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('responsible-create-need')), findsOneWidget);
     expect(find.text('À traiter'), findsOneWidget);
     expect(find.text('Sous contrôle'), findsOneWidget);
@@ -239,6 +243,7 @@ void main() {
 
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
     expect(find.text('3 postes restent à couvrir demain.'), findsOneWidget);
+    expect(find.textContaining('Demain  •  Centre : Mérignac'), findsOneWidget);
     expect(
       find.byKey(const Key('responsible-open-need-mission-merignac')),
       findsOneWidget,
@@ -328,7 +333,10 @@ void main() {
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
     expect(find.text('Mérignac'), findsOneWidget);
-    expect(find.text('Voir comme'), findsOneWidget);
+    expect(find.text('Perspective'), findsOneWidget);
+    expect(find.text('Centre géré'), findsOneWidget);
+    expect(find.text('Identité'), findsNothing);
+    expect(find.text('Identifiant du compte'), findsNothing);
     expect(find.text('Réglages'), findsOneWidget);
     expect(find.text('Gestion des responsables'), findsNothing);
     expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
@@ -352,7 +360,7 @@ void main() {
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Voir comme'), findsOneWidget);
+    expect(find.text('Perspective'), findsOneWidget);
     final professionalPerspective = find.byKey(
       const Key('perspective-professional'),
     );
@@ -372,6 +380,71 @@ void main() {
 
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byKey(const Key('cross-role-preview-banner')), findsNothing);
+  });
+
+  testWidgets('responsible empty states communicate operational serenity', (
+    tester,
+  ) async {
+    final bassens = places.first;
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: [bassens],
+      initialEngagements: const [],
+      responsibleAccess: ResponsibleAccess(
+        uid: 'manager-empty',
+        role: ResponsibleRole.siteManager,
+        locationIds: {bassens.id},
+        active: true,
+      ),
+    );
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
+    expect(
+      find.textContaining('Demain  •  Centre : ${bassens.name}'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Rien ne nécessite votre intervention pour demain.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Tous les besoins prévus sont sécurisés.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Aucun professionnel mobilisé actuellement.'),
+      findsOneWidget,
+    );
+    expect(find.text('Les confirmations apparaîtront ici.'), findsOneWidget);
+    final colors = Theme.of(
+      tester.element(find.byType(ResponsibleShell)),
+    ).extension<V5Colors>()!;
+    final calmCreateButton = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Créer un besoin'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(
+      calmCreateButton.style?.backgroundColor?.resolve({}),
+      colors.warningContainer,
+    );
+
+    await tester.tap(find.text('Besoins'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Aucun besoin ouvert'), findsOneWidget);
+    expect(
+      find.text('Votre planning est actuellement couvert.'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('responsible-needs-empty-create')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

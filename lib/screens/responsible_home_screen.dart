@@ -155,11 +155,16 @@ class _ResponsibleHomeContent extends StatelessWidget {
       _ => '$remaining postes restent à couvrir demain.',
     };
     final teamSummary = quotas.requiredTotal == 0
-        ? 'Aucun professionnel attendu demain.'
+        ? 'Aucun professionnel mobilisé actuellement.'
+        : quotas.registeredTotal == 0
+        ? 'Aucun professionnel mobilisé actuellement.'
         : quotas.registeredTotal == 1
         ? '1 confirmé sur ${quotas.requiredTotal} attendus demain.'
         : '${quotas.registeredTotal} confirmés sur '
               '${quotas.requiredTotal} attendus demain.';
+    final teamSupportingText = quotas.registeredTotal == 0
+        ? 'Les confirmations apparaîtront ici.'
+        : null;
     final centerContext = _centerContext(
       planningNeeds: planningNeeds,
       locations: locations,
@@ -179,14 +184,12 @@ class _ResponsibleHomeContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const _ResponsibleTopBar(),
-                    const SizedBox(height: V5Spacing.xl),
                     _PlanningHero(
                       verdict: verdict,
                       centerContext: centerContext,
                       secured: remaining == 0,
                     ),
-                    const SizedBox(height: V5Spacing.xl),
+                    const SizedBox(height: V5Spacing.xxl),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
@@ -194,8 +197,12 @@ class _ResponsibleHomeContent extends StatelessWidget {
                         onPressed: onCreateNeed,
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(50),
-                          backgroundColor: colors.accent,
-                          foregroundColor: colors.onAccent,
+                          backgroundColor: remaining == 0
+                              ? colors.warningContainer
+                              : colors.accent,
+                          foregroundColor: remaining == 0
+                              ? colors.accent
+                              : colors.onAccent,
                           elevation: 0,
                           shadowColor: Colors.transparent,
                           shape: RoundedRectangleBorder(
@@ -210,14 +217,19 @@ class _ResponsibleHomeContent extends StatelessWidget {
                     const SizedBox(height: V5Spacing.xxxl),
                     _MissionSection(
                       title: 'À traiter',
-                      emptyMessage: 'Aucun besoin ne nécessite d’action.',
+                      emptyMessage:
+                          'Rien ne nécessite votre intervention pour demain.',
                       needs: toHandle,
                       onOpenNeeds: onOpenNeeds,
                     ),
                     const SizedBox(height: V5Spacing.xxxl),
                     _MissionSection(
                       title: 'Sous contrôle',
-                      emptyMessage: 'Aucun besoin sous contrôle pour demain.',
+                      description: 'Les besoins couverts ou bien avancés.',
+                      emptyMessage: toHandle.isEmpty
+                          ? 'Tous les besoins prévus sont sécurisés.'
+                          : 'Les confirmations apparaîtront ici au fil des '
+                                'mobilisations.',
                       needs: underControl,
                       onOpenNeeds: onOpenNeeds,
                     ),
@@ -227,7 +239,10 @@ class _ResponsibleHomeContent extends StatelessWidget {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: V5Spacing.sm),
-                    _TeamSummary(message: teamSummary),
+                    _TeamSummary(
+                      message: teamSummary,
+                      supportingText: teamSupportingText,
+                    ),
                   ],
                 ),
               ),
@@ -262,24 +277,9 @@ String _centerContext({
   }
   final ordered = names.toList(growable: false)..sort();
   if (ordered.isEmpty) return 'Votre périmètre de centres';
-  if (ordered.length == 1) return ordered.single;
-  if (ordered.length == 2) return ordered.join(' · ');
+  if (ordered.length == 1) return 'Centre : ${ordered.single}';
+  if (ordered.length == 2) return 'Centres : ${ordered.join(' · ')}';
   return '${ordered.length} centres concernés';
-}
-
-class _ResponsibleTopBar extends StatelessWidget {
-  const _ResponsibleTopBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      'ESPACE RESPONSABLE',
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: context.v5Colors.accent,
-        letterSpacing: 1.1,
-      ),
-    );
-  }
 }
 
 class _PlanningHero extends StatelessWidget {
@@ -299,18 +299,11 @@ class _PlanningHero extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: true,
-      label: 'Mon planning est-il sécurisé ? $verdict $centerContext',
+      label: '$verdict Demain, $centerContext',
       child: ExcludeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Mon planning est-il sécurisé ?',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
-            ),
-            const SizedBox(height: V5Spacing.sm),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -338,22 +331,14 @@ class _PlanningHero extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: V5Spacing.md),
-            Row(
-              children: [
-                Icon(
-                  Icons.location_on_outlined,
-                  size: 15,
-                  color: colors.accent,
-                ),
-                const SizedBox(width: V5Spacing.xs),
-                Expanded(
-                  child: Text(
-                    centerContext,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              ],
+            const SizedBox(height: V5Spacing.sm),
+            Text(
+              'Demain  •  $centerContext',
+              key: const Key('responsible-planning-context'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.textSecondary,
+                letterSpacing: 0.1,
+              ),
             ),
           ],
         ),
@@ -368,12 +353,14 @@ class _MissionSection extends StatelessWidget {
     required this.emptyMessage,
     required this.needs,
     required this.onOpenNeeds,
+    this.description,
   });
 
   final String title;
   final String emptyMessage;
   final List<CoordinationNeed> needs;
   final VoidCallback onOpenNeeds;
+  final String? description;
 
   @override
   Widget build(BuildContext context) {
@@ -400,6 +387,10 @@ class _MissionSection extends StatelessWidget {
               ),
           ],
         ),
+        if (description != null) ...[
+          const SizedBox(height: V5Spacing.xxs),
+          Text(description!, style: Theme.of(context).textTheme.bodySmall),
+        ],
         const SizedBox(height: V5Spacing.sm),
         if (needs.isEmpty)
           Container(
@@ -407,14 +398,33 @@ class _MissionSection extends StatelessWidget {
                 ? const Key('responsible-open-needs-empty')
                 : null,
             width: double.infinity,
-            padding: const EdgeInsets.all(V5Spacing.lg),
+            padding: const EdgeInsets.symmetric(
+              horizontal: V5Spacing.lg,
+              vertical: V5Spacing.md,
+            ),
             decoration: BoxDecoration(
               color: colors.surfaceElevated,
               borderRadius: BorderRadius.circular(V5Radius.card),
             ),
-            child: Text(
-              emptyMessage,
-              style: Theme.of(context).textTheme.bodyMedium,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 20,
+                  color: colors.success,
+                ),
+                const SizedBox(width: V5Spacing.sm),
+                Expanded(
+                  child: Text(
+                    emptyMessage,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           )
         else
@@ -469,9 +479,10 @@ String _homeStatusForNeed(CoordinationNeed need) => switch (need.status) {
 };
 
 class _TeamSummary extends StatelessWidget {
-  const _TeamSummary({required this.message});
+  const _TeamSummary({required this.message, this.supportingText});
 
   final String message;
+  final String? supportingText;
 
   @override
   Widget build(BuildContext context) {
@@ -492,11 +503,24 @@ class _TeamSummary extends StatelessWidget {
           Icon(Icons.people_outline_rounded, size: 19, color: colors.accent),
           const SizedBox(width: V5Spacing.sm),
           Expanded(
-            child: Text(
-              message,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: colors.textPrimary),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (supportingText != null) ...[
+                  const SizedBox(height: V5Spacing.xxs),
+                  Text(
+                    supportingText!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
             ),
           ),
         ],

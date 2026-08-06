@@ -146,32 +146,15 @@ class _ResponsibleProfileContent extends StatelessWidget {
                       access: access!,
                       locations: locations,
                       accentColor: colors.accent,
+                      title: 'Perspective',
                     ),
                   ] else if (access?.isSiteManager == true) ...[
                     const SizedBox(height: V5Spacing.xxl),
-                    const SiteManagerPerspectiveSection(),
+                    const SiteManagerPerspectiveSection(title: 'Perspective'),
                   ],
                   const SizedBox(height: V5Spacing.xxl),
                   Text(
-                    'Identité',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: V5Spacing.sm),
-                  _ProfileGroup(
-                    children: [
-                      const _ProfileLine(
-                        label: 'Rôle',
-                        value: 'Responsable de centre',
-                      ),
-                      _ProfileLine(
-                        label: 'Identifiant du compte',
-                        value: access?.uid ?? 'Aucun compte responsable actif',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: V5Spacing.xxl),
-                  Text(
-                    'Périmètre',
+                    'Centre géré',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: V5Spacing.xxs),
@@ -184,7 +167,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
                     children: perimeter.isEmpty
                         ? const [
                             _ProfileLine(
-                              label: 'Centres',
+                              label: 'Centre',
                               value: 'Aucun périmètre attribué',
                             ),
                           ]

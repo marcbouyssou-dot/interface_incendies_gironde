@@ -6,14 +6,16 @@ import '../perspective/cross_role_perspective.dart';
 import '../theme/v5_foundation.dart';
 
 class SiteManagerPerspectiveSection extends StatelessWidget {
-  const SiteManagerPerspectiveSection({super.key});
+  const SiteManagerPerspectiveSection({super.key, this.title = 'Voir comme'});
+
+  final String title;
 
   @override
   Widget build(BuildContext context) {
     final controller = CrossRolePerspectiveScope.of(context);
     final accent = context.v5Colors.accent;
     return PerspectiveSection(
-      title: 'Voir comme',
+      title: title,
       children: [
         PerspectiveOption(
           key: const Key('perspective-site-manager'),
@@ -41,18 +43,20 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
     required this.locations,
     this.onSelectionComplete,
     this.accentColor,
+    this.title = 'Changer de perspective',
   });
 
   final ResponsibleAccess access;
   final List<ResponsePlace> locations;
   final VoidCallback? onSelectionComplete;
   final Color? accentColor;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
     final controller = CrossRolePerspectiveScope.of(context);
     return PerspectiveSection(
-      title: 'Changer de perspective',
+      title: title,
       children: [
         PerspectiveOption(
           key: const Key('perspective-coordinator'),

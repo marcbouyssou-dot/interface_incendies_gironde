@@ -80,7 +80,11 @@ void main() {
       locations: [bazas, places.first],
     );
 
-    expect(find.text('Mon planning est-il sécurisé ?'), findsOneWidget);
+    expect(
+      find.byKey(const Key('responsible-planning-context')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Bazas'), findsOneWidget);
     expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
     expect(find.byKey(const Key('administration-statistics')), findsNothing);
 

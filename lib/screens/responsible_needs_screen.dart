@@ -228,11 +228,28 @@ class _ResponsibleNeedsContent extends StatelessWidget {
               ),
             ),
           ),
-          if (filteredNeeds.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _NeedsMessage(
-                message: 'Aucun besoin « ${selectedFilter.label} ».',
+          if (needs.isEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+              sliver: SliverToBoxAdapter(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: _NeedsEmptyState(onCreateNeed: onCreateNeed),
+                  ),
+                ),
+              ),
+            )
+          else if (filteredNeeds.isEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+              sliver: SliverToBoxAdapter(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: _FilteredNeedsEmptyState(filter: selectedFilter),
+                  ),
+                ),
               ),
             )
           else
@@ -387,6 +404,127 @@ class _NeedsLoading extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _NeedsEmptyState extends StatelessWidget {
+  const _NeedsEmptyState({required this.onCreateNeed});
+
+  final VoidCallback onCreateNeed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      key: const Key('responsible-needs-empty'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(V5Spacing.xl),
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: colors.successContainer,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(Icons.check_rounded, size: 21, color: colors.success),
+          ),
+          const SizedBox(height: V5Spacing.md),
+          Text(
+            'Aucun besoin ouvert',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: V5Spacing.xs),
+          Text(
+            'Votre planning est actuellement couvert.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: V5Spacing.lg),
+          OutlinedButton(
+            key: const Key('responsible-needs-empty-create'),
+            onPressed: onCreateNeed,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: colors.accent,
+              minimumSize: const Size(0, 44),
+              side: BorderSide(color: colors.outline),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(V5Radius.control),
+              ),
+            ),
+            child: const Text('Créer un besoin'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilteredNeedsEmptyState extends StatelessWidget {
+  const _FilteredNeedsEmptyState({required this.filter});
+
+  final _NeedsFilter filter;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final (title, message) = switch (filter) {
+      _NeedsFilter.attention => (
+        'Rien à traiter',
+        'Votre planning ne demande aucune intervention.',
+      ),
+      _NeedsFilter.inProgress => (
+        'Aucun besoin en cours',
+        'Les prochains remplissages apparaîtront ici.',
+      ),
+      _NeedsFilter.covered => (
+        'Aucun besoin couvert',
+        'Les besoins sécurisés apparaîtront ici.',
+      ),
+      _NeedsFilter.past => (
+        'Aucun besoin passé',
+        'L’historique de votre établissement apparaîtra ici.',
+      ),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: V5Spacing.lg,
+        vertical: V5Spacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle_rounded, size: 20, color: colors.success),
+          const SizedBox(width: V5Spacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: V5Spacing.xxs),
+                Text(message, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _NeedsMessage extends StatelessWidget {
