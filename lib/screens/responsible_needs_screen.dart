@@ -10,6 +10,7 @@ import '../widgets/responsible_mission_card.dart';
 import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
+import 'responsible_published_needs.dart';
 
 enum _NeedsFilter { attention, inProgress, covered, past }
 
@@ -26,10 +27,14 @@ class ResponsibleNeedsScreen extends StatefulWidget {
   const ResponsibleNeedsScreen({
     super.key,
     this.previewLocationId,
+    required this.publishedNeeds,
+    this.onMissionPublished,
     required this.onOpenTeam,
   });
 
   final String? previewLocationId;
+  final ResponsiblePublishedNeeds publishedNeeds;
+  final ValueChanged<CoordinationNeed>? onMissionPublished;
   final VoidCallback onOpenTeam;
 
   @override
@@ -57,52 +62,59 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<ResponsibleAccess?>(
-      stream: _access,
-      builder: (context, accessSnapshot) =>
-          StreamBuilder<List<CoordinationNeed>>(
-            stream: _missions,
-            builder: (context, missionsSnapshot) =>
-                StreamBuilder<List<ResponsePlace>>(
-                  stream: _locations,
-                  builder: (context, locationsSnapshot) {
-                    if (accessSnapshot.hasError ||
-                        missionsSnapshot.hasError ||
-                        locationsSnapshot.hasError) {
-                      return const _NeedsMessage(
-                        message:
-                            'Les besoins sont temporairement indisponibles.',
+    return ValueListenableBuilder<List<CoordinationNeed>>(
+      valueListenable: widget.publishedNeeds,
+      builder: (context, _, _) => StreamBuilder<ResponsibleAccess?>(
+        stream: _access,
+        builder: (context, accessSnapshot) =>
+            StreamBuilder<List<CoordinationNeed>>(
+              stream: _missions,
+              builder: (context, missionsSnapshot) =>
+                  StreamBuilder<List<ResponsePlace>>(
+                    stream: _locations,
+                    builder: (context, locationsSnapshot) {
+                      if (accessSnapshot.hasError ||
+                          missionsSnapshot.hasError ||
+                          locationsSnapshot.hasError) {
+                        return const _NeedsMessage(
+                          message:
+                              'Les besoins sont temporairement indisponibles.',
+                        );
+                      }
+                      if (!missionsSnapshot.hasData ||
+                          !locationsSnapshot.hasData) {
+                        return const _NeedsLoading();
+                      }
+                      final locations = locationsSnapshot.data!;
+                      final needs =
+                          missionsVisibleToResponsible(
+                                missions: widget.publishedNeeds.mergeWith(
+                                  missionsSnapshot.data!,
+                                ),
+                                locations: locations,
+                                access: accessSnapshot.data,
+                                previewLocationId: widget.previewLocationId,
+                              )
+                              .where(
+                                (need) => need.isActive && !need.isCancelled,
+                              )
+                              .toList(growable: false);
+                      return _ResponsibleNeedsContent(
+                        needs: needs,
+                        locations: locations,
+                        access: accessSnapshot.data,
+                        selectedFilter: _filter,
+                        editingMissionId: _editingMissionId,
+                        onFilterChanged: (filter) =>
+                            setState(() => _filter = filter),
+                        onCreateNeed: _openCreateNeed,
+                        onEditNeed: _openEditor,
+                        onOpenTeam: widget.onOpenTeam,
                       );
-                    }
-                    if (!missionsSnapshot.hasData ||
-                        !locationsSnapshot.hasData) {
-                      return const _NeedsLoading();
-                    }
-                    final locations = locationsSnapshot.data!;
-                    final needs =
-                        missionsVisibleToResponsible(
-                              missions: missionsSnapshot.data!,
-                              locations: locations,
-                              access: accessSnapshot.data,
-                              previewLocationId: widget.previewLocationId,
-                            )
-                            .where((need) => need.isActive && !need.isCancelled)
-                            .toList(growable: false);
-                    return _ResponsibleNeedsContent(
-                      needs: needs,
-                      locations: locations,
-                      access: accessSnapshot.data,
-                      selectedFilter: _filter,
-                      editingMissionId: _editingMissionId,
-                      onFilterChanged: (filter) =>
-                          setState(() => _filter = filter),
-                      onCreateNeed: _openCreateNeed,
-                      onEditNeed: _openEditor,
-                      onOpenTeam: widget.onOpenTeam,
-                    );
-                  },
-                ),
-          ),
+                    },
+                  ),
+            ),
+      ),
     );
   }
 
@@ -114,6 +126,7 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
           data: liveData,
           child: CreateNeedScreen(
             onViewMission: () => Navigator.of(context).pop(),
+            onMissionPublished: widget.onMissionPublished,
           ),
         ),
       ),

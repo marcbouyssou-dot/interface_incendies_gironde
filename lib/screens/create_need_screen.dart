@@ -40,9 +40,15 @@ Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
 }
 
 class CreateNeedScreen extends StatefulWidget {
-  const CreateNeedScreen({super.key, this.onViewMission, this.mission});
+  const CreateNeedScreen({
+    super.key,
+    this.onViewMission,
+    this.onMissionPublished,
+    this.mission,
+  });
 
   final VoidCallback? onViewMission;
+  final ValueChanged<CoordinationNeed>? onMissionPublished;
   final CoordinationNeed? mission;
 
   @override
@@ -229,6 +235,31 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     if (_isEditing && _selectedLocation == null) {
       _selectedLocation = responsePlaceForNeed(widget.mission!, locations);
     }
+    final responsibleLocationId = _isEditing
+        ? null
+        : access.singleManagedLocationId;
+    if (responsibleLocationId != null) {
+      final responsibleLocation = locations
+          .where(
+            (location) =>
+                location.id == responsibleLocationId &&
+                location.isOperational &&
+                location.isEnabled,
+          )
+          .firstOrNull;
+      if (responsibleLocation == null) {
+        return const CriticalDataUnavailableState(
+          stateKey: Key('responsible-create-location-unavailable'),
+          eyebrow: 'Nouveau besoin',
+          title: 'Centre indisponible',
+          message: 'Le centre associé à votre compte ne peut pas être chargé.',
+          safetyMessage:
+              'La création est suspendue afin de ne jamais publier pour un '
+              'autre centre.',
+        );
+      }
+      _selectedLocation = responsibleLocation;
+    }
     final requestedProfessionals = _requiredByProfession.values.fold<int>(
       0,
       (total, quota) => total + quota,
@@ -302,23 +333,25 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     const SizedBox(height: 10),
                     _FormDetailsCard(
                       children: [
-                        _LocationInput(
-                          key: _locationKey,
-                          access: access,
-                          locations: locations,
-                          selectedLocation: _selectedLocation,
-                          preserveUnavailableSelection: _isEditing,
-                          enabled: !_publishing,
-                          focusNode: _locationFocusNode,
-                          onSelected: (location) {
-                            if (!mounted) return;
-                            setState(() {
-                              _selectedLocation = location;
-                              _errorMessage = null;
-                            });
-                          },
-                        ),
-                        const _CreateNeedDivider(),
+                        if (responsibleLocationId == null) ...[
+                          _LocationInput(
+                            key: _locationKey,
+                            access: access,
+                            locations: locations,
+                            selectedLocation: _selectedLocation,
+                            preserveUnavailableSelection: _isEditing,
+                            enabled: !_publishing,
+                            focusNode: _locationFocusNode,
+                            onSelected: (location) {
+                              if (!mounted) return;
+                              setState(() {
+                                _selectedLocation = location;
+                                _errorMessage = null;
+                              });
+                            },
+                          ),
+                          const _CreateNeedDivider(),
+                        ],
                         KeyedSubtree(
                           key: _dateKey,
                           child: _PickerField(
@@ -570,7 +603,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        onPressed: _publishing ? null : _publish,
+                        onPressed: _publishing ? null : () => _publish(access),
                         child: _publishing
                             ? Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -687,7 +720,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     }
   }
 
-  Future<void> _publish() async {
+  Future<void> _publish(ResponsibleAccess access) async {
     if (_publishing) return;
 
     final validation = _validate();
@@ -720,6 +753,26 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       final id = await RepositoryScope.of(context).createMission(draft);
       if (!mounted) return;
       debugPrint('Publication mission confirmée : $id');
+      widget.onMissionPublished?.call(
+        CoordinationNeed(
+          id: id,
+          locationId: draft.location.id,
+          place: draft.location.name,
+          group: draft.location.group,
+          date: FrenchDateTime.date(draft.startAt),
+          time: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
+          startAt: draft.startAt,
+          endAt: draft.endAt,
+          requiredPhysiotherapists: draft.requiredPhysiotherapists,
+          registeredPhysiotherapists: 0,
+          requiredPodiatrists: draft.requiredPodiatrists,
+          registeredPodiatrists: 0,
+          professionQuotas: draft.professionQuotas,
+          equipment: List.of(draft.equipment),
+          details: draft.details.trim(),
+          createdBy: access.uid,
+        ),
+      );
       setState(() {
         _publishing = false;
         _publishedMission = _PublishedMission(id: id, draft: draft);

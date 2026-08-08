@@ -228,38 +228,37 @@ void main() {
     expect(repository.calls, 1);
   });
 
-  testWidgets(
-    'site manager has one injected location and no location selector',
-    (tester) async {
-      final merignac = places.singleWhere(
-        (location) => location.name == 'Mérignac',
-      );
-      final repository = _MissionRepository(
-        access: ResponsibleAccess(
-          uid: 'manager-merignac',
-          role: 'site_manager',
-          locationIds: {merignac.id},
-          active: true,
-        ),
-        locations: [merignac, places.first],
-      );
-      await pumpForm(tester, repository);
+  testWidgets('site manager has one prefilled location and no location field', (
+    tester,
+  ) async {
+    final merignac = places.singleWhere(
+      (location) => location.name == 'Mérignac',
+    );
+    final repository = _MissionRepository(
+      access: ResponsibleAccess(
+        uid: 'manager-merignac',
+        role: 'site_manager',
+        locationIds: {merignac.id},
+        active: true,
+      ),
+      locations: [merignac, places.first],
+    );
+    await pumpForm(tester, repository);
 
-      expect(find.text('Créer un besoin'), findsOneWidget);
-      expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
-      expect(find.byKey(const Key('mission-location')), findsNothing);
-      expect(find.text('Mérignac'), findsOneWidget);
-      expect(find.text(places.first.name), findsNothing);
+    expect(find.text('Créer un besoin'), findsOneWidget);
+    expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+    expect(find.byKey(const Key('mission-location')), findsNothing);
+    expect(find.text('Lieu · Mérignac'), findsOneWidget);
+    expect(find.text(places.first.name), findsNothing);
 
-      await completeRequiredFields(tester, selectLocation: false);
-      await revealPublishButton(tester);
-      await tester.tap(find.byKey(const Key('publish-mission')));
-      await tester.pumpAndSettle();
+    await completeRequiredFields(tester, selectLocation: false);
+    await revealPublishButton(tester);
+    await tester.tap(find.byKey(const Key('publish-mission')));
+    await tester.pumpAndSettle();
 
-      expect(repository.calls, 1);
-      expect(repository.lastDraft?.location.id, merignac.id);
-    },
-  );
+    expect(repository.calls, 1);
+    expect(repository.lastDraft?.location.id, merignac.id);
+  });
 
   testWidgets('coordinator can select any location', (tester) async {
     final repository = _MissionRepository(

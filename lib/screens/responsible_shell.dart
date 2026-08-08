@@ -9,6 +9,7 @@ import '../widgets/perspective_switcher.dart';
 import '../widgets/responsible_bottom_navigation.dart';
 import 'responsible_home_screen.dart';
 import 'responsible_needs_screen.dart';
+import 'responsible_published_needs.dart';
 import 'responsible_profile_screen.dart';
 import 'responsible_team_screen.dart';
 
@@ -29,6 +30,7 @@ class ResponsibleShell extends StatefulWidget {
 class _ResponsibleShellState extends State<ResponsibleShell> {
   late int _currentIndex;
   final List<Widget?> _screens = List<Widget?>.filled(4, null);
+  final _publishedNeeds = ResponsiblePublishedNeeds();
 
   @override
   void initState() {
@@ -40,10 +42,18 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
   Widget _createScreen(int index) => switch (index) {
     0 => ResponsibleHomeScreen(
       previewLocationId: widget.previewLocationId,
+      publishedNeeds: _publishedNeeds,
+      onMissionPublished: widget.previewLocationId == null
+          ? _publishedNeeds.publish
+          : null,
       onOpenNeeds: () => _selectTab(1),
     ),
     1 => ResponsibleNeedsScreen(
       previewLocationId: widget.previewLocationId,
+      publishedNeeds: _publishedNeeds,
+      onMissionPublished: widget.previewLocationId == null
+          ? _publishedNeeds.publish
+          : null,
       onOpenTeam: () => _selectTab(2),
     ),
     2 => ResponsibleTeamScreen(previewLocationId: widget.previewLocationId),
@@ -56,6 +66,12 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
       _screens[index] ??= _createScreen(index);
       _currentIndex = index;
     });
+  }
+
+  @override
+  void dispose() {
+    _publishedNeeds.dispose();
+    super.dispose();
   }
 
   @override

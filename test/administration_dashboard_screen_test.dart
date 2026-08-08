@@ -70,7 +70,7 @@ void main() {
     expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
   });
 
-  testWidgets('single-site manager sees its centre and opens a locked form', (
+  testWidgets('single-site manager opens a form without a location field', (
     tester,
   ) async {
     final bazas = places.singleWhere((location) => location.name == 'Bazas');
@@ -99,9 +99,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Créer un besoin'), findsOneWidget);
-    expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
+    expect(find.byKey(const Key('mission-location-locked')), findsNothing);
     expect(find.byKey(const Key('mission-location')), findsNothing);
-    expect(find.text('Bazas'), findsOneWidget);
+    expect(find.text('Lieu · Bazas'), findsOneWidget);
   });
 
   testWidgets(

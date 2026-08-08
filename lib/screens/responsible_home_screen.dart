@@ -10,15 +10,20 @@ import '../widgets/responsible_mission_card.dart';
 import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
+import 'responsible_published_needs.dart';
 
 class ResponsibleHomeScreen extends StatefulWidget {
   const ResponsibleHomeScreen({
     super.key,
     this.previewLocationId,
+    required this.publishedNeeds,
+    this.onMissionPublished,
     required this.onOpenNeeds,
   });
 
   final String? previewLocationId;
+  final ResponsiblePublishedNeeds publishedNeeds;
+  final ValueChanged<CoordinationNeed>? onMissionPublished;
   final VoidCallback onOpenNeeds;
 
   @override
@@ -58,35 +63,40 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
               accessSnapshot.connectionState == ConnectionState.waiting) {
             return const _ResponsibleHomeLoading();
           }
-          return StreamBuilder<List<CoordinationNeed>>(
-            stream: _missions,
-            builder: (context, missionsSnapshot) {
-              if (missionsSnapshot.hasError) {
-                return const _ResponsibleHomeUnavailable();
-              }
-              if (!missionsSnapshot.hasData) {
-                return const _ResponsibleHomeLoading();
-              }
-              return StreamBuilder<List<ResponsePlace>>(
-                stream: _locations,
-                builder: (context, locationsSnapshot) {
-                  if (locationsSnapshot.hasError) {
-                    return const _ResponsibleHomeUnavailable();
-                  }
-                  if (!locationsSnapshot.hasData) {
-                    return const _ResponsibleHomeLoading();
-                  }
-                  return _ResponsibleHomeContent(
-                    access: accessSnapshot.data,
-                    missions: missionsSnapshot.data!,
-                    locations: locationsSnapshot.data!,
-                    onCreateNeed: _openCreateNeed,
-                    onOpenNeeds: widget.onOpenNeeds,
-                    previewLocationId: widget.previewLocationId,
-                  );
-                },
-              );
-            },
+          return ValueListenableBuilder<List<CoordinationNeed>>(
+            valueListenable: widget.publishedNeeds,
+            builder: (context, _, _) => StreamBuilder<List<CoordinationNeed>>(
+              stream: _missions,
+              builder: (context, missionsSnapshot) {
+                if (missionsSnapshot.hasError) {
+                  return const _ResponsibleHomeUnavailable();
+                }
+                if (!missionsSnapshot.hasData) {
+                  return const _ResponsibleHomeLoading();
+                }
+                return StreamBuilder<List<ResponsePlace>>(
+                  stream: _locations,
+                  builder: (context, locationsSnapshot) {
+                    if (locationsSnapshot.hasError) {
+                      return const _ResponsibleHomeUnavailable();
+                    }
+                    if (!locationsSnapshot.hasData) {
+                      return const _ResponsibleHomeLoading();
+                    }
+                    return _ResponsibleHomeContent(
+                      access: accessSnapshot.data,
+                      missions: widget.publishedNeeds.mergeWith(
+                        missionsSnapshot.data!,
+                      ),
+                      locations: locationsSnapshot.data!,
+                      onCreateNeed: _openCreateNeed,
+                      onOpenNeeds: widget.onOpenNeeds,
+                      previewLocationId: widget.previewLocationId,
+                    );
+                  },
+                );
+              },
+            ),
           );
         },
       ),
@@ -101,6 +111,7 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
           data: liveData,
           child: CreateNeedScreen(
             onViewMission: () => Navigator.of(context).pop(),
+            onMissionPublished: widget.onMissionPublished,
           ),
         ),
       ),
