@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/v5_foundation.dart';
+import 'native_interactions.dart';
 
 enum MissionCardState {
   available,
@@ -79,8 +80,12 @@ class MissionCard extends StatelessWidget {
     final card = Semantics(
       container: true,
       label: _semanticLabel,
-      child: Container(
+      child: AnimatedContainer(
         key: const Key('mission-card-surface'),
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : NativeMotion.stateTransition,
+        curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           color: colors.surfaceElevated,
           borderRadius: BorderRadius.circular(V5Radius.card),
@@ -321,7 +326,24 @@ class _MissionDetailsDisclosureState extends State<_MissionDetailsDisclosure> {
           ),
           label: Text(_expanded ? 'Masquer les détails' : 'Voir les détails'),
         ),
-        if (_expanded) ...[const SizedBox(height: V5Spacing.xxs), widget.child],
+        ClipRect(
+          child: AnimatedSize(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : NativeMotion.detailsExpansion,
+            reverseDuration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : NativeMotion.detailsCollapse,
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Padding(
+                    padding: const EdgeInsets.only(top: V5Spacing.xxs),
+                    child: widget.child,
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ),
       ],
     );
   }

@@ -541,6 +541,16 @@ void main() {
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const PageStorageKey('professional-profile')),
+      const Offset(0, -1800),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const PageStorageKey('professional-profile')),
+      const Offset(0, -600),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('open-development-settings')));
     await tester.pumpAndSettle();
     await selectPreview(tester, 'Responsable');

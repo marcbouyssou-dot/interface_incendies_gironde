@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_identity.dart';
 import '../theme/v5_foundation.dart';
 import 'brand_mark.dart';
+import 'native_interactions.dart';
 
 class MobSantePageHeader extends StatelessWidget {
   const MobSantePageHeader({
@@ -50,10 +51,29 @@ class MobSantePageHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: V5Spacing.lg),
-        Text(
-          title,
+        AnimatedSize(
           key: titleKey,
-          style: Theme.of(context).textTheme.headlineMedium,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : NativeMotion.stateTransition,
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topLeft,
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : NativeMotion.stateTransition,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            layoutBuilder: (currentChild, previousChildren) => Stack(
+              alignment: Alignment.topLeft,
+              children: [...previousChildren, ?currentChild],
+            ),
+            child: Text(
+              title,
+              key: ValueKey(title),
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+          ),
         ),
         if (subtitle case final value? when value.trim().isNotEmpty) ...[
           const SizedBox(height: V5Spacing.xs),

@@ -10,6 +10,7 @@ import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/native_interactions.dart';
 
 class ProfessionalProfileScreen extends StatefulWidget {
   const ProfessionalProfileScreen({
@@ -61,7 +62,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
   }
 
   Future<void> _editProfile(VolunteerProfile? profile) async {
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showNativeBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,

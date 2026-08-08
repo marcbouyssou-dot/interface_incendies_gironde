@@ -13,6 +13,7 @@ import '../utils/mission_timing.dart';
 import '../widgets/common.dart';
 import '../widgets/decision_header.dart';
 import '../widgets/mobilization_design_system.dart';
+import '../widgets/native_interactions.dart';
 import '../widgets/professional_page_header.dart';
 import 'create_need_screen.dart';
 
@@ -728,17 +729,13 @@ class _HeroFilterChip extends StatelessWidget {
 
   void _showOptions(BuildContext context) {
     final colors = context.v5Colors;
-    showModalBottomSheet<void>(
+    showNativeBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       isDismissible: true,
       enableDrag: true,
       backgroundColor: Colors.transparent,
       barrierColor: colors.shadow.withValues(alpha: 0.28),
-      sheetAnimationStyle: const AnimationStyle(
-        duration: Duration(milliseconds: 260),
-        reverseDuration: Duration(milliseconds: 210),
-      ),
       builder: (sheetContext) => _ProfessionalFilterSheet(
         title: label == 'Où' ? 'Où aider ?' : 'Quand aider ?',
         selectedValue: selectedValue,

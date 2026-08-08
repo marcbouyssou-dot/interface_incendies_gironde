@@ -5,6 +5,7 @@ import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/coordinator_bottom_navigation.dart';
+import '../widgets/native_interactions.dart';
 import 'admin_invitations_screen.dart';
 import 'coordinator_actors_screen.dart';
 import 'coordinator_more_screen.dart';
@@ -165,7 +166,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
       backgroundColor: context.v5Colors.canvas,
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(
+        child: NativeTabView(
           index: _currentIndex,
           children: List.generate(
             _screens.length,

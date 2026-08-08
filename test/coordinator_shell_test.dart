@@ -94,7 +94,7 @@ void main() {
     expect(find.text('Professionnels'), findsOneWidget);
     expect(find.text('Lieux'), findsOneWidget);
     expect(find.text('Responsable Mérignac'), findsOneWidget);
-    expect(find.textContaining('professionnels mobilisés'), findsOneWidget);
+    expect(find.text('16 professionnels mobilisés'), findsOneWidget);
 
     await tester.tap(find.text('Plus'));
     await tester.pumpAndSettle();

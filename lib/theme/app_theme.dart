@@ -184,15 +184,12 @@ class _AppPageTransitionsBuilder extends PageTransitionsBuilder {
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
-    return FadeTransition(
-      opacity: curvedAnimation,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0.018, 0),
-          end: Offset.zero,
-        ).animate(curvedAnimation),
-        child: child,
-      ),
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0.018, 0),
+        end: Offset.zero,
+      ).animate(curvedAnimation),
+      child: child,
     );
   }
 }

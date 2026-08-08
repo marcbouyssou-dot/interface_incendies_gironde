@@ -6,6 +6,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/v5_bottom_navigation.dart';
 import '../widgets/perspective_switcher.dart';
+import '../widgets/native_interactions.dart';
 import 'create_need_screen.dart';
 import 'development_settings_screen.dart';
 import 'professional_engagements_screen.dart';
@@ -115,7 +116,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
             child: SafeArea(
               top: widget.crossRolePreviewLabel == null,
               bottom: false,
-              child: IndexedStack(
+              child: NativeTabView(
                 index: _currentIndex,
                 children: List.generate(
                   _screens.length,

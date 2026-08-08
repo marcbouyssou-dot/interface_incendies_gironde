@@ -17,6 +17,7 @@ void main() {
   testWidgets('DecisionHeader exposes its four visual states', (tester) async {
     for (final state in DecisionHeaderState.values) {
       await tester.pumpWidget(app(DecisionHeader(state: state)));
+      await tester.pumpAndSettle();
 
       if (state == DecisionHeaderState.loading) {
         expect(
@@ -149,7 +150,7 @@ void main() {
           ),
         ),
       );
-      final surface = tester.widget<Container>(
+      final surface = tester.widget<AnimatedContainer>(
         find.byKey(const Key('mission-card-surface')),
       );
       final decoration = surface.decoration! as BoxDecoration;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/v5_foundation.dart';
+import 'native_interactions.dart';
 
 enum DecisionHeaderState { noUpdates, newMissions, urgentMission, loading }
 
@@ -43,26 +44,45 @@ class DecisionHeader extends StatelessWidget {
       label: showSecondary
           ? '${verdict ?? content.$1}. ${secondary ?? content.$2}'
           : verdict ?? content.$1,
-      child: ExcludeSemantics(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              verdict ?? content.$1,
-              key: const Key('decision-header-verdict'),
-              style: Theme.of(
-                context,
-              ).textTheme.headlineLarge?.copyWith(color: resolvedVerdictColor),
+      child: AnimatedSize(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : NativeMotion.stateTransition,
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topLeft,
+        child: AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : NativeMotion.stateTransition,
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          layoutBuilder: (currentChild, previousChildren) => Stack(
+            alignment: Alignment.topLeft,
+            children: [...previousChildren, ?currentChild],
+          ),
+          child: ExcludeSemantics(
+            key: ValueKey((state, verdict, secondary, showSecondary)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  verdict ?? content.$1,
+                  key: const Key('decision-header-verdict'),
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    color: resolvedVerdictColor,
+                  ),
+                ),
+                if (showSecondary) ...[
+                  const SizedBox(height: V5Spacing.xs),
+                  Text(
+                    secondary ?? content.$2,
+                    key: const Key('decision-header-secondary'),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ],
             ),
-            if (showSecondary) ...[
-              const SizedBox(height: V5Spacing.xs),
-              Text(
-                secondary ?? content.$2,
-                key: const Key('decision-header-secondary'),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

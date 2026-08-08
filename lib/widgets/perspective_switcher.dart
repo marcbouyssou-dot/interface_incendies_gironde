@@ -4,6 +4,7 @@ import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../perspective/cross_role_perspective.dart';
 import '../theme/v5_foundation.dart';
+import 'native_interactions.dart';
 
 class SiteManagerPerspectiveSection extends StatelessWidget {
   const SiteManagerPerspectiveSection({super.key, this.title = 'Voir comme'});
@@ -359,7 +360,7 @@ Future<ResponsePlace?> showResponsibleCenterPicker(
           .where((location) => access.canManage(location.id))
           .toList(growable: false)
         ..sort((first, second) => first.name.compareTo(second.name));
-  return showModalBottomSheet<ResponsePlace>(
+  return showNativeBottomSheet<ResponsePlace>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,

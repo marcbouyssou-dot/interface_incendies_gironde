@@ -7,6 +7,7 @@ import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/responsible_bottom_navigation.dart';
+import '../widgets/native_interactions.dart';
 import 'responsible_home_screen.dart';
 import 'responsible_needs_screen.dart';
 import 'responsible_published_needs.dart';
@@ -93,7 +94,7 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
             child: SafeArea(
               top: widget.previewLocationId == null,
               bottom: false,
-              child: IndexedStack(
+              child: NativeTabView(
                 index: _currentIndex,
                 children: List.generate(
                   _screens.length,

@@ -9,8 +9,8 @@ class AppPageRoute<T> extends MaterialPageRoute<T> {
   });
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 190);
+  Duration get transitionDuration => const Duration(milliseconds: 220);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 130);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
 }

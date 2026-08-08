@@ -18,6 +18,7 @@ import '../utils/mission_timing.dart';
 import 'brand_mark.dart';
 import 'mission_card.dart';
 import 'mission_location_details.dart';
+import 'native_interactions.dart';
 import 'mobilization_design_system.dart';
 
 class PageContainer extends StatelessWidget {
@@ -1317,7 +1318,7 @@ class _NeedActionsState extends State<_NeedActions> {
                 onPressed:
                     engagement.status == EngagementStatus.cancelled ||
                         engagement.status == EngagementStatus.pending
-                    ? () => showModalBottomSheet<void>(
+                    ? () => showNativeBottomSheet<void>(
                         context: context,
                         isScrollControlled: true,
                         showDragHandle: true,
@@ -1405,7 +1406,7 @@ class _NeedActionsState extends State<_NeedActions> {
         return _actionButton(
           onPressed: need.status == NeedStatus.complete
               ? null
-              : () => showModalBottomSheet<void>(
+              : () => showNativeBottomSheet<void>(
                   context: context,
                   isScrollControlled: true,
                   showDragHandle: true,
