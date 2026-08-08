@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
@@ -14,6 +15,7 @@ import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/utils/french_date_time.dart';
+import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 
 void main() {
   Future<void> pumpForm(
@@ -53,8 +55,8 @@ void main() {
   Future<void> chooseDate(WidgetTester tester) async {
     await tester.tap(find.byKey(const Key('mission-date')));
     await tester.pumpAndSettle();
-    expect(find.byType(DatePickerDialog), findsOneWidget);
-    await tester.tap(find.text('OK'));
+    expect(find.byType(CupertinoDatePicker), findsOneWidget);
+    await tester.tap(find.text('Valider'));
     await tester.pumpAndSettle();
   }
 
@@ -65,8 +67,8 @@ void main() {
   ) async {
     await tester.tap(find.byKey(fieldKey));
     await tester.pumpAndSettle();
-    expect(find.byType(TimePickerDialog), findsOneWidget);
-    await tester.tap(find.text('OK'));
+    expect(find.byType(CupertinoDatePicker), findsOneWidget);
+    await tester.tap(find.text('Valider'));
     await tester.pumpAndSettle();
     expect(find.text(expected), findsOneWidget);
   }
@@ -315,13 +317,10 @@ void main() {
 
     expect(find.byKey(const Key('mission-location')), findsOneWidget);
     expect(find.byKey(const Key('mission-location-locked')), findsNothing);
-    final selector = tester.widget<DropdownButton<String>>(
-      find.descendant(
-        of: find.byKey(const Key('mission-location')),
-        matching: find.byType(DropdownButton<String>),
-      ),
+    final selector = tester.widget<V5SelectField<String>>(
+      find.byKey(const Key('mission-location')),
     );
-    expect(selector.items?.map((item) => item.value), [
+    expect(selector.options.map((item) => item.value), [
       operational[0].id,
       operational[1].id,
     ]);
@@ -350,17 +349,14 @@ void main() {
 
       expect(find.byKey(const Key('mission-location')), findsOneWidget);
       expect(find.byKey(const Key('mission-location-locked')), findsNothing);
-      final selector = tester.widget<DropdownButton<String>>(
-        find.descendant(
-          of: find.byKey(const Key('mission-location')),
-          matching: find.byType(DropdownButton<String>),
-        ),
+      final selector = tester.widget<V5SelectField<String>>(
+        find.byKey(const Key('mission-location')),
       );
-      expect(selector.items?.map((item) => item.value), [
+      expect(selector.options.map((item) => item.value), [
         allowed[0].id,
         allowed[1].id,
       ]);
-      expect(selector.items?.any((item) => item.value == denied.id), isFalse);
+      expect(selector.options.any((item) => item.value == denied.id), isFalse);
       expect(tester.takeException(), isNull);
     },
   );

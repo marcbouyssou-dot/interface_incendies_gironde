@@ -8,6 +8,7 @@ import '../repositories/location_administration_repository_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
+import '../widgets/v5_form_system.dart';
 import 'admin_location_form_screen.dart';
 
 abstract final class _LocationAdminVisuals {
@@ -21,6 +22,8 @@ abstract final class _LocationAdminVisuals {
 }
 
 enum _LocationStatusFilter { all, active, inactive }
+
+const _allFilters = 'all';
 
 class LocationAdministrationScreen extends StatefulWidget {
   const LocationAdministrationScreen({super.key});
@@ -145,15 +148,15 @@ class _LocationAdministrationScreenState
             children: [
               _LocationAdminHeader(onCreate: _openCreate),
               const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(15),
-                decoration: _locationAdminCardDecoration(),
+              V5Section(
+                title: 'Filtres',
+                leading: const Icon(Icons.tune_rounded),
                 child: Column(
                   children: [
-                    TextField(
+                    V5TextField(
                       key: const Key('admin-location-search'),
-                      decoration: _locationAdminSearchDecoration(),
+                      label: 'Rechercher un lieu',
+                      prefixIcon: const Icon(Icons.search_rounded),
                       onChanged: (value) => setState(() => _query = value),
                     ),
                     const SizedBox(height: 12),
@@ -194,69 +197,63 @@ class _LocationAdministrationScreenState
     );
   }
 
-  Widget _groupFilter() => _LocationAdminFilter(
-    icon: Icons.map_outlined,
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<TerritorialGroup?>(
-        key: const Key('admin-location-group-filter'),
-        value: _group,
-        isExpanded: true,
-        hint: const Text('Tous les territoires'),
-        items: [
-          const DropdownMenuItem(
-            value: null,
-            child: Text('Tous les territoires'),
-          ),
-          for (final value in TerritorialGroup.values)
-            DropdownMenuItem(value: value, child: Text(value.label)),
-        ],
-        onChanged: (value) => setState(() => _group = value),
-      ),
+  Widget _groupFilter() => V5SelectField<String>(
+    key: const Key('admin-location-group-filter'),
+    label: 'Territoire',
+    value: _group?.name ?? _allFilters,
+    leading: const Icon(Icons.map_outlined),
+    options: [
+      const V5SelectOption(value: _allFilters, label: 'Tous les territoires'),
+      for (final value in TerritorialGroup.values)
+        V5SelectOption(value: value.name, label: value.label),
+    ],
+    onChanged: (value) => setState(
+      () => _group = value == _allFilters
+          ? null
+          : TerritorialGroup.values
+                .where((candidate) => candidate.name == value)
+                .firstOrNull,
     ),
   );
 
-  Widget _typeFilter() => _LocationAdminFilter(
-    icon: Icons.category_outlined,
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<ResponsePlaceType?>(
-        key: const Key('admin-location-type-filter'),
-        value: _type,
-        isExpanded: true,
-        hint: const Text('Tous les types'),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('Tous les types')),
-          for (final value in ResponsePlaceType.values)
-            DropdownMenuItem(value: value, child: Text(value.label)),
-        ],
-        onChanged: (value) => setState(() => _type = value),
-      ),
+  Widget _typeFilter() => V5SelectField<String>(
+    key: const Key('admin-location-type-filter'),
+    label: 'Type de lieu',
+    value: _type?.name ?? _allFilters,
+    leading: const Icon(Icons.category_outlined),
+    options: [
+      const V5SelectOption(value: _allFilters, label: 'Tous les types'),
+      for (final value in ResponsePlaceType.values)
+        V5SelectOption(value: value.name, label: value.label),
+    ],
+    onChanged: (value) => setState(
+      () => _type = value == _allFilters
+          ? null
+          : ResponsePlaceType.values
+                .where((candidate) => candidate.name == value)
+                .firstOrNull,
     ),
   );
 
-  Widget _statusFilter() => _LocationAdminFilter(
-    icon: Icons.toggle_on_outlined,
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<_LocationStatusFilter>(
-        key: const Key('admin-location-status-filter'),
-        value: _status,
-        isExpanded: true,
-        items: const [
-          DropdownMenuItem(
-            value: _LocationStatusFilter.all,
-            child: Text('Tous les statuts'),
-          ),
-          DropdownMenuItem(
-            value: _LocationStatusFilter.active,
-            child: Text('Actifs'),
-          ),
-          DropdownMenuItem(
-            value: _LocationStatusFilter.inactive,
-            child: Text('Désactivés'),
-          ),
-        ],
-        onChanged: (value) => setState(() => _status = value!),
+  Widget _statusFilter() => V5SelectField<_LocationStatusFilter>(
+    key: const Key('admin-location-status-filter'),
+    label: 'Statut',
+    value: _status,
+    leading: const Icon(Icons.toggle_on_outlined),
+    options: const [
+      V5SelectOption(
+        value: _LocationStatusFilter.all,
+        label: 'Tous les statuts',
       ),
-    ),
+      V5SelectOption(value: _LocationStatusFilter.active, label: 'Actifs'),
+      V5SelectOption(
+        value: _LocationStatusFilter.inactive,
+        label: 'Désactivés',
+      ),
+    ],
+    onChanged: (value) {
+      if (value != null) setState(() => _status = value);
+    },
   );
 
   Future<void> _openCreate() async {
@@ -299,6 +296,7 @@ class _LocationAdministrationScreenState
       message:
           'Cette opération est irréversible. Aucun historique ne sera supprimé.',
       action: 'Supprimer',
+      destructive: true,
     )) {
       return;
     }
@@ -315,9 +313,7 @@ class _LocationAdministrationScreenState
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(success)));
+      V5Toast.show(context, message: success, tone: V5ToastTone.success);
       await _reload();
     } on LocationAdministrationException catch (error) {
       if (mounted) _showError(error.message);
@@ -330,23 +326,15 @@ class _LocationAdministrationScreenState
     required String title,
     required String message,
     required String action,
+    bool destructive = false,
   }) async =>
-      await showDialog<bool>(
+      await showV5Confirmation(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Retour'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(action),
-            ),
-          ],
-        ),
+        title: title,
+        message: message,
+        confirmLabel: action,
+        cancelLabel: 'Retour',
+        destructive: destructive,
       ) ??
       false;
 
@@ -367,9 +355,7 @@ class _LocationAdministrationScreenState
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    V5Toast.show(context, message: message, tone: V5ToastTone.danger);
   }
 }
 
@@ -440,33 +426,6 @@ class _LocationAdminHeader extends StatelessWidget {
   }
 }
 
-class _LocationAdminFilter extends StatelessWidget {
-  const _LocationAdminFilter({required this.icon, required this.child});
-
-  final IconData icon;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 52),
-      padding: const EdgeInsets.symmetric(horizontal: 13),
-      decoration: BoxDecoration(
-        color: _LocationAdminVisuals.fieldBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _LocationAdminVisuals.border),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: _LocationAdminVisuals.navy, size: 20),
-          const SizedBox(width: 11),
-          Expanded(child: child),
-        ],
-      ),
-    );
-  }
-}
-
 class _EmptyLocationAdminState extends StatelessWidget {
   const _EmptyLocationAdminState();
 
@@ -505,15 +464,7 @@ class _LocationAdminLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: _LocationAdminVisuals.background,
-      child: Center(
-        child: CircularProgressIndicator(
-          color: _LocationAdminVisuals.orange,
-          strokeWidth: 3,
-        ),
-      ),
-    );
+    return const V5LoadingState(label: 'Chargement des lieux…');
   }
 }
 
@@ -525,34 +476,6 @@ BoxDecoration _locationAdminCardDecoration({Color? color}) {
     boxShadow: const [
       BoxShadow(color: Color(0x08173052), blurRadius: 12, offset: Offset(0, 3)),
     ],
-  );
-}
-
-InputDecoration _locationAdminSearchDecoration() {
-  return InputDecoration(
-    labelText: 'Rechercher un lieu',
-    labelStyle: const TextStyle(
-      color: _LocationAdminVisuals.textMuted,
-      fontWeight: FontWeight.w600,
-    ),
-    prefixIcon: const Icon(
-      Icons.search_rounded,
-      color: _LocationAdminVisuals.navy,
-    ),
-    filled: true,
-    fillColor: _LocationAdminVisuals.fieldBackground,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _LocationAdminVisuals.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(
-        color: _LocationAdminVisuals.navy,
-        width: 1.5,
-      ),
-    ),
   );
 }
 

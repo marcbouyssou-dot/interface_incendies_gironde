@@ -11,6 +11,7 @@ import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/native_interactions.dart';
+import '../widgets/v5_form_system.dart';
 
 class ProfessionalProfileScreen extends StatefulWidget {
   const ProfessionalProfileScreen({
@@ -71,9 +72,11 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
     );
     if (saved == true && mounted) {
       _reloadProfile();
-      ScaffoldMessenger.of(
+      V5Toast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Profil enregistré.')));
+        message: 'Profil enregistré.',
+        tone: V5ToastTone.success,
+      );
     }
   }
 
@@ -95,7 +98,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
         future: _profile,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const V5LoadingState(label: 'Chargement du profil…');
           }
           final profile = snapshot.hasError ? null : snapshot.data;
           final profileComplete = _isProfileComplete(profile);
@@ -318,7 +321,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
       profile.equipment,
     ).map(ProfessionalEquipmentRegistry.displayLabel).toList();
     if (profile.otherEquipmentDetails?.trim().isNotEmpty == true) {
-      labels.add(profile!.otherEquipmentDetails!.trim());
+      labels.add(profile.otherEquipmentDetails!.trim());
     }
     return labels.join(' • ');
   }
@@ -356,30 +359,12 @@ class _ProfileSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.v5Colors;
-    return Container(
-      padding: const EdgeInsets.all(V5Spacing.md),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-        boxShadow: V5Elevation.level1(colors),
-      ),
+    return V5Section(
+      title: title,
+      leading: Icon(icon),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: colors.info),
-              const SizedBox(width: V5Spacing.xs),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: V5Spacing.sm),
           for (var index = 0; index < children.length; index++) ...[
             children[index],
             if (index < children.length - 1)
@@ -501,6 +486,7 @@ class _ProfessionalProfileEditorState
     return ColoredBox(
       color: context.v5Colors.canvas,
       child: SingleChildScrollView(
+        key: const Key('professional-profile-editor-scroll'),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: EdgeInsets.fromLTRB(
           18,
@@ -520,161 +506,182 @@ class _ProfessionalProfileEditorState
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: V5Spacing.lg),
-              DropdownButtonFormField<VolunteerProfession>(
-                key: const Key('professional-profile-profession'),
-                initialValue: _profession,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Profession'),
-                items: [
-                  for (final profession in VolunteerProfession.values)
-                    DropdownMenuItem(
-                      value: profession,
-                      child: Text(
-                        profession.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+              V5Section(
+                title: 'Identité professionnelle',
+                leading: const Icon(Icons.person_outline_rounded),
+                child: Column(
+                  children: [
+                    V5SelectField<VolunteerProfession>(
+                      key: const Key('professional-profile-profession'),
+                      label: 'Profession',
+                      value: _profession,
+                      options: [
+                        for (final profession in VolunteerProfession.values)
+                          V5SelectOption(
+                            value: profession,
+                            label: profession.label,
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _profession = value;
+                          _equipment.removeWhere(
+                            (item) =>
+                                !ProfessionalEquipmentRegistry.isCompatible(
+                                  item,
+                                  value.canonicalId!,
+                                ),
+                          );
+                          if (value == VolunteerProfession.veterinarian) {
+                            _idType = ProfessionalIdType.ordinal;
+                          }
+                        });
+                      },
                     ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  setState(() {
-                    _profession = value;
-                    _equipment.removeWhere(
-                      (item) => !ProfessionalEquipmentRegistry.isCompatible(
-                        item,
-                        value.canonicalId!,
-                      ),
-                    );
-                    if (value == VolunteerProfession.veterinarian) {
-                      _idType = ProfessionalIdType.ordinal;
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: V5Spacing.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      key: const Key('professional-profile-first-name'),
-                      controller: _firstName,
-                      decoration: const InputDecoration(labelText: 'Prénom'),
+                    const SizedBox(height: V5Spacing.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: V5TextField(
+                            key: const Key('professional-profile-first-name'),
+                            label: 'Prénom',
+                            controller: _firstName,
+                            validator: _required,
+                          ),
+                        ),
+                        const SizedBox(width: V5Spacing.xs),
+                        Expanded(
+                          child: V5TextField(
+                            key: const Key('professional-profile-last-name'),
+                            label: 'Nom',
+                            controller: _lastName,
+                            validator: _required,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: V5Spacing.sm),
+                    V5TextField(
+                      key: const Key('professional-profile-phone'),
+                      label: 'Téléphone',
+                      controller: _phone,
+                      keyboardType: TextInputType.phone,
                       validator: _required,
                     ),
-                  ),
-                  const SizedBox(width: V5Spacing.xs),
-                  Expanded(
-                    child: TextFormField(
-                      key: const Key('professional-profile-last-name'),
-                      controller: _lastName,
-                      decoration: const InputDecoration(labelText: 'Nom'),
-                      validator: _required,
+                    const SizedBox(height: V5Spacing.sm),
+                    V5TextField(
+                      key: const Key('professional-profile-email'),
+                      label: 'Email',
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: _emailValidator,
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: V5Spacing.sm),
-              TextFormField(
-                key: const Key('professional-profile-phone'),
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Téléphone'),
-                validator: _required,
-              ),
-              const SizedBox(height: V5Spacing.sm),
-              TextFormField(
-                key: const Key('professional-profile-email'),
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: _emailValidator,
-              ),
-              const SizedBox(height: V5Spacing.sm),
-              DropdownButtonFormField<ProfessionalIdType>(
-                key: ValueKey(
-                  'professional-profile-id-type-${_profession.name}',
-                ),
-                initialValue: _idType,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Type d’identifiant',
-                ),
-                items: [
-                  for (final type in _idTypes)
-                    DropdownMenuItem(value: type, child: Text(type.label)),
-                ],
-                onChanged: (value) {
-                  if (value != null) setState(() => _idType = value);
-                },
-                validator: (value) =>
-                    value == ProfessionalIdType.rpps ||
-                        value == ProfessionalIdType.ordinal
-                    ? null
-                    : 'Choisissez un identifiant professionnel.',
-              ),
-              const SizedBox(height: V5Spacing.sm),
-              TextFormField(
-                key: const Key('professional-profile-id-value'),
-                controller: _idValue,
-                keyboardType: _idType == ProfessionalIdType.rpps
-                    ? TextInputType.number
-                    : TextInputType.text,
-                inputFormatters: [
-                  if (_idType == ProfessionalIdType.rpps)
-                    FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(
-                    _idType == ProfessionalIdType.rpps ? 11 : 32,
-                  ),
-                ],
-                decoration: InputDecoration(labelText: _idType.label),
-                validator: _idValidator,
-              ),
-              const SizedBox(height: V5Spacing.sm),
-              TextFormField(
-                key: const Key('professional-profile-cpts-id'),
-                controller: _cptsId,
-                decoration: const InputDecoration(
-                  labelText: 'Identifiant CPTS (facultatif)',
+                  ],
                 ),
               ),
               const SizedBox(height: V5Spacing.sm),
-              TextFormField(
-                key: const Key('professional-profile-cpts-label'),
-                controller: _cptsLabel,
-                decoration: const InputDecoration(
-                  labelText: 'CPTS (facultatif)',
+              V5Section(
+                title: 'Identifiant professionnel',
+                leading: const Icon(Icons.verified_user_outlined),
+                child: Column(
+                  children: [
+                    V5SelectField<ProfessionalIdType>(
+                      key: ValueKey(
+                        'professional-profile-id-type-${_profession.name}',
+                      ),
+                      label: 'Type d’identifiant',
+                      value: _idType,
+                      options: [
+                        for (final type in _idTypes)
+                          V5SelectOption(value: type, label: type.label),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) setState(() => _idType = value);
+                      },
+                      validator: (value) =>
+                          value == ProfessionalIdType.rpps ||
+                              value == ProfessionalIdType.ordinal
+                          ? null
+                          : 'Choisissez un identifiant professionnel.',
+                    ),
+                    const SizedBox(height: V5Spacing.sm),
+                    V5TextField(
+                      key: const Key('professional-profile-id-value'),
+                      label: _idType.label,
+                      controller: _idValue,
+                      keyboardType: _idType == ProfessionalIdType.rpps
+                          ? TextInputType.number
+                          : TextInputType.text,
+                      inputFormatters: [
+                        if (_idType == ProfessionalIdType.rpps)
+                          FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(
+                          _idType == ProfessionalIdType.rpps ? 11 : 32,
+                        ),
+                      ],
+                      validator: _idValidator,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: V5Spacing.lg),
-              Text(
-                'Matériel disponible',
-                style: Theme.of(context).textTheme.titleMedium,
+              const SizedBox(height: V5Spacing.sm),
+              V5Section(
+                title: 'Territoire',
+                leading: const Icon(Icons.location_on_outlined),
+                child: Column(
+                  children: [
+                    V5TextField(
+                      key: const Key('professional-profile-cpts-id'),
+                      label: 'Identifiant CPTS (facultatif)',
+                      controller: _cptsId,
+                    ),
+                    const SizedBox(height: V5Spacing.sm),
+                    V5TextField(
+                      key: const Key('professional-profile-cpts-label'),
+                      label: 'CPTS (facultatif)',
+                      controller: _cptsLabel,
+                    ),
+                  ],
+                ),
               ),
-              for (final equipment in _equipmentOptions)
-                CheckboxListTile(
-                  key: Key('professional-profile-equipment-${equipment.id}'),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(equipment.label),
-                  value: _equipment.contains(equipment.id),
-                  onChanged: (selected) => setState(() {
-                    if (selected == true) {
-                      _equipment.add(equipment.id);
-                    } else {
-                      _equipment.remove(equipment.id);
-                    }
-                  }),
+              const SizedBox(height: V5Spacing.sm),
+              V5Section(
+                title: 'Matériel disponible',
+                leading: const Icon(Icons.medical_services_outlined),
+                child: Column(
+                  children: [
+                    for (final equipment in _equipmentOptions)
+                      CheckboxListTile(
+                        key: Key(
+                          'professional-profile-equipment-${equipment.id}',
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Text(equipment.label),
+                        value: _equipment.contains(equipment.id),
+                        onChanged: (selected) => setState(() {
+                          if (selected == true) {
+                            _equipment.add(equipment.id);
+                          } else {
+                            _equipment.remove(equipment.id);
+                          }
+                        }),
+                      ),
+                    if (ProfessionalEquipmentRegistry.requiresDetails(
+                      _equipment,
+                    ))
+                      V5TextField(
+                        key: const Key(
+                          'professional-profile-equipment-details',
+                        ),
+                        label: 'Précisez le matériel',
+                        controller: _equipmentDetails,
+                        validator: _required,
+                      ),
+                  ],
                 ),
-              if (ProfessionalEquipmentRegistry.requiresDetails(_equipment))
-                TextFormField(
-                  key: const Key('professional-profile-equipment-details'),
-                  controller: _equipmentDetails,
-                  decoration: const InputDecoration(
-                    labelText: 'Précisez le matériel',
-                  ),
-                  validator: _required,
-                ),
+              ),
               const SizedBox(height: V5Spacing.lg),
               SizedBox(
                 width: double.infinity,
@@ -722,10 +729,10 @@ class _ProfessionalProfileEditorState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if ((_cptsId.text.trim().isEmpty) != (_cptsLabel.text.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Renseignez ensemble l’identifiant et le nom CPTS.'),
-        ),
+      V5Toast.show(
+        context,
+        message: 'Renseignez ensemble l’identifiant et le nom CPTS.',
+        tone: V5ToastTone.warning,
       );
       return;
     }
@@ -761,10 +768,10 @@ class _ProfessionalProfileEditorState
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Le profil n’a pas pu être enregistré. Réessayez.'),
-        ),
+      V5Toast.show(
+        context,
+        message: 'Le profil n’a pas pu être enregistré. Réessayez.',
+        tone: V5ToastTone.danger,
       );
     }
   }

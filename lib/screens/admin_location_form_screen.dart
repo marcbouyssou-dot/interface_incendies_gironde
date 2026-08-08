@@ -5,6 +5,7 @@ import '../models/need.dart';
 import '../repositories/location_administration_repository.dart';
 import '../repositories/location_administration_repository_scope.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_form_system.dart';
 
 abstract final class _LocationFormVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -127,27 +128,23 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
                     title: 'Identité du lieu',
                     child: Column(
                       children: [
-                        TextFormField(
+                        V5TextField(
                           key: const Key('admin-location-id-field'),
+                          label: 'Identifiant stable',
                           controller: _id,
                           enabled: !_editing && !_submitting,
-                          decoration: _locationFormInputDecoration(
-                            labelText: 'Identifiant stable',
-                            icon: Icons.tag_rounded,
-                            helperText:
-                                'Minuscules, chiffres et tirets uniquement.',
-                          ),
+                          prefixIcon: const Icon(Icons.tag_rounded),
+                          supportingText:
+                              'Minuscules, chiffres et tirets uniquement.',
                           validator: _validateId,
                         ),
                         const SizedBox(height: AppFormLayout.fieldSpacing),
-                        TextFormField(
+                        V5TextField(
                           key: const Key('admin-location-name-field'),
+                          label: 'Nom',
                           controller: _name,
                           enabled: !_submitting,
-                          decoration: _locationFormInputDecoration(
-                            labelText: 'Nom',
-                            icon: Icons.business_outlined,
-                          ),
+                          prefixIcon: const Icon(Icons.business_outlined),
                           validator: (value) =>
                               value == null || value.trim().isEmpty
                               ? 'Saisissez le nom du lieu.'
@@ -166,40 +163,28 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
                     title: 'Rattachement territorial',
                     child: Column(
                       children: [
-                        DropdownButtonFormField<TerritorialGroup>(
+                        V5SelectField<TerritorialGroup>(
                           key: const Key('admin-location-group-field'),
-                          initialValue: _group,
-                          isExpanded: true,
-                          decoration: _locationFormInputDecoration(
-                            labelText: 'Groupe territorial',
-                            icon: Icons.map_outlined,
-                          ),
-                          items: [
+                          label: 'Groupe territorial',
+                          value: _group,
+                          leading: const Icon(Icons.map_outlined),
+                          options: [
                             for (final value in TerritorialGroup.values)
-                              DropdownMenuItem(
-                                value: value,
-                                child: Text(value.label),
-                              ),
+                              V5SelectOption(value: value, label: value.label),
                           ],
                           onChanged: _submitting
                               ? null
                               : (value) => setState(() => _group = value!),
                         ),
                         const SizedBox(height: AppFormLayout.fieldSpacing),
-                        DropdownButtonFormField<ResponsePlaceType>(
+                        V5SelectField<ResponsePlaceType>(
                           key: const Key('admin-location-type-field'),
-                          initialValue: _type,
-                          isExpanded: true,
-                          decoration: _locationFormInputDecoration(
-                            labelText: 'Type de lieu',
-                            icon: Icons.category_outlined,
-                          ),
-                          items: [
+                          label: 'Type de lieu',
+                          value: _type,
+                          leading: const Icon(Icons.category_outlined),
+                          options: [
                             for (final value in ResponsePlaceType.values)
-                              DropdownMenuItem(
-                                value: value,
-                                child: Text(value.label),
-                              ),
+                              V5SelectOption(value: value, label: value.label),
                           ],
                           onChanged: _submitting
                               ? null
@@ -341,11 +326,11 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
     String? Function(String?)? validator,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: AppFormLayout.fieldSpacing),
-    child: TextFormField(
+    child: V5TextField(
+      label: label,
       controller: controller,
       enabled: !_submitting,
       keyboardType: keyboardType,
-      decoration: _locationFormInputDecoration(labelText: label),
       validator: validator,
     ),
   );
@@ -417,9 +402,7 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    V5Toast.show(context, message: message, tone: V5ToastTone.danger);
   }
 
   static String _coordinate(double? value) => value?.toString() ?? '';
@@ -438,57 +421,7 @@ class _LocationFormSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: _LocationFormVisuals.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _LocationFormVisuals.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08173052),
-            blurRadius: 12,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _LocationFormVisuals.fieldBackground,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: _LocationFormVisuals.navy, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: _LocationFormVisuals.navy,
-                    fontSize: 16,
-                    height: 1.2,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 14),
-            child: Divider(height: 1, color: _LocationFormVisuals.border),
-          ),
-          child,
-        ],
-      ),
-    );
+    return V5Section(title: title, leading: Icon(icon), child: child);
   }
 }
 
@@ -532,47 +465,6 @@ class _LocationFormStatus extends StatelessWidget {
       ),
     );
   }
-}
-
-InputDecoration _locationFormInputDecoration({
-  required String labelText,
-  IconData? icon,
-  String? helperText,
-}) {
-  return InputDecoration(
-    labelText: labelText,
-    helperText: helperText,
-    labelStyle: const TextStyle(
-      color: _LocationFormVisuals.textMuted,
-      fontWeight: FontWeight.w600,
-    ),
-    helperStyle: const TextStyle(
-      color: _LocationFormVisuals.textMuted,
-      fontSize: 11,
-      height: 1.3,
-    ),
-    prefixIcon: icon == null
-        ? null
-        : Icon(icon, color: _LocationFormVisuals.navy, size: 21),
-    filled: true,
-    fillColor: _LocationFormVisuals.fieldBackground,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _LocationFormVisuals.border),
-    ),
-    disabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _LocationFormVisuals.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(
-        color: _LocationFormVisuals.navy,
-        width: 1.5,
-      ),
-    ),
-  );
 }
 
 class _AdaptiveFieldPair extends StatelessWidget {

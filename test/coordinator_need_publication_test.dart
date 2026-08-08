@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
@@ -119,9 +119,10 @@ Future<void> _openAndCompleteForm(
 
   await tester.tap(find.byKey(const Key('mission-date')));
   await tester.pumpAndSettle();
-  final tomorrow = DateTime.now().add(const Duration(days: 1));
-  await tester.tap(find.text('${tomorrow.day}').last);
-  await tester.tap(find.text('OK'));
+  tester
+      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
+      .onDateTimeChanged(DateTime.now().add(const Duration(days: 1)));
+  await tester.tap(find.text('Valider'));
   await tester.pumpAndSettle();
 
   await _chooseTime(tester, const Key('mission-start-time'));
@@ -134,7 +135,7 @@ Future<void> _openAndCompleteForm(
 Future<void> _chooseTime(WidgetTester tester, Key fieldKey) async {
   await tester.tap(find.byKey(fieldKey));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('OK'));
+  await tester.tap(find.text('Valider'));
   await tester.pumpAndSettle();
 }
 
@@ -170,7 +171,7 @@ class _CoordinatorPublicationRepository extends MockCoordinationRepository {
 
   @override
   Stream<List<CoordinationNeed>> watchMissions() =>
-      Stream.value([if (_persistedMission != null) _persistedMission!]);
+      Stream.value([?_persistedMission]);
 
   @override
   Future<String> createMission(MissionDraft draft) async {

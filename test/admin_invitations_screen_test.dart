@@ -15,6 +15,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/repositories/responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/admin_invitations_screen.dart';
+import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 
 void main() {
@@ -30,7 +31,7 @@ void main() {
     locationIds: {'merignac'},
     active: true,
   );
-  final now = DateTime(2026, 7, 30, 12);
+  final now = DateTime.now();
 
   Future<MockCoordinationRepository> pumpApp(
     WidgetTester tester, {
@@ -82,6 +83,21 @@ void main() {
       180,
       scrollable: _scrollableInside(const Key('admin-invitation-form')),
     );
+    await tester.ensureVisible(control);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> revealListControl(WidgetTester tester, Key key) async {
+    final control = find.byKey(key);
+    final scrollable = _scrollableInside(const Key('admin-invitations-list'));
+    for (
+      var attempt = 0;
+      attempt < 8 && control.evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.drag(scrollable, const Offset(0, -280));
+      await tester.pumpAndSettle();
+    }
     await tester.ensureVisible(control);
     await tester.pumpAndSettle();
   }
@@ -251,6 +267,7 @@ void main() {
     addTearDown(invitationsRepository.dispose);
     await pumpApp(tester, invitationRepository: invitationsRepository);
     await openInvitations(tester);
+    await revealListControl(tester, const Key('invitation-card-pending'));
 
     expect(find.text('En attente'), findsOneWidget);
     expect(find.byKey(const Key('invitation-card-accepted')), findsNothing);
@@ -542,10 +559,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<DropdownButtonFormField<int>>(
+          .widget<V5SelectField<int>>(
             find.byKey(const Key('invitation-expiration')),
           )
-          .initialValue,
+          .value,
       14,
     );
     expect(find.text('14 jours'), findsOneWidget);
@@ -579,6 +596,7 @@ void main() {
     addTearDown(repository.dispose);
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
+    await revealListControl(tester, const Key('cancel-invitation-pending'));
     await tester.tap(find.byKey(const Key('cancel-invitation-pending')));
     await tester.pumpAndSettle();
 
@@ -614,6 +632,7 @@ void main() {
       addTearDown(repository.dispose);
       await pumpApp(tester, invitationRepository: repository);
       await openInvitations(tester);
+      await revealListControl(tester, const Key('edit-invitation-pending'));
 
       expect(find.byKey(const Key('edit-invitation-pending')), findsOneWidget);
       expect(
@@ -751,6 +770,7 @@ void main() {
     addTearDown(repository.dispose);
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
+    await revealListControl(tester, const Key('delete-invitation-pending'));
     await tester.tap(find.byKey(const Key('delete-invitation-pending')));
     await tester.pumpAndSettle();
 
@@ -778,6 +798,7 @@ void main() {
     );
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
+    await revealListControl(tester, const Key('resend-invitation-pending'));
 
     await tester.tap(find.byKey(const Key('resend-invitation-pending')));
     await tester.pumpAndSettle();
@@ -815,6 +836,7 @@ void main() {
     );
     await pumpApp(tester, invitationRepository: repository);
     await openInvitations(tester);
+    await revealListControl(tester, const Key('resend-invitation-pending'));
     await tester.tap(find.byKey(const Key('resend-invitation-pending')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-resend-invitation')));

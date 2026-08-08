@@ -12,6 +12,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/repositories/mock_location_administration_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/location_administration_screen.dart';
+import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 
 void main() {
   const active = AdminLocation(
@@ -181,9 +182,7 @@ void main() {
     expect(find.byKey(const Key('admin-location-form-list')), findsOneWidget);
     expect(
       tester
-          .widget<TextFormField>(
-            find.byKey(const Key('admin-location-id-field')),
-          )
+          .widget<V5TextField>(find.byKey(const Key('admin-location-id-field')))
           .enabled,
       isFalse,
     );

@@ -14,6 +14,7 @@ import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
+import '../widgets/v5_form_system.dart';
 import 'responsible_access_form_screen.dart';
 
 abstract final class _ResponsibleVisuals {
@@ -131,15 +132,7 @@ class _ManagementLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: _ResponsibleVisuals.background,
-      child: Center(
-        child: CircularProgressIndicator(
-          color: _ResponsibleVisuals.orange,
-          strokeWidth: 3,
-        ),
-      ),
-    );
+    return const V5LoadingState(label: 'Chargement des responsables…');
   }
 }
 
@@ -194,13 +187,12 @@ class _CoordinatorInvitationsContentState
       ),
     );
     if (!mounted || invitation == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
+    V5Toast.show(
+      context,
+      message:
           'Invitation créée. Préparez maintenant le compte pour envoyer '
           'l’e-mail d’activation.',
-        ),
-      ),
+      tone: V5ToastTone.success,
     );
   }
 
@@ -221,14 +213,12 @@ class _CoordinatorInvitationsContentState
     );
     if (!mounted || updated == null) return;
     _reloadAccounts();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          updated.access.active
-              ? 'Accès responsable mis à jour.'
-              : 'Accès responsable désactivé.',
-        ),
-      ),
+    V5Toast.show(
+      context,
+      message: updated.access.active
+          ? 'Accès responsable mis à jour.'
+          : 'Accès responsable désactivé.',
+      tone: V5ToastTone.success,
     );
   }
 
@@ -401,76 +391,70 @@ class _CoordinatorInvitationsContentState
       ),
     );
     if (!mounted || updated == null) return;
-    ScaffoldMessenger.of(
+    V5Toast.show(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Invitation mise à jour.')));
+      message: 'Invitation mise à jour.',
+      tone: V5ToastTone.success,
+    );
   }
 
   Future<void> _cancel(AdminInvitation invitation) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showV5Confirmation(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Annuler cette invitation ?'),
-        content: const Text(
-          'Le futur responsable ne pourra plus utiliser cette invitation.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Conserver'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Annuler l’invitation'),
-          ),
-        ],
-      ),
+      title: 'Annuler cette invitation ?',
+      message: 'Le futur responsable ne pourra plus utiliser cette invitation.',
+      cancelLabel: 'Conserver',
+      confirmLabel: 'Annuler l’invitation',
+      destructive: true,
     );
     if (confirmed != true) return;
     try {
       await widget.repository.cancelInvitation(invitation.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      V5Toast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Invitation annulée.')));
+        message: 'Invitation annulée.',
+        tone: V5ToastTone.success,
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('L’invitation n’a pas pu être annulée. Réessayez.'),
-        ),
+      V5Toast.show(
+        context,
+        message: 'L’invitation n’a pas pu être annulée. Réessayez.',
+        tone: V5ToastTone.danger,
       );
     }
   }
 
   Future<void> _reactivate(AdminInvitation invitation) async {
     var expirationDays = 7;
-    final selectedDays = await showDialog<int>(
+    final selectedDays = await showV5Dialog<int>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Réactiver cette invitation ?'),
-          content: DropdownButtonFormField<int>(
+        builder: (context, setDialogState) => V5Dialog(
+          title: 'Réactiver cette invitation ?',
+          content: V5SelectField<int>(
             key: const Key('reactivate-expiration'),
-            initialValue: expirationDays,
-            decoration: const InputDecoration(labelText: 'Nouvelle validité'),
-            items: const [
-              DropdownMenuItem(value: 1, child: Text('24 heures')),
-              DropdownMenuItem(value: 7, child: Text('7 jours')),
-              DropdownMenuItem(value: 14, child: Text('14 jours')),
+            label: 'Nouvelle validité',
+            value: expirationDays,
+            options: const [
+              V5SelectOption(value: 1, label: '24 heures'),
+              V5SelectOption(value: 7, label: '7 jours'),
+              V5SelectOption(value: 14, label: '14 jours'),
             ],
             onChanged: (value) =>
                 setDialogState(() => expirationDays = value ?? 7),
           ),
           actions: [
-            TextButton(
+            V5DialogAction(
+              label: 'Retour',
               onPressed: () => Navigator.pop(context),
-              child: const Text('Retour'),
             ),
-            FilledButton(
+            V5DialogAction(
               key: const Key('confirm-reactivate-invitation'),
+              label: 'Réactiver',
               onPressed: () => Navigator.pop(context, expirationDays),
-              child: const Text('Réactiver'),
+              style: V5DialogActionStyle.primary,
             ),
           ],
         ),
@@ -483,51 +467,46 @@ class _CoordinatorInvitationsContentState
         DateTime.now().add(Duration(days: selectedDays)),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      V5Toast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Invitation réactivée.')));
+        message: 'Invitation réactivée.',
+        tone: V5ToastTone.success,
+      );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('L’invitation n’a pas pu être réactivée. Réessayez.'),
-        ),
+      V5Toast.show(
+        context,
+        message: 'L’invitation n’a pas pu être réactivée. Réessayez.',
+        tone: V5ToastTone.danger,
       );
     }
   }
 
   Future<void> _delete(AdminInvitation invitation) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showV5Confirmation(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer définitivement cette invitation ?'),
-        content: const Text('Cette opération est irréversible.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Conserver'),
-          ),
-          FilledButton(
-            key: const Key('confirm-delete-invitation'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer définitivement'),
-          ),
-        ],
-      ),
+      title: 'Supprimer définitivement cette invitation ?',
+      message: 'Cette opération est irréversible.',
+      cancelLabel: 'Conserver',
+      confirmLabel: 'Supprimer définitivement',
+      destructive: true,
+      confirmKey: const Key('confirm-delete-invitation'),
     );
     if (confirmed != true) return;
     try {
       await widget.repository.deleteInvitation(invitation.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      V5Toast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Invitation supprimée.')));
+        message: 'Invitation supprimée.',
+        tone: V5ToastTone.success,
+      );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('L’invitation n’a pas pu être supprimée. Réessayez.'),
-        ),
+      V5Toast.show(
+        context,
+        message: 'L’invitation n’a pas pu être supprimée. Réessayez.',
+        tone: V5ToastTone.danger,
       );
     }
   }
@@ -535,42 +514,33 @@ class _CoordinatorInvitationsContentState
   final Set<String> _provisioningIds = {};
 
   Future<void> _resend(AdminInvitation invitation) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showV5Confirmation(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Renvoyer l’e-mail d’activation ?'),
-        content: const Text(
+      title: 'Renvoyer l’e-mail d’activation ?',
+      message:
           'Cette action prépare ou réutilise le compte responsable, puis '
           'envoie un nouveau lien d’activation.\n\n'
           'Un compte déjà préparé conserve le même identifiant.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Retour'),
-          ),
-          FilledButton(
-            key: const Key('confirm-resend-invitation'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Renvoyer'),
-          ),
-        ],
-      ),
+      cancelLabel: 'Retour',
+      confirmLabel: 'Renvoyer',
+      confirmKey: const Key('confirm-resend-invitation'),
     );
     if (confirmed != true || _provisioningIds.contains(invitation.id)) return;
     setState(() => _provisioningIds.add(invitation.id));
     try {
       await widget.repository.provisionInvitation(invitation.id, resend: true);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('E-mail d’activation envoyé.')),
+      V5Toast.show(
+        context,
+        message: 'E-mail d’activation envoyé.',
+        tone: V5ToastTone.success,
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('L’e-mail d’activation n’a pas pu être envoyé.'),
-        ),
+      V5Toast.show(
+        context,
+        message: 'L’e-mail d’activation n’a pas pu être envoyé.',
+        tone: V5ToastTone.danger,
       );
     } finally {
       if (mounted) setState(() => _provisioningIds.remove(invitation.id));
@@ -672,18 +642,7 @@ class _InlineLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(24),
-      child: Center(
-        child: SizedBox.square(
-          dimension: 30,
-          child: CircularProgressIndicator(
-            color: _ResponsibleVisuals.orange,
-            strokeWidth: 3,
-          ),
-        ),
-      ),
-    );
+    return const V5LoadingState(label: 'Chargement…', compact: true);
   }
 }
 
@@ -1286,19 +1245,17 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                 36,
               ),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(17),
-                  decoration: _responsibleCardDecoration(),
+                V5Section(
+                  title: 'Invitation',
+                  leading: const Icon(Icons.person_add_alt_1_outlined),
                   child: Column(
                     children: [
-                      TextFormField(
+                      V5TextField(
                         key: const Key('invitation-display-name'),
+                        label: 'Nom complet',
                         controller: _nameController,
                         textCapitalization: TextCapitalization.words,
-                        decoration: _managementInputDecoration(
-                          labelText: 'Nom complet',
-                          icon: Icons.person_outline_rounded,
-                        ),
+                        prefixIcon: const Icon(Icons.person_outline_rounded),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
                             ? 'Saisissez le nom du responsable.'
@@ -1306,17 +1263,14 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                         onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: AppFormLayout.fieldSpacing),
-                      TextFormField(
+                      V5TextField(
                         key: const Key('invitation-email'),
+                        label: 'E-mail',
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         autocorrect: false,
                         readOnly: _isEditing,
-                        decoration: _managementInputDecoration(
-                          labelText: 'E-mail',
-                          icon: Icons.alternate_email_rounded,
-                          readOnly: _isEditing,
-                        ),
+                        prefixIcon: const Icon(Icons.alternate_email_rounded),
                         validator: (value) {
                           return _isValidInvitationEmail(value ?? '')
                               ? null
@@ -1325,22 +1279,21 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                         onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: AppFormLayout.fieldSpacing),
-                      DropdownButtonFormField<String>(
+                      V5SelectField<String>(
                         key: const Key('invitation-role'),
-                        initialValue: _role,
-                        isExpanded: true,
-                        decoration: _managementInputDecoration(
-                          labelText: 'Rôle',
-                          icon: Icons.admin_panel_settings_outlined,
+                        label: 'Rôle',
+                        value: _role,
+                        leading: const Icon(
+                          Icons.admin_panel_settings_outlined,
                         ),
-                        items: const [
-                          DropdownMenuItem(
+                        options: const [
+                          V5SelectOption(
                             value: AdminInvitationDraft.siteManagerRole,
-                            child: Text('Responsable de centre'),
+                            label: 'Responsable de centre',
                           ),
-                          DropdownMenuItem(
+                          V5SelectOption(
                             value: AdminInvitationDraft.coordinatorRole,
-                            child: Text('Coordinateur départemental'),
+                            label: 'Coordinateur départemental',
                           ),
                         ],
                         onChanged: (value) => setState(() {
@@ -1352,23 +1305,15 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                       ),
                       if (!_isEditing) ...[
                         const SizedBox(height: AppFormLayout.fieldSpacing),
-                        DropdownButtonFormField<int>(
+                        V5SelectField<int>(
                           key: const Key('invitation-expiration'),
-                          initialValue: _expirationDays,
-                          decoration: _managementInputDecoration(
-                            labelText: 'Validité',
-                            icon: Icons.schedule_outlined,
-                          ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 1,
-                              child: Text('24 heures'),
-                            ),
-                            DropdownMenuItem(value: 7, child: Text('7 jours')),
-                            DropdownMenuItem(
-                              value: 14,
-                              child: Text('14 jours'),
-                            ),
+                          label: 'Validité',
+                          value: _expirationDays,
+                          leading: const Icon(Icons.schedule_outlined),
+                          options: const [
+                            V5SelectOption(value: 1, label: '24 heures'),
+                            V5SelectOption(value: 7, label: '7 jours'),
+                            V5SelectOption(value: 14, label: '14 jours'),
                           ],
                           onChanged: (value) =>
                               setState(() => _expirationDays = value ?? 7),
@@ -1420,9 +1365,11 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
       draft.validate(now: now);
     } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      V5Toast.show(
         context,
-      ).showSnackBar(SnackBar(content: Text(_messageFor(error))));
+        message: _messageFor(error),
+        tone: V5ToastTone.danger,
+      );
       return;
     }
     setState(() => _submitting = true);
@@ -1432,9 +1379,11 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(
+      V5Toast.show(
         context,
-      ).showSnackBar(SnackBar(content: Text(_messageFor(error))));
+        message: _messageFor(error),
+        tone: V5ToastTone.danger,
+      );
     }
   }
 
@@ -1449,9 +1398,11 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
       update.validate();
     } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      V5Toast.show(
         context,
-      ).showSnackBar(SnackBar(content: Text(_messageFor(error))));
+        message: _messageFor(error),
+        tone: V5ToastTone.danger,
+      );
       return;
     }
     setState(() => _submitting = true);
@@ -1464,14 +1415,12 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error is FormatException
-                ? error.message
-                : 'L’invitation n’a pas pu être modifiée. Réessayez.',
-          ),
-        ),
+      V5Toast.show(
+        context,
+        message: error is FormatException
+            ? error.message
+            : 'L’invitation n’a pas pu être modifiée. Réessayez.',
+        tone: V5ToastTone.danger,
       );
     }
   }
@@ -1486,38 +1435,6 @@ bool _isValidInvitationEmail(String value) {
   final email = value.trim();
   return email.length <= AdminInvitationDraft.maxEmailLength &&
       RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
-}
-
-InputDecoration _managementInputDecoration({
-  required String labelText,
-  required IconData icon,
-  bool readOnly = false,
-}) {
-  return InputDecoration(
-    labelText: labelText,
-    labelStyle: const TextStyle(
-      color: _ResponsibleVisuals.textMuted,
-      fontWeight: FontWeight.w600,
-    ),
-    prefixIcon: Icon(
-      icon,
-      color: readOnly
-          ? _ResponsibleVisuals.textMuted
-          : _ResponsibleVisuals.navy,
-      size: 21,
-    ),
-    filled: true,
-    fillColor: _ResponsibleVisuals.fieldBackground,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _ResponsibleVisuals.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _ResponsibleVisuals.navy, width: 1.5),
-    ),
-  );
 }
 
 class _InvitationSubmitBar extends StatelessWidget {

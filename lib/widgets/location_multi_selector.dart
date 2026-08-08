@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/need.dart';
 import '../theme/app_theme.dart';
+import 'v5_form_system.dart';
 
 class LocationMultiSelector extends StatefulWidget {
   const LocationMultiSelector({
@@ -148,26 +149,24 @@ class _LocationMultiSelectorState extends State<LocationMultiSelector> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TextFormField(
+        V5TextField(
           key: const Key('location-search'),
+          label: 'Rechercher un centre',
           controller: _searchController,
           enabled: widget.enabled,
           textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            labelText: 'Rechercher un centre',
-            prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: _query.isEmpty
-                ? null
-                : IconButton(
-                    key: const Key('clear-location-search'),
-                    tooltip: 'Effacer la recherche',
-                    onPressed: () {
-                      _searchController.clear();
-                      _updateSearch('');
-                    },
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-          ),
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  key: const Key('clear-location-search'),
+                  tooltip: 'Effacer la recherche',
+                  onPressed: () {
+                    _searchController.clear();
+                    _updateSearch('');
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
           onChanged: _updateSearch,
         ),
         const SizedBox(height: 12),

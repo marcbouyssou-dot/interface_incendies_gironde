@@ -7,10 +7,12 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_form_system.dart';
 
 abstract final class _CreateNeedVisuals {
   static const navy = Color(0xFF173052);
@@ -182,7 +184,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
           return const _ResponsibleAccessReadFailure();
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const V5LoadingState(label: 'Chargement de vos accès…');
         }
         final access = snapshot.data;
         if (access == null) {
@@ -211,7 +213,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
               );
             }
             if (!locationsSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const V5LoadingState(label: 'Chargement des centres…');
             }
             return _buildForm(context, access, locationsSnapshot.data!);
           },
@@ -266,9 +268,14 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     );
     final equipmentProfession = _equipmentProfession;
     final displayedEquipment = _displayedEquipment;
+    final today = DateUtils.dateOnly(DateTime.now());
+    final firstDate =
+        _isEditing && _selectedDate != null && _selectedDate!.isBefore(today)
+        ? _selectedDate!
+        : today;
     return PageContainer(
       child: Material(
-        color: _CreateNeedVisuals.background,
+        color: context.v5Colors.canvas,
         child: ListView(
           key: const PageStorageKey('create'),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -331,228 +338,255 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       requestedProfessionals: requestedProfessionals,
                     ),
                     const SizedBox(height: 10),
-                    _FormDetailsCard(
-                      children: [
-                        if (responsibleLocationId == null) ...[
-                          _LocationInput(
-                            key: _locationKey,
-                            access: access,
-                            locations: locations,
-                            selectedLocation: _selectedLocation,
-                            preserveUnavailableSelection: _isEditing,
-                            enabled: !_publishing,
-                            focusNode: _locationFocusNode,
-                            onSelected: (location) {
-                              if (!mounted) return;
-                              setState(() {
-                                _selectedLocation = location;
-                                _errorMessage = null;
-                              });
-                            },
+                    V5Section(
+                      title: 'Planification',
+                      leading: const Icon(Icons.event_available_outlined),
+                      child: Column(
+                        children: [
+                          if (responsibleLocationId == null) ...[
+                            _LocationInput(
+                              key: _locationKey,
+                              access: access,
+                              locations: locations,
+                              selectedLocation: _selectedLocation,
+                              preserveUnavailableSelection: _isEditing,
+                              enabled: !_publishing,
+                              focusNode: _locationFocusNode,
+                              onSelected: (location) {
+                                if (!mounted) return;
+                                setState(() {
+                                  _selectedLocation = location;
+                                  _errorMessage = null;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: V5Spacing.md),
+                          ],
+                          KeyedSubtree(
+                            key: _dateKey,
+                            child: V5DateField(
+                              key: const Key('mission-date'),
+                              label: 'Date',
+                              value: _selectedDate,
+                              firstDate: firstDate,
+                              lastDate: DateTime(
+                                today.year + 2,
+                                today.month,
+                                today.day,
+                              ),
+                              formatter: (_, value) => _formatDate(value),
+                              focusNode: _dateFocusNode,
+                              onChanged: _publishing
+                                  ? null
+                                  : (value) {
+                                      if (value == null || !mounted) return;
+                                      setState(() {
+                                        _selectedDate = value;
+                                        _errorMessage = null;
+                                      });
+                                    },
+                            ),
                           ),
-                          const _CreateNeedDivider(),
+                          const SizedBox(height: V5Spacing.md),
+                          KeyedSubtree(
+                            key: _startTimeKey,
+                            child: V5TimeField(
+                              key: const Key('mission-start-time'),
+                              label: 'Début',
+                              value: _startTime,
+                              pickerInitialValue: const TimeOfDay(
+                                hour: 8,
+                                minute: 0,
+                              ),
+                              use24HourFormat: true,
+                              focusNode: _startTimeFocusNode,
+                              onChanged: _publishing
+                                  ? null
+                                  : (value) {
+                                      if (value == null || !mounted) return;
+                                      setState(() {
+                                        _startTime = value;
+                                        _errorMessage = null;
+                                      });
+                                    },
+                            ),
+                          ),
+                          const SizedBox(height: V5Spacing.md),
+                          KeyedSubtree(
+                            key: _endTimeKey,
+                            child: V5TimeField(
+                              key: const Key('mission-end-time'),
+                              label: 'Fin',
+                              value: _endTime,
+                              pickerInitialValue: const TimeOfDay(
+                                hour: 12,
+                                minute: 0,
+                              ),
+                              use24HourFormat: true,
+                              focusNode: _endTimeFocusNode,
+                              onChanged: _publishing
+                                  ? null
+                                  : (value) {
+                                      if (value == null || !mounted) return;
+                                      setState(() {
+                                        _endTime = value;
+                                        _errorMessage = null;
+                                      });
+                                    },
+                            ),
+                          ),
                         ],
-                        KeyedSubtree(
-                          key: _dateKey,
-                          child: _PickerField(
-                            key: const Key('mission-date'),
-                            label: 'Date',
-                            value: _selectedDate == null
-                                ? 'Choisir une date'
-                                : _formatDate(_selectedDate!),
-                            focusNode: _dateFocusNode,
-                            onTap: _publishing ? null : _pickDate,
-                          ),
-                        ),
-                        const _CreateNeedDivider(),
-                        KeyedSubtree(
-                          key: _startTimeKey,
-                          child: _PickerField(
-                            key: const Key('mission-start-time'),
-                            label: 'Début',
-                            value: _startTime == null
-                                ? 'Choisir une heure'
-                                : _formatTime(_startTime!),
-                            focusNode: _startTimeFocusNode,
-                            onTap: _publishing
-                                ? null
-                                : () => _pickTime(isStart: true),
-                          ),
-                        ),
-                        const _CreateNeedDivider(),
-                        KeyedSubtree(
-                          key: _endTimeKey,
-                          child: _PickerField(
-                            key: const Key('mission-end-time'),
-                            label: 'Fin',
-                            value: _endTime == null
-                                ? 'Choisir une heure'
-                                : _formatTime(_endTime!),
-                            focusNode: _endTimeFocusNode,
-                            onTap: _publishing
-                                ? null
-                                : () => _pickTime(isStart: false),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 20),
-                    const _CreateNeedSectionTitle('Professionnels recherchés'),
-                    const SizedBox(height: 9),
-                    for (final profession
-                        in HealthProfessionRegistry.values) ...[
-                      _QuotaStepper(
-                        key: _quotaKeys[profession.id],
-                        label: profession.missionLabel,
-                        value: _requiredByProfession[profession.id]!,
-                        removeKey: Key('${profession.id}-remove'),
-                        addKey: Key('${profession.id}-add'),
-                        addFocusNode: _quotaFocusNodes[profession.id]!,
-                        onRemove:
-                            !_publishing &&
-                                _requiredByProfession[profession.id]! > 0
-                            ? () => _changeQuota(profession.id, -1)
-                            : null,
-                        onAdd: _publishing
-                            ? null
-                            : () => _changeQuota(profession.id, 1),
-                      ),
-                      if (profession != HealthProfessionRegistry.values.last)
-                        const SizedBox(height: 8),
-                    ],
-                    const SizedBox(height: 20),
-                    const _CreateNeedSectionTitle('Matériel conseillé'),
-                    const SizedBox(height: 9),
-                    if (equipmentProfession == null)
-                      const Padding(
-                        key: Key('mission-equipment-empty'),
-                        padding: EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: EdgeInsets.only(top: 1),
-                              child: Icon(
-                                Icons.info_outline_rounded,
-                                size: 14,
-                                color: _CreateNeedVisuals.textMuted,
-                              ),
-                            ),
-                            SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                'Ajoutez au moins un professionnel recherché '
-                                'pour afficher le matériel correspondant.',
-                                style: TextStyle(
-                                  color: _CreateNeedVisuals.textMuted,
-                                  fontSize: 11,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else ...[
-                      _EquipmentProfessionContext(
-                        professionLabel: equipmentProfession.missionLabel,
-                      ),
-                      const SizedBox(height: 9),
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 7,
+                    V5Section(
+                      title: 'Professionnels recherchés',
+                      leading: const Icon(Icons.groups_2_outlined),
+                      child: Column(
                         children: [
-                          for (final equipment in displayedEquipment)
-                            FilterChip(
-                              key: Key('mission-equipment-${equipment.id}'),
-                              label: Text(equipment.label),
-                              selected: _equipment.contains(equipment.label),
-                              onSelected: _publishing
+                          for (final profession
+                              in HealthProfessionRegistry.values) ...[
+                            _QuotaStepper(
+                              key: _quotaKeys[profession.id],
+                              label: profession.missionLabel,
+                              value: _requiredByProfession[profession.id]!,
+                              removeKey: Key('${profession.id}-remove'),
+                              addKey: Key('${profession.id}-add'),
+                              addFocusNode: _quotaFocusNodes[profession.id]!,
+                              onRemove:
+                                  !_publishing &&
+                                      _requiredByProfession[profession.id]! > 0
+                                  ? () => _changeQuota(profession.id, -1)
+                                  : null,
+                              onAdd: _publishing
                                   ? null
-                                  : (selected) => setState(() {
-                                      if (selected) {
-                                        _equipment.add(equipment.label);
-                                      } else {
-                                        _equipment.remove(equipment.label);
-                                      }
-                                    }),
-                              selectedColor: _CreateNeedVisuals.orangeSoft,
-                              backgroundColor: Colors.white,
-                              checkmarkColor: _CreateNeedVisuals.orange,
-                              showCheckmark: true,
-                              side: BorderSide(
-                                color: _equipment.contains(equipment.label)
-                                    ? _CreateNeedVisuals.orange
-                                    : _CreateNeedVisuals.borderStrong,
-                                width: _equipment.contains(equipment.label)
-                                    ? 1.4
-                                    : 1,
-                              ),
-                              shape: const StadiumBorder(),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 2,
-                              ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.padded,
-                              labelStyle: const TextStyle(
-                                color: _CreateNeedVisuals.navy,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
+                                  : () => _changeQuota(profession.id, 1),
                             ),
+                            if (profession !=
+                                HealthProfessionRegistry.values.last)
+                              const SizedBox(height: V5Spacing.xs),
+                          ],
                         ],
                       ),
-                    ],
+                    ),
                     const SizedBox(height: 20),
-                    const _CreateNeedFieldLabel('Commentaire facultatif'),
-                    const SizedBox(height: 8),
-                    TextField(
+                    V5Section(
+                      title: 'Matériel conseillé',
+                      leading: const Icon(Icons.medical_services_outlined),
+                      child: equipmentProfession == null
+                          ? const Padding(
+                              key: Key('mission-equipment-empty'),
+                              padding: EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: EdgeInsets.only(top: 1),
+                                    child: Icon(
+                                      Icons.info_outline_rounded,
+                                      size: 14,
+                                      color: _CreateNeedVisuals.textMuted,
+                                    ),
+                                  ),
+                                  SizedBox(width: 7),
+                                  Expanded(
+                                    child: Text(
+                                      'Ajoutez au moins un professionnel recherché '
+                                      'pour afficher le matériel correspondant.',
+                                      style: TextStyle(
+                                        color: _CreateNeedVisuals.textMuted,
+                                        fontSize: 11,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _EquipmentProfessionContext(
+                                  professionLabel:
+                                      equipmentProfession.missionLabel,
+                                ),
+                                const SizedBox(height: V5Spacing.sm),
+                                Wrap(
+                                  spacing: 7,
+                                  runSpacing: 7,
+                                  children: [
+                                    for (final equipment in displayedEquipment)
+                                      FilterChip(
+                                        key: Key(
+                                          'mission-equipment-${equipment.id}',
+                                        ),
+                                        label: Text(equipment.label),
+                                        selected: _equipment.contains(
+                                          equipment.label,
+                                        ),
+                                        onSelected: _publishing
+                                            ? null
+                                            : (selected) => setState(() {
+                                                if (selected) {
+                                                  _equipment.add(
+                                                    equipment.label,
+                                                  );
+                                                } else {
+                                                  _equipment.remove(
+                                                    equipment.label,
+                                                  );
+                                                }
+                                              }),
+                                        selectedColor:
+                                            _CreateNeedVisuals.orangeSoft,
+                                        backgroundColor: Colors.white,
+                                        checkmarkColor:
+                                            _CreateNeedVisuals.orange,
+                                        showCheckmark: true,
+                                        side: BorderSide(
+                                          color:
+                                              _equipment.contains(
+                                                equipment.label,
+                                              )
+                                              ? _CreateNeedVisuals.orange
+                                              : _CreateNeedVisuals.borderStrong,
+                                          width:
+                                              _equipment.contains(
+                                                equipment.label,
+                                              )
+                                              ? 1.4
+                                              : 1,
+                                        ),
+                                        shape: const StadiumBorder(),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 2,
+                                        ),
+                                        materialTapTargetSize:
+                                            MaterialTapTargetSize.padded,
+                                        labelStyle: const TextStyle(
+                                          color: _CreateNeedVisuals.navy,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                    ),
+                    const SizedBox(height: 20),
+                    V5TextField(
+                      label: 'Commentaire facultatif',
                       controller: _detailsController,
                       enabled: !_publishing,
                       maxLines: 4,
                       minLines: 3,
-                      style: const TextStyle(
-                        color: _CreateNeedVisuals.navy,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
+                      hint: 'Ajouter un commentaire (optionnel)',
                       scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                       onTapOutside: _isEditing
                           ? (_) => FocusManager.instance.primaryFocus?.unfocus()
                           : null,
-                      decoration: InputDecoration(
-                        hintText: 'Ajouter un commentaire (optionnel)',
-                        hintStyle: const TextStyle(
-                          color: Color(0xFF747A78),
-                          fontSize: 12,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 15,
-                          vertical: 14,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: _CreateNeedVisuals.borderStrong,
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: _CreateNeedVisuals.borderStrong,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: _CreateNeedVisuals.orange,
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
                     ),
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 12),
@@ -676,50 +710,6 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     );
   }
 
-  Future<void> _pickDate() async {
-    final today = DateUtils.dateOnly(DateTime.now());
-    final firstDate =
-        _isEditing && _selectedDate != null && _selectedDate!.isBefore(today)
-        ? _selectedDate!
-        : today;
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? today,
-      firstDate: firstDate,
-      lastDate: DateTime(today.year + 2, today.month, today.day),
-    );
-    if (selected != null && mounted) {
-      setState(() {
-        _selectedDate = selected;
-        _errorMessage = null;
-      });
-    }
-  }
-
-  Future<void> _pickTime({required bool isStart}) async {
-    final initial = isStart
-        ? _startTime ?? const TimeOfDay(hour: 8, minute: 0)
-        : _endTime ?? const TimeOfDay(hour: 12, minute: 0);
-    final selected = await showTimePicker(
-      context: context,
-      initialTime: initial,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-        child: child!,
-      ),
-    );
-    if (selected != null && mounted) {
-      setState(() {
-        if (isStart) {
-          _startTime = selected;
-        } else {
-          _endTime = selected;
-        }
-        _errorMessage = null;
-      });
-    }
-  }
-
   Future<void> _publish(ResponsibleAccess access) async {
     if (_publishing) return;
 
@@ -744,9 +734,11 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         ).updateMission(widget.mission!.id, draft);
         if (!mounted) return;
         setState(() => _publishing = false);
-        ScaffoldMessenger.of(
+        V5Toast.show(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Mission mise à jour.')));
+          message: 'Mission mise à jour.',
+          tone: V5ToastTone.success,
+        );
         if (Navigator.of(context).canPop()) Navigator.pop(context);
         return;
       }
@@ -996,8 +988,6 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
 
   static int _minutes(TimeOfDay value) => value.hour * 60 + value.minute;
   static String _formatDate(DateTime value) => FrenchDateTime.date(value);
-  static String _formatTime(TimeOfDay value) =>
-      FrenchDateTime.timeFromParts(value.hour, value.minute);
 }
 
 class _NeedSummaryCard extends StatelessWidget {
@@ -1109,57 +1099,6 @@ class _NeedSummaryCard extends StatelessWidget {
 
   static String _formatTime(TimeOfDay value) =>
       FrenchDateTime.timeFromParts(value.hour, value.minute);
-}
-
-class _FormDetailsCard extends StatelessWidget {
-  const _FormDetailsCard({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _CreateNeedVisuals.border),
-      ),
-      child: Column(children: children),
-    );
-  }
-}
-
-class _CreateNeedDivider extends StatelessWidget {
-  const _CreateNeedDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Divider(
-      height: 1,
-      thickness: 1,
-      color: _CreateNeedVisuals.border,
-    );
-  }
-}
-
-class _CreateNeedSectionTitle extends StatelessWidget {
-  const _CreateNeedSectionTitle(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: _CreateNeedVisuals.navy,
-        fontSize: 14,
-        fontWeight: FontWeight.w800,
-      ),
-    );
-  }
 }
 
 class _EquipmentProfessionContext extends StatelessWidget {
@@ -1339,35 +1278,23 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        TextField(
+                        V5TextField(
                           key: const Key('manager-email'),
+                          label: 'Adresse email',
                           controller: _email,
                           keyboardType: TextInputType.emailAddress,
                           autofillHints: const [AutofillHints.email],
-                          style: const TextStyle(
-                            color: _CreateNeedVisuals.navy,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          decoration: _responsibleLoginInputDecoration(
-                            labelText: 'Adresse email',
-                            icon: Icons.alternate_email_rounded,
-                          ),
+                          prefixIcon: const Icon(Icons.alternate_email_rounded),
                         ),
                         const SizedBox(height: 14),
-                        TextField(
+                        V5TextField(
                           key: const Key('manager-password'),
+                          label: 'Mot de passe',
                           controller: _password,
                           obscureText: true,
                           autofillHints: const [AutofillHints.password],
-                          onSubmitted: (_) => _loading ? null : _signIn(),
-                          style: const TextStyle(
-                            color: _CreateNeedVisuals.navy,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          decoration: _responsibleLoginInputDecoration(
-                            labelText: 'Mot de passe',
-                            icon: Icons.lock_outline_rounded,
-                          ),
+                          onFieldSubmitted: (_) => _loading ? null : _signIn(),
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
                         ),
                         if (_message != null) ...[
                           const SizedBox(height: 12),
@@ -1498,31 +1425,6 @@ class _ResponsibleLoginHeader extends StatelessWidget {
       ],
     );
   }
-}
-
-InputDecoration _responsibleLoginInputDecoration({
-  required String labelText,
-  required IconData icon,
-}) {
-  return InputDecoration(
-    labelText: labelText,
-    labelStyle: const TextStyle(
-      color: _CreateNeedVisuals.textMuted,
-      fontWeight: FontWeight.w600,
-    ),
-    prefixIcon: Icon(icon, color: _CreateNeedVisuals.navy, size: 21),
-    filled: true,
-    fillColor: _CreateNeedVisuals.fieldBackground,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _CreateNeedVisuals.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _CreateNeedVisuals.navy, width: 1.5),
-    ),
-  );
 }
 
 class _PublishedMission {
@@ -1683,81 +1585,35 @@ class _LocationInput extends StatelessWidget {
               .where((location) => access.locationIds.contains(location.id))
               .toList(growable: false)
         : displayed;
-    return SizedBox(
-      height: 62,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const _CreateNeedFieldLabel('Lieu'),
-          const SizedBox(height: 4),
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              key: const Key('mission-location'),
-              focusNode: focusNode,
-              isExpanded: true,
-              isDense: true,
-              initialValue:
-                  selectable.any(
-                    (location) => location.id == selectedLocation?.id,
-                  )
-                  ? selectedLocation?.id
-                  : null,
-              hint: const Text(
-                'Choisir un lieu',
-                style: TextStyle(
-                  color: _CreateNeedVisuals.textMuted,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              items: selectable
-                  .map(
-                    (location) => DropdownMenuItem(
-                      value: location.id,
-                      enabled: location.isOperational && location.isEnabled,
-                      child: Text(
-                        location.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: enabled
-                  ? (id) => onSelected(
-                      selectable
-                          .where(
-                            (location) =>
-                                location.id == id &&
-                                location.isOperational &&
-                                location.isEnabled,
-                          )
-                          .firstOrNull,
-                    )
-                  : null,
-              icon: const Icon(
-                Icons.chevron_left_rounded,
-                size: 20,
-                color: _CreateNeedVisuals.navy,
-              ),
-              style: const TextStyle(
-                color: _CreateNeedVisuals.navy,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-              decoration: const InputDecoration(
-                isDense: true,
-                isCollapsed: true,
-                filled: false,
-                contentPadding: EdgeInsets.zero,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-              ),
-            ),
+    return V5SelectField<String>(
+      key: const Key('mission-location'),
+      label: 'Lieu',
+      value: selectable.any((location) => location.id == selectedLocation?.id)
+          ? selectedLocation?.id
+          : null,
+      placeholder: 'Choisir un lieu',
+      sheetTitle: 'Choisir le lieu d’intervention',
+      focusNode: focusNode,
+      options: [
+        for (final location in selectable)
+          V5SelectOption(
+            value: location.id,
+            label: location.name,
+            enabled: location.isOperational && location.isEnabled,
           ),
-        ],
-      ),
+      ],
+      onChanged: enabled
+          ? (id) => onSelected(
+              selectable
+                  .where(
+                    (location) =>
+                        location.id == id &&
+                        location.isOperational &&
+                        location.isEnabled,
+                  )
+                  .firstOrNull,
+            )
+          : null,
     );
   }
 
@@ -1929,66 +1785,6 @@ class _QuotaIconButton extends StatelessWidget {
           shape: const CircleBorder(),
         ),
         icon: Icon(icon, size: 19),
-      ),
-    );
-  }
-}
-
-class _PickerField extends StatelessWidget {
-  const _PickerField({
-    super.key,
-    required this.label,
-    required this.value,
-    required this.focusNode,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final FocusNode focusNode;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        focusNode: focusNode,
-        onTap: onTap,
-        child: SizedBox(
-          height: 62,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _CreateNeedFieldLabel(label),
-              const SizedBox(height: 5),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: onTap == null
-                            ? _CreateNeedVisuals.textMuted
-                            : _CreateNeedVisuals.navy,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.chevron_left_rounded,
-                    size: 20,
-                    color: _CreateNeedVisuals.navy,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

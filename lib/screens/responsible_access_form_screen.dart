@@ -6,6 +6,7 @@ import '../models/responsible_account.dart';
 import '../repositories/responsible_access_administration_repository.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
+import '../widgets/v5_form_system.dart';
 
 abstract final class _AccessFormVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -171,10 +172,9 @@ class _ResponsibleAccessFormScreenState
               36,
             ),
             children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(17),
-                decoration: _accessFormCardDecoration(),
+              V5Section(
+                title: 'Accès responsable',
+                leading: const Icon(Icons.admin_panel_settings_outlined),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -244,23 +244,23 @@ class _ResponsibleAccessFormScreenState
                       ),
                     ),
                     const SizedBox(height: 14),
-                    DropdownButtonFormField<String>(
+                    V5SelectField<String>(
                       key: const Key('responsible-role-choice'),
-                      initialValue: _roleChoice,
-                      decoration: _accessFormInputDecoration(),
-                      isExpanded: true,
-                      items: const [
-                        DropdownMenuItem(
+                      label: 'Rôle',
+                      value: _roleChoice,
+                      leading: const Icon(Icons.admin_panel_settings_outlined),
+                      options: const [
+                        V5SelectOption(
                           value: ResponsibleRole.siteManager,
-                          child: Text('Responsable de centre'),
+                          label: 'Responsable de centre',
                         ),
-                        DropdownMenuItem(
+                        V5SelectOption(
                           value: ResponsibleRole.coordinator,
-                          child: Text('Coordinateur départemental'),
+                          label: 'Coordinateur départemental',
                         ),
-                        DropdownMenuItem(
+                        V5SelectOption(
                           value: _cumulative,
-                          child: Text('Coordinateur et responsable'),
+                          label: 'Coordinateur et responsable',
                         ),
                       ],
                       onChanged: _submitting
@@ -311,26 +311,16 @@ class _ResponsibleAccessFormScreenState
       return;
     }
     if (!_active && widget.account.access.active) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showV5Confirmation(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Désactiver ce responsable ?'),
-          content: const Text(
+        title: 'Désactiver ce responsable ?',
+        message:
             'Le compte et son historique sont conservés, mais ses accès '
             'responsables seront immédiatement suspendus.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Conserver l’accès'),
-            ),
-            FilledButton(
-              key: const Key('confirm-responsible-deactivation'),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Désactiver'),
-            ),
-          ],
-        ),
+        cancelLabel: 'Conserver l’accès',
+        confirmLabel: 'Désactiver',
+        destructive: true,
+        confirmKey: const Key('confirm-responsible-deactivation'),
       );
       if (confirmed != true) return;
     }
@@ -357,9 +347,7 @@ class _ResponsibleAccessFormScreenState
   }
 
   void _show(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    V5Toast.show(context, message: message, tone: V5ToastTone.danger);
   }
 }
 
@@ -371,32 +359,6 @@ BoxDecoration _accessFormCardDecoration() {
     boxShadow: const [
       BoxShadow(color: Color(0x08173052), blurRadius: 12, offset: Offset(0, 3)),
     ],
-  );
-}
-
-InputDecoration _accessFormInputDecoration() {
-  return InputDecoration(
-    labelText: 'Rôle',
-    labelStyle: const TextStyle(
-      color: _AccessFormVisuals.textMuted,
-      fontWeight: FontWeight.w600,
-    ),
-    prefixIcon: const Icon(
-      Icons.admin_panel_settings_outlined,
-      color: _AccessFormVisuals.navy,
-      size: 21,
-    ),
-    filled: true,
-    fillColor: _AccessFormVisuals.fieldBackground,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _AccessFormVisuals.border),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _AccessFormVisuals.navy, width: 1.5),
-    ),
   );
 }
 

@@ -8,6 +8,7 @@ import 'package:interface_incendies_gironde/models/responsible_access.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
+import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 
 void main() {
   testWidgets(
@@ -264,9 +265,15 @@ Future<void> _enterProfessionalPerspective(
 }
 
 Future<void> _scrollTo(WidgetTester tester, Finder target) async {
+  final editor = find.byKey(const Key('professional-profile-editor-scroll'));
+  for (var attempt = 0; attempt < 8; attempt++) {
+    if (tester.getCenter(target).dy < 760) break;
+    await tester.drag(editor, const Offset(0, -360));
+    await tester.pumpAndSettle();
+  }
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
 }
 
 String _fieldText(WidgetTester tester, Key key) =>
-    tester.widget<TextFormField>(find.byKey(key)).controller?.text ?? '';
+    tester.widget<V5TextField>(find.byKey(key)).controller?.text ?? '';

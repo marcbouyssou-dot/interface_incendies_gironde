@@ -28,13 +28,17 @@ class V5TextField extends StatelessWidget {
     this.onChanged,
     this.onFieldSubmitted,
     this.onTap,
+    this.onTapOutside,
     this.enabled = true,
     this.readOnly = false,
+    this.autocorrect = true,
+    this.enableSuggestions = true,
     this.obscureText = false,
     this.autofocus = false,
     this.minLines = 1,
     this.maxLines = 1,
     this.maxLength,
+    this.scrollPadding = const EdgeInsets.all(20),
     this.autovalidateMode,
   }) : assert(controller == null || initialValue == null),
        assert(minLines > 0),
@@ -58,13 +62,17 @@ class V5TextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onFieldSubmitted;
   final VoidCallback? onTap;
+  final TapRegionCallback? onTapOutside;
   final bool enabled;
   final bool readOnly;
+  final bool autocorrect;
+  final bool enableSuggestions;
   final bool obscureText;
   final bool autofocus;
   final int minLines;
   final int? maxLines;
   final int? maxLength;
+  final EdgeInsets scrollPadding;
   final AutovalidateMode? autovalidateMode;
 
   @override
@@ -86,13 +94,17 @@ class V5TextField extends StatelessWidget {
         onChanged: onChanged,
         onFieldSubmitted: onFieldSubmitted,
         onTap: onTap,
+        onTapOutside: onTapOutside,
         enabled: enabled,
         readOnly: readOnly,
+        autocorrect: autocorrect,
+        enableSuggestions: enableSuggestions,
         obscureText: obscureText,
         autofocus: autofocus,
         minLines: obscureText ? 1 : minLines,
         maxLines: obscureText ? 1 : maxLines,
         maxLength: maxLength,
+        scrollPadding: scrollPadding,
         autovalidateMode: autovalidateMode,
         cursorColor: colors.accent,
         style: Theme.of(
@@ -142,6 +154,7 @@ class V5SelectField<T> extends StatelessWidget {
     this.validator,
     this.autovalidateMode,
     this.leading,
+    this.focusNode,
   });
 
   final String label;
@@ -155,10 +168,12 @@ class V5SelectField<T> extends StatelessWidget {
   final FormFieldValidator<T>? validator;
   final AutovalidateMode? autovalidateMode;
   final Widget? leading;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     return FormField<T>(
+      key: ValueKey(value),
       initialValue: value,
       validator: validator,
       autovalidateMode: autovalidateMode,
@@ -175,6 +190,7 @@ class V5SelectField<T> extends StatelessWidget {
           enabled: interactive,
           icon: Icons.unfold_more_rounded,
           semanticValue: selected?.label,
+          focusNode: focusNode,
           onTap: !interactive
               ? null
               : () async {
@@ -226,6 +242,7 @@ class V5DateField extends StatelessWidget {
     this.enabled = true,
     this.validator,
     this.autovalidateMode,
+    this.focusNode,
   });
 
   final String label;
@@ -240,10 +257,12 @@ class V5DateField extends StatelessWidget {
   final bool enabled;
   final FormFieldValidator<DateTime>? validator;
   final AutovalidateMode? autovalidateMode;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     return FormField<DateTime>(
+      key: ValueKey(value),
       initialValue: value,
       validator: validator,
       autovalidateMode: autovalidateMode,
@@ -262,6 +281,7 @@ class V5DateField extends StatelessWidget {
           semanticValue: state.value == null
               ? null
               : _semanticDate(state.value!),
+          focusNode: focusNode,
           onTap: !interactive
               ? null
               : () async {
@@ -332,9 +352,11 @@ class V5TimeField extends StatelessWidget {
     this.supportingText,
     this.minuteInterval = 1,
     this.use24HourFormat,
+    this.pickerInitialValue,
     this.enabled = true,
     this.validator,
     this.autovalidateMode,
+    this.focusNode,
   }) : assert(minuteInterval > 0 && 60 % minuteInterval == 0);
 
   final String label;
@@ -345,13 +367,16 @@ class V5TimeField extends StatelessWidget {
   final String? supportingText;
   final int minuteInterval;
   final bool? use24HourFormat;
+  final TimeOfDay? pickerInitialValue;
   final bool enabled;
   final FormFieldValidator<TimeOfDay>? validator;
   final AutovalidateMode? autovalidateMode;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     return FormField<TimeOfDay>(
+      key: ValueKey(value),
       initialValue: value,
       validator: validator,
       autovalidateMode: autovalidateMode,
@@ -370,6 +395,7 @@ class V5TimeField extends StatelessWidget {
           enabled: interactive,
           icon: Icons.schedule_outlined,
           semanticValue: state.value?.format(context),
+          focusNode: focusNode,
           onTap: !interactive
               ? null
               : () async {
@@ -387,7 +413,7 @@ class V5TimeField extends StatelessWidget {
     BuildContext context,
     TimeOfDay? selectedValue,
   ) {
-    final rawInitial = selectedValue ?? TimeOfDay.now();
+    final rawInitial = selectedValue ?? pickerInitialValue ?? TimeOfDay.now();
     final initial = TimeOfDay(
       hour: rawInitial.hour,
       minute: rawInitial.minute - (rawInitial.minute % minuteInterval),
@@ -616,12 +642,14 @@ enum V5DialogActionStyle { primary, secondary, destructive }
 @immutable
 class V5DialogAction {
   const V5DialogAction({
+    this.key,
     required this.label,
     required this.onPressed,
     this.style = V5DialogActionStyle.secondary,
     this.loading = false,
   });
 
+  final Key? key;
   final String label;
   final VoidCallback? onPressed;
   final V5DialogActionStyle style;
@@ -744,6 +772,8 @@ class V5Confirmation extends StatelessWidget {
     this.destructive = false,
     this.loading = false,
     this.icon,
+    this.confirmKey,
+    this.cancelKey,
   });
 
   final String title;
@@ -755,6 +785,8 @@ class V5Confirmation extends StatelessWidget {
   final bool destructive;
   final bool loading;
   final IconData? icon;
+  final Key? confirmKey;
+  final Key? cancelKey;
 
   @override
   Widget build(BuildContext context) {
@@ -765,8 +797,9 @@ class V5Confirmation extends StatelessWidget {
           icon ??
           (destructive ? Icons.warning_amber_rounded : Icons.help_outline),
       actions: [
-        V5DialogAction(label: cancelLabel, onPressed: onCancel),
+        V5DialogAction(key: cancelKey, label: cancelLabel, onPressed: onCancel),
         V5DialogAction(
+          key: confirmKey,
           label: confirmLabel,
           onPressed: loading ? null : onConfirm,
           style: destructive
@@ -788,6 +821,8 @@ Future<bool?> showV5Confirmation({
   bool destructive = false,
   bool barrierDismissible = true,
   IconData? icon,
+  Key? confirmKey,
+  Key? cancelKey,
 }) {
   return showV5Dialog<bool>(
     context: context,
@@ -799,6 +834,8 @@ Future<bool?> showV5Confirmation({
       cancelLabel: cancelLabel,
       destructive: destructive,
       icon: icon,
+      confirmKey: confirmKey,
+      cancelKey: cancelKey,
       onCancel: () => Navigator.of(dialogContext).pop(false),
       onConfirm: () => Navigator.of(dialogContext).pop(true),
     ),
@@ -1042,6 +1079,7 @@ class _V5PickerFormField extends StatelessWidget {
     this.errorText,
     this.leading,
     this.semanticValue,
+    this.focusNode,
   });
 
   final String label;
@@ -1053,6 +1091,7 @@ class _V5PickerFormField extends StatelessWidget {
   final IconData icon;
   final Widget? leading;
   final String? semanticValue;
+  final FocusNode? focusNode;
   final VoidCallback? onTap;
 
   @override
@@ -1074,6 +1113,7 @@ class _V5PickerFormField extends StatelessWidget {
             label: label,
             value: semanticValue ?? value,
             child: CupertinoButton(
+              focusNode: focusNode,
               padding: EdgeInsets.zero,
               borderRadius: BorderRadius.circular(V5Radius.control),
               onPressed: onTap,
@@ -1376,6 +1416,7 @@ class _V5DialogActionButton extends StatelessWidget {
         : Text(action.label);
     return switch (action.style) {
       V5DialogActionStyle.secondary => OutlinedButton(
+        key: action.key,
         onPressed: action.onPressed,
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(48),
@@ -1388,6 +1429,7 @@ class _V5DialogActionButton extends StatelessWidget {
         child: label,
       ),
       V5DialogActionStyle.primary => FilledButton(
+        key: action.key,
         onPressed: action.onPressed,
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(48),
@@ -1397,6 +1439,7 @@ class _V5DialogActionButton extends StatelessWidget {
         child: label,
       ),
       V5DialogActionStyle.destructive => FilledButton(
+        key: action.key,
         onPressed: action.onPressed,
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(48),
@@ -1476,25 +1519,33 @@ class _V5ToastOverlayState extends State<_V5ToastOverlay>
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
-    return FadeTransition(
-      opacity: curved,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.06),
-          end: Offset.zero,
-        ).animate(curved),
-        child: V5Toast(
-          message: widget.message,
-          tone: widget.tone,
-          icon: widget.icon,
-          actionLabel: widget.actionLabel,
-          onAction: widget.onAction == null
-              ? null
-              : () {
-                  widget.onAction!();
-                  _dismiss();
-                },
-          onDismiss: _dismiss,
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.06),
+            end: Offset.zero,
+          ).animate(curved),
+          child: IgnorePointer(
+            ignoring: widget.onAction == null,
+            child: V5Toast(
+              message: widget.message,
+              tone: widget.tone,
+              icon: widget.icon,
+              actionLabel: widget.actionLabel,
+              onAction: widget.onAction == null
+                  ? null
+                  : () {
+                      widget.onAction!();
+                      _dismiss();
+                    },
+              onDismiss: widget.onAction == null ? null : _dismiss,
+            ),
+          ),
         ),
       ),
     );
