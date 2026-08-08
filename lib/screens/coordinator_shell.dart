@@ -30,6 +30,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
   late int _currentIndex;
   final List<Widget?> _screens = List<Widget?>.filled(4, null);
   final _publishedNeeds = CoordinatorPublishedNeeds();
+  int _actorsRevision = 0;
 
   @override
   void initState() {
@@ -48,6 +49,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
     ),
     1 => CoordinatorTerritoryScreen(publishedNeeds: _publishedNeeds),
     2 => CoordinatorActorsScreen(
+      key: ValueKey('coordinator-actors-$_actorsRevision'),
       onManageResponsibles: _openResponsibles,
       onManageLocations: _openLocations,
     ),
@@ -89,9 +91,9 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
     );
   }
 
-  void _openResponsibles() {
+  Future<void> _openResponsibles() async {
     final liveData = LiveCoordinationDataScope.of(context);
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       AppPageRoute<void>(
         builder: (_) => LiveCoordinationDataScope(
           data: liveData,
@@ -99,6 +101,11 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
         ),
       ),
     );
+    if (!mounted) return;
+    setState(() {
+      _actorsRevision++;
+      _screens[2] = _createScreen(2);
+    });
   }
 
   void _openLocations() {
