@@ -9,6 +9,7 @@ import 'package:interface_incendies_gironde/screens/coordinator_territory_screen
 import 'package:interface_incendies_gironde/theme/coordinator_identity.dart';
 import 'package:interface_incendies_gironde/widgets/coordinator_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/territory_components.dart';
+import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
   testWidgets('coordinator journey exposes four territorial V5 tabs', (
@@ -36,20 +37,14 @@ void main() {
     expect(find.byKey(const Key('coordinator-global-dashboard')), findsNothing);
     expect(find.text('Déclarer'), findsNothing);
 
-    final navigation = tester.widget<NavigationBar>(
+    final navigation = tester.widget<V5BottomBar>(
       find.byKey(const Key('coordinator-bottom-navigation')),
     );
     expect(navigation.destinations, hasLength(4));
     final identity = CoordinatorIdentity.of(
       tester.element(find.byType(CoordinatorShell)),
     );
-    final navigationTheme = NavigationBarTheme.of(
-      tester.element(find.byKey(const Key('coordinator-bottom-navigation'))),
-    );
-    expect(
-      navigationTheme.iconTheme?.resolve({WidgetState.selected})?.color,
-      identity.accent,
-    );
+    expect(navigation.selectedColor, identity.accent);
 
     await tester.tap(find.text('Territoire'));
     await tester.pumpAndSettle();

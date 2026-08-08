@@ -7,6 +7,7 @@ import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import 'coordinator_overview_screen.dart';
 
 class CoordinatorMoreScreen extends StatefulWidget {
@@ -274,7 +275,7 @@ class CoordinatorProfileScreen extends StatelessWidget {
       stream: LiveCoordinationDataScope.of(context).watchResponsibleAccess(),
       builder: (context, snapshot) => Scaffold(
         backgroundColor: colors.canvas,
-        appBar: AppBar(title: const Text('Profil')),
+        appBar: const V5SecondaryNavigationBar(title: 'Profil'),
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(

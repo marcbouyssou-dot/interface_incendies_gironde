@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/widgets/location_multi_selector.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
 void main() {
   Future<Set<String> Function()> pumpSelector(
@@ -167,7 +168,7 @@ void main() {
     await tester.tap(find.byKey(groupKey));
     await tester.pumpAndSettle();
     expect(find.byKey(locationKey), findsOneWidget);
-    final tile = tester.widget<CheckboxListTile>(find.byKey(locationKey));
+    final tile = tester.widget<V5CheckboxTile>(find.byKey(locationKey));
     expect(tile.value, isTrue);
   });
 

@@ -8,6 +8,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/responsible_mission_card.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
@@ -209,29 +210,17 @@ class _ResponsibleHomeContent extends StatelessWidget {
                       secured: remaining == 0,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        key: const Key('responsible-create-need'),
-                        onPressed: onCreateNeed,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(50),
-                          backgroundColor: remaining == 0
-                              ? colors.warningContainer
-                              : colors.accent,
-                          foregroundColor: remaining == 0
-                              ? colors.accent
-                              : colors.onAccent,
-                          elevation: 0,
-                          shadowColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              V5Radius.control,
-                            ),
-                          ),
-                        ),
-                        child: const Text('Créer un besoin'),
-                      ),
+                    V5Button(
+                      key: const Key('responsible-create-need'),
+                      expanded: true,
+                      onPressed: onCreateNeed,
+                      backgroundColor: remaining == 0
+                          ? colors.warningContainer
+                          : colors.accent,
+                      foregroundColor: remaining == 0
+                          ? colors.accent
+                          : colors.onAccent,
+                      label: 'Créer un besoin',
                     ),
                     const SizedBox(height: V5Spacing.xxxl),
                     _MissionSection(
@@ -569,13 +558,7 @@ class _ResponsibleHomeLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: SizedBox.square(
-      dimension: 22,
-      child: CircularProgressIndicator(
-        color: context.v5Colors.accent,
-        strokeWidth: 2,
-      ),
-    ),
+    child: V5ActivityIndicator(size: 22, color: context.v5Colors.accent),
   );
 }
 

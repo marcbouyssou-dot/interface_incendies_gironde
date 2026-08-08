@@ -11,6 +11,8 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
 import 'package:interface_incendies_gironde/widgets/common.dart';
+import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
 void main() {
   CoordinationNeed mission() => const CoordinationNeed(
@@ -122,8 +124,8 @@ void main() {
   }
 
   Future<void> selectNavigationTab(WidgetTester tester, int index) async {
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    navigation.onDestinationSelected?.call(index);
+    final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
+    navigation.onDestinationSelected(index);
     await tester.pumpAndSettle();
   }
 
@@ -279,7 +281,7 @@ void main() {
       await pumpApp(tester, repository, settle: false);
 
       expect(find.text('Je me mobilise'), findsNothing);
-      expect(find.byType(CircularProgressIndicator), findsWidgets);
+      expect(find.byType(V5ActivityIndicator), findsWidgets);
     },
   );
 

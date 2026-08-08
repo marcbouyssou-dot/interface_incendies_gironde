@@ -15,6 +15,7 @@ import '../widgets/decision_header.dart';
 import '../widgets/mobilization_design_system.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_controls.dart';
 import 'create_need_screen.dart';
 
 class _MissionFilterMemory {
@@ -87,7 +88,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
             }
             if (!snapshot.hasData) {
               return const _MissionsPageSurface(
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: V5ActivityIndicator()),
               );
             }
             return StreamBuilder<List<ResponsePlace>>(
@@ -110,7 +111,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                 }
                 if (!locationsSnapshot.hasData) {
                   return const _MissionsPageSurface(
-                    child: Center(child: CircularProgressIndicator()),
+                    child: Center(child: V5ActivityIndicator()),
                   );
                 }
                 return _buildContent(
@@ -709,7 +710,7 @@ class _HeroFilterChip extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: hasSelection ? colors.info : colors.textPrimary,
-                  fontSize: 12.5,
+                  fontSize: 12,
                   height: 1.2,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1023,7 +1024,7 @@ class _MissionCount extends StatelessWidget {
         label,
         style: TextStyle(
           color: colors.textSecondary,
-          fontSize: 10.5,
+          fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -1248,7 +1249,7 @@ class _FilterChip extends StatelessWidget {
                   label,
                   style: TextStyle(
                     color: selected ? selectedForeground : colors.textSecondary,
-                    fontSize: 10.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

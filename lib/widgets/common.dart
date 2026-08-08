@@ -20,6 +20,8 @@ import 'mission_card.dart';
 import 'mission_location_details.dart';
 import 'native_interactions.dart';
 import 'mobilization_design_system.dart';
+import 'v5_controls.dart';
+import 'v5_form_system.dart';
 
 class PageContainer extends StatelessWidget {
   const PageContainer({super.key, required this.child});
@@ -91,7 +93,7 @@ class PageHeader extends StatelessWidget {
                 eyebrow.toUpperCase(),
                 style: const TextStyle(
                   color: AppColors.orange,
-                  fontSize: 11,
+                  fontSize: 12,
                   letterSpacing: 1.3,
                   fontWeight: FontWeight.w800,
                 ),
@@ -336,7 +338,7 @@ class StatusPill extends StatelessWidget {
         label,
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -689,7 +691,7 @@ class _MissionCardSectionTitle extends StatelessWidget {
             label,
             style: const TextStyle(
               color: AppColors.textMuted,
-              fontSize: 11,
+              fontSize: 12,
               letterSpacing: 1.2,
               fontWeight: FontWeight.w800,
             ),
@@ -897,7 +899,7 @@ class NeedCard extends StatelessWidget {
                 icon: isMissionEditorOpening
                     ? const SizedBox.square(
                         dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: V5ActivityIndicator(),
                       )
                     : const Icon(Icons.edit_outlined),
                 label: Text(
@@ -1063,7 +1065,7 @@ class NeedCard extends StatelessWidget {
                         item,
                         style: const TextStyle(
                           color: AppColors.textMuted,
-                          fontSize: 11.5,
+                          fontSize: 12,
                           height: 1.2,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1120,7 +1122,7 @@ class NeedCard extends StatelessWidget {
                 icon: isMissionEditorOpening
                     ? const SizedBox.square(
                         dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: V5ActivityIndicator(),
                       )
                     : const Icon(Icons.edit_outlined),
                 label: Text(
@@ -1265,10 +1267,7 @@ class _NeedActionsState extends State<_NeedActions> {
             !engagementSnapshot.hasData) {
           return const FilledButton(
             onPressed: null,
-            child: SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            child: SizedBox.square(dimension: 20, child: V5ActivityIndicator()),
           );
         }
         final engagement = engagementSnapshot.data;
@@ -1591,8 +1590,8 @@ class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Se désengager de cette mission ?'),
+    return V5Dialog(
+      title: 'Se désengager de cette mission ?',
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1608,23 +1607,16 @@ class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
         ],
       ),
       actions: [
-        TextButton(
+        V5DialogAction(
+          label: 'Annuler',
           onPressed: _submitting ? null : () => Navigator.pop(context),
-          child: const Text('Annuler'),
         ),
-        FilledButton(
+        V5DialogAction(
           key: const Key('confirm-cancel-engagement'),
+          label: _submitting ? 'Désengagement…' : 'Confirmer mon désengagement',
           onPressed: _submitting ? null : _confirm,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.red),
-          child: _submitting
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('Confirmer mon désengagement'),
+          style: V5DialogActionStyle.destructive,
+          loading: _submitting,
         ),
       ],
     );
@@ -1725,8 +1717,8 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Annuler ce besoin ?'),
+    return V5Dialog(
+      title: 'Annuler ce besoin ?',
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1743,14 +1735,12 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
             Text('MK engagés : ${widget.need.registeredPhysiotherapists}'),
             Text('PP engagés : ${widget.need.registeredPodiatrists}'),
             const SizedBox(height: 14),
-            TextField(
+            V5TextField(
               key: const Key('cancellation-reason'),
+              label: 'Motif de l’annulation',
               controller: _reason,
               maxLength: 300,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Motif de l’annulation',
-              ),
             ),
             if (_error != null)
               Text(_error!, style: const TextStyle(color: AppColors.red)),
@@ -1758,23 +1748,16 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        V5DialogAction(
+          label: 'Retour',
           onPressed: _submitting ? null : () => Navigator.pop(context),
-          child: const Text('Retour'),
         ),
-        FilledButton(
+        V5DialogAction(
           key: const Key('confirm-cancel-mission'),
+          label: _submitting ? 'Annulation…' : 'Confirmer l’annulation',
           onPressed: _submitting ? null : _confirm,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.red),
-          child: _submitting
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('Confirmer l’annulation'),
+          style: V5DialogActionStyle.destructive,
+          loading: _submitting,
         ),
       ],
     );
@@ -2002,7 +1985,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
           color: _ProfessionalProfileVisuals.background,
           child: Padding(
             padding: EdgeInsets.all(32),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: V5ActivityIndicator()),
           ),
         ),
       );
@@ -2043,10 +2026,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                       ),
                     ),
                     const SizedBox(height: 14),
-                    FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.orange,
-                      ),
+                    V5Button(
+                      backgroundColor: AppColors.orange,
+                      foregroundColor: Colors.white,
                       onPressed: () {
                         setState(() {
                           _loadingProfile = true;
@@ -2054,7 +2036,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                         });
                         _loadProfile();
                       },
-                      child: const Text('Réessayer'),
+                      label: 'Réessayer',
                     ),
                   ],
                 ),
@@ -2095,7 +2077,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 'PROFIL PROFESSIONNEL',
                                 style: TextStyle(
                                   color: _ProfessionalProfileVisuals.textMuted,
-                                  fontSize: 10,
+                                  fontSize: 12,
                                   letterSpacing: 1.2,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -2462,18 +2444,15 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                         child: Column(
                           children: [
                             for (final equipment in _equipmentOptions)
-                              CheckboxListTile(
+                              V5CheckboxTile(
                                 key: Key('equipment-${equipment.id}'),
-                                contentPadding: EdgeInsets.zero,
                                 dense: true,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                title: Text(equipment.label),
+                                label: equipment.label,
                                 value: _selectedEquipment.contains(
                                   equipment.id,
                                 ),
                                 onChanged: (selected) => setState(() {
-                                  if (selected ?? false) {
+                                  if (selected) {
                                     _selectedEquipment.add(equipment.id);
                                   } else {
                                     _selectedEquipment.remove(equipment.id);
@@ -2488,20 +2467,14 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                               ),
                               const SizedBox(height: 2),
                               for (final equipment in _incompatibleEquipment)
-                                CheckboxListTile(
+                                V5CheckboxTile(
                                   key: Key('legacy-equipment-$equipment'),
-                                  contentPadding: EdgeInsets.zero,
                                   dense: true,
-                                  controlAffinity:
-                                      ListTileControlAffinity.leading,
-                                  title: Text(
-                                    ProfessionalEquipmentRegistry.displayLabel(
-                                      equipment,
-                                    ),
-                                  ),
-                                  subtitle: const Text(
-                                    'Non proposé pour cette profession',
-                                  ),
+                                  label:
+                                      ProfessionalEquipmentRegistry.displayLabel(
+                                        equipment,
+                                      ),
+                                  subtitle: 'Non proposé pour cette profession',
                                   value: true,
                                   onChanged: (selected) {
                                     if (selected == false) {
@@ -2528,32 +2501,17 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                       ),
                       const SizedBox(height: 18),
                     ],
-                    SizedBox(
-                      width: double.infinity,
-                      height: AppFormLayout.actionHeight,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.orange,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: AppColors.border,
-                          disabledForegroundColor: AppColors.textMuted,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        onPressed: _submitting || !_hasAvailableProfession
-                            ? null
-                            : _submit,
-                        child: _submitting
-                            ? const SizedBox.square(
-                                dimension: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text('CONFIRMER MA PARTICIPATION'),
-                      ),
+                    V5Button(
+                      expanded: true,
+                      backgroundColor: AppColors.orange,
+                      foregroundColor: Colors.white,
+                      loading: _submitting,
+                      onPressed: _submitting || !_hasAvailableProfession
+                          ? null
+                          : _submit,
+                      label: _submitting
+                          ? 'Confirmation…'
+                          : 'CONFIRMER MA PARTICIPATION',
                     ),
                   ],
                 ),
@@ -2736,7 +2694,7 @@ class _ProfileFormCard extends StatelessWidget {
                       eyebrow,
                       style: const TextStyle(
                         color: _ProfessionalProfileVisuals.textMuted,
-                        fontSize: 9,
+                        fontSize: 12,
                         letterSpacing: 0.9,
                         fontWeight: FontWeight.w800,
                       ),
@@ -2944,7 +2902,7 @@ class _ProfileSummary extends StatelessWidget {
                       'MON PROFIL',
                       style: TextStyle(
                         color: _ProfessionalProfileVisuals.textMuted,
-                        fontSize: 9,
+                        fontSize: 12,
                         letterSpacing: 0.9,
                         fontWeight: FontWeight.w800,
                       ),
@@ -3057,7 +3015,7 @@ class _ProfileSummaryItem extends StatelessWidget {
                 label,
                 style: const TextStyle(
                   color: _ProfessionalProfileVisuals.textMuted,
-                  fontSize: 9,
+                  fontSize: 12,
                   letterSpacing: 0.45,
                   fontWeight: FontWeight.w800,
                 ),

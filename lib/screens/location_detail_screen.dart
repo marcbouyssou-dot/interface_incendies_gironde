@@ -4,6 +4,8 @@ import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
+import '../widgets/v5_controls.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import 'create_need_screen.dart';
 
 abstract final class _MissionDetailVisuals {
@@ -45,19 +47,7 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _MissionDetailVisuals.background,
-      appBar: AppBar(
-        title: const Text('Fiche du lieu'),
-        backgroundColor: _MissionDetailVisuals.background,
-        foregroundColor: _MissionDetailVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _MissionDetailVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      appBar: const V5SecondaryNavigationBar(title: 'Fiche du lieu'),
       body: SafeArea(
         top: false,
         child: StreamBuilder<ResponsibleAccess?>(
@@ -109,9 +99,7 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
                           }
                           if (!locationsSnapshot.hasData ||
                               !missionsSnapshot.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
+                            return const Center(child: V5ActivityIndicator());
                           }
                           final currentLocation = _locationFrom(
                             locationsSnapshot.data!,
@@ -171,7 +159,7 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
           );
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: V5ActivityIndicator());
         }
         return _buildContent(context, currentLocation, snapshot.data!, access);
       },
@@ -313,7 +301,7 @@ class _LocationSummaryCard extends StatelessWidget {
             'LIEU D’INTERVENTION',
             style: TextStyle(
               color: _MissionDetailVisuals.textMuted,
-              fontSize: 10,
+              fontSize: 12,
               letterSpacing: 1.15,
               fontWeight: FontWeight.w800,
             ),
@@ -406,7 +394,7 @@ class _ActiveNeedsHeader extends StatelessWidget {
                 'MISSIONS ACTIVES',
                 style: TextStyle(
                   color: _MissionDetailVisuals.textMuted,
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 1.1,
                   fontWeight: FontWeight.w800,
                 ),

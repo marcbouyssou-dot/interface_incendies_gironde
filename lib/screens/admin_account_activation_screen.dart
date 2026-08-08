@@ -9,6 +9,7 @@ import '../firebase_startup_gate.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/brand_mark.dart';
+import '../widgets/v5_controls.dart';
 
 abstract final class _ActivationVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -18,7 +19,6 @@ abstract final class _ActivationVisuals {
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF7C817F);
   static const orange = Color(0xFFF25C05);
-  static const orangeSoft = Color(0xFFFFE8D9);
 }
 
 enum ActivationFailure { invalid, expired, alreadyUsed, unavailable }
@@ -443,13 +443,9 @@ class _ActivationLoading extends StatelessWidget {
       children: [
         Padding(
           padding: EdgeInsets.symmetric(vertical: 6),
-          child: SizedBox(
-            width: 34,
-            height: 34,
-            child: CircularProgressIndicator(
-              color: _ActivationVisuals.orange,
-              strokeWidth: 3,
-            ),
+          child: V5ActivityIndicator(
+            size: 34,
+            color: _ActivationVisuals.orange,
           ),
         ),
         SizedBox(height: 18),
@@ -603,26 +599,14 @@ class _ActivationForm extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 22),
-          SizedBox(
-            height: 56,
-            child: FilledButton(
-              key: const Key('activate-account'),
-              onPressed: submitting ? null : onSubmit,
-              style: FilledButton.styleFrom(
-                backgroundColor: _ActivationVisuals.orange,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: _ActivationVisuals.orangeSoft,
-                disabledForegroundColor: _ActivationVisuals.orange,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              child: Text(submitting ? 'Activation…' : 'Activer mon accès'),
-            ),
+          V5Button(
+            key: const Key('activate-account'),
+            expanded: true,
+            backgroundColor: _ActivationVisuals.orange,
+            foregroundColor: Colors.white,
+            loading: submitting,
+            onPressed: submitting ? null : onSubmit,
+            label: submitting ? 'Activation…' : 'Activer mon accès',
           ),
         ],
       ),
@@ -717,24 +701,12 @@ class _ActivationMessage extends StatelessWidget {
         ),
         if (actionLabel != null && onAction != null) ...[
           const SizedBox(height: 22),
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: FilledButton(
-              onPressed: onAction,
-              style: FilledButton.styleFrom(
-                backgroundColor: _ActivationVisuals.orange,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              child: Text(actionLabel!),
-            ),
+          V5Button(
+            expanded: true,
+            onPressed: onAction,
+            backgroundColor: _ActivationVisuals.orange,
+            foregroundColor: Colors.white,
+            label: actionLabel!,
           ),
         ],
       ],

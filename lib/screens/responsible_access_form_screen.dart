@@ -6,7 +6,9 @@ import '../models/responsible_account.dart';
 import '../repositories/responsible_access_administration_repository.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
+import '../widgets/v5_secondary_navigation.dart';
 
 abstract final class _AccessFormVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -16,7 +18,6 @@ abstract final class _AccessFormVisuals {
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF7C817F);
   static const orange = Color(0xFFF25C05);
-  static const orangeSoft = Color(0xFFFFE8D9);
 }
 
 class ResponsibleAccessFormScreen extends StatefulWidget {
@@ -71,19 +72,7 @@ class _ResponsibleAccessFormScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _AccessFormVisuals.background,
-      appBar: AppBar(
-        title: const Text('Gérer l’accès'),
-        backgroundColor: _AccessFormVisuals.background,
-        foregroundColor: _AccessFormVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _AccessFormVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      appBar: const V5SecondaryNavigationBar(title: 'Gérer l’accès'),
       bottomNavigationBar: Material(
         color: _AccessFormVisuals.surface,
         elevation: 6,
@@ -126,28 +115,14 @@ class _ResponsibleAccessFormScreenState
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: FilledButton(
+                      child: V5Button(
                         key: const Key('save-responsible-access'),
+                        expanded: true,
+                        backgroundColor: _AccessFormVisuals.orange,
+                        foregroundColor: Colors.white,
+                        loading: _submitting,
                         onPressed: _submitting ? null : _save,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _AccessFormVisuals.orange,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor:
-                              _AccessFormVisuals.orangeSoft,
-                          disabledForegroundColor: _AccessFormVisuals.orange,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            _submitting ? 'Enregistrement…' : 'Enregistrer',
-                          ),
-                        ),
+                        label: _submitting ? 'Enregistrement…' : 'Enregistrer',
                       ),
                     ),
                   ],
@@ -215,29 +190,14 @@ class _ResponsibleAccessFormScreenState
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: _AccessFormVisuals.border),
                       ),
-                      child: SwitchListTile.adaptive(
+                      child: V5SwitchTile(
                         key: const Key('responsible-active-switch'),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 3,
-                        ),
-                        title: const Text(
-                          'Compte actif',
-                          style: TextStyle(
-                            color: _AccessFormVisuals.navy,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        subtitle: Text(
-                          _active ? 'Accès autorisé' : 'Accès désactivé',
-                          style: const TextStyle(
-                            color: _AccessFormVisuals.textMuted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        title: 'Compte actif',
+                        subtitle: _active
+                            ? 'Accès autorisé'
+                            : 'Accès désactivé',
                         value: _active,
-                        activeThumbColor: _AccessFormVisuals.orange,
+                        activeColor: _AccessFormVisuals.orange,
                         onChanged: _submitting
                             ? null
                             : (value) => setState(() => _active = value),

@@ -14,7 +14,9 @@ import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import 'responsible_access_form_screen.dart';
 
 abstract final class _ResponsibleVisuals {
@@ -25,7 +27,6 @@ abstract final class _ResponsibleVisuals {
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF7C817F);
   static const orange = Color(0xFFF25C05);
-  static const orangeSoft = Color(0xFFFFE8D9);
 }
 
 class AdminInvitationsScreen extends StatefulWidget {
@@ -55,19 +56,7 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _ResponsibleVisuals.background,
-      appBar: AppBar(
-        title: const Text('Responsables'),
-        backgroundColor: _ResponsibleVisuals.background,
-        foregroundColor: _ResponsibleVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _ResponsibleVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      appBar: const V5SecondaryNavigationBar(title: 'Responsables'),
       body: SafeArea(
         top: false,
         child: StreamBuilder<ResponsibleAccess?>(
@@ -566,7 +555,7 @@ class _ResponsibleHeader extends StatelessWidget {
                 'ADMINISTRATION',
                 style: TextStyle(
                   color: _ResponsibleVisuals.textMuted,
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 1.25,
                   fontWeight: FontWeight.w800,
                 ),
@@ -823,7 +812,7 @@ class _AccountStatusBadge extends StatelessWidget {
         active ? 'Actif' : 'Inactif',
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -959,7 +948,7 @@ class _InvitationCard extends StatelessWidget {
               'Expire le ${FrenchDateTime.date(invitation.expiresAt)}',
               style: const TextStyle(
                 color: _ResponsibleVisuals.textMuted,
-                fontSize: 11,
+                fontSize: 12,
                 height: 1.4,
                 fontWeight: FontWeight.w600,
               ),
@@ -969,20 +958,15 @@ class _InvitationCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton.icon(
+                  V5Button(
                     key: Key('resend-invitation-${invitation.id}'),
                     onPressed: provisioning ? null : onResend,
-                    style: _primaryInvitationButtonStyle(),
-                    icon: provisioning
-                        ? const SizedBox.square(
-                            dimension: 17,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.send_outlined, size: 19),
-                    label: Text(provisioning ? 'Envoi…' : 'Renvoyer'),
+                    expanded: true,
+                    backgroundColor: _ResponsibleVisuals.orange,
+                    foregroundColor: Colors.white,
+                    loading: provisioning,
+                    icon: Icons.send_outlined,
+                    label: provisioning ? 'Envoi…' : 'Renvoyer',
                   ),
                   const SizedBox(height: 4),
                   Wrap(
@@ -1013,12 +997,14 @@ class _InvitationCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton.icon(
+                  V5Button(
                     key: Key('reactivate-invitation-${invitation.id}'),
                     onPressed: onReactivate,
-                    style: _primaryInvitationButtonStyle(),
-                    icon: const Icon(Icons.refresh_rounded, size: 19),
-                    label: const Text('Réactiver'),
+                    expanded: true,
+                    backgroundColor: _ResponsibleVisuals.orange,
+                    foregroundColor: Colors.white,
+                    icon: Icons.refresh_rounded,
+                    label: 'Réactiver',
                   ),
                   const SizedBox(height: 4),
                   Wrap(
@@ -1071,22 +1057,12 @@ class _InvitationStatusBadge extends StatelessWidget {
         label,
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
       ),
     );
   }
-}
-
-ButtonStyle _primaryInvitationButtonStyle() {
-  return FilledButton.styleFrom(
-    backgroundColor: _ResponsibleVisuals.orange,
-    foregroundColor: Colors.white,
-    minimumSize: const Size.fromHeight(50),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
-  );
 }
 
 class _EmptyInvitations extends StatelessWidget {
@@ -1206,20 +1182,8 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _ResponsibleVisuals.background,
-      appBar: AppBar(
-        title: Text(
-          _isEditing ? 'Modifier l’invitation' : 'Inviter un responsable',
-        ),
-        backgroundColor: _ResponsibleVisuals.background,
-        foregroundColor: _ResponsibleVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _ResponsibleVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
+      appBar: V5SecondaryNavigationBar(
+        title: _isEditing ? 'Modifier l’invitation' : 'Inviter un responsable',
       ),
       bottomNavigationBar: _InvitationSubmitBar(
         submitting: _submitting,
@@ -1469,44 +1433,23 @@ class _InvitationSubmitBar extends StatelessWidget {
             heightFactor: 1,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
-              child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: FilledButton.icon(
-                  key: Key(
-                    editing
-                        ? 'save-admin-invitation'
-                        : 'create-admin-invitation',
-                  ),
-                  onPressed: enabled ? onSubmit : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _ResponsibleVisuals.orange,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: _ResponsibleVisuals.orangeSoft,
-                    disabledForegroundColor: _ResponsibleVisuals.orange,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  icon: submitting
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send_rounded),
-                  label: Text(
-                    submitting
-                        ? (editing ? 'Enregistrement…' : 'Création…')
-                        : (editing ? 'Enregistrer' : 'Créer l’invitation'),
-                  ),
+              child: V5Button(
+                key: Key(
+                  editing ? 'save-admin-invitation' : 'create-admin-invitation',
                 ),
+                expanded: true,
+                backgroundColor: _ResponsibleVisuals.orange,
+                foregroundColor: Colors.white,
+                loading: submitting,
+                icon: Icons.send_rounded,
+                onPressed: enabled ? onSubmit : null,
+                label: submitting
+                    ? editing
+                          ? 'Enregistrement…'
+                          : 'Création…'
+                    : editing
+                    ? 'Enregistrer'
+                    : 'Créer l’invitation',
               ),
             ),
           ),

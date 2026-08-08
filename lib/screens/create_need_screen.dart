@@ -12,6 +12,7 @@ import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
 abstract final class _CreateNeedVisuals {
@@ -495,7 +496,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                                       'pour afficher le matériel correspondant.',
                                       style: TextStyle(
                                         color: _CreateNeedVisuals.textMuted,
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         height: 1.4,
                                       ),
                                     ),
@@ -516,11 +517,11 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                                   runSpacing: 7,
                                   children: [
                                     for (final equipment in displayedEquipment)
-                                      FilterChip(
+                                      V5ChoiceChip(
                                         key: Key(
                                           'mission-equipment-${equipment.id}',
                                         ),
-                                        label: Text(equipment.label),
+                                        label: equipment.label,
                                         selected: _equipment.contains(
                                           equipment.label,
                                         ),
@@ -537,38 +538,6 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                                                   );
                                                 }
                                               }),
-                                        selectedColor:
-                                            _CreateNeedVisuals.orangeSoft,
-                                        backgroundColor: Colors.white,
-                                        checkmarkColor:
-                                            _CreateNeedVisuals.orange,
-                                        showCheckmark: true,
-                                        side: BorderSide(
-                                          color:
-                                              _equipment.contains(
-                                                equipment.label,
-                                              )
-                                              ? _CreateNeedVisuals.orange
-                                              : _CreateNeedVisuals.borderStrong,
-                                          width:
-                                              _equipment.contains(
-                                                equipment.label,
-                                              )
-                                              ? 1.4
-                                              : 1,
-                                        ),
-                                        shape: const StadiumBorder(),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 5,
-                                          vertical: 2,
-                                        ),
-                                        materialTapTargetSize:
-                                            MaterialTapTargetSize.padded,
-                                        labelStyle: const TextStyle(
-                                          color: _CreateNeedVisuals.navy,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                        ),
                                       ),
                                   ],
                                 ),
@@ -613,56 +582,22 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       ),
                     ],
                     const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: FilledButton(
-                        key: Key(
-                          _isEditing ? 'update-mission' : 'publish-mission',
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _CreateNeedVisuals.orange,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: _CreateNeedVisuals.orange
-                              .withValues(alpha: 0.55),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 1,
-                          shadowColor: _CreateNeedVisuals.orange.withValues(
-                            alpha: 0.24,
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        onPressed: _publishing ? null : () => _publish(access),
-                        child: _publishing
-                            ? Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    _isEditing
-                                        ? 'Enregistrement…'
-                                        : 'Publication…',
-                                  ),
-                                ],
-                              )
-                            : Text(
-                                _isEditing
-                                    ? 'Enregistrer les modifications'
-                                    : 'Publier le besoin',
-                              ),
+                    V5Button(
+                      key: Key(
+                        _isEditing ? 'update-mission' : 'publish-mission',
                       ),
+                      expanded: true,
+                      backgroundColor: _CreateNeedVisuals.orange,
+                      foregroundColor: Colors.white,
+                      loading: _publishing,
+                      onPressed: _publishing ? null : () => _publish(access),
+                      label: _publishing
+                          ? _isEditing
+                                ? 'Enregistrement…'
+                                : 'Publication…'
+                          : _isEditing
+                          ? 'Enregistrer les modifications'
+                          : 'Publier le besoin',
                     ),
                     const SizedBox(height: 8),
                     Center(
@@ -672,7 +607,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             : '$requestedProfessionals professionnel${requestedProfessionals > 1 ? 's' : ''} demandé${requestedProfessionals > 1 ? 's' : ''}',
                         style: const TextStyle(
                           color: _CreateNeedVisuals.textMuted,
-                          fontSize: 10,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -689,7 +624,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                           minimumSize: const Size(0, 36),
                           tapTargetSize: MaterialTapTargetSize.padded,
                           textStyle: const TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1056,7 +991,7 @@ class _NeedSummaryCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: _CreateNeedVisuals.textMuted,
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1081,7 +1016,7 @@ class _NeedSummaryCard extends StatelessWidget {
                       text: professionLabel,
                       style: const TextStyle(
                         color: _CreateNeedVisuals.textMuted,
-                        fontSize: 9,
+                        fontSize: 12,
                         height: 1.8,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1114,7 +1049,7 @@ class _EquipmentProfessionContext extends StatelessWidget {
           'pour :',
           style: TextStyle(
             color: _CreateNeedVisuals.textMuted,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1145,7 +1080,7 @@ class _EquipmentProfessionContext extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: _CreateNeedVisuals.navy,
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -1170,7 +1105,7 @@ class _CreateNeedFieldLabel extends StatelessWidget {
       label.toUpperCase(),
       style: const TextStyle(
         color: _CreateNeedVisuals.textMuted,
-        fontSize: 9,
+        fontSize: 12,
         letterSpacing: 0.45,
         fontWeight: FontWeight.w700,
       ),
@@ -1323,30 +1258,14 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                           ),
                         ],
                         const SizedBox(height: 22),
-                        SizedBox(
-                          height: 56,
-                          child: FilledButton(
-                            key: const Key('manager-sign-in'),
-                            onPressed: _loading ? null : _signIn,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _CreateNeedVisuals.orange,
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor:
-                                  _CreateNeedVisuals.orangeSoft,
-                              disabledForegroundColor:
-                                  _CreateNeedVisuals.orange,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              textStyle: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            child: Text(
-                              _loading ? 'Connexion…' : 'Se connecter',
-                            ),
-                          ),
+                        V5Button(
+                          key: const Key('manager-sign-in'),
+                          expanded: true,
+                          backgroundColor: _CreateNeedVisuals.orange,
+                          foregroundColor: Colors.white,
+                          loading: _loading,
+                          onPressed: _loading ? null : _signIn,
+                          label: _loading ? 'Connexion…' : 'Se connecter',
                         ),
                       ],
                     ),
@@ -1391,7 +1310,7 @@ class _ResponsibleLoginHeader extends StatelessWidget {
                     'ESPACE RESPONSABLE',
                     style: TextStyle(
                       color: _CreateNeedVisuals.textMuted,
-                      fontSize: 9,
+                      fontSize: 12,
                       letterSpacing: 1.1,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1512,9 +1431,10 @@ class _MissionPublishedView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          FilledButton(
+          V5Button(
+            expanded: true,
             onPressed: onViewMission,
-            child: const Text('Voir la mission'),
+            label: 'Voir la mission',
           ),
           const SizedBox(height: 10),
           OutlinedButton(
@@ -1714,7 +1634,7 @@ class _QuotaStepper extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: _CreateNeedVisuals.navy,
-                fontSize: 12.5,
+                fontSize: 12,
                 height: 1.15,
                 fontWeight: FontWeight.w700,
               ),

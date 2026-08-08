@@ -11,6 +11,7 @@ import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/native_interactions.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
 class ProfessionalProfileScreen extends StatefulWidget {
@@ -259,14 +260,11 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                                 if (widget.onExitCrossRolePreview != null)
                                   Align(
                                     alignment: Alignment.centerLeft,
-                                    child: FilledButton.tonalIcon(
+                                    child: V5Button(
                                       onPressed: widget.onExitCrossRolePreview,
-                                      icon: const Icon(
-                                        Icons.arrow_back_rounded,
-                                      ),
-                                      label: const Text(
-                                        'Revenir à mon espace réel',
-                                      ),
+                                      icon: Icons.arrow_back_rounded,
+                                      tone: V5ButtonTone.tonal,
+                                      label: 'Revenir à mon espace réel',
                                     ),
                                   ),
                                 const SizedBox(height: V5Spacing.sm),
@@ -652,16 +650,14 @@ class _ProfessionalProfileEditorState
                 child: Column(
                   children: [
                     for (final equipment in _equipmentOptions)
-                      CheckboxListTile(
+                      V5CheckboxTile(
                         key: Key(
                           'professional-profile-equipment-${equipment.id}',
                         ),
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(equipment.label),
+                        label: equipment.label,
                         value: _equipment.contains(equipment.id),
                         onChanged: (selected) => setState(() {
-                          if (selected == true) {
+                          if (selected) {
                             _equipment.add(equipment.id);
                           } else {
                             _equipment.remove(equipment.id);
@@ -683,18 +679,12 @@ class _ProfessionalProfileEditorState
                 ),
               ),
               const SizedBox(height: V5Spacing.lg),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  key: const Key('save-professional-profile'),
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Enregistrer'),
-                ),
+              V5Button(
+                key: const Key('save-professional-profile'),
+                expanded: true,
+                loading: _saving,
+                onPressed: _saving ? null : _save,
+                label: _saving ? 'Enregistrement…' : 'Enregistrer',
               ),
             ],
           ),

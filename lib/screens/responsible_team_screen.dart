@@ -7,6 +7,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_controls.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 
 extension on EngagementStatus {
@@ -80,12 +81,9 @@ class _ResponsibleTeamScreenState extends State<ResponsibleTeamScreen> {
                     if (!missionsSnapshot.hasData ||
                         !locationsSnapshot.hasData) {
                       return Center(
-                        child: SizedBox.square(
-                          dimension: 22,
-                          child: CircularProgressIndicator(
-                            color: context.v5Colors.accent,
-                            strokeWidth: 2,
-                          ),
+                        child: V5ActivityIndicator(
+                          size: 22,
+                          color: context.v5Colors.accent,
                         ),
                       );
                     }
@@ -457,7 +455,7 @@ class _TeamMemberRowState extends State<_TeamMemberRow> {
               if (_updating)
                 const SizedBox.square(
                   dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: V5ActivityIndicator(),
                 )
               else
                 PopupMenuButton<EngagementStatus>(

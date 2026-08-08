@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_secondary_navigation.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -18,7 +19,7 @@ class AboutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('À propos')),
+      appBar: const V5SecondaryNavigationBar(title: 'À propos'),
       body: SafeArea(
         child: PageContainer(
           child: ListView(
@@ -82,7 +83,7 @@ class AboutScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppColors.textMuted,
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.w400,
                 ),
               ),

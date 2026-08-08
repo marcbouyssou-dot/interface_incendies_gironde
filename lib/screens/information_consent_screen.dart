@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_identity.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import 'legal_notice_screen.dart';
 import 'privacy_policy_screen.dart';
 
@@ -22,22 +23,8 @@ class InformationConsentScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _TermsVisuals.background,
-      appBar: AppBar(
-        title: const Text(
-          'Informations et consentement',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        backgroundColor: _TermsVisuals.background,
-        foregroundColor: _TermsVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _TermsVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
+      appBar: const V5SecondaryNavigationBar(
+        title: 'Informations et consentement',
       ),
       body: SafeArea(
         top: false,
@@ -151,7 +138,7 @@ class _TermsHeader extends StatelessWidget {
           AppIdentity.productName.toUpperCase(),
           style: const TextStyle(
             color: _TermsVisuals.textMuted,
-            fontSize: 10,
+            fontSize: 12,
             letterSpacing: 1.25,
             fontWeight: FontWeight.w800,
           ),

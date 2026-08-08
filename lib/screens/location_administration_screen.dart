@@ -8,7 +8,9 @@ import '../repositories/location_administration_repository_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import 'admin_location_form_screen.dart';
 
 abstract final class _LocationAdminVisuals {
@@ -62,19 +64,7 @@ class _LocationAdministrationScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _LocationAdminVisuals.background,
-      appBar: AppBar(
-        title: const Text('Lieux'),
-        backgroundColor: _LocationAdminVisuals.background,
-        foregroundColor: _LocationAdminVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _LocationAdminVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      appBar: const V5SecondaryNavigationBar(title: 'Lieux'),
       body: SafeArea(
         top: false,
         child: StreamBuilder<ResponsibleAccess?>(
@@ -373,7 +363,7 @@ class _LocationAdminHeader extends StatelessWidget {
           'ADMINISTRATION',
           style: TextStyle(
             color: _LocationAdminVisuals.textMuted,
-            fontSize: 10,
+            fontSize: 12,
             letterSpacing: 1.25,
             fontWeight: FontWeight.w800,
           ),
@@ -400,26 +390,14 @@ class _LocationAdminHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 17),
-        SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: FilledButton.icon(
-            key: const Key('admin-location-create'),
-            onPressed: onCreate,
-            style: FilledButton.styleFrom(
-              backgroundColor: _LocationAdminVisuals.orange,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            icon: const Icon(Icons.add_location_alt_outlined),
-            label: const Text('Créer un lieu'),
-          ),
+        V5Button(
+          key: const Key('admin-location-create'),
+          expanded: true,
+          backgroundColor: _LocationAdminVisuals.orange,
+          foregroundColor: Colors.white,
+          icon: Icons.add_location_alt_outlined,
+          onPressed: onCreate,
+          label: 'Créer un lieu',
         ),
       ],
     );
@@ -684,10 +662,12 @@ class _LoadError extends StatelessWidget {
   Widget build(BuildContext context) => _LocationAdminMessageState(
     icon: Icons.cloud_off_outlined,
     message: 'Les lieux ne sont pas disponibles.',
-    action: FilledButton(
+    action: V5Button(
+      expanded: true,
       onPressed: onRetry,
-      style: _locationAdminMessageButtonStyle(),
-      child: const Text('Réessayer'),
+      backgroundColor: _LocationAdminVisuals.orange,
+      foregroundColor: Colors.white,
+      label: 'Réessayer',
     ),
   );
 }
@@ -756,21 +736,13 @@ class _AccessRefused extends StatelessWidget {
     message: 'Accès coordinateur actif requis.',
     action: onRetry == null
         ? null
-        : FilledButton(
+        : V5Button(
+            expanded: true,
             onPressed: onRetry,
-            style: _locationAdminMessageButtonStyle(),
-            child: const Text('Réessayer'),
+            backgroundColor: _LocationAdminVisuals.orange,
+            foregroundColor: Colors.white,
+            label: 'Réessayer',
           ),
-  );
-}
-
-ButtonStyle _locationAdminMessageButtonStyle() {
-  return FilledButton.styleFrom(
-    backgroundColor: _LocationAdminVisuals.orange,
-    foregroundColor: Colors.white,
-    minimumSize: const Size.fromHeight(52),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    textStyle: const TextStyle(fontWeight: FontWeight.w800),
   );
 }
 

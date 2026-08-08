@@ -155,7 +155,7 @@ class ImpactBanner extends StatelessWidget {
                       ),
                   ],
                 ),
-                style: const TextStyle(fontSize: 12.5, height: 1.25),
+                style: const TextStyle(fontSize: 12, height: 1.25),
               ),
             ),
             if (trailing != null) ...[
@@ -190,7 +190,7 @@ class ImpactBanner extends StatelessWidget {
                   label,
                   style: TextStyle(
                     color: color,
-                    fontSize: 10.5,
+                    fontSize: 12,
                     letterSpacing: 0.05,
                     fontWeight: FontWeight.w900,
                   ),
@@ -336,7 +336,7 @@ class SectionCard extends StatelessWidget {
                   title,
                   style: TextStyle(
                     color: colors.textSecondary,
-                    fontSize: 11,
+                    fontSize: 12,
                     letterSpacing: 0.25,
                     fontWeight: FontWeight.w800,
                   ),
@@ -422,7 +422,7 @@ class MobilizationHeroCard extends StatelessWidget {
                 'LIEU DE MOBILISATION',
                 style: TextStyle(
                   color: AppColors.textMuted,
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 1.05,
                   fontWeight: FontWeight.w900,
                 ),

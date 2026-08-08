@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_controls.dart';
 import 'admin_invitations_screen.dart';
 import 'create_need_screen.dart';
 import 'location_administration_screen.dart';
@@ -75,7 +76,7 @@ class _AdministrationDashboardScreenState
           );
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: V5ActivityIndicator());
         }
         final access = snapshot.data;
         if (access == null) {
@@ -112,7 +113,7 @@ class _AdministrationDashboardScreenState
               );
             }
             if (!locationsSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: V5ActivityIndicator());
             }
             return _AdministrationDashboard(
               access: access,
@@ -286,7 +287,7 @@ class _AdministrationHeader extends StatelessWidget {
                 'ESPACE RESPONSABLE',
                 style: TextStyle(
                   color: _AdministrationVisuals.textMuted,
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 1.3,
                   fontWeight: FontWeight.w800,
                 ),
@@ -338,7 +339,7 @@ class _AdministrationSectionTitle extends StatelessWidget {
           'ADMINISTRATION',
           style: TextStyle(
             color: _AdministrationVisuals.textMuted,
-            fontSize: 10,
+            fontSize: 12,
             letterSpacing: 1.15,
             fontWeight: FontWeight.w800,
           ),
@@ -398,7 +399,7 @@ class _ResponsibleScopeCard extends StatelessWidget {
                   'VOTRE PÉRIMÈTRE',
                   style: TextStyle(
                     color: _AdministrationVisuals.textMuted,
-                    fontSize: 9,
+                    fontSize: 12,
                     letterSpacing: 0.75,
                     fontWeight: FontWeight.w800,
                   ),
@@ -588,10 +589,10 @@ class _ResponsibleAccessUnavailable extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 18),
-                  FilledButton(
+                  V5Button(
                     key: const Key('responsible-access-retry'),
                     onPressed: onRetry,
-                    child: const Text('Réessayer'),
+                    label: 'Réessayer',
                   ),
                   const SizedBox(height: 8),
                   TextButton(

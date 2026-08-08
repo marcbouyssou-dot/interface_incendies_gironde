@@ -42,7 +42,7 @@ class MobSantePageHeader extends StatelessWidget {
                     'La mobilisation santé, simplement.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colors.textSecondary,
-                      fontSize: 11,
+                      fontSize: 12,
                     ),
                   ),
                 ],

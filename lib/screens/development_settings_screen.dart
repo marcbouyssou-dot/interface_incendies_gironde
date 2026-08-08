@@ -8,6 +8,8 @@ import '../repositories/live_data_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
+import '../widgets/v5_controls.dart';
+import '../widgets/v5_secondary_navigation.dart';
 
 class DevelopmentSettingsScreen extends StatefulWidget {
   const DevelopmentSettingsScreen({super.key});
@@ -38,7 +40,7 @@ class _DevelopmentSettingsScreenState extends State<DevelopmentSettingsScreen> {
     final controller = RolePreviewScope.of(context);
     final mode = kDebugMode ? controller.mode : RolePreviewMode.automatic;
     return Scaffold(
-      appBar: AppBar(title: const Text('Réglages')),
+      appBar: const V5SecondaryNavigationBar(title: 'Réglages'),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(V5Spacing.xl),
@@ -87,9 +89,7 @@ class _DevelopmentSettingsScreenState extends State<DevelopmentSettingsScreen> {
                                     ConnectionState.waiting ||
                                 locationsSnapshot.connectionState ==
                                     ConnectionState.waiting)) {
-                          return const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          );
+                          return const Center(child: V5ActivityIndicator());
                         }
                         if (!kDebugMode && access?.isSiteManager == true) {
                           return Text(

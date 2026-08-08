@@ -7,6 +7,7 @@ import '../repositories/live_data_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/territory_components.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/professional_page_header.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'coordinator_published_needs.dart';
@@ -53,7 +54,7 @@ class _CoordinatorOverviewScreenState extends State<CoordinatorOverviewScreen> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<CoordinationNeed>>(
       valueListenable: widget.publishedNeeds,
-      builder: (context, _, __) => StreamBuilder<List<CoordinationNeed>>(
+      builder: (context, _, _) => StreamBuilder<List<CoordinationNeed>>(
         stream: _missions,
         builder: (context, missionsSnapshot) => StreamBuilder<List<ResponsePlace>>(
           stream: _locations,
@@ -361,12 +362,9 @@ class CoordinatorLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: SizedBox.square(
-      dimension: 22,
-      child: CircularProgressIndicator(
-        color: CoordinatorIdentity.of(context).accent,
-        strokeWidth: 2,
-      ),
+    child: V5ActivityIndicator(
+      size: 22,
+      color: CoordinatorIdentity.of(context).accent,
     ),
   );
 }

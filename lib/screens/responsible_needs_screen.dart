@@ -8,6 +8,7 @@ import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import '../widgets/responsible_mission_card.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_controls.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'create_need_screen.dart';
 import 'responsible_published_needs.dart';
@@ -195,21 +196,13 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                       const SizedBox(height: V5Spacing.md),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: FilledButton(
+                        child: V5Button(
                           key: const Key('responsible-needs-create'),
                           onPressed: onCreateNeed,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: colors.accent,
-                            foregroundColor: colors.onAccent,
-                            minimumSize: const Size(0, 44),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                V5Radius.control,
-                              ),
-                            ),
-                          ),
-                          child: const Text('Créer'),
+                          compact: true,
+                          backgroundColor: colors.accent,
+                          foregroundColor: colors.onAccent,
+                          label: 'Créer',
                         ),
                       ),
                       const SizedBox(height: V5Spacing.lg),
@@ -403,13 +396,7 @@ class _NeedsLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: SizedBox.square(
-      dimension: 22,
-      child: CircularProgressIndicator(
-        color: context.v5Colors.accent,
-        strokeWidth: 2,
-      ),
-    ),
+    child: V5ActivityIndicator(size: 22, color: context.v5Colors.accent),
   );
 }
 

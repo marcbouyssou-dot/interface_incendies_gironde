@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
+import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
   Future<void> pumpScreen(WidgetTester tester, {String? tab}) async {
@@ -12,7 +13,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     if (tab != null) {
-      await tester.tap(find.widgetWithText(NavigationDestination, tab));
+      await tester.tap(
+        find.descendant(of: find.byType(V5BottomBar), matching: find.text(tab)),
+      );
       await tester.pumpAndSettle();
     }
   }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/v5_foundation.dart';
 import 'native_interactions.dart';
+import 'v5_controls.dart';
 
 class V5TextField extends StatelessWidget {
   const V5TextField({
@@ -1428,27 +1429,25 @@ class _V5DialogActionButton extends StatelessWidget {
         ),
         child: label,
       ),
-      V5DialogActionStyle.primary => FilledButton(
+      V5DialogActionStyle.primary => V5Button(
         key: action.key,
         onPressed: action.onPressed,
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(48),
-          backgroundColor: colors.brand,
-          foregroundColor: colors.onBrand,
-        ),
-        child: label,
+        expanded: true,
+        backgroundColor: colors.brand,
+        foregroundColor: colors.onBrand,
+        loading: action.loading,
+        label: action.label,
       ),
-      V5DialogActionStyle.destructive => FilledButton(
+      V5DialogActionStyle.destructive => V5Button(
         key: action.key,
         onPressed: action.onPressed,
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(48),
-          backgroundColor: colors.danger,
-          foregroundColor: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF2A080D)
-              : Colors.white,
-        ),
-        child: label,
+        expanded: true,
+        backgroundColor: colors.danger,
+        foregroundColor: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF2A080D)
+            : Colors.white,
+        loading: action.loading,
+        label: action.label,
       ),
     };
   }

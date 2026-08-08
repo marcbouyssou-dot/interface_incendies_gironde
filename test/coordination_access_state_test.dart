@@ -8,6 +8,7 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/widgets/common.dart';
+import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
   const coordinator = ResponsibleAccess(
@@ -24,8 +25,8 @@ void main() {
   );
 
   Future<void> selectNavigationTab(WidgetTester tester, int index) async {
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    navigation.onDestinationSelected?.call(index);
+    final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
+    navigation.onDestinationSelected(index);
     for (var attempt = 0; attempt < 6; attempt++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
@@ -136,7 +137,7 @@ void main() {
       );
 
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        tester.widget<V5BottomBar>(find.byType(V5BottomBar)).selectedIndex,
         2,
       );
       expect(cancellationAction(), findsOneWidget);
@@ -158,7 +159,7 @@ void main() {
 
       expect(find.text('Accès temporairement indisponible'), findsNothing);
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        tester.widget<V5BottomBar>(find.byType(V5BottomBar)).selectedIndex,
         2,
       );
       expect(cancellationAction(), findsOneWidget);

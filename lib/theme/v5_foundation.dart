@@ -281,7 +281,7 @@ abstract final class V5Typography {
     ),
     labelSmall: TextStyle(
       color: colors.textSecondary,
-      fontSize: 10,
+      fontSize: 12,
       height: 1.2,
       letterSpacing: 0.8,
       fontWeight: FontWeight.w800,

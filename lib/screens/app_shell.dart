@@ -9,6 +9,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../widgets/v5_bottom_navigation.dart';
 import 'administration_dashboard_screen.dart';
 import 'coordinator_shell.dart';
 import 'coordination_screen.dart';
@@ -221,31 +222,29 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: V5BottomBar(
         selectedIndex: _legacyCurrentIndex,
         onDestinationSelected: _selectLegacyTab,
+        selectedColor: AppColors.orange,
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.local_fire_department_outlined),
-            selectedIcon: Icon(Icons.local_fire_department_rounded),
+          V5BottomBarDestination(
+            icon: Icons.local_fire_department_outlined,
+            selectedIcon: Icons.local_fire_department_rounded,
             label: 'Missions',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.add_circle_outline_rounded),
-            selectedIcon: Icon(
-              Icons.add_circle_rounded,
-              color: AppColors.orange,
-            ),
+          V5BottomBarDestination(
+            icon: Icons.add_circle_outline_rounded,
+            selectedIcon: Icons.add_circle_rounded,
             label: 'Déclarer',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard_rounded),
+          V5BottomBarDestination(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard_rounded,
             label: 'Statistiques',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.location_on_outlined),
-            selectedIcon: Icon(Icons.location_on_rounded),
+          V5BottomBarDestination(
+            icon: Icons.location_on_outlined,
+            selectedIcon: Icons.location_on_rounded,
             label: 'Plus',
           ),
         ],

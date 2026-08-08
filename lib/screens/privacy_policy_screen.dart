@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/common.dart';
+import '../widgets/v5_secondary_navigation.dart';
 
 abstract final class _PrivacyVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -18,22 +19,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _PrivacyVisuals.background,
-      appBar: AppBar(
-        title: const Text(
-          'Politique de confidentialité',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        backgroundColor: _PrivacyVisuals.background,
-        foregroundColor: _PrivacyVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _PrivacyVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
+      appBar: const V5SecondaryNavigationBar(
+        title: 'Politique de confidentialité',
       ),
       body: SafeArea(
         top: false,
@@ -150,7 +137,7 @@ class _PrivacyHeader extends StatelessWidget {
           'DONNÉES PERSONNELLES',
           style: TextStyle(
             color: _PrivacyVisuals.textMuted,
-            fontSize: 10,
+            fontSize: 12,
             letterSpacing: 1.25,
             fontWeight: FontWeight.w800,
           ),

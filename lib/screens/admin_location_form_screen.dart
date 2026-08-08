@@ -5,7 +5,9 @@ import '../models/need.dart';
 import '../repositories/location_administration_repository.dart';
 import '../repositories/location_administration_repository_scope.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
+import '../widgets/v5_secondary_navigation.dart';
 
 abstract final class _LocationFormVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -15,7 +17,6 @@ abstract final class _LocationFormVisuals {
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF7C817F);
   static const orange = Color(0xFFF25C05);
-  static const orangeSoft = Color(0xFFFFE8D9);
 }
 
 class AdminLocationFormScreen extends StatefulWidget {
@@ -90,18 +91,8 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _LocationFormVisuals.background,
-      appBar: AppBar(
-        title: Text(_editing ? 'Modifier le lieu' : 'Créer un lieu'),
-        backgroundColor: _LocationFormVisuals.background,
-        foregroundColor: _LocationFormVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _LocationFormVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
+      appBar: V5SecondaryNavigationBar(
+        title: _editing ? 'Modifier le lieu' : 'Créer un lieu',
       ),
       body: SafeArea(
         top: false,
@@ -281,35 +272,18 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
               heightFactor: 1,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: FilledButton(
-                    key: const Key('admin-location-submit'),
-                    onPressed: _submitting ? null : _submit,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _LocationFormVisuals.orange,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: _LocationFormVisuals.orangeSoft,
-                      disabledForegroundColor: _LocationFormVisuals.orange,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    child: _submitting
-                        ? const SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : Text(_editing ? 'Enregistrer' : 'Créer le lieu'),
-                  ),
+                child: V5Button(
+                  key: const Key('admin-location-submit'),
+                  expanded: true,
+                  backgroundColor: _LocationFormVisuals.orange,
+                  foregroundColor: Colors.white,
+                  loading: _submitting,
+                  onPressed: _submitting ? null : _submit,
+                  label: _submitting
+                      ? 'Enregistrement…'
+                      : _editing
+                      ? 'Enregistrer'
+                      : 'Créer le lieu',
                 ),
               ),
             ),

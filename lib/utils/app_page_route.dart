@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
-class AppPageRoute<T> extends MaterialPageRoute<T> {
+class AppPageRoute<T> extends CupertinoPageRoute<T> {
   AppPageRoute({
     required super.builder,
     super.settings,

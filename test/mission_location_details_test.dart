@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/widgets/common.dart';
+import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
   const location = ResponsePlace(
@@ -117,8 +118,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    navigation.onDestinationSelected?.call(2);
+    final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
+    navigation.onDestinationSelected(2);
     await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(

@@ -15,6 +15,7 @@ import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
 import 'package:interface_incendies_gironde/widgets/responsible_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/coordinator_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
 void main() {
   Future<void> selectPreview(WidgetTester tester, String label) async {
@@ -127,18 +128,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Détails de la mission'), findsOneWidget);
 
-    final navigation = tester.widget<NavigationBar>(
+    final navigation = tester.widget<V5BottomBar>(
       find.byKey(const Key('v5-bottom-navigation')),
     );
     expect(navigation.destinations, hasLength(3));
-    final navigationTheme = NavigationBarTheme.of(
-      tester.element(find.byType(NavigationBar)),
-    );
-    expect(navigationTheme.indicatorColor, Colors.transparent);
-    expect(
-      navigationTheme.iconTheme?.resolve({WidgetState.selected})?.color,
-      colors.info,
-    );
+    expect(navigation.selectedColor, colors.info);
     expect(find.text('Missions'), findsWidgets);
     expect(find.text('Engagements'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
@@ -191,7 +185,7 @@ void main() {
       find.text('1 mission urgente nécessite votre attention.'),
       findsNothing,
     );
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
     expect(navigation.destinations, hasLength(4));
     expect(find.text('Vue d’ensemble'), findsOneWidget);
     expect(find.text('Territoire'), findsOneWidget);
@@ -233,7 +227,7 @@ void main() {
     expect(find.text('Sous contrôle'), findsOneWidget);
     expect(find.text('Équipe'), findsWidgets);
     expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
     expect(navigation.destinations, hasLength(4));
   });
 
@@ -266,22 +260,17 @@ void main() {
     final colors = Theme.of(
       tester.element(find.byType(ResponsibleShell)),
     ).extension<V5Colors>()!;
-    final createButton = tester.widget<FilledButton>(
+    final createButton = tester.widget<V5Button>(
       find.ancestor(
         of: find.text('Créer un besoin'),
-        matching: find.byType(FilledButton),
+        matching: find.byType(V5Button),
       ),
     );
-    expect(createButton.style?.backgroundColor?.resolve({}), colors.accent);
-    final responsibleNavigationTheme = NavigationBarTheme.of(
-      tester.element(find.byKey(const Key('responsible-bottom-navigation'))),
+    expect(createButton.backgroundColor, colors.accent);
+    final responsibleNavigation = tester.widget<V5BottomBar>(
+      find.byKey(const Key('responsible-bottom-navigation')),
     );
-    expect(
-      responsibleNavigationTheme.iconTheme?.resolve({
-        WidgetState.selected,
-      })?.color,
-      colors.accent,
-    );
+    expect(responsibleNavigation.selectedColor, colors.accent);
 
     await tester.tap(find.text('Besoins'));
     await tester.pumpAndSettle();
@@ -432,16 +421,13 @@ void main() {
     final colors = Theme.of(
       tester.element(find.byType(ResponsibleShell)),
     ).extension<V5Colors>()!;
-    final calmCreateButton = tester.widget<FilledButton>(
+    final calmCreateButton = tester.widget<V5Button>(
       find.ancestor(
         of: find.text('Créer un besoin'),
-        matching: find.byType(FilledButton),
+        matching: find.byType(V5Button),
       ),
     );
-    expect(
-      calmCreateButton.style?.backgroundColor?.resolve({}),
-      colors.warningContainer,
-    );
+    expect(calmCreateButton.backgroundColor, colors.warningContainer);
 
     await tester.tap(find.text('Besoins'));
     await tester.pumpAndSettle();

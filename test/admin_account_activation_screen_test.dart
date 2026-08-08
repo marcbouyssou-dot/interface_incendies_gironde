@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app_entry.dart';
 import 'package:interface_incendies_gironde/screens/admin_account_activation_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
 void main() {
   Widget activationApp({
@@ -284,7 +285,7 @@ void main() {
     await tester.pumpWidget(activationApp(service: service));
     await tester.pump();
     expect(find.text('Vérification de votre invitation…'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(V5ActivityIndicator), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
     expect(find.text('Définissez votre mot de passe'), findsOneWidget);

@@ -15,6 +15,7 @@ import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/utils/french_date_time.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 
 void main() {
@@ -104,9 +105,11 @@ void main() {
     final button = find.byKey(Key('$professionId-add'));
     await tester.scrollUntilVisible(
       button,
-      200,
+      260,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pump();
   }
@@ -163,7 +166,7 @@ void main() {
       expect(repository.calls, 1);
       expect(find.text('Publication…'), findsOneWidget);
       expect(find.text('Mission publiée'), findsNothing);
-      final button = tester.widget<FilledButton>(
+      final button = tester.widget<V5Button>(
         find.byKey(const Key('publish-mission')),
       );
       expect(button.onPressed, isNull);

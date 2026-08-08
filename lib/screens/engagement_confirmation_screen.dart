@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
 import '../widgets/mission_location_details.dart';
+import '../widgets/v5_controls.dart';
 
 abstract final class _ConfirmationVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -155,23 +156,12 @@ class EngagementConfirmationScreen extends StatelessWidget {
                         ),
                         const Spacer(),
                         const SizedBox(height: 24),
-                        SizedBox(
-                          height: 56,
-                          child: FilledButton(
-                            onPressed: () => Navigator.pop(context),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _ConfirmationVisuals.orange,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              textStyle: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            child: const Text('Retour aux interventions'),
-                          ),
+                        V5Button(
+                          expanded: true,
+                          onPressed: () => Navigator.pop(context),
+                          backgroundColor: _ConfirmationVisuals.orange,
+                          foregroundColor: Colors.white,
+                          label: 'Retour aux interventions',
                         ),
                       ],
                     ),
@@ -220,7 +210,7 @@ class _ConfirmationDetail extends StatelessWidget {
                 label.toUpperCase(),
                 style: const TextStyle(
                   color: _ConfirmationVisuals.textMuted,
-                  fontSize: 9,
+                  fontSize: 12,
                   letterSpacing: 0.7,
                   fontWeight: FontWeight.w800,
                 ),

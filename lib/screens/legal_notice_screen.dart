@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_identity.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import 'credits_screen.dart';
 import 'information_consent_screen.dart';
 import 'privacy_policy_screen.dart';
@@ -23,19 +24,7 @@ class LegalNoticeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _LegalVisuals.background,
-      appBar: AppBar(
-        title: const Text('Mentions légales'),
-        backgroundColor: _LegalVisuals.background,
-        foregroundColor: _LegalVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _LegalVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      appBar: const V5SecondaryNavigationBar(title: 'Mentions légales'),
       body: SafeArea(
         top: false,
         child: PageContainer(
@@ -59,7 +48,7 @@ class LegalNoticeScreen extends StatelessWidget {
                       'INFORMATIONS LÉGALES',
                       style: TextStyle(
                         color: _LegalVisuals.textMuted,
-                        fontSize: 10,
+                        fontSize: 12,
                         letterSpacing: 1.25,
                         fontWeight: FontWeight.w800,
                       ),
@@ -141,7 +130,7 @@ class _LegalSectionHeader extends StatelessWidget {
           eyebrow,
           style: const TextStyle(
             color: _LegalVisuals.textMuted,
-            fontSize: 9,
+            fontSize: 12,
             letterSpacing: 1.05,
             fontWeight: FontWeight.w800,
           ),
@@ -237,7 +226,7 @@ class _LegalInformationRow extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     color: _LegalVisuals.textMuted,
-                    fontSize: 10,
+                    fontSize: 12,
                     letterSpacing: 0.25,
                     fontWeight: FontWeight.w800,
                   ),
@@ -357,7 +346,7 @@ class _LegalNavigationRow extends StatelessWidget {
                         subtitle!,
                         style: const TextStyle(
                           color: _LegalVisuals.textMuted,
-                          fontSize: 11,
+                          fontSize: 12,
                           height: 1.25,
                           fontWeight: FontWeight.w600,
                         ),

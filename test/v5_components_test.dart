@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
+import 'package:interface_incendies_gironde/utils/app_page_route.dart';
 import 'package:interface_incendies_gironde/widgets/decision_header.dart';
 import 'package:interface_incendies_gironde/widgets/mission_card.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
+import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 
 void main() {
   Widget app(Widget child, {ThemeData? theme}) {
@@ -95,7 +98,7 @@ void main() {
       ),
     );
 
-    final navigation = tester.widget<NavigationBar>(
+    final navigation = tester.widget<V5BottomBar>(
       find.byKey(const Key('v5-bottom-navigation')),
     );
     expect(navigation.destinations, hasLength(3));
@@ -103,27 +106,52 @@ void main() {
     expect(find.text('Engagements'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
     expect(
-      Theme.of(tester.element(find.byType(NavigationBar))).brightness,
+      Theme.of(tester.element(find.byType(V5BottomBar))).brightness,
       Brightness.dark,
     );
     expect(
-      Theme.of(
-        tester.element(find.byType(NavigationBar)),
-      ).extension<V5Colors>(),
+      Theme.of(tester.element(find.byType(V5BottomBar))).extension<V5Colors>(),
       V5Colors.dark,
     );
-    final navigationTheme = NavigationBarTheme.of(
-      tester.element(find.byType(NavigationBar)),
-    );
-    expect(navigationTheme.indicatorColor, Colors.transparent);
-    expect(
-      navigationTheme.iconTheme?.resolve({WidgetState.selected})?.color,
-      V5Colors.dark.info,
-    );
+    expect(navigation.selectedColor, V5Colors.dark.info);
 
     await tester.tap(find.text('Engagements'));
     expect(selected, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('V5 secondary navigation owns header and native back action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: V5Button(
+              label: 'Ouvrir',
+              onPressed: () => Navigator.of(context).push<void>(
+                AppPageRoute<void>(
+                  builder: (_) => const Scaffold(
+                    appBar: V5SecondaryNavigationBar(title: 'Écran secondaire'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Ouvrir'));
+    await tester.pumpAndSettle();
+    expect(find.byType(V5SecondaryNavigationBar), findsOneWidget);
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.text('Écran secondaire'), findsOneWidget);
+
+    await tester.tap(find.byType(V5BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Ouvrir'), findsOneWidget);
   });
 
   testWidgets('professional cards keep a calm borderless surface', (

@@ -8,6 +8,7 @@ import '../utils/app_page_route.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
+import '../widgets/v5_controls.dart';
 import 'about_screen.dart';
 import 'development_settings_screen.dart';
 import 'legal_notice_screen.dart';
@@ -67,7 +68,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
           );
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: V5ActivityIndicator());
         }
         return _buildContent(snapshot.data!);
       },
@@ -135,7 +136,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                               'FILTRER PAR SECTEUR',
                               style: TextStyle(
                                 color: _PlacesVisuals.textMuted,
-                                fontSize: 9,
+                                fontSize: 12,
                                 letterSpacing: 1,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -209,7 +210,7 @@ class _PlacesHeader extends StatelessWidget {
                 'DISPOSITIF TERRITORIAL',
                 style: TextStyle(
                   color: _PlacesVisuals.textMuted,
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 1.3,
                   fontWeight: FontWeight.w800,
                 ),
@@ -366,7 +367,7 @@ class _PlacesResultsHeader extends StatelessWidget {
           'RÉPERTOIRE',
           style: TextStyle(
             color: _PlacesVisuals.textMuted,
-            fontSize: 9,
+            fontSize: 12,
             letterSpacing: 1.05,
             fontWeight: FontWeight.w800,
           ),
@@ -486,7 +487,7 @@ class _PlaceCard extends StatelessWidget {
                         place.group.label,
                         style: const TextStyle(
                           color: _PlacesVisuals.navy,
-                          fontSize: 11,
+                          fontSize: 12,
                           height: 1.3,
                           fontWeight: FontWeight.w700,
                         ),
@@ -530,7 +531,7 @@ class _PlaceCard extends StatelessWidget {
                           'Voir le lieu',
                           style: TextStyle(
                             color: _PlacesVisuals.navy,
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
@@ -582,7 +583,7 @@ class _ActivityStatus extends StatelessWidget {
               : 'Inactif',
           style: TextStyle(
             color: color,
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
         ),

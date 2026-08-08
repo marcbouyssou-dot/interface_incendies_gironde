@@ -16,6 +16,7 @@ import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/repositories/responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/admin_invitations_screen.dart';
 import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 
 void main() {
@@ -377,7 +378,7 @@ void main() {
       final submitFinder = find.byKey(const Key('create-admin-invitation'));
       expect(submitFinder, findsOneWidget);
       expect(tester.getRect(submitFinder).bottom, lessThanOrEqualTo(844));
-      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+      expect(tester.widget<V5Button>(submitFinder).onPressed, isNull);
 
       await enterInvitationText(
         tester,
@@ -390,7 +391,7 @@ void main() {
         'mobile@mobsante.fr',
       );
       await tester.pump();
-      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+      expect(tester.widget<V5Button>(submitFinder).onPressed, isNotNull);
 
       final location = places.where((place) => place.isOperational).first;
       await tester.scrollUntilVisible(
@@ -401,7 +402,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(Key('invitation-location-${location.id}')));
       await tester.pump();
-      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+      expect(tester.widget<V5Button>(submitFinder).onPressed, isNotNull);
 
       await tester.tap(find.byKey(const Key('location-search')));
       tester.view.viewInsets = const FakeViewPadding(bottom: 300);
@@ -432,7 +433,7 @@ void main() {
       '${List.filled(243, 'a').join()}@example.com',
     );
     await tester.pump();
-    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+    expect(tester.widget<V5Button>(submitFinder).onPressed, isNotNull);
 
     await enterInvitationText(
       tester,
@@ -440,7 +441,7 @@ void main() {
       '${List.filled(244, 'a').join()}@example.com',
     );
     await tester.pump();
-    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+    expect(tester.widget<V5Button>(submitFinder).onPressed, isNull);
   });
 
   testWidgets(
@@ -466,7 +467,7 @@ void main() {
       await tester.pump();
 
       final submitFinder = find.byKey(const Key('create-admin-invitation'));
-      final submitButton = tester.widget<FilledButton>(submitFinder);
+      final submitButton = tester.widget<V5Button>(submitFinder);
       expect(submitButton.onPressed, isNotNull);
       submitButton.onPressed!();
       await tester.pump(const Duration(milliseconds: 300));
@@ -479,7 +480,7 @@ void main() {
       );
       expect(await invitationsRepository.watchInvitations().first, isEmpty);
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+      expect(tester.widget<V5Button>(submitFinder).onPressed, isNotNull);
 
       final location = places.where((place) => place.isOperational).first;
       await tester.scrollUntilVisible(
@@ -528,7 +529,7 @@ void main() {
     await tester.tap(submitFinder);
     await tester.pump();
     expect(invitationsRepository.calls, 1);
-    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNull);
+    expect(tester.widget<V5Button>(submitFinder).onPressed, isNull);
     await tester.tap(submitFinder);
     expect(invitationsRepository.calls, 1);
 
@@ -539,7 +540,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(tester.widget<FilledButton>(submitFinder).onPressed, isNotNull);
+    expect(tester.widget<V5Button>(submitFinder).onPressed, isNotNull);
 
     await tester.tap(submitFinder);
     await tester.pumpAndSettle();

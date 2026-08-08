@@ -15,6 +15,7 @@ import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/system_theme.dart';
 import 'widgets/brand_mark.dart';
+import 'widgets/v5_controls.dart';
 
 abstract final class _StartupVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -237,24 +238,12 @@ class _StartupError extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 22),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 54,
-                              child: FilledButton(
-                                onPressed: onRetry,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: _StartupVisuals.orange,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  textStyle: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                child: const Text('Réessayer'),
-                              ),
+                            V5Button(
+                              expanded: true,
+                              onPressed: onRetry,
+                              backgroundColor: _StartupVisuals.orange,
+                              foregroundColor: Colors.white,
+                              label: 'Réessayer',
                             ),
                           ],
                         ),

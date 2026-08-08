@@ -12,6 +12,7 @@ import '../utils/mission_timing.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_controls.dart';
 
 enum _EngagementPeriod { upcoming, current, past }
 
@@ -50,7 +51,7 @@ class _ProfessionalEngagementsScreenState
             return const _EngagementLoadError();
           }
           if (!missionSnapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: V5ActivityIndicator());
           }
           return StreamBuilder<List<ResponsePlace>>(
             stream: _locations,
@@ -59,7 +60,7 @@ class _ProfessionalEngagementsScreenState
                 return const _EngagementLoadError();
               }
               if (!locationSnapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const Center(child: V5ActivityIndicator());
               }
               return _ProfessionalEngagementCollection(
                 liveData: _liveData!,
@@ -222,7 +223,7 @@ class _ProfessionalEngagementCollectionState
             if (_waiting.isNotEmpty && allEngagements.isEmpty)
               const SliverFillRemaining(
                 hasScrollBody: false,
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: V5ActivityIndicator()),
               )
             else if (visible.isEmpty)
               SliverFillRemaining(
@@ -401,7 +402,7 @@ class _EngagementStatus extends StatelessWidget {
         status.label,
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
       ),

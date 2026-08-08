@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
 import '../widgets/common.dart';
+import '../widgets/v5_secondary_navigation.dart';
 
 abstract final class _CreditsVisuals {
   static const background = Color(0xFFF6F7F8);
@@ -19,19 +20,7 @@ class CreditsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _CreditsVisuals.background,
-      appBar: AppBar(
-        title: const Text('Crédits'),
-        backgroundColor: _CreditsVisuals.background,
-        foregroundColor: _CreditsVisuals.navy,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleTextStyle: const TextStyle(
-          color: _CreditsVisuals.navy,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      appBar: const V5SecondaryNavigationBar(title: 'Crédits'),
       body: SafeArea(
         top: false,
         child: PageContainer(
@@ -79,7 +68,7 @@ class _CreditsHeader extends StatelessWidget {
           AppIdentity.productName.toUpperCase(),
           style: const TextStyle(
             color: _CreditsVisuals.textMuted,
-            fontSize: 10,
+            fontSize: 12,
             letterSpacing: 1.25,
             fontWeight: FontWeight.w800,
           ),

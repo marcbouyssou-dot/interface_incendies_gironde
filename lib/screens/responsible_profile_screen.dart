@@ -8,6 +8,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_controls.dart';
 import 'development_settings_screen.dart';
 
 class ResponsibleProfileScreen extends StatefulWidget {
@@ -52,7 +53,7 @@ class _ResponsibleProfileScreenState extends State<ResponsibleProfileScreen> {
             return const Center(
               child: SizedBox.square(
                 dimension: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: V5ActivityIndicator(),
               ),
             );
           }

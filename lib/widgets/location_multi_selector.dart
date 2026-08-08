@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/need.dart';
 import '../theme/app_theme.dart';
+import 'v5_controls.dart';
 import 'v5_form_system.dart';
 
 class LocationMultiSelector extends StatefulWidget {
@@ -340,25 +341,14 @@ class _LocationGroup extends StatelessWidget {
         ),
         if (expanded)
           for (final location in locations)
-            CheckboxListTile(
+            V5CheckboxTile(
               key: Key('invitation-location-${location.id}'),
               value: selectedIds.contains(location.id),
               dense: true,
-              contentPadding: const EdgeInsets.only(left: 8, right: 12),
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(
-                location.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                location.type.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              label: location.name,
+              subtitle: location.type.label,
               onChanged: enabled
-                  ? (selected) =>
-                        onLocationChanged(location.id, selected == true)
+                  ? (selected) => onLocationChanged(location.id, selected)
                   : null,
             ),
         if (expanded) const Divider(height: 1),

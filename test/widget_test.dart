@@ -8,6 +8,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
 import 'package:interface_incendies_gironde/screens/app_shell.dart';
 import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
+import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
   Future<void> pumpIPhone(WidgetTester tester) async {
@@ -21,8 +22,8 @@ void main() {
   }
 
   Future<void> selectNavigationTab(WidgetTester tester, int index) async {
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    navigation.onDestinationSelected?.call(index);
+    final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
+    navigation.onDestinationSelected(index);
     await tester.pumpAndSettle();
   }
 
@@ -133,7 +134,7 @@ void main() {
   ) async {
     await pumpIPhone(tester);
 
-    final navigation = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
     expect(navigation.destinations, hasLength(4));
 
     for (final entry in [
@@ -143,7 +144,13 @@ void main() {
       (0, 'Missions'),
     ]) {
       final (index, label) = entry;
-      expect(find.widgetWithText(NavigationDestination, label), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(V5BottomBar),
+          matching: find.text(label),
+        ),
+        findsOneWidget,
+      );
       await selectNavigationTab(tester, index);
       expect(
         tester.takeException(),

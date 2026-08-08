@@ -11,6 +11,7 @@ import '../utils/csv_export.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
+import '../widgets/v5_controls.dart';
 import 'create_need_screen.dart';
 
 abstract final class _StatisticsVisuals {
@@ -296,7 +297,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
           return const _ResponsibleAccessUnavailableState();
         }
         if (accessSnapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: V5ActivityIndicator());
         }
         return StreamBuilder<List<CoordinationNeed>>(
           stream: _missions,
@@ -315,7 +316,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
               );
             }
             if (!missionsSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: V5ActivityIndicator());
             }
             return StreamBuilder<List<ResponsePlace>>(
               stream: _locations,
@@ -334,7 +335,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                   );
                 }
                 if (!locationsSnapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: V5ActivityIndicator());
                 }
                 return _buildContent(
                   missionsSnapshot.data!,
@@ -541,7 +542,7 @@ class _StatisticsPageHeader extends StatelessWidget {
                 'SITUATION',
                 style: TextStyle(
                   color: _StatisticsVisuals.textMuted,
-                  fontSize: 10,
+                  fontSize: 12,
                   letterSpacing: 1.3,
                   fontWeight: FontWeight.w800,
                 ),
@@ -603,7 +604,7 @@ class _StatisticsSectionHeader extends StatelessWidget {
                 eyebrow,
                 style: const TextStyle(
                   color: _StatisticsVisuals.textMuted,
-                  fontSize: 9,
+                  fontSize: 12,
                   letterSpacing: 1.05,
                   fontWeight: FontWeight.w800,
                 ),
@@ -625,7 +626,7 @@ class _StatisticsSectionHeader extends StatelessWidget {
                   subtitle!,
                   style: const TextStyle(
                     color: _StatisticsVisuals.textMuted,
-                    fontSize: 11,
+                    fontSize: 12,
                     height: 1.3,
                     fontWeight: FontWeight.w600,
                   ),
@@ -892,7 +893,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                         color: selectedPeriod == period
                             ? Colors.white
                             : _StatisticsVisuals.navy,
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
                       onSelected: (selected) {
@@ -964,7 +965,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                   'Taux global de couverture',
                   style: TextStyle(
                     color: _StatisticsVisuals.textMuted,
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1249,7 +1250,7 @@ class _LocationDashboardRow extends StatelessWidget {
             key: Key('dashboard-location-${stats.id}-missions'),
             style: const TextStyle(
               color: AppColors.textMuted,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1326,7 +1327,7 @@ class _DashboardBreakdownValue extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: AppColors.textMuted,
-            fontSize: 9,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -1433,7 +1434,7 @@ class _StatusMetric extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: color,
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1503,7 +1504,7 @@ class _SituationRow extends StatelessWidget {
             need.group.label,
             style: const TextStyle(
               color: _StatisticsVisuals.textMuted,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1512,7 +1513,7 @@ class _SituationRow extends StatelessWidget {
             location?.type.label ?? 'Lieu d’intervention',
             style: const TextStyle(
               color: _StatisticsVisuals.textMuted,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -1586,7 +1587,7 @@ class _ResponsibleMissionActions extends StatelessWidget {
             icon: isMissionEditorOpening
                 ? const SizedBox.square(
                     dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: V5ActivityIndicator(),
                   )
                 : const Icon(Icons.edit_outlined),
             label: Text(
@@ -1731,10 +1732,7 @@ class _EngagementRowState extends State<_EngagementRow> {
             ),
           ),
           if (_updating)
-            const SizedBox.square(
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+            const SizedBox.square(dimension: 20, child: V5ActivityIndicator())
           else
             PopupMenuButton<EngagementStatus>(
               key: Key('engagement-menu-${engagement.documentId}'),
