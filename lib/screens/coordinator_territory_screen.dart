@@ -9,6 +9,7 @@ import '../theme/v5_foundation.dart';
 import '../widgets/territory_components.dart';
 import '../widgets/professional_page_header.dart';
 import 'coordinator_overview_screen.dart';
+import 'coordinator_published_needs.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 
 enum _TerritoryFilter { all, watch, critical, stable }
@@ -23,7 +24,9 @@ extension on _TerritoryFilter {
 }
 
 class CoordinatorTerritoryScreen extends StatefulWidget {
-  const CoordinatorTerritoryScreen({super.key});
+  const CoordinatorTerritoryScreen({super.key, required this.publishedNeeds});
+
+  final CoordinatorPublishedNeeds publishedNeeds;
 
   @override
   State<CoordinatorTerritoryScreen> createState() =>
@@ -51,58 +54,65 @@ class _CoordinatorTerritoryScreenState
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<CoordinationNeed>>(
-      stream: _missions,
-      builder: (context, missionsSnapshot) =>
-          StreamBuilder<List<ResponsePlace>>(
-            stream: _locations,
-            builder: (context, locationsSnapshot) {
-              if (missionsSnapshot.hasError || locationsSnapshot.hasError) {
-                return const CoordinatorDataUnavailable(
-                  message: 'La lecture territoriale est indisponible.',
-                );
-              }
-              if (!missionsSnapshot.hasData || !locationsSnapshot.hasData) {
-                return const CoordinatorLoadingState();
-              }
-              return StreamBuilder<ResponsibleAccess?>(
-                stream: _access,
-                builder: (context, accessSnapshot) {
-                  if (accessSnapshot.hasError) {
-                    return const CoordinatorDataUnavailable(
-                      message:
-                          'Les autorisations ne peuvent pas être vérifiées.',
+    return ValueListenableBuilder<List<CoordinationNeed>>(
+      valueListenable: widget.publishedNeeds,
+      builder: (context, _, __) => StreamBuilder<List<CoordinationNeed>>(
+        stream: _missions,
+        builder: (context, missionsSnapshot) =>
+            StreamBuilder<List<ResponsePlace>>(
+              stream: _locations,
+              builder: (context, locationsSnapshot) {
+                if (missionsSnapshot.hasError || locationsSnapshot.hasError) {
+                  return const CoordinatorDataUnavailable(
+                    message: 'La lecture territoriale est indisponible.',
+                  );
+                }
+                if (!missionsSnapshot.hasData || !locationsSnapshot.hasData) {
+                  return const CoordinatorLoadingState();
+                }
+                return StreamBuilder<ResponsibleAccess?>(
+                  stream: _access,
+                  builder: (context, accessSnapshot) {
+                    if (accessSnapshot.hasError) {
+                      return const CoordinatorDataUnavailable(
+                        message:
+                            'Les autorisations ne peuvent pas être vérifiées.',
+                      );
+                    }
+                    final visibleMissions = missionsVisibleToResponsible(
+                      missions: widget.publishedNeeds.mergeWith(
+                        missionsSnapshot.data!,
+                      ),
+                      locations: locationsSnapshot.data!,
+                      access: accessSnapshot.data,
                     );
-                  }
-                  final visibleMissions = missionsVisibleToResponsible(
-                    missions: missionsSnapshot.data!,
-                    locations: locationsSnapshot.data!,
-                    access: accessSnapshot.data,
-                  );
-                  final visibleLocations =
-                      accessSnapshot.data?.isCoordinator == true
-                      ? locationsSnapshot.data!
-                      : locationsSnapshot.data!
-                            .where(
-                              (location) =>
-                                  accessSnapshot.data?.canManage(location.id) ==
-                                  true,
-                            )
-                            .toList(growable: false);
-                  final territory = CoordinatorTerritoryViewData.from(
-                    missions: visibleMissions,
-                    locations: visibleLocations,
-                  );
-                  return _TerritoryContent(
-                    territory: territory,
-                    filter: _filter,
-                    onFilterChanged: (filter) =>
-                        setState(() => _filter = filter),
-                  );
-                },
-              );
-            },
-          ),
+                    final visibleLocations =
+                        accessSnapshot.data?.isCoordinator == true
+                        ? locationsSnapshot.data!
+                        : locationsSnapshot.data!
+                              .where(
+                                (location) =>
+                                    accessSnapshot.data?.canManage(
+                                      location.id,
+                                    ) ==
+                                    true,
+                              )
+                              .toList(growable: false);
+                    final territory = CoordinatorTerritoryViewData.from(
+                      missions: visibleMissions,
+                      locations: visibleLocations,
+                    );
+                    return _TerritoryContent(
+                      territory: territory,
+                      filter: _filter,
+                      onFilterChanged: (filter) =>
+                          setState(() => _filter = filter),
+                    );
+                  },
+                );
+              },
+            ),
+      ),
     );
   }
 }

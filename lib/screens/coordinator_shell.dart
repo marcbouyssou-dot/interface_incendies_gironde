@@ -9,6 +9,7 @@ import 'admin_invitations_screen.dart';
 import 'coordinator_actors_screen.dart';
 import 'coordinator_more_screen.dart';
 import 'coordinator_overview_screen.dart';
+import 'coordinator_published_needs.dart';
 import 'coordinator_territory_screen.dart';
 import 'coordination_screen.dart';
 import 'create_need_screen.dart';
@@ -28,6 +29,7 @@ class CoordinatorShell extends StatefulWidget {
 class _CoordinatorShellState extends State<CoordinatorShell> {
   late int _currentIndex;
   final List<Widget?> _screens = List<Widget?>.filled(4, null);
+  final _publishedNeeds = CoordinatorPublishedNeeds();
 
   @override
   void initState() {
@@ -38,12 +40,13 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
 
   Widget _createScreen(int index) => switch (index) {
     0 => CoordinatorOverviewScreen(
+      publishedNeeds: _publishedNeeds,
       onOpenTerritory: () => _selectTab(1),
       onCreateNeed: _openCreateNeed,
       onManageResponsibles: _openResponsibles,
       onManageLocations: _openLocations,
     ),
-    1 => const CoordinatorTerritoryScreen(),
+    1 => CoordinatorTerritoryScreen(publishedNeeds: _publishedNeeds),
     2 => CoordinatorActorsScreen(
       onManageResponsibles: _openResponsibles,
       onManageLocations: _openLocations,
@@ -73,6 +76,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
           child: Scaffold(
             body: SafeArea(
               child: CreateNeedScreen(
+                onMissionPublished: _publishedNeeds.publish,
                 onViewMission: () {
                   Navigator.of(context).pop();
                   _selectTab(1);
@@ -140,6 +144,12 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
   }
 
   Future<void> _signOut() => RepositoryScope.of(context).signOutResponsible();
+
+  @override
+  void dispose() {
+    _publishedNeeds.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
