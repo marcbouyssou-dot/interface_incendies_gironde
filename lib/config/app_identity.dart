@@ -9,7 +9,7 @@ abstract final class AppIdentity {
       'assets/branding/mobsante_pictogram_transparent.png';
   static const mobilizationSymbolAsset =
       'assets/branding/mobilization_flame.png';
-  static const splashMinimumDuration = Duration(milliseconds: 2500);
+  static const splashRevealDuration = Duration(milliseconds: 600);
   static const version = '1.0.0+1';
 
   // Cette mention décrit la conception de l’outil. Elle ne constitue pas

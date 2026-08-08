@@ -1,1 +1,3 @@
 void activateLightApplicationChrome() {}
+
+void dismissNativeStartupSplash() {}

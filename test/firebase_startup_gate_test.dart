@@ -9,7 +9,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/screens/splash_screen.dart';
 
 void main() {
-  testWidgets('real startup work displays branding without a fixed timer', (
+  testWidgets('startup displays one animated identity while work is pending', (
     tester,
   ) async {
     final pending = Completer<CoordinationRepository>();
@@ -32,9 +32,32 @@ void main() {
     );
     expect(find.text('InterfaceRecup33'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    final animatedIdentity = find.byKey(const Key('splash-animated-identity'));
+    expect(animatedIdentity, findsOneWidget);
+    expect(
+      find.descendant(
+        of: animatedIdentity,
+        matching: find.byKey(const Key('splash-pictogram')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: animatedIdentity,
+        matching: find.byKey(const Key('splash-product-name')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: animatedIdentity,
+        matching: find.byKey(const Key('splash-mobilization-subtitle')),
+      ),
+      findsOneWidget,
+    );
 
     pending.complete(MockCoordinationRepository.instance);
-    await tester.pump(AppIdentity.splashMinimumDuration);
+    await tester.pump(AppIdentity.splashRevealDuration);
     await tester.pumpAndSettle();
     expect(find.byType(SplashScreen), findsNothing);
   });
@@ -50,7 +73,7 @@ void main() {
 
     await tester.pumpWidget(FirebaseStartupGate(startup: fail));
     await tester.pumpAndSettle();
-    await tester.pump(AppIdentity.splashMinimumDuration);
+    await tester.pump(AppIdentity.splashRevealDuration);
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(
@@ -62,7 +85,7 @@ void main() {
     await tester.tap(find.text('Réessayer'));
     await tester.pump();
     await tester.pumpAndSettle();
-    await tester.pump(AppIdentity.splashMinimumDuration);
+    await tester.pump(AppIdentity.splashRevealDuration);
     expect(attempts, 2);
     expect(find.text('Réessayer'), findsOneWidget);
   });

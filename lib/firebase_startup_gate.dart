@@ -57,7 +57,7 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     if (!preserveSplash) return startup;
     await Future.wait<void>([
       startup.then<void>((_) {}),
-      Future<void>.delayed(AppIdentity.splashMinimumDuration),
+      Future<void>.delayed(AppIdentity.splashRevealDuration),
     ], eagerError: true);
     return startup;
   }

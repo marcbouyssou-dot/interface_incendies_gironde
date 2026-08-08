@@ -3,10 +3,48 @@ import 'package:flutter/services.dart';
 
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
+import '../utils/system_theme.dart';
 import '../widgets/brand_mark.dart';
 
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<double> _scale;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: AppIdentity.splashRevealDuration,
+    );
+    final reveal = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+    _opacity = reveal;
+    _scale = Tween<double>(begin: .985, end: 1).animate(reveal);
+    _slide = Tween<Offset>(
+      begin: const Offset(0, .025),
+      end: Offset.zero,
+    ).animate(reveal);
+    _controller.forward().whenComplete(dismissNativeStartupSplash);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,39 +67,16 @@ class SplashScreen extends StatelessWidget {
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 420),
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _SplashPictogram(),
-                          SizedBox(height: 30),
-                          Text(
-                            AppIdentity.productName,
-                            key: Key('splash-product-name'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 42,
-                              height: 1.05,
-                              letterSpacing: -1.1,
-                              fontWeight: FontWeight.w900,
-                            ),
+                      child: FadeTransition(
+                        key: const Key('splash-animated-identity'),
+                        opacity: _opacity,
+                        child: ScaleTransition(
+                          scale: _scale,
+                          child: SlideTransition(
+                            position: _slide,
+                            child: const _SplashIdentity(),
                           ),
-                          SizedBox(height: 10),
-                          Text(
-                            AppIdentity.mobilizationSubtitle,
-                            key: Key('splash-mobilization-subtitle'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Color(0xFFD9E3F1),
-                              fontSize: 20,
-                              height: 1.25,
-                              letterSpacing: 0.2,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: 58),
-                          _InstitutionalSignature(),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -71,6 +86,48 @@ class SplashScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SplashIdentity extends StatelessWidget {
+  const _SplashIdentity();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _SplashPictogram(),
+        SizedBox(height: 30),
+        Text(
+          AppIdentity.productName,
+          key: Key('splash-product-name'),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 42,
+            height: 1.05,
+            letterSpacing: -1.1,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        SizedBox(height: 10),
+        Text(
+          AppIdentity.mobilizationSubtitle,
+          key: Key('splash-mobilization-subtitle'),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Color(0xFFD9E3F1),
+            fontSize: 20,
+            height: 1.25,
+            letterSpacing: 0.2,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: 58),
+        _InstitutionalSignature(),
+      ],
     );
   }
 }

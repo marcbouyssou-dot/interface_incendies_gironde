@@ -19,7 +19,7 @@ export PATH="${FLUTTER_SDK_DIR}/bin:${PATH}"
 flutter config --no-analytics --enable-web
 flutter pub get
 
-build_arguments=(--release)
+build_arguments=(--release --pwa-strategy=none)
 
 if [[ "${USE_FIREBASE:-false}" == "true" ]]; then
   required_firebase_variables=(

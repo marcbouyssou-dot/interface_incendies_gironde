@@ -18,15 +18,17 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="MobSanté — Interface de mobilisation des professionnels de santé">
   <meta name="application-name" content="MobSanté">
   <meta name="theme-color" content="#10233E">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MobSanté">
   <link rel="apple-touch-icon" sizes="192x192" href="icons/Icon-192.png">
+  <link rel="preload" href="icons/Icon-192.png" as="image" fetchpriority="high">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
@@ -39,10 +41,120 @@
       height: 100%;
       margin: 0;
       background: #10233E;
+      overflow: hidden;
+    }
+
+    #startup-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      box-sizing: border-box;
+      display: grid;
+      place-items: center;
+      padding: max(20px, env(safe-area-inset-top)) 28px
+        max(20px, env(safe-area-inset-bottom));
+      overflow: hidden;
+      background: #10233E;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      transition: opacity 160ms ease-out;
+    }
+
+    #startup-splash.is-dismissing {
+      opacity: 0;
+    }
+
+    .startup-splash__content {
+      width: min(100%, 420px);
+      text-align: center;
+      animation: startup-reveal 600ms cubic-bezier(.22, 1, .36, 1) both;
+    }
+
+    .startup-splash__logo {
+      display: block;
+      width: min(246px, 58vw, 34vh);
+      height: auto;
+      margin: 0 auto 30px;
+      border-radius: 24%;
+    }
+
+    .startup-splash__title {
+      margin: 0;
+      font-size: clamp(36px, 10vw, 42px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -1.1px;
+    }
+
+    .startup-splash__subtitle {
+      margin: 10px 0 0;
+      color: #D9E3F1;
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: .2px;
+    }
+
+    .startup-splash__signature {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 58px;
+      color: #58A5FF;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 3.2px;
+      white-space: nowrap;
+    }
+
+    .startup-splash__signature::before,
+    .startup-splash__signature::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, .24);
+    }
+
+    @keyframes startup-reveal {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .startup-splash__content {
+        animation: none;
+      }
+
+      #startup-splash {
+        transition: none;
+      }
     }
   </style>
 </head>
 <body>
+  <div id="startup-splash" aria-hidden="true">
+    <div class="startup-splash__content">
+      <img
+        class="startup-splash__logo"
+        src="icons/Icon-192.png"
+        alt=""
+        width="192"
+        height="192"
+      >
+      <h1 class="startup-splash__title">MobSanté</h1>
+      <p class="startup-splash__subtitle">Incendies Gironde</p>
+      <div class="startup-splash__signature">URPS MK NA</div>
+    </div>
+  </div>
+  <script>
+    performance.mark('mobsante-launch-shell-visible');
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
