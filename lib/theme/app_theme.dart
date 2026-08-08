@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/system_theme.dart';
 import 'v5_foundation.dart';
 
 abstract final class AppColors {
@@ -56,6 +57,7 @@ abstract final class AppTheme {
   }
 
   static Widget systemSurface(BuildContext context, Widget? child) {
+    activateLightApplicationChrome();
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: lightSystemUiOverlayStyle,
       child: ColoredBox(

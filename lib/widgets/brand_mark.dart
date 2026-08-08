@@ -21,11 +21,6 @@ class BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = assetPath == null
-        ? (onDarkBackground
-              ? Colors.white.withValues(alpha: .12)
-              : AppColors.orangeSoft)
-        : Colors.transparent;
     final mark = assetPath == null
         ? Icon(
             Icons.health_and_safety_rounded,
@@ -47,18 +42,20 @@ class BrandMark extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: background,
-                  shape: BoxShape.circle,
-                ),
-                child: Padding(
-                  padding: assetPath == null
-                      ? EdgeInsets.all(size * .12)
-                      : EdgeInsets.zero,
-                  child: mark,
-                ),
-              ),
+              child: assetPath == null
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: onDarkBackground
+                            ? Colors.white.withValues(alpha: .12)
+                            : AppColors.orangeSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(size * .12),
+                        child: mark,
+                      ),
+                    )
+                  : mark,
             ),
             if (assetPath != null && showMobilizationSymbol)
               Positioned(

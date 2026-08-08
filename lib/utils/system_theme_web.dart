@@ -1,4 +1,3 @@
-import 'dart:async';
 // ignore: deprecated_member_use
 import 'dart:html' as html;
 
@@ -29,9 +28,7 @@ void dismissNativeStartupSplash() {
     startMark: 'mobsante-launch-shell-visible',
   );
   final splash = html.document.getElementById('startup-splash');
-  if (splash == null || splash.classes.contains('is-dismissing')) return;
-  splash.classes.add('is-dismissing');
-  Timer(const Duration(milliseconds: 180), splash.remove);
+  splash?.remove();
 }
 
 void _markStartupMilestone(

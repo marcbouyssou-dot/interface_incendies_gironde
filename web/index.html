@@ -28,7 +28,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MobSanté">
   <link rel="apple-touch-icon" sizes="192x192" href="icons/Icon-192.png">
-  <link rel="preload" href="icons/Icon-192.png" as="image" fetchpriority="high">
+  <link rel="preload" href="assets/assets/branding/mobsante_pictogram_transparent.png" as="image" fetchpriority="high">
+  <link rel="preload" href="assets/assets/branding/mobilization_flame.png" as="image" fetchpriority="high">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
@@ -57,25 +58,35 @@
       background: #10233E;
       color: #FFFFFF;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      transition: opacity 160ms ease-out;
-    }
-
-    #startup-splash.is-dismissing {
-      opacity: 0;
     }
 
     .startup-splash__content {
       width: min(100%, 420px);
       text-align: center;
-      animation: startup-reveal 600ms cubic-bezier(.22, 1, .36, 1) both;
     }
 
     .startup-splash__logo {
-      display: block;
+      position: relative;
       width: min(246px, 58vw, 34vh);
-      height: auto;
+      aspect-ratio: 1;
       margin: 0 auto 30px;
-      border-radius: 24%;
+    }
+
+    .startup-splash__pictogram {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .startup-splash__mobilization-symbol {
+      position: absolute;
+      top: -8%;
+      right: -6%;
+      width: 48%;
+      height: 54%;
+      object-fit: contain;
+      transform: scale(1.72);
     }
 
     .startup-splash__title {
@@ -115,38 +126,27 @@
       background: rgba(255, 255, 255, .24);
     }
 
-    @keyframes startup-reveal {
-      from {
-        opacity: 0;
-        transform: translateY(10px) scale(.985);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .startup-splash__content {
-        animation: none;
-      }
-
-      #startup-splash {
-        transition: none;
-      }
-    }
   </style>
 </head>
 <body>
   <div id="startup-splash" aria-hidden="true">
     <div class="startup-splash__content">
-      <img
-        class="startup-splash__logo"
-        src="icons/Icon-192.png"
-        alt=""
-        width="192"
-        height="192"
-      >
+      <div class="startup-splash__logo">
+        <img
+          class="startup-splash__pictogram"
+          src="assets/assets/branding/mobsante_pictogram_transparent.png"
+          alt=""
+          width="1254"
+          height="1254"
+        >
+        <img
+          class="startup-splash__mobilization-symbol"
+          src="assets/assets/branding/mobilization_flame.png"
+          alt=""
+          width="1254"
+          height="1254"
+        >
+      </div>
       <h1 class="startup-splash__title">MobSanté</h1>
       <p class="startup-splash__subtitle">Incendies Gironde</p>
       <div class="startup-splash__signature">URPS MK NA</div>
