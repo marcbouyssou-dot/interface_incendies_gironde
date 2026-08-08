@@ -137,16 +137,12 @@ class _SplashPictogram extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Pictogramme MobSanté',
-      image: true,
-      child: SizedBox.square(
-        dimension: 246,
-        child: const BrandMark(
-          key: Key('splash-pictogram'),
-          size: 246,
-          onDarkBackground: true,
-        ),
+    return const SizedBox.square(
+      dimension: 246,
+      child: BrandMark(
+        key: Key('splash-pictogram'),
+        size: 246,
+        onDarkBackground: true,
       ),
     );
   }

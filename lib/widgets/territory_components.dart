@@ -135,84 +135,96 @@ class SectorStatusCard extends StatelessWidget {
     final identity = CoordinatorIdentity.of(context);
     final statusColor = territoryStatusColor(sector.status, colors);
     final statusContainer = territoryStatusContainer(sector.status, colors);
-    return Container(
-      key: Key('sector-status-${sector.group.name}'),
-      padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-        boxShadow: V5Elevation.level1(colors),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  sector.group.label,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              const SizedBox(width: V5Spacing.sm),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: statusContainer,
-                  borderRadius: BorderRadius.circular(V5Radius.pill),
-                ),
-                child: Text(
-                  sector.status.label,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: statusColor,
-                    letterSpacing: 0.1,
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label:
+          'Secteur ${sector.group.label}. État : ${sector.status.label}. '
+          '${sector.activeNeeds} besoins actifs, '
+          '${sector.uncoveredNeeds} non couverts. '
+          'Prochaine échéance : ${sector.nextDeadline}.',
+      child: Container(
+        key: Key('sector-status-${sector.group.name}'),
+        padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
+        decoration: BoxDecoration(
+          color: colors.surfaceElevated,
+          borderRadius: BorderRadius.circular(V5Radius.card),
+          boxShadow: V5Elevation.level1(colors),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    sector.group.label,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
+                ),
+                const SizedBox(width: V5Spacing.sm),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusContainer,
+                    borderRadius: BorderRadius.circular(V5Radius.pill),
+                  ),
+                  child: Text(
+                    sector.status.label,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: V5Spacing.sm),
+            TerritoryStatusRow(
+              label: 'Besoins actifs',
+              value: '${sector.activeNeeds}',
+              icon: Icons.assignment_outlined,
+              status: sector.status,
+            ),
+            TerritoryStatusRow(
+              label: 'Non couverts',
+              value: '${sector.uncoveredNeeds}',
+              icon: Icons.shield_outlined,
+              status: sector.status,
+            ),
+            TerritoryStatusRow(
+              label: 'Prochaine échéance',
+              value: sector.nextDeadline,
+              icon: Icons.schedule_rounded,
+              status: sector.status,
+            ),
+            if (trend != null)
+              TerritoryStatusRow(
+                label: 'Tendance',
+                value: trend!,
+                icon: Icons.trending_flat_rounded,
+                status: sector.status,
+              ),
+            if (onView != null) ...[
+              const SizedBox(height: V5Spacing.xxs),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: onView,
+                  style: TextButton.styleFrom(
+                    foregroundColor: identity.accent,
+                    minimumSize: const Size(0, 44),
+                  ),
+                  child: const Text('Voir'),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: V5Spacing.sm),
-          TerritoryStatusRow(
-            label: 'Besoins actifs',
-            value: '${sector.activeNeeds}',
-            icon: Icons.assignment_outlined,
-            status: sector.status,
-          ),
-          TerritoryStatusRow(
-            label: 'Non couverts',
-            value: '${sector.uncoveredNeeds}',
-            icon: Icons.shield_outlined,
-            status: sector.status,
-          ),
-          TerritoryStatusRow(
-            label: 'Prochaine échéance',
-            value: sector.nextDeadline,
-            icon: Icons.schedule_rounded,
-            status: sector.status,
-          ),
-          if (trend != null)
-            TerritoryStatusRow(
-              label: 'Tendance',
-              value: trend!,
-              icon: Icons.trending_flat_rounded,
-              status: sector.status,
-            ),
-          if (onView != null) ...[
-            const SizedBox(height: V5Spacing.xxs),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: onView,
-                style: TextButton.styleFrom(
-                  foregroundColor: identity.accent,
-                  minimumSize: const Size(0, 44),
-                ),
-                child: const Text('Voir'),
-              ),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

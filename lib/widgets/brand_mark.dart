@@ -30,50 +30,52 @@ class BrandMark extends StatelessWidget {
         : Image.asset(
             assetPath!,
             fit: BoxFit.contain,
-            semanticLabel: 'Logo MobSanté',
+            excludeFromSemantics: true,
           );
     return Semantics(
-      label: 'Logo MobSanté',
+      label: 'MobSanté',
       image: true,
-      child: SizedBox.square(
-        key: const Key('brand-logo-slot'),
-        dimension: size,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned.fill(
-              child: assetPath == null
-                  ? DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: onDarkBackground
-                            ? Colors.white.withValues(alpha: .12)
-                            : AppColors.orangeSoft,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(size * .12),
-                        child: mark,
-                      ),
-                    )
-                  : mark,
-            ),
-            if (assetPath != null && showMobilizationSymbol)
-              Positioned(
-                top: -size * .08,
-                right: -size * .06,
-                width: size * .48,
-                height: size * .54,
-                child: Transform.scale(
-                  scale: 1.72,
-                  child: Image.asset(
-                    AppIdentity.mobilizationSymbolAsset,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                    semanticLabel: 'Symbole de mobilisation',
+      child: ExcludeSemantics(
+        child: SizedBox.square(
+          key: const Key('brand-logo-slot'),
+          dimension: size,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: assetPath == null
+                    ? DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: onDarkBackground
+                              ? Colors.white.withValues(alpha: .12)
+                              : AppColors.orangeSoft,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(size * .12),
+                          child: mark,
+                        ),
+                      )
+                    : mark,
+              ),
+              if (assetPath != null && showMobilizationSymbol)
+                Positioned(
+                  top: -size * .08,
+                  right: -size * .06,
+                  width: size * .48,
+                  height: size * .54,
+                  child: Transform.scale(
+                    scale: 1.72,
+                    child: Image.asset(
+                      AppIdentity.mobilizationSymbolAsset,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                      excludeFromSemantics: true,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

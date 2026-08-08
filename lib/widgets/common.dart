@@ -489,25 +489,33 @@ class AnimatedCoverageIndicator extends StatelessWidget {
     required this.value,
     this.color = AppColors.orange,
     this.minHeight = 16,
+    this.semanticLabel = 'Progression',
   });
 
   final double value;
   final Color color;
   final double minHeight;
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: value),
-      duration: const Duration(milliseconds: 700),
-      curve: Curves.easeOutCubic,
-      builder: (context, animatedValue, _) => ClipRRect(
-        borderRadius: BorderRadius.circular(minHeight),
-        child: LinearProgressIndicator(
-          minHeight: minHeight,
-          value: animatedValue,
-          color: color,
-          backgroundColor: AppColors.border,
+    return Semantics(
+      label: semanticLabel,
+      value: '${(value * 100).round()} pour cent',
+      child: ExcludeSemantics(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: value),
+          duration: const Duration(milliseconds: 700),
+          curve: Curves.easeOutCubic,
+          builder: (context, animatedValue, _) => ClipRRect(
+            borderRadius: BorderRadius.circular(minHeight),
+            child: LinearProgressIndicator(
+              minHeight: minHeight,
+              value: animatedValue,
+              color: color,
+              backgroundColor: AppColors.border,
+            ),
+          ),
         ),
       ),
     );
@@ -913,7 +921,40 @@ class NeedCard extends StatelessWidget {
         ],
       ),
     );
-    return _animatedCard(content);
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: _semanticSummary,
+      child: _animatedCard(content),
+    );
+  }
+
+  String get _semanticSummary {
+    final required = need.professionQuotas.requiredTotal;
+    final registered = need.professionQuotas.registeredTotal;
+    final remaining = (required - registered).clamp(0, required);
+    final professions = need.professionQuotas.values
+        .where((quota) => quota.required > 0)
+        .map(
+          (quota) =>
+              HealthProfessionRegistry.byId(quota.professionId)?.missionLabel ??
+              quota.professionId,
+        )
+        .join(', ');
+    final status = switch (need.status) {
+      NeedStatus.critical => 'critique',
+      NeedStatus.toComplete => 'à compléter',
+      NeedStatus.complete => 'complet',
+    };
+    final filled = registered == 1
+        ? '1 poste pourvu'
+        : '$registered postes pourvus';
+    final open = remaining == 1
+        ? '1 poste à couvrir'
+        : '$remaining postes à couvrir';
+    return 'Besoin pour ${professions.isEmpty ? 'profession non précisée' : professions}, '
+        '${need.place}, ${need.date}, ${need.time}. État : $status. '
+        '$filled sur $required, $open.';
   }
 
   Widget _buildProfessionalHomeContent() {

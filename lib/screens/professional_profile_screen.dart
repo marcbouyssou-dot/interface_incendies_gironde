@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../models/need.dart';
@@ -433,6 +434,17 @@ class _ProfessionalProfileEditorState
   late final TextEditingController _cptsLabel;
   late final TextEditingController _equipmentDetails;
   late final Set<String> _equipment;
+  final _firstNameFocus = FocusNode(debugLabel: 'profile-first-name');
+  final _lastNameFocus = FocusNode(debugLabel: 'profile-last-name');
+  final _phoneFocus = FocusNode(debugLabel: 'profile-phone');
+  final _emailFocus = FocusNode(debugLabel: 'profile-email');
+  final _idTypeFocus = FocusNode(debugLabel: 'profile-id-type');
+  final _idValueFocus = FocusNode(debugLabel: 'profile-id-value');
+  final _cptsIdFocus = FocusNode(debugLabel: 'profile-cpts-id');
+  final _cptsLabelFocus = FocusNode(debugLabel: 'profile-cpts-label');
+  final _equipmentDetailsFocus = FocusNode(
+    debugLabel: 'profile-equipment-details',
+  );
   bool _saving = false;
 
   @override
@@ -468,6 +480,15 @@ class _ProfessionalProfileEditorState
     _cptsId.dispose();
     _cptsLabel.dispose();
     _equipmentDetails.dispose();
+    _firstNameFocus.dispose();
+    _lastNameFocus.dispose();
+    _phoneFocus.dispose();
+    _emailFocus.dispose();
+    _idTypeFocus.dispose();
+    _idValueFocus.dispose();
+    _cptsIdFocus.dispose();
+    _cptsLabelFocus.dispose();
+    _equipmentDetailsFocus.dispose();
     super.dispose();
   }
 
@@ -545,6 +566,8 @@ class _ProfessionalProfileEditorState
                             key: const Key('professional-profile-first-name'),
                             label: 'Prénom',
                             controller: _firstName,
+                            focusNode: _firstNameFocus,
+                            isRequired: true,
                             validator: _required,
                           ),
                         ),
@@ -554,6 +577,8 @@ class _ProfessionalProfileEditorState
                             key: const Key('professional-profile-last-name'),
                             label: 'Nom',
                             controller: _lastName,
+                            focusNode: _lastNameFocus,
+                            isRequired: true,
                             validator: _required,
                           ),
                         ),
@@ -564,15 +589,20 @@ class _ProfessionalProfileEditorState
                       key: const Key('professional-profile-phone'),
                       label: 'Téléphone',
                       controller: _phone,
+                      focusNode: _phoneFocus,
                       keyboardType: TextInputType.phone,
+                      isRequired: true,
                       validator: _required,
                     ),
                     const SizedBox(height: V5Spacing.sm),
                     V5TextField(
                       key: const Key('professional-profile-email'),
                       label: 'Email',
+                      semanticLabel: 'Email professionnel',
                       controller: _email,
+                      focusNode: _emailFocus,
                       keyboardType: TextInputType.emailAddress,
+                      isRequired: true,
                       validator: _emailValidator,
                     ),
                   ],
@@ -589,6 +619,7 @@ class _ProfessionalProfileEditorState
                         'professional-profile-id-type-${_profession.name}',
                       ),
                       label: 'Type d’identifiant',
+                      focusNode: _idTypeFocus,
                       value: _idType,
                       options: [
                         for (final type in _idTypes)
@@ -608,9 +639,11 @@ class _ProfessionalProfileEditorState
                       key: const Key('professional-profile-id-value'),
                       label: _idType.label,
                       controller: _idValue,
+                      focusNode: _idValueFocus,
                       keyboardType: _idType == ProfessionalIdType.rpps
                           ? TextInputType.number
                           : TextInputType.text,
+                      isRequired: true,
                       inputFormatters: [
                         if (_idType == ProfessionalIdType.rpps)
                           FilteringTextInputFormatter.digitsOnly,
@@ -633,12 +666,14 @@ class _ProfessionalProfileEditorState
                       key: const Key('professional-profile-cpts-id'),
                       label: 'Identifiant CPTS (facultatif)',
                       controller: _cptsId,
+                      focusNode: _cptsIdFocus,
                     ),
                     const SizedBox(height: V5Spacing.sm),
                     V5TextField(
                       key: const Key('professional-profile-cpts-label'),
                       label: 'CPTS (facultatif)',
                       controller: _cptsLabel,
+                      focusNode: _cptsLabelFocus,
                     ),
                   ],
                 ),
@@ -673,6 +708,8 @@ class _ProfessionalProfileEditorState
                         ),
                         label: 'Précisez le matériel',
                         controller: _equipmentDetails,
+                        focusNode: _equipmentDetailsFocus,
+                        isRequired: true,
                         validator: _required,
                       ),
                   ],
@@ -717,8 +754,18 @@ class _ProfessionalProfileEditorState
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      await _focusFirstInvalidField();
+      return;
+    }
     if ((_cptsId.text.trim().isEmpty) != (_cptsLabel.text.trim().isEmpty)) {
+      final missingCptsId = _cptsId.text.trim().isEmpty;
+      await _focusAndAnnounce(
+        focusNode: missingCptsId ? _cptsIdFocus : _cptsLabelFocus,
+        label: missingCptsId ? 'Identifiant CPTS' : 'CPTS',
+        error: 'Renseignez ensemble l’identifiant et le nom CPTS.',
+      );
+      if (!mounted) return;
       V5Toast.show(
         context,
         message: 'Renseignez ensemble l’identifiant et le nom CPTS.',
@@ -762,6 +809,96 @@ class _ProfessionalProfileEditorState
         context,
         message: 'Le profil n’a pas pu être enregistré. Réessayez.',
         tone: V5ToastTone.danger,
+      );
+    }
+  }
+
+  Future<void> _focusFirstInvalidField() async {
+    final failure = _firstInvalidField();
+    if (failure == null) return;
+    await _focusAndAnnounce(
+      focusNode: failure.focusNode,
+      label: failure.label,
+      error: failure.error,
+    );
+  }
+
+  ({FocusNode focusNode, String label, String error})? _firstInvalidField() {
+    final candidates = <({FocusNode focusNode, String label, String? error})>[
+      (
+        focusNode: _firstNameFocus,
+        label: 'Prénom',
+        error: _required(_firstName.text),
+      ),
+      (
+        focusNode: _lastNameFocus,
+        label: 'Nom',
+        error: _required(_lastName.text),
+      ),
+      (
+        focusNode: _phoneFocus,
+        label: 'Téléphone',
+        error: _required(_phone.text),
+      ),
+      (
+        focusNode: _emailFocus,
+        label: 'Email professionnel',
+        error: _emailValidator(_email.text),
+      ),
+      (
+        focusNode: _idTypeFocus,
+        label: 'Type d’identifiant',
+        error:
+            _idType == ProfessionalIdType.rpps ||
+                _idType == ProfessionalIdType.ordinal
+            ? null
+            : 'Choisissez un identifiant professionnel.',
+      ),
+      (
+        focusNode: _idValueFocus,
+        label: _idType.label,
+        error: _idValidator(_idValue.text),
+      ),
+      if (ProfessionalEquipmentRegistry.requiresDetails(_equipment))
+        (
+          focusNode: _equipmentDetailsFocus,
+          label: 'Précisez le matériel',
+          error: _required(_equipmentDetails.text),
+        ),
+    ];
+    for (final candidate in candidates) {
+      if (candidate.error != null) {
+        return (
+          focusNode: candidate.focusNode,
+          label: candidate.label,
+          error: candidate.error!,
+        );
+      }
+    }
+    return null;
+  }
+
+  Future<void> _focusAndAnnounce({
+    required FocusNode focusNode,
+    required String label,
+    required String error,
+  }) async {
+    focusNode.requestFocus();
+    final fieldContext = focusNode.context;
+    if (fieldContext != null) {
+      await Scrollable.ensureVisible(
+        fieldContext,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        alignment: 0.2,
+      );
+    }
+    if (!mounted) return;
+    if (MediaQuery.supportsAnnounceOf(context)) {
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        '$label. Erreur : $error',
+        Directionality.of(context),
       );
     }
   }

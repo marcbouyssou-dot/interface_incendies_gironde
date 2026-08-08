@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
@@ -449,7 +450,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                               in HealthProfessionRegistry.values) ...[
                             _QuotaStepper(
                               key: _quotaKeys[profession.id],
-                              label: profession.missionLabel,
+                              profession: profession,
                               value: _requiredByProfession[profession.id]!,
                               removeKey: Key('${profession.id}-remove'),
                               addKey: Key('${profession.id}-add'),
@@ -559,24 +560,31 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     ),
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 13,
-                          vertical: 11,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.redSoft,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          _errorMessage!,
-                          key: const Key('mission-form-error'),
-                          style: const TextStyle(
-                            color: AppColors.red,
-                            fontSize: 12,
-                            height: 1.35,
-                            fontWeight: FontWeight.w700,
+                      Semantics(
+                        container: true,
+                        liveRegion: true,
+                        label: 'Erreur : $_errorMessage',
+                        child: ExcludeSemantics(
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 13,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.redSoft,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              _errorMessage!,
+                              key: const Key('mission-form-error'),
+                              style: const TextStyle(
+                                color: AppColors.red,
+                                fontSize: 12,
+                                height: 1.35,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -838,15 +846,23 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   }
 
   void _changeQuota(String professionId, int delta) {
+    final current = _requiredByProfession[professionId]!;
+    final updated = current + delta;
     setState(() {
-      final current = _requiredByProfession[professionId]!;
-      final updated = current + delta;
       _requiredByProfession[professionId] = updated;
       _equipmentProfessionHistory.remove(professionId);
       if (updated > 0) _equipmentProfessionHistory.add(professionId);
       _retainCompatibleEquipment();
       _errorMessage = null;
     });
+    final profession = HealthProfessionRegistry.byId(professionId);
+    if (profession != null && MediaQuery.supportsAnnounceOf(context)) {
+      SemanticsService.sendAnnouncement(
+        View.of(context),
+        _quotaValueLabel(profession, updated),
+        Directionality.of(context),
+      );
+    }
   }
 
   HealthProfessionDefinition? get _equipmentProfession {
@@ -1600,7 +1616,7 @@ class _LocationInput extends StatelessWidget {
 class _QuotaStepper extends StatelessWidget {
   const _QuotaStepper({
     super.key,
-    required this.label,
+    required this.profession,
     required this.value,
     required this.onRemove,
     required this.onAdd,
@@ -1609,7 +1625,7 @@ class _QuotaStepper extends StatelessWidget {
     required this.addFocusNode,
   });
 
-  final String label;
+  final HealthProfessionDefinition profession;
   final int value;
   final VoidCallback? onRemove;
   final VoidCallback? onAdd;
@@ -1619,6 +1635,8 @@ class _QuotaStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final valueLabel = _quotaValueLabel(profession, value);
+    final professionLabel = _quotaProfessionSingular(profession);
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.fromLTRB(14, 7, 8, 7),
@@ -1631,7 +1649,7 @@ class _QuotaStepper extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              label,
+              profession.missionLabel,
               style: const TextStyle(
                 color: _CreateNeedVisuals.navy,
                 fontSize: 12,
@@ -1644,17 +1662,24 @@ class _QuotaStepper extends StatelessWidget {
             key: removeKey,
             onPressed: onRemove,
             icon: Icons.remove_rounded,
+            semanticLabel: 'Retirer un $professionLabel',
+            semanticValue: valueLabel,
           ),
           SizedBox(
             width: 40,
-            child: Text(
-              '$value',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: _CreateNeedVisuals.navy,
-                fontSize: 20,
-                height: 1,
-                fontWeight: FontWeight.w800,
+            child: Semantics(
+              label: valueLabel,
+              child: ExcludeSemantics(
+                child: Text(
+                  '$value',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _CreateNeedVisuals.navy,
+                    fontSize: 20,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1663,6 +1688,8 @@ class _QuotaStepper extends StatelessWidget {
             focusNode: addFocusNode,
             onPressed: onAdd,
             icon: Icons.add_rounded,
+            semanticLabel: 'Ajouter un $professionLabel',
+            semanticValue: valueLabel,
           ),
         ],
       ),
@@ -1675,37 +1702,71 @@ class _QuotaIconButton extends StatelessWidget {
     super.key,
     required this.icon,
     required this.onPressed,
+    required this.semanticLabel,
+    required this.semanticValue,
     this.focusNode,
   });
 
   final IconData icon;
   final VoidCallback? onPressed;
+  final String semanticLabel;
+  final String semanticValue;
   final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    return SizedBox.square(
-      dimension: 40,
-      child: IconButton(
-        focusNode: focusNode,
-        onPressed: onPressed,
-        padding: EdgeInsets.zero,
-        style: IconButton.styleFrom(
-          foregroundColor: _CreateNeedVisuals.navy,
-          backgroundColor: Colors.white,
-          disabledForegroundColor: _CreateNeedVisuals.textDisabled,
-          disabledBackgroundColor: _CreateNeedVisuals.fieldBackground,
-          side: BorderSide(
-            color: enabled
-                ? _CreateNeedVisuals.navy
-                : _CreateNeedVisuals.borderStrong,
-            width: 1.2,
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: semanticLabel,
+      value: semanticValue,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: SizedBox.square(
+        dimension: 44,
+        child: IconButton(
+          focusNode: focusNode,
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            minimumSize: const Size.square(44),
+            foregroundColor: _CreateNeedVisuals.navy,
+            backgroundColor: Colors.white,
+            disabledForegroundColor: _CreateNeedVisuals.textDisabled,
+            disabledBackgroundColor: _CreateNeedVisuals.fieldBackground,
+            side: BorderSide(
+              color: enabled
+                  ? _CreateNeedVisuals.navy
+                  : _CreateNeedVisuals.borderStrong,
+              width: 1.2,
+            ),
+            shape: const CircleBorder(),
           ),
-          shape: const CircleBorder(),
+          icon: Icon(icon, size: 19),
         ),
-        icon: Icon(icon, size: 19),
       ),
     );
   }
+}
+
+String _quotaProfessionSingular(HealthProfessionDefinition profession) =>
+    switch (profession.id) {
+      HealthProfessionId.physiotherapist => 'masseur-kinésithérapeute',
+      HealthProfessionId.podiatrist => 'pédicure-podologue',
+      HealthProfessionId.physician => 'médecin',
+      HealthProfessionId.nurse => 'infirmier',
+      HealthProfessionId.veterinarian => 'vétérinaire',
+      HealthProfessionId.otherHealthProfessional =>
+        'autre professionnel de santé',
+      _ => profession.missionLabel.toLowerCase(),
+    };
+
+String _quotaValueLabel(HealthProfessionDefinition profession, int value) {
+  final singular = _quotaProfessionSingular(profession);
+  if (value == 1) return '1 $singular demandé';
+  final plural = profession.id == HealthProfessionId.otherHealthProfessional
+      ? 'autres professionnels de santé'
+      : '${singular}s';
+  return '$value $plural demandés';
 }

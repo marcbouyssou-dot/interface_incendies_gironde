@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/v5_foundation.dart';
 import 'native_interactions.dart';
 import 'v5_controls.dart';
 
-class V5TextField extends StatelessWidget {
+class V5TextField extends StatefulWidget {
   const V5TextField({
     super.key,
     required this.label,
@@ -41,6 +42,8 @@ class V5TextField extends StatelessWidget {
     this.maxLength,
     this.scrollPadding = const EdgeInsets.all(20),
     this.autovalidateMode,
+    this.isRequired = false,
+    this.semanticLabel,
   }) : assert(controller == null || initialValue == null),
        assert(minLines > 0),
        assert(maxLines == null || maxLines >= minLines);
@@ -75,51 +78,88 @@ class V5TextField extends StatelessWidget {
   final int? maxLength;
   final EdgeInsets scrollPadding;
   final AutovalidateMode? autovalidateMode;
+  final bool isRequired;
+  final String? semanticLabel;
+
+  @override
+  State<V5TextField> createState() => _V5TextFieldState();
+}
+
+class _V5TextFieldState extends State<V5TextField> {
+  String? _validationError;
+
+  String? _validate(String? value) {
+    final error = widget.validator?.call(value);
+    if (error != _validationError) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && error != _validationError) {
+          setState(() => _validationError = error);
+        }
+      });
+    }
+    return error;
+  }
+
+  String get _accessibilityLabel {
+    final label = widget.semanticLabel ?? widget.label;
+    final error = widget.errorText ?? _validationError;
+    return [
+      label,
+      if (widget.isRequired) 'obligatoire',
+      if (error != null && error.trim().isNotEmpty) 'Erreur : $error',
+    ].join(', ');
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     return _V5FieldLabel(
-      label: label,
-      enabled: enabled,
-      child: TextFormField(
-        controller: controller,
-        initialValue: initialValue,
-        focusNode: focusNode,
-        keyboardType: keyboardType,
-        textInputAction: textInputAction,
-        textCapitalization: textCapitalization,
-        inputFormatters: inputFormatters,
-        autofillHints: autofillHints,
-        validator: validator,
-        onChanged: onChanged,
-        onFieldSubmitted: onFieldSubmitted,
-        onTap: onTap,
-        onTapOutside: onTapOutside,
-        enabled: enabled,
-        readOnly: readOnly,
-        autocorrect: autocorrect,
-        enableSuggestions: enableSuggestions,
-        obscureText: obscureText,
-        autofocus: autofocus,
-        minLines: obscureText ? 1 : minLines,
-        maxLines: obscureText ? 1 : maxLines,
-        maxLength: maxLength,
-        scrollPadding: scrollPadding,
-        autovalidateMode: autovalidateMode,
-        cursorColor: colors.accent,
-        style: Theme.of(
-          context,
-        ).textTheme.bodyLarge?.copyWith(color: colors.textPrimary),
-        decoration: _fieldDecoration(
-          context,
-          hint: hint,
-          supportingText: supportingText,
-          errorText: errorText,
-          prefixIcon: prefixIcon,
-          suffixIcon: suffixIcon,
-          enabled: enabled,
-          multiline: maxLines != 1,
+      label: widget.label,
+      enabled: widget.enabled,
+      excludeLabelSemantics: true,
+      child: MergeSemantics(
+        child: Semantics(
+          label: _accessibilityLabel,
+          child: TextFormField(
+            controller: widget.controller,
+            initialValue: widget.initialValue,
+            focusNode: widget.focusNode,
+            keyboardType: widget.keyboardType,
+            textInputAction: widget.textInputAction,
+            textCapitalization: widget.textCapitalization,
+            inputFormatters: widget.inputFormatters,
+            autofillHints: widget.autofillHints,
+            validator: widget.validator == null ? null : _validate,
+            onChanged: widget.onChanged,
+            onFieldSubmitted: widget.onFieldSubmitted,
+            onTap: widget.onTap,
+            onTapOutside: widget.onTapOutside,
+            enabled: widget.enabled,
+            readOnly: widget.readOnly,
+            autocorrect: widget.autocorrect,
+            enableSuggestions: widget.enableSuggestions,
+            obscureText: widget.obscureText,
+            autofocus: widget.autofocus,
+            minLines: widget.obscureText ? 1 : widget.minLines,
+            maxLines: widget.obscureText ? 1 : widget.maxLines,
+            maxLength: widget.maxLength,
+            scrollPadding: widget.scrollPadding,
+            autovalidateMode: widget.autovalidateMode,
+            cursorColor: colors.accent,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: colors.textPrimary),
+            decoration: _fieldDecoration(
+              context,
+              hint: widget.hint,
+              supportingText: widget.supportingText,
+              errorText: widget.errorText,
+              prefixIcon: widget.prefixIcon,
+              suffixIcon: widget.suffixIcon,
+              enabled: widget.enabled,
+              multiline: widget.maxLines != 1,
+            ),
+          ),
         ),
       ),
     );
@@ -199,6 +239,16 @@ class V5SelectField<T> extends StatelessWidget {
                   if (selection == null) return;
                   state.didChange(selection);
                   onChanged?.call(selection);
+                  final selectedOption = _optionFor(selection);
+                  if (selectedOption != null && context.mounted) {
+                    if (MediaQuery.supportsAnnounceOf(context)) {
+                      SemanticsService.sendAnnouncement(
+                        View.of(context),
+                        '${selectedOption.label}, sélectionné',
+                        Directionality.of(context),
+                      );
+                    }
+                  }
                 },
         );
       },
@@ -991,11 +1041,13 @@ class _V5FieldLabel extends StatelessWidget {
     required this.label,
     required this.enabled,
     required this.child,
+    this.excludeLabelSemantics = false,
   });
 
   final String label;
   final bool enabled;
   final Widget child;
+  final bool excludeLabelSemantics;
 
   @override
   Widget build(BuildContext context) {
@@ -1003,12 +1055,15 @@ class _V5FieldLabel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: enabled
-                ? colors.textPrimary
-                : colors.textSecondary.withValues(alpha: 0.72),
+        ExcludeSemantics(
+          excluding: excludeLabelSemantics,
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: enabled
+                  ? colors.textPrimary
+                  : colors.textSecondary.withValues(alpha: 0.72),
+            ),
           ),
         ),
         const SizedBox(height: V5Spacing.xs),
@@ -1105,6 +1160,7 @@ class _V5PickerFormField extends StatelessWidget {
     return _V5FieldLabel(
       label: label,
       enabled: enabled,
+      excludeLabelSemantics: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1113,6 +1169,8 @@ class _V5PickerFormField extends StatelessWidget {
             enabled: enabled,
             label: label,
             value: semanticValue ?? value,
+            onTap: enabled ? onTap : null,
+            excludeSemantics: true,
             child: CupertinoButton(
               focusNode: focusNode,
               padding: EdgeInsets.zero,
@@ -1241,49 +1299,59 @@ class _V5SelectionSheet<T> extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final option = options[index];
                     final selected = option.value == selectedValue;
-                    return CupertinoButton(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: V5Spacing.lg,
-                        vertical: V5Spacing.sm,
-                      ),
-                      onPressed: option.enabled
-                          ? () => Navigator.of(context).pop(option.value)
-                          : null,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  option.label,
-                                  style: Theme.of(context).textTheme.bodyLarge
-                                      ?.copyWith(
-                                        color: option.enabled
-                                            ? colors.textPrimary
-                                            : colors.textSecondary,
-                                        fontWeight: selected
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                      ),
-                                ),
-                                if (option.subtitle case final subtitle?) ...[
-                                  const SizedBox(height: V5Spacing.xxs),
+                    final onTap = option.enabled
+                        ? () => Navigator.of(context).pop(option.value)
+                        : null;
+                    return Semantics(
+                      button: true,
+                      enabled: option.enabled,
+                      selected: selected,
+                      label: option.label,
+                      value: option.subtitle,
+                      onTap: onTap,
+                      excludeSemantics: true,
+                      child: CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: V5Spacing.lg,
+                          vertical: V5Spacing.sm,
+                        ),
+                        onPressed: onTap,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Text(
-                                    subtitle,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
+                                    option.label,
+                                    style: Theme.of(context).textTheme.bodyLarge
+                                        ?.copyWith(
+                                          color: option.enabled
+                                              ? colors.textPrimary
+                                              : colors.textSecondary,
+                                          fontWeight: selected
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                        ),
                                   ),
+                                  if (option.subtitle case final subtitle?) ...[
+                                    const SizedBox(height: V5Spacing.xxs),
+                                    Text(
+                                      subtitle,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                          if (selected) ...[
-                            const SizedBox(width: V5Spacing.sm),
-                            Icon(Icons.check_rounded, color: colors.accent),
+                            if (selected) ...[
+                              const SizedBox(width: V5Spacing.sm),
+                              Icon(Icons.check_rounded, color: colors.accent),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     );
                   },

@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -95,6 +97,7 @@ void main() {
   });
 
   testWidgets('V5TextField supports input and form validation', (tester) async {
+    final semantics = tester.ensureSemantics();
     final formKey = GlobalKey<FormState>();
     await tester.pumpWidget(
       app(
@@ -105,9 +108,11 @@ void main() {
             child: Column(
               children: [
                 V5TextField(
-                  label: 'Identifiant',
+                  label: 'Email',
+                  semanticLabel: 'Email professionnel',
+                  isRequired: true,
                   validator: (value) => value == null || value.isEmpty
-                      ? 'Champ obligatoire'
+                      ? 'Adresse email invalide'
                       : null,
                 ),
                 FilledButton(
@@ -122,13 +127,36 @@ void main() {
     );
 
     await tester.tap(find.text('Valider'));
-    await tester.pump();
-    expect(find.text('Champ obligatoire'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Adresse email invalide'), findsOneWidget);
+    final invalidField = tester.getSemantics(
+      find.bySemanticsLabel(
+        RegExp(
+          r'Email professionnel, obligatoire, Erreur : Adresse email invalide',
+        ),
+      ),
+    );
+    expect(invalidField.flagsCollection.isTextField, isTrue);
+    expect('Email professionnel'.allMatches(invalidField.label), hasLength(1));
+    expect(
+      'Adresse email invalide'.allMatches(invalidField.label),
+      hasLength(1),
+    );
+    expect(find.bySemanticsLabel('Email'), findsNothing);
 
     await tester.enterText(find.byType(TextFormField), '123456');
     await tester.tap(find.text('Valider'));
-    await tester.pump();
-    expect(find.text('Champ obligatoire'), findsNothing);
+    await tester.pumpAndSettle();
+    expect(find.text('Adresse email invalide'), findsNothing);
+    expect(
+      find.bySemanticsLabel('Email professionnel, obligatoire'),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSemantics(find.byType(TextFormField)).value,
+      contains('123456'),
+    );
+    semantics.dispose();
   });
 
   testWidgets('V5SelectField opens its safe sheet and returns a value', (
@@ -175,6 +203,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(selection, 'infirmier');
     expect(find.text('Infirmier'), findsOneWidget);
+  });
+
+  testWidgets('V5SelectField options expose selected state', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      app(
+        Padding(
+          padding: const EdgeInsets.all(V5Spacing.lg),
+          child: V5SelectField<String>(
+            key: const Key('selected-state-select'),
+            label: 'Profession',
+            value: 'medecin',
+            options: const [
+              V5SelectOption(value: 'medecin', label: 'Médecin'),
+              V5SelectOption(value: 'infirmier', label: 'Infirmier'),
+            ],
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('selected-state-select')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final selected = tester.getSemantics(find.bySemanticsLabel('Médecin'));
+    final unselected = tester.getSemantics(find.bySemanticsLabel('Infirmier'));
+    expect(selected.flagsCollection.isSelected, ui.Tristate.isTrue);
+    expect(unselected.flagsCollection.isSelected, ui.Tristate.isFalse);
+    semantics.dispose();
   });
 
   testWidgets('V5DateField and V5TimeField use Cupertino pickers', (

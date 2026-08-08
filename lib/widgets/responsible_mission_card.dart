@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/profession_quotas.dart';
 import '../theme/v5_foundation.dart';
 
 enum ResponsibleMissionTone { urgent, attention, controlled, covered, past }
@@ -42,104 +43,151 @@ class ResponsibleMissionCard extends StatelessWidget {
     final quotas = need.professionQuotas.values
         .where((quota) => quota.required > 0)
         .toList(growable: false);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 17, 18, 14),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-        boxShadow: [
-          BoxShadow(
-            color: colors.shadow.withValues(alpha: 0.035),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  need.place,
-                  style: Theme.of(context).textTheme.titleMedium,
+    final coverage = required == 0
+        ? 1.0
+        : (registered / required).clamp(0, 1).toDouble();
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      label: _semanticSummary(quotas, registered, required),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 17, 18, 14),
+        decoration: BoxDecoration(
+          color: colors.surfaceElevated,
+          borderRadius: BorderRadius.circular(V5Radius.card),
+          boxShadow: [
+            BoxShadow(
+              color: colors.shadow.withValues(alpha: 0.035),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    need.place,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
-              ),
-              const SizedBox(width: V5Spacing.sm),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: toneContainer,
+                const SizedBox(width: V5Spacing.sm),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: toneContainer,
+                    borderRadius: BorderRadius.circular(V5Radius.pill),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: toneColor,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: V5Spacing.xs),
+            Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 14,
+                  color: colors.textSecondary,
+                ),
+                const SizedBox(width: V5Spacing.xs),
+                Expanded(
+                  child: Text(
+                    '${need.date} · ${need.time}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+            if (quotas.isNotEmpty) ...[
+              const SizedBox(height: V5Spacing.md),
+              for (var index = 0; index < quotas.length; index++) ...[
+                _ProfessionProgress(
+                  professionId: quotas[index].professionId,
+                  registered: quotas[index].registered,
+                  required: quotas[index].required,
+                ),
+                if (index < quotas.length - 1)
+                  const SizedBox(height: V5Spacing.xs),
+              ],
+            ],
+            const SizedBox(height: V5Spacing.md),
+            Semantics(
+              label: 'Progression du besoin',
+              value: _coverageLabel(registered, required),
+              child: ExcludeSemantics(
+                child: ClipRRect(
                   borderRadius: BorderRadius.circular(V5Radius.pill),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  child: LinearProgressIndicator(
+                    value: coverage,
+                    minHeight: 4,
+                    backgroundColor: colors.surfaceMuted,
                     color: toneColor,
-                    letterSpacing: 0.1,
                   ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: V5Spacing.xs),
-          Row(
-            children: [
-              Icon(
-                Icons.calendar_today_outlined,
-                size: 14,
-                color: colors.textSecondary,
-              ),
-              const SizedBox(width: V5Spacing.xs),
-              Expanded(
-                child: Text(
-                  '${need.date} · ${need.time}',
-                  style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: V5Spacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: V5Spacing.xs,
+                  runSpacing: V5Spacing.xxs,
+                  children: actions,
                 ),
               ),
             ],
-          ),
-          if (quotas.isNotEmpty) ...[
-            const SizedBox(height: V5Spacing.md),
-            for (var index = 0; index < quotas.length; index++) ...[
-              _ProfessionProgress(
-                professionId: quotas[index].professionId,
-                registered: quotas[index].registered,
-                required: quotas[index].required,
-              ),
-              if (index < quotas.length - 1)
-                const SizedBox(height: V5Spacing.xs),
-            ],
           ],
-          const SizedBox(height: V5Spacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(V5Radius.pill),
-            child: LinearProgressIndicator(
-              value: required == 0
-                  ? 1
-                  : (registered / required).clamp(0, 1).toDouble(),
-              minHeight: 4,
-              backgroundColor: colors.surfaceMuted,
-              color: toneColor,
-            ),
-          ),
-          if (actions.isNotEmpty) ...[
-            const SizedBox(height: V5Spacing.sm),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                spacing: V5Spacing.xs,
-                runSpacing: V5Spacing.xxs,
-                children: actions,
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
+  }
+
+  String _semanticSummary(
+    List<ProfessionQuota> quotas,
+    int registered,
+    int required,
+  ) {
+    final professions = quotas
+        .map(
+          (quota) =>
+              HealthProfessionRegistry.byId(quota.professionId)?.missionLabel ??
+              quota.professionId,
+        )
+        .join(', ');
+    final professionLabel = professions.isEmpty
+        ? 'sans profession demandée'
+        : 'pour $professions';
+    return 'Besoin $professionLabel, ${need.place}, ${need.date}, '
+        '${need.time}. État : $statusLabel. '
+        '${_coverageLabel(registered, required)}.';
+  }
+
+  String _coverageLabel(int registered, int required) {
+    if (required == 0) return 'Aucun poste demandé';
+    final remaining = (required - registered).clamp(0, required);
+    final filled = registered == 1
+        ? '1 poste pourvu'
+        : '$registered postes pourvus';
+    final open = remaining == 1
+        ? '1 poste à couvrir'
+        : '$remaining postes à couvrir';
+    return '$filled sur $required, $open';
   }
 }
 

@@ -14,6 +14,7 @@ void main() {
   testWidgets(
     'an incomplete professional profile can be completed and survives reload',
     (tester) async {
+      final semantics = tester.ensureSemantics();
       final profiles = <String, VolunteerProfile>{};
       final repository = MockCoordinationRepository(
         responsibleAccess: null,
@@ -34,13 +35,26 @@ void main() {
         find.byKey(const Key('save-professional-profile')),
       );
       await tester.tap(find.byKey(const Key('save-professional-profile')));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.text('Champ requis'), findsNWidgets(3));
       expect(find.text('Email invalide'), findsOneWidget);
       expect(
         find.text('Choisissez un identifiant professionnel.'),
         findsOneWidget,
       );
+      final firstNameEditable = tester.widget<EditableText>(
+        find.descendant(
+          of: find.byKey(const Key('professional-profile-first-name')),
+          matching: find.byType(EditableText),
+        ),
+      );
+      expect(firstNameEditable.focusNode.hasFocus, isTrue);
+      final firstNameSemantics = tester.getSemantics(
+        find.bySemanticsLabel(
+          RegExp(r'Prénom, obligatoire, Erreur : Champ requis'),
+        ),
+      );
+      expect(firstNameSemantics.flagsCollection.isTextField, isTrue);
 
       await tester.enterText(
         find.byKey(const Key('professional-profile-first-name')),
@@ -115,6 +129,7 @@ void main() {
       expect(find.text('Profil complet'), findsOneWidget);
       expect(find.text('alice@example.fr'), findsOneWidget);
       expect(find.text('CPTS Médoc'), findsWidgets);
+      semantics.dispose();
     },
   );
 
