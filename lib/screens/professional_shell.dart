@@ -48,7 +48,6 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     2 => ProfessionalProfileScreen(
       onOpenResponsibleAccess: _openResponsibleAccess,
       onOpenSettings: _openSettings,
-      onShowMissions: () => _selectTab(0),
       onSignOut: _signOut,
       onExitCrossRolePreview: widget.onExitCrossRolePreview,
     ),

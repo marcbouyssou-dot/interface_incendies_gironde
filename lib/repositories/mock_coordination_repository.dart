@@ -151,7 +151,7 @@ class MockCoordinationRepository implements CoordinationRepository {
       equipment: profile.equipment,
       otherEquipmentDetails: profile.otherEquipmentDetails,
     );
-    if (profile.uid != volunteerUid) {
+    if (profile.uid.isNotEmpty && profile.uid != volunteerUid) {
       throw const RepositoryException(
         'Ce profil n’appartient pas à la session volontaire active.',
       );

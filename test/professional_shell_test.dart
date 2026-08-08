@@ -163,6 +163,11 @@ void main() {
       find.text('Votre profil professionnel sera bientôt disponible ici.'),
       findsNothing,
     );
+    await tester.drag(
+      find.byKey(const PageStorageKey('professional-profile')),
+      const Offset(0, -900),
+    );
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('open-responsible-access')), findsOneWidget);
   });
 

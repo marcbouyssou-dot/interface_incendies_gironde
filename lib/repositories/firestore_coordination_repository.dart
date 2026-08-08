@@ -255,7 +255,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       otherEquipmentDetails: profile.otherEquipmentDetails,
     );
     final user = _auth.currentUser;
-    if (user == null || !user.isAnonymous || user.uid != profile.uid) {
+    if (user == null ||
+        !user.isAnonymous ||
+        (profile.uid.isNotEmpty && user.uid != profile.uid)) {
       throw const RepositoryException(
         'Ce profil n’appartient pas à la session volontaire active.',
       );
@@ -266,7 +268,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
           final existing = await transaction.get(reference);
           final now = FieldValue.serverTimestamp();
           transaction.set(reference, {
-            ..._profileData(profile, now),
+            ..._profileData(profile, now, uid: user.uid),
             'createdAt': existing.data()?['createdAt'] ?? now,
           });
         })
@@ -1036,8 +1038,9 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
 
   static Map<String, dynamic> _profileData(
     VolunteerProfile profile,
-    Object serverTimestamp,
-  ) {
+    Object serverTimestamp, {
+    required String uid,
+  }) {
     final email = _nullableTrim(profile.email);
     final professionalIdType = profile.effectiveProfessionalIdType;
     final professionalIdValue = _normalizeProfessionalIdValue(
@@ -1047,7 +1050,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     final cptsId = _nullableTrim(profile.cptsId);
     final cptsLabel = _nullableTrim(profile.cptsLabel);
     return {
-      'uid': profile.uid,
+      'uid': uid,
       'firstName': profile.firstName.trim(),
       'lastName': profile.lastName.trim(),
       'phone': profile.phone.trim(),

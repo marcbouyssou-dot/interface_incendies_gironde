@@ -16,14 +16,12 @@ class ProfessionalProfileScreen extends StatefulWidget {
     super.key,
     required this.onOpenResponsibleAccess,
     required this.onOpenSettings,
-    required this.onShowMissions,
     required this.onSignOut,
     this.onExitCrossRolePreview,
   });
 
   final VoidCallback onOpenResponsibleAccess;
   final VoidCallback onOpenSettings;
-  final VoidCallback onShowMissions;
   final Future<void> Function() onSignOut;
   final VoidCallback? onExitCrossRolePreview;
 
@@ -63,17 +61,6 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
   }
 
   Future<void> _editProfile(VolunteerProfile? profile) async {
-    if (profile == null) {
-      widget.onShowMissions();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Choisissez une mission pour créer votre profil professionnel.',
-          ),
-        ),
-      );
-      return;
-    }
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -81,7 +68,12 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
       useSafeArea: true,
       builder: (_) => _ProfessionalProfileEditor(profile: profile),
     );
-    if (saved == true && mounted) _reloadProfile();
+    if (saved == true && mounted) {
+      _reloadProfile();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profil enregistré.')));
+    }
   }
 
   Future<void> _signOut() async {
@@ -105,6 +97,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           final profile = snapshot.hasError ? null : snapshot.data;
+          final profileComplete = _isProfileComplete(profile);
           return LayoutBuilder(
             builder: (context, constraints) {
               final horizontalPadding = constraints.maxWidth <= 556
@@ -170,11 +163,10 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                       ),
                       _ProfileValue(
                         label: 'État',
-                        value: profile?.hasValidProfessionalIdentifier == true
+                        value: profileComplete
                             ? 'Profil complet'
                             : 'Profil à compléter',
-                        valueColor:
-                            profile?.hasValidProfessionalIdentifier == true
+                        valueColor: profileComplete
                             ? context.v5Colors.success
                             : context.v5Colors.warning,
                       ),
@@ -185,9 +177,9 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                           onPressed: () => _editProfile(profile),
                           icon: const Icon(Icons.edit_outlined, size: 18),
                           label: Text(
-                            profile == null
-                                ? 'Compléter mon profil'
-                                : 'Modifier',
+                            profileComplete
+                                ? 'Modifier'
+                                : 'Compléter mon profil',
                           ),
                         ),
                       ),
@@ -329,6 +321,25 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
     }
     return labels.join(' • ');
   }
+
+  bool _isProfileComplete(VolunteerProfile? profile) {
+    if (profile == null || !profile.hasValidProfessionalIdentifier) {
+      return false;
+    }
+    final email = profile.email?.trim() ?? '';
+    final hasIdentity =
+        profile.firstName.trim().isNotEmpty &&
+        profile.lastName.trim().isNotEmpty &&
+        profile.phone.trim().isNotEmpty &&
+        RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+    final hasCompleteCpts =
+        (profile.cptsId?.trim().isNotEmpty ?? false) ==
+        (profile.cptsLabel?.trim().isNotEmpty ?? false);
+    final hasEquipmentDetails =
+        !ProfessionalEquipmentRegistry.requiresDetails(profile.equipment) ||
+        (profile.otherEquipmentDetails?.trim().isNotEmpty ?? false);
+    return hasIdentity && hasCompleteCpts && hasEquipmentDetails;
+  }
 }
 
 class _ProfileSection extends StatelessWidget {
@@ -417,7 +428,7 @@ class _ProfileValue extends StatelessWidget {
 class _ProfessionalProfileEditor extends StatefulWidget {
   const _ProfessionalProfileEditor({required this.profile});
 
-  final VolunteerProfile profile;
+  final VolunteerProfile? profile;
 
   @override
   State<_ProfessionalProfileEditor> createState() =>
@@ -444,22 +455,22 @@ class _ProfessionalProfileEditorState
   void initState() {
     super.initState();
     final profile = widget.profile;
-    _profession = profile.profession;
-    _idType = profile.effectiveProfessionalIdType;
-    _firstName = TextEditingController(text: profile.firstName);
-    _lastName = TextEditingController(text: profile.lastName);
-    _phone = TextEditingController(text: profile.phone);
-    _email = TextEditingController(text: profile.email);
+    _profession = profile?.profession ?? VolunteerProfession.mk;
+    _idType = profile?.effectiveProfessionalIdType ?? ProfessionalIdType.none;
+    _firstName = TextEditingController(text: profile?.firstName);
+    _lastName = TextEditingController(text: profile?.lastName);
+    _phone = TextEditingController(text: profile?.phone);
+    _email = TextEditingController(text: profile?.email);
     _idValue = TextEditingController(
-      text: profile.effectiveProfessionalIdValue,
+      text: profile?.effectiveProfessionalIdValue,
     );
-    _cptsId = TextEditingController(text: profile.cptsId);
-    _cptsLabel = TextEditingController(text: profile.cptsLabel);
+    _cptsId = TextEditingController(text: profile?.cptsId);
+    _cptsLabel = TextEditingController(text: profile?.cptsLabel);
     _equipmentDetails = TextEditingController(
-      text: profile.otherEquipmentDetails,
+      text: profile?.otherEquipmentDetails,
     );
     _equipment = ProfessionalEquipmentRegistry.normalizeStoredValues(
-      profile.equipment,
+      profile?.equipment ?? const [],
     ).toSet();
   }
 
@@ -502,18 +513,26 @@ class _ProfessionalProfileEditorState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Modifier mon profil',
+                widget.profile == null
+                    ? 'Compléter mon profil'
+                    : 'Modifier mon profil',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: V5Spacing.lg),
               DropdownButtonFormField<VolunteerProfession>(
+                key: const Key('professional-profile-profession'),
                 initialValue: _profession,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Profession'),
                 items: [
                   for (final profession in VolunteerProfession.values)
                     DropdownMenuItem(
                       value: profession,
-                      child: Text(profession.label),
+                      child: Text(
+                        profession.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 onChanged: (value) {
@@ -537,6 +556,7 @@ class _ProfessionalProfileEditorState
                 children: [
                   Expanded(
                     child: TextFormField(
+                      key: const Key('professional-profile-first-name'),
                       controller: _firstName,
                       decoration: const InputDecoration(labelText: 'Prénom'),
                       validator: _required,
@@ -545,6 +565,7 @@ class _ProfessionalProfileEditorState
                   const SizedBox(width: V5Spacing.xs),
                   Expanded(
                     child: TextFormField(
+                      key: const Key('professional-profile-last-name'),
                       controller: _lastName,
                       decoration: const InputDecoration(labelText: 'Nom'),
                       validator: _required,
@@ -554,6 +575,7 @@ class _ProfessionalProfileEditorState
               ),
               const SizedBox(height: V5Spacing.sm),
               TextFormField(
+                key: const Key('professional-profile-phone'),
                 controller: _phone,
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(labelText: 'Téléphone'),
@@ -561,6 +583,7 @@ class _ProfessionalProfileEditorState
               ),
               const SizedBox(height: V5Spacing.sm),
               TextFormField(
+                key: const Key('professional-profile-email'),
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(labelText: 'Email'),
@@ -568,8 +591,11 @@ class _ProfessionalProfileEditorState
               ),
               const SizedBox(height: V5Spacing.sm),
               DropdownButtonFormField<ProfessionalIdType>(
-                key: ValueKey('profile-id-type-${_profession.name}'),
+                key: ValueKey(
+                  'professional-profile-id-type-${_profession.name}',
+                ),
                 initialValue: _idType,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Type d’identifiant',
                 ),
@@ -588,6 +614,7 @@ class _ProfessionalProfileEditorState
               ),
               const SizedBox(height: V5Spacing.sm),
               TextFormField(
+                key: const Key('professional-profile-id-value'),
                 controller: _idValue,
                 keyboardType: _idType == ProfessionalIdType.rpps
                     ? TextInputType.number
@@ -604,6 +631,7 @@ class _ProfessionalProfileEditorState
               ),
               const SizedBox(height: V5Spacing.sm),
               TextFormField(
+                key: const Key('professional-profile-cpts-id'),
                 controller: _cptsId,
                 decoration: const InputDecoration(
                   labelText: 'Identifiant CPTS (facultatif)',
@@ -611,6 +639,7 @@ class _ProfessionalProfileEditorState
               ),
               const SizedBox(height: V5Spacing.sm),
               TextFormField(
+                key: const Key('professional-profile-cpts-label'),
                 controller: _cptsLabel,
                 decoration: const InputDecoration(
                   labelText: 'CPTS (facultatif)',
@@ -623,6 +652,7 @@ class _ProfessionalProfileEditorState
               ),
               for (final equipment in _equipmentOptions)
                 CheckboxListTile(
+                  key: Key('professional-profile-equipment-${equipment.id}'),
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                   title: Text(equipment.label),
@@ -637,6 +667,7 @@ class _ProfessionalProfileEditorState
                 ),
               if (ProfessionalEquipmentRegistry.requiresDetails(_equipment))
                 TextFormField(
+                  key: const Key('professional-profile-equipment-details'),
                   controller: _equipmentDetails,
                   decoration: const InputDecoration(
                     labelText: 'Précisez le matériel',
@@ -647,6 +678,7 @@ class _ProfessionalProfileEditorState
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
+                  key: const Key('save-professional-profile'),
                   onPressed: _saving ? null : _save,
                   child: _saving
                       ? const SizedBox.square(
@@ -698,24 +730,32 @@ class _ProfessionalProfileEditorState
     }
     setState(() => _saving = true);
     try {
-      await RepositoryScope.of(context).saveVolunteerProfile(
-        widget.profile.copyWith(
-          firstName: _firstName.text.trim(),
-          lastName: _lastName.text.trim(),
-          phone: _phone.text.trim(),
-          email: _email.text.trim(),
-          profession: _profession,
-          professionalIdType: _idType,
-          professionalIdValue: _idValue.text.trim(),
-          cptsId: _cptsId.text.trim(),
-          cptsLabel: _cptsLabel.text.trim(),
-          equipment: _equipment.toList(growable: false),
-          otherEquipmentDetails:
-              ProfessionalEquipmentRegistry.requiresDetails(_equipment)
-              ? _equipmentDetails.text.trim()
-              : '',
-        ),
+      final currentProfile =
+          widget.profile ??
+          VolunteerProfile(
+            uid: '',
+            firstName: '',
+            lastName: '',
+            phone: '',
+            profession: _profession,
+          );
+      final updatedProfile = currentProfile.copyWith(
+        firstName: _firstName.text.trim(),
+        lastName: _lastName.text.trim(),
+        phone: _phone.text.trim(),
+        email: _email.text.trim(),
+        profession: _profession,
+        professionalIdType: _idType,
+        professionalIdValue: _idValue.text.trim(),
+        cptsId: _cptsId.text.trim(),
+        cptsLabel: _cptsLabel.text.trim(),
+        equipment: _equipment.toList(growable: false),
+        otherEquipmentDetails:
+            ProfessionalEquipmentRegistry.requiresDetails(_equipment)
+            ? _equipmentDetails.text.trim()
+            : '',
       );
+      await RepositoryScope.of(context).saveVolunteerProfile(updatedProfile);
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
       if (!mounted) return;

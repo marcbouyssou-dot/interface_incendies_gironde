@@ -76,6 +76,47 @@ void main() {
     },
   );
 
+  test('a new profile is bound to the active volunteer uid only', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+      volunteerUid: 'active-volunteer',
+    );
+    const draft = VolunteerProfile(
+      uid: '',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      email: 'alice@example.fr',
+      profession: VolunteerProfession.mk,
+      professionalIdType: ProfessionalIdType.ordinal,
+      professionalIdValue: 'ORD-123',
+    );
+
+    await repository.saveVolunteerProfile(draft);
+
+    expect((await repository.getVolunteerProfile())?.uid, 'active-volunteer');
+    await expectLater(
+      repository.saveVolunteerProfile(draft.copyWith(firstName: 'Intrus')),
+      completes,
+    );
+    await expectLater(
+      repository.saveVolunteerProfile(
+        const VolunteerProfile(
+          uid: 'another-volunteer',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          profession: VolunteerProfession.mk,
+          professionalIdType: ProfessionalIdType.ordinal,
+          professionalIdValue: 'ORD-123',
+        ),
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+  });
+
   test('engagement persists its professional profile', () async {
     final mission = CoordinationNeed(
       id: 'mission',
