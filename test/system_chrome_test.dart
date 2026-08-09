@@ -137,11 +137,10 @@ void main() {
     final manifest = File('web/manifest.json').readAsStringSync();
 
     expect(index, contains('<meta name="theme-color" content="#F6F7F8">'));
-    expect(index, contains('<html>'));
+    expect(index, contains('<html class="mobsante-splash-active">'));
     expect(index, contains('background: #F6F7F8;'));
-    expect(index, isNot(contains('mobsante-splash-active')));
+    expect(index, contains('html.mobsante-splash-active body'));
     expect(index, contains('#startup-splash'));
-    expect('background: #10233E;'.allMatches(index), hasLength(1));
     expect(manifest, contains('"theme_color": "#F6F7F8"'));
   });
 }

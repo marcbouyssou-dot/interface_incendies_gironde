@@ -4,11 +4,14 @@ import 'dart:html' as html;
 
 const _applicationBackground = '#F6F7F8';
 const _darkApplicationBackground = '#0D1622';
+const _splashBackground = '#10233E';
+const _splashClass = 'mobsante-splash-active';
 
 void activateLightApplicationChrome() {
   dismissNativeStartupSplash();
   _setApplicationChrome(
     background: _applicationBackground,
+    splashActive: false,
     appleStatusBarStyle: 'default',
   );
   _markStartupMilestone(
@@ -22,6 +25,7 @@ void activateDarkApplicationChrome() {
   dismissNativeStartupSplash();
   _setApplicationChrome(
     background: _darkApplicationBackground,
+    splashActive: false,
     appleStatusBarStyle: 'black-translucent',
   );
   _markStartupMilestone(
@@ -31,7 +35,13 @@ void activateDarkApplicationChrome() {
   );
 }
 
-void activateSplashApplicationChrome() {}
+void activateSplashApplicationChrome() {
+  _setApplicationChrome(
+    background: _splashBackground,
+    splashActive: true,
+    appleStatusBarStyle: 'black-translucent',
+  );
+}
 
 void dismissNativeStartupSplash() {
   _markStartupMilestone(
@@ -45,6 +55,7 @@ void dismissNativeStartupSplash() {
 
 void _setApplicationChrome({
   required String background,
+  required bool splashActive,
   required String appleStatusBarStyle,
 }) {
   html.document
@@ -53,7 +64,9 @@ void _setApplicationChrome({
   html.document
       .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
       ?.setAttribute('content', appleStatusBarStyle);
-  html.document.documentElement?.style.backgroundColor = background;
+  final documentElement = html.document.documentElement;
+  documentElement?.classes.toggle(_splashClass, splashActive);
+  documentElement?.style.backgroundColor = background;
   html.document.body?.style.backgroundColor = background;
 }
 
