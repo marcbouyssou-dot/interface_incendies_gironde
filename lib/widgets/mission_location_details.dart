@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
-import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/external_url_launcher.dart';
 
 abstract final class LocationActionLinks {
@@ -44,8 +44,8 @@ class LocationAddressLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final address = location?.verifiedAddress?.trim();
     if (address == null || address.isEmpty) return const SizedBox.shrink();
-    const style = TextStyle(
-      color: AppColors.textMuted,
+    final style = TextStyle(
+      color: context.v5Colors.textSecondary,
       fontSize: 12,
       fontWeight: FontWeight.w600,
       height: 1.35,
@@ -87,7 +87,7 @@ class MissionLocationDetails extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final style = TextStyle(
-      color: AppColors.textMuted,
+      color: context.v5Colors.textSecondary,
       fontSize: compact ? 12 : 13,
       fontWeight: FontWeight.w600,
       height: 1.35,

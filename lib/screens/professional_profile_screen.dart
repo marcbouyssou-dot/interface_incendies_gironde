@@ -888,7 +888,9 @@ class _ProfessionalProfileEditorState
     if (fieldContext != null) {
       await Scrollable.ensureVisible(
         fieldContext,
-        duration: const Duration(milliseconds: 200),
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
         alignment: 0.2,
       );

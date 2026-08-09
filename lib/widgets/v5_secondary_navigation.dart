@@ -33,9 +33,12 @@ class V5SecondaryNavigationBar extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final canGoBack = showBack && Navigator.of(context).canPop();
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: AppTheme.lightSystemUiOverlayStyle,
+      value: dark
+          ? AppTheme.darkSystemUiOverlayStyle
+          : AppTheme.lightSystemUiOverlayStyle,
       child: ColoredBox(
         color: colors.canvas,
         child: SafeArea(

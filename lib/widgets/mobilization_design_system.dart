@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 
 /// Shared visual tokens for the MobSanté mobilization experience.
@@ -390,9 +389,13 @@ class MobilizationHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final colors = context.v5Colors;
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 380),
+      tween: Tween(begin: reduceMotion ? 1 : 0, end: 1),
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 380),
       curve: Curves.easeOut,
       builder: (context, value, child) => Opacity(
         opacity: value,
@@ -403,25 +406,25 @@ class MobilizationHeroCard extends StatelessWidget {
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.surfaceElevated,
           borderRadius: BorderRadius.circular(MobilizationTokens.radiusCard),
           border: Border.all(
-            color: featured ? AppColors.orange : AppColors.border,
+            color: featured ? colors.accent : colors.outline,
             width: featured ? 1.35 : 1,
           ),
           boxShadow: featured
-              ? MobilizationTokens.featuredCardShadow
-              : MobilizationTokens.cardShadow,
+              ? V5Elevation.level2(colors)
+              : V5Elevation.level1(colors),
         ),
         child: Padding(
           padding: MobilizationTokens.heroPadding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'LIEU DE MOBILISATION',
                 style: TextStyle(
-                  color: AppColors.textMuted,
+                  color: colors.textSecondary,
                   fontSize: 12,
                   letterSpacing: 1.05,
                   fontWeight: FontWeight.w900,
@@ -431,8 +434,8 @@ class MobilizationHeroCard extends StatelessWidget {
               Text(
                 locationType,
                 key: locationTypeKey,
-                style: const TextStyle(
-                  color: AppColors.navy,
+                style: TextStyle(
+                  color: colors.textPrimary,
                   fontSize: 23,
                   height: 1.1,
                   letterSpacing: -0.6,
@@ -442,8 +445,8 @@ class MobilizationHeroCard extends StatelessWidget {
               const SizedBox(height: 5),
               Text(
                 locationName,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 14,
                   height: 1.3,
                   fontWeight: FontWeight.w700,
@@ -454,16 +457,16 @@ class MobilizationHeroCard extends StatelessWidget {
                 width: double.infinity,
                 padding: MobilizationTokens.bannerPadding,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF4F5F4),
+                  color: colors.surfaceMuted,
                   borderRadius: BorderRadius.circular(
                     MobilizationTokens.radiusSection,
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.calendar_month_outlined,
-                      color: AppColors.navy,
+                      color: colors.textPrimary,
                       size: MobilizationTokens.iconSize,
                     ),
                     const SizedBox(width: MobilizationTokens.spaceMd),
@@ -473,8 +476,8 @@ class MobilizationHeroCard extends StatelessWidget {
                         children: [
                           Text(
                             dateLabel,
-                            style: const TextStyle(
-                              color: AppColors.textMuted,
+                            style: TextStyle(
+                              color: colors.textSecondary,
                               fontSize: 12,
                               height: 1.25,
                               fontWeight: FontWeight.w700,
@@ -483,8 +486,8 @@ class MobilizationHeroCard extends StatelessWidget {
                           const SizedBox(height: 3),
                           Text(
                             timeLabel,
-                            style: const TextStyle(
-                              color: AppColors.navy,
+                            style: TextStyle(
+                              color: colors.textPrimary,
                               fontSize: 18,
                               height: 1.15,
                               fontWeight: FontWeight.w900,
@@ -503,8 +506,8 @@ class MobilizationHeroCard extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 professionTitle,
-                style: const TextStyle(
-                  color: AppColors.navy,
+                style: TextStyle(
+                  color: colors.textPrimary,
                   fontSize: 16,
                   height: 1.2,
                   letterSpacing: -0.2,
@@ -569,7 +572,7 @@ class _SecondaryDetailsDisclosureState
           child: TextButton.icon(
             key: widget.toggleKey,
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.textMuted,
+              foregroundColor: context.v5Colors.textSecondary,
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
               minimumSize: const Size(44, 44),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,

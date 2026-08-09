@@ -24,6 +24,7 @@ Future<T?> showNativeBottomSheet<T>({
   Color? backgroundColor,
   Color? barrierColor,
 }) {
+  final reduceMotion = MediaQuery.disableAnimationsOf(context);
   return showModalBottomSheet<T>(
     context: context,
     builder: builder,
@@ -34,7 +35,12 @@ Future<T?> showNativeBottomSheet<T>({
     useSafeArea: useSafeArea,
     backgroundColor: backgroundColor,
     barrierColor: barrierColor,
-    sheetAnimationStyle: NativeMotion.bottomSheet,
+    sheetAnimationStyle: reduceMotion
+        ? const AnimationStyle(
+            duration: Duration.zero,
+            reverseDuration: Duration.zero,
+          )
+        : NativeMotion.bottomSheet,
   );
 }
 
@@ -62,6 +68,23 @@ class _NativeTabViewState extends State<NativeTabView> {
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      return IndexedStack(
+        index: widget.index,
+        sizing: StackFit.expand,
+        children: [
+          for (
+            var childIndex = 0;
+            childIndex < widget.children.length;
+            childIndex++
+          )
+            TickerMode(
+              enabled: childIndex == widget.index,
+              child: widget.children[childIndex],
+            ),
+        ],
+      );
+    }
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -81,9 +104,7 @@ class _NativeTabViewState extends State<NativeTabView> {
                   child: AnimatedOpacity(
                     key: ValueKey('native-tab-$childIndex'),
                     opacity: childIndex == widget.index ? 1 : 0,
-                    duration: reduceMotion
-                        ? Duration.zero
-                        : NativeMotion.tabTransition,
+                    duration: NativeMotion.tabTransition,
                     curve: Curves.easeOutCubic,
                     onEnd: childIndex == widget.index
                         ? () {

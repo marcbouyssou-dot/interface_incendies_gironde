@@ -3,6 +3,7 @@
 import 'dart:html' as html;
 
 const _applicationBackground = '#F6F7F8';
+const _darkApplicationBackground = '#0D1622';
 const _splashBackground = '#10233E';
 const _splashClass = 'mobsante-splash-active';
 
@@ -12,6 +13,20 @@ void activateLightApplicationChrome() {
     background: _applicationBackground,
     splashActive: false,
     appleStatusBarStyle: 'default',
+  );
+  _markStartupMilestone(
+    'mobsante-application-ready',
+    measureName: 'mobsante-initialization',
+    startMark: 'mobsante-flutter-first-frame',
+  );
+}
+
+void activateDarkApplicationChrome() {
+  dismissNativeStartupSplash();
+  _setApplicationChrome(
+    background: _darkApplicationBackground,
+    splashActive: false,
+    appleStatusBarStyle: 'black-translucent',
   );
   _markStartupMilestone(
     'mobsante-application-ready',

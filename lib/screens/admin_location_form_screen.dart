@@ -260,7 +260,9 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
         elevation: 6,
         shadowColor: const Color(0x24173052),
         child: AnimatedPadding(
-          duration: const Duration(milliseconds: 160),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 160),
           curve: Curves.easeOut,
           padding: EdgeInsets.only(
             bottom: MediaQuery.viewInsetsOf(context).bottom,

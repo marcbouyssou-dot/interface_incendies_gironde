@@ -341,24 +341,29 @@ class _MissionDetailsDisclosureState extends State<_MissionDetailsDisclosure> {
           ),
           label: Text(_expanded ? 'Masquer les détails' : 'Voir les détails'),
         ),
-        ClipRect(
-          child: AnimatedSize(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : NativeMotion.detailsExpansion,
-            reverseDuration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : NativeMotion.detailsCollapse,
-            curve: Curves.easeOutCubic,
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? Padding(
-                    padding: const EdgeInsets.only(top: V5Spacing.xxs),
-                    child: widget.child,
-                  )
-                : const SizedBox(width: double.infinity),
+        if (MediaQuery.disableAnimationsOf(context))
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.only(top: V5Spacing.xxs),
+              child: widget.child,
+            )
+          else
+            const SizedBox(width: double.infinity)
+        else
+          ClipRect(
+            child: AnimatedSize(
+              duration: NativeMotion.detailsExpansion,
+              reverseDuration: NativeMotion.detailsCollapse,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: _expanded
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: V5Spacing.xxs),
+                      child: widget.child,
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
           ),
-        ),
       ],
     );
   }

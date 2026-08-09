@@ -317,17 +317,28 @@ class StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final (label, color, background) = switch (status) {
-      NeedStatus.critical => ('Critique', AppColors.red, AppColors.redSoft),
+      NeedStatus.critical => (
+        'Critique',
+        colors.danger,
+        colors.dangerContainer,
+      ),
       NeedStatus.toComplete => (
         'À compléter',
-        AppColors.orange,
-        AppColors.orangeSoft,
+        colors.warning,
+        colors.warningContainer,
       ),
-      NeedStatus.complete => ('Complet', AppColors.green, AppColors.greenSoft),
+      NeedStatus.complete => (
+        'Complet',
+        colors.success,
+        colors.successContainer,
+      ),
     };
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 250),
       curve: Curves.easeOut,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -360,30 +371,27 @@ class MissionTimingPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final timing = _timingAt(DateTime.now());
     if (timing == null) return const SizedBox.shrink();
     final (label, icon, color, background) = switch (timing) {
       _MissionTiming.past => (
         'Passée',
         Icons.history_rounded,
-        AppColors.textMuted,
-        AppColors.background,
+        colors.textSecondary,
+        colors.surfaceMuted,
       ),
       _MissionTiming.current => (
         'En cours',
         Icons.play_circle_outline_rounded,
-        professionalPalette ? context.v5Colors.info : AppColors.green,
-        professionalPalette
-            ? context.v5Colors.infoContainer
-            : AppColors.greenSoft,
+        professionalPalette ? colors.info : colors.success,
+        professionalPalette ? colors.infoContainer : colors.successContainer,
       ),
       _MissionTiming.upcoming => (
         'À venir',
         Icons.schedule_rounded,
-        professionalPalette ? context.v5Colors.info : AppColors.orange,
-        professionalPalette
-            ? context.v5Colors.infoContainer
-            : AppColors.orangeSoft,
+        professionalPalette ? colors.info : colors.warning,
+        professionalPalette ? colors.infoContainer : colors.warningContainer,
       ),
     };
     return Semantics(
@@ -499,13 +507,16 @@ class AnimatedCoverageIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       label: semanticLabel,
       value: '${(value * 100).round()} pour cent',
       child: ExcludeSemantics(
         child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: value),
-          duration: const Duration(milliseconds: 700),
+          tween: Tween(begin: reduceMotion ? value : 0, end: value),
+          duration: reduceMotion
+              ? Duration.zero
+              : const Duration(milliseconds: 700),
           curve: Curves.easeOutCubic,
           builder: (context, animatedValue, _) => ClipRRect(
             borderRadius: BorderRadius.circular(minHeight),
@@ -513,7 +524,7 @@ class AnimatedCoverageIndicator extends StatelessWidget {
               minHeight: minHeight,
               value: animatedValue,
               color: color,
-              backgroundColor: AppColors.border,
+              backgroundColor: context.v5Colors.outline,
             ),
           ),
         ),
@@ -565,13 +576,14 @@ class _ProfessionQuotaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final quota = need.professionQuotas.quotaFor(profession.id);
     if (emphasized) {
       final color = quota.isCovered
-          ? AppColors.green
+          ? colors.success
           : quota.coverage < .5
-          ? AppColors.red
-          : AppColors.orange;
+          ? colors.danger
+          : colors.warning;
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
@@ -589,8 +601,8 @@ class _ProfessionQuotaRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     profession.missionLabel,
-                    style: const TextStyle(
-                      color: AppColors.navy,
+                    style: TextStyle(
+                      color: colors.textPrimary,
                       fontSize: 15,
                       height: 1.25,
                       fontWeight: FontWeight.w700,
@@ -604,7 +616,7 @@ class _ProfessionQuotaRow extends StatelessWidget {
                     vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: colors.surfaceElevated,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: color.withValues(alpha: 0.24)),
                   ),
@@ -636,8 +648,8 @@ class _ProfessionQuotaRow extends StatelessWidget {
         Expanded(
           child: Text(
             profession.missionLabel,
-            style: const TextStyle(
-              color: AppColors.navy,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -647,8 +659,8 @@ class _ProfessionQuotaRow extends StatelessWidget {
         Text(
           '${quota.registered} / ${quota.required}',
           key: Key('mission-quota-${profession.id}'),
-          style: const TextStyle(
-            color: AppColors.navy,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w900,
           ),
@@ -675,7 +687,9 @@ class _MissionCardSectionTitle extends StatelessWidget {
       return Text(
         label,
         style: TextStyle(
-          color: professionalHome ? AppColors.textMuted : AppColors.navy,
+          color: professionalHome
+              ? context.v5Colors.textSecondary
+              : context.v5Colors.textPrimary,
           fontSize: 12,
           height: professionalHome ? 1.2 : null,
           letterSpacing: professionalHome ? 0.15 : 0.65,
@@ -697,8 +711,8 @@ class _MissionCardSectionTitle extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              color: AppColors.textMuted,
+            style: TextStyle(
+              color: context.v5Colors.textSecondary,
               fontSize: 12,
               letterSpacing: 1.2,
               fontWeight: FontWeight.w800,
@@ -719,7 +733,7 @@ class _MissionCardSectionDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: harmonized ? 16 : 20),
-      child: const Divider(height: 1, thickness: 1, color: AppColors.border),
+      child: Divider(height: 1, thickness: 1, color: context.v5Colors.outline),
     );
   }
 }
@@ -756,8 +770,9 @@ class NeedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (professionalHome) {
-      return _buildProfessionalHomeContent();
+      return _buildProfessionalHomeContent(context);
     }
+    final colors = context.v5Colors;
     final useStackedHeader = MediaQuery.textScalerOf(context).scale(12) >= 18;
     final timing = MissionTimingPill(mission: need);
     final content = Padding(
@@ -771,8 +786,8 @@ class NeedCard extends StatelessWidget {
             Text(
               need.place.toUpperCase(),
               style: harmonized
-                  ? const TextStyle(
-                      color: AppColors.navy,
+                  ? TextStyle(
+                      color: colors.textPrimary,
                       fontSize: 18,
                       height: 1.15,
                       letterSpacing: -0.25,
@@ -790,8 +805,8 @@ class NeedCard extends StatelessWidget {
                   child: Text(
                     need.place.toUpperCase(),
                     style: harmonized
-                        ? const TextStyle(
-                            color: AppColors.navy,
+                        ? TextStyle(
+                            color: colors.textPrimary,
                             fontSize: 18,
                             height: 1.15,
                             letterSpacing: -0.25,
@@ -809,7 +824,7 @@ class NeedCard extends StatelessWidget {
             location?.type.label ?? 'Lieu d’intervention',
             key: const Key('mission-location-type'),
             style: TextStyle(
-              color: harmonized ? AppColors.textMuted : AppColors.orange,
+              color: harmonized ? colors.textSecondary : colors.accent,
               fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
@@ -823,11 +838,9 @@ class NeedCard extends StatelessWidget {
               vertical: harmonized ? 11 : 12,
             ),
             decoration: BoxDecoration(
-              color: harmonized
-                  ? const Color(0xFFF1F1EF)
-                  : AppColors.background,
+              color: colors.surfaceMuted,
               borderRadius: BorderRadius.circular(harmonized ? 12 : 14),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: colors.outline),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -837,7 +850,7 @@ class NeedCard extends StatelessWidget {
                       ? need.date
                       : FrenchDateTime.relativeDate(need.startAt!),
                   style: TextStyle(
-                    color: AppColors.textMuted,
+                    color: colors.textSecondary,
                     fontSize: harmonized ? 12 : 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -846,7 +859,7 @@ class NeedCard extends StatelessWidget {
                 Text(
                   need.time,
                   style: TextStyle(
-                    color: AppColors.navy,
+                    color: colors.textPrimary,
                     fontSize: harmonized ? 20 : 22,
                     fontWeight: FontWeight.w800,
                   ),
@@ -883,16 +896,16 @@ class NeedCard extends StatelessWidget {
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: harmonized ? Colors.white : AppColors.background,
+                        color: colors.surfaceElevated,
                         borderRadius: BorderRadius.circular(
                           harmonized ? 20 : 10,
                         ),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: colors.outline),
                       ),
                       child: Text(
                         item,
-                        style: const TextStyle(
-                          color: AppColors.navy,
+                        style: TextStyle(
+                          color: colors.textPrimary,
                           fontSize: 12,
                           height: 1.2,
                           fontWeight: FontWeight.w700,
@@ -913,9 +926,9 @@ class NeedCard extends StatelessWidget {
                 key: Key('edit-mission-${need.id}'),
                 style: harmonized
                     ? OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.navy,
+                        foregroundColor: colors.textPrimary,
                         minimumSize: const Size.fromHeight(52),
-                        side: const BorderSide(color: AppColors.border),
+                        side: BorderSide(color: colors.outline),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -943,7 +956,7 @@ class NeedCard extends StatelessWidget {
       container: true,
       explicitChildNodes: true,
       label: _semanticSummary,
-      child: _animatedCard(content),
+      child: _animatedCard(context, content),
     );
   }
 
@@ -975,7 +988,8 @@ class NeedCard extends StatelessWidget {
         '$filled sur $required, $open.';
   }
 
-  Widget _buildProfessionalHomeContent() {
+  Widget _buildProfessionalHomeContent(BuildContext context) {
+    final colors = context.v5Colors;
     final required = need.professionQuotas.requiredTotal;
     final registered = need.professionQuotas.registeredTotal;
     final remaining = (required - registered).clamp(0, required);
@@ -1114,16 +1128,16 @@ class NeedCard extends StatelessWidget {
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: colors.surfaceElevated,
                         borderRadius: BorderRadius.circular(
                           MobilizationTokens.radiusPill,
                         ),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: colors.outline),
                       ),
                       child: Text(
                         item,
-                        style: const TextStyle(
-                          color: AppColors.textMuted,
+                        style: TextStyle(
+                          color: colors.textSecondary,
                           fontSize: 12,
                           height: 1.2,
                           fontWeight: FontWeight.w700,
@@ -1146,13 +1160,13 @@ class NeedCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(13),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colors.surfaceElevated,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
                   details,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
+                  style: TextStyle(
+                    color: colors.textSecondary,
                     fontSize: 12,
                     height: 1.45,
                     fontWeight: FontWeight.w600,
@@ -1170,9 +1184,9 @@ class NeedCard extends StatelessWidget {
               child: OutlinedButton.icon(
                 key: Key('edit-mission-${need.id}'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.navy,
+                  foregroundColor: colors.textPrimary,
                   minimumSize: const Size.fromHeight(52),
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide(color: colors.outline),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -1194,10 +1208,14 @@ class NeedCard extends StatelessWidget {
     );
   }
 
-  Widget _animatedCard(Widget content) {
+  Widget _animatedCard(BuildContext context, Widget content) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final colors = context.v5Colors;
     return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 380),
+      tween: Tween(begin: reduceMotion ? 1 : 0, end: 1),
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 380),
       curve: Curves.easeOut,
       builder: (context, value, child) => Opacity(
         opacity: value,
@@ -1209,21 +1227,19 @@ class NeedCard extends StatelessWidget {
       child: harmonized
           ? Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colors.surfaceElevated,
                 borderRadius: BorderRadius.circular(
                   professionalHome
                       ? MobilizationTokens.radiusCard
                       : MobilizationTokens.radiusContentCard,
                 ),
                 border: Border.all(
-                  color: featured ? AppColors.orange : AppColors.border,
+                  color: featured ? colors.accent : colors.outline,
                   width: featured ? 1.35 : 1,
                 ),
-                boxShadow: professionalHome
-                    ? featured
-                          ? MobilizationTokens.featuredCardShadow
-                          : MobilizationTokens.cardShadow
-                    : MobilizationTokens.subtleShadow,
+                boxShadow: featured
+                    ? V5Elevation.level2(colors)
+                    : V5Elevation.level1(colors),
               ),
               child: content,
             )
@@ -1538,17 +1554,18 @@ class _EngagementStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final (color, background) = switch (status) {
-      EngagementStatus.pending => (AppColors.orange, AppColors.orangeSoft),
-      EngagementStatus.confirmed => (AppColors.green, AppColors.greenSoft),
+      EngagementStatus.pending => (colors.warning, colors.warningContainer),
+      EngagementStatus.confirmed => (colors.success, colors.successContainer),
       EngagementStatus.standby =>
         professionalPalette
-            ? (context.v5Colors.info, context.v5Colors.infoContainer)
-            : (AppColors.navy, AppColors.background),
+            ? (colors.info, colors.infoContainer)
+            : (colors.textPrimary, colors.surfaceMuted),
       EngagementStatus.cancelled =>
         professionalPalette
-            ? (context.v5Colors.textSecondary, context.v5Colors.surfaceMuted)
-            : (AppColors.red, AppColors.redSoft),
+            ? (colors.textSecondary, colors.surfaceMuted)
+            : (colors.danger, colors.dangerContainer),
     };
     return Container(
       key: Key('engagement-status-${status.name}'),
@@ -1823,15 +1840,6 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
   }
 }
 
-abstract final class _ProfessionalProfileVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
-  static const navy = Color(0xFF173052);
-  static const fieldBackground = Color(0xFFF1F1EF);
-  static const border = Color(0xFFE5E5E1);
-  static const textMuted = Color(0xFF5F6865);
-}
-
 class _RegistrationSheet extends StatefulWidget {
   const _RegistrationSheet({required this.need, required this.location});
   final CoordinationNeed need;
@@ -2038,11 +2046,12 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     if (_loadingProfile) {
-      return const SafeArea(
+      return SafeArea(
         child: ColoredBox(
-          color: _ProfessionalProfileVisuals.background,
-          child: Padding(
+          color: colors.canvas,
+          child: const Padding(
             padding: EdgeInsets.all(32),
             child: Center(child: V5ActivityIndicator()),
           ),
@@ -2052,7 +2061,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     if (_profileError != null) {
       return SafeArea(
         child: ColoredBox(
-          color: _ProfessionalProfileVisuals.background,
+          color: colors.canvas,
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
@@ -2060,34 +2069,34 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                 margin: const EdgeInsets.all(20),
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.redSoft,
+                  color: colors.dangerContainer,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
-                    color: AppColors.red.withValues(alpha: 0.24),
+                    color: colors.danger.withValues(alpha: 0.24),
                   ),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.error_outline_rounded,
-                      color: AppColors.red,
+                      color: colors.danger,
                       size: 30,
                     ),
                     const SizedBox(height: 10),
                     Text(
                       _profileError!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: _ProfessionalProfileVisuals.navy,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 14),
                     V5Button(
-                      backgroundColor: AppColors.orange,
-                      foregroundColor: Colors.white,
+                      backgroundColor: colors.accent,
+                      foregroundColor: colors.onAccent,
                       onPressed: () {
                         setState(() {
                           _loadingProfile = true;
@@ -2107,7 +2116,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     }
     return SafeArea(
       child: ColoredBox(
-        color: _ProfessionalProfileVisuals.background,
+        color: colors.canvas,
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: EdgeInsets.fromLTRB(
@@ -2132,20 +2141,20 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'PROFIL PROFESSIONNEL',
                                 style: TextStyle(
-                                  color: _ProfessionalProfileVisuals.textMuted,
+                                  color: colors.textSecondary,
                                   fontSize: 12,
                                   letterSpacing: 1.2,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              const Text(
+                              Text(
                                 'S’inscrire à la mission',
                                 style: TextStyle(
-                                  color: _ProfessionalProfileVisuals.navy,
+                                  color: colors.textPrimary,
                                   fontSize: 24,
                                   height: 1.12,
                                   letterSpacing: -0.5,
@@ -2155,8 +2164,8 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                               const SizedBox(height: 6),
                               Text(
                                 widget.need.place,
-                                style: const TextStyle(
-                                  color: _ProfessionalProfileVisuals.textMuted,
+                                style: TextStyle(
+                                  color: colors.textSecondary,
                                   fontSize: 13,
                                   height: 1.35,
                                   fontWeight: FontWeight.w600,
@@ -2218,13 +2227,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                   padding: const EdgeInsets.only(bottom: 7),
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
-                                      color: _ProfessionalProfileVisuals
-                                          .fieldBackground,
+                                      color: colors.surfaceMuted,
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color:
-                                            _ProfessionalProfileVisuals.border,
-                                      ),
+                                      border: Border.all(color: colors.outline),
                                     ),
                                     child: RadioListTile<VolunteerProfession>(
                                       key: Key(
@@ -2711,20 +2716,15 @@ class _ProfileFormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _ProfessionalProfileVisuals.surface,
+        color: colors.surfaceElevated,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _ProfessionalProfileVisuals.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08173052),
-            blurRadius: 12,
-            offset: Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: colors.outline),
+        boxShadow: V5Elevation.level1(colors),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2735,14 +2735,10 @@ class _ProfileFormCard extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: _ProfessionalProfileVisuals.fieldBackground,
+                  color: colors.surfaceMuted,
                   borderRadius: BorderRadius.circular(11),
                 ),
-                child: Icon(
-                  icon,
-                  color: _ProfessionalProfileVisuals.navy,
-                  size: 20,
-                ),
+                child: Icon(icon, color: colors.textPrimary, size: 20),
               ),
               const SizedBox(width: 11),
               Expanded(
@@ -2751,8 +2747,8 @@ class _ProfileFormCard extends StatelessWidget {
                   children: [
                     Text(
                       eyebrow,
-                      style: const TextStyle(
-                        color: _ProfessionalProfileVisuals.textMuted,
+                      style: TextStyle(
+                        color: colors.textSecondary,
                         fontSize: 12,
                         letterSpacing: 0.9,
                         fontWeight: FontWeight.w800,
@@ -2761,8 +2757,8 @@ class _ProfileFormCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       title,
-                      style: const TextStyle(
-                        color: _ProfessionalProfileVisuals.navy,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontSize: 17,
                         height: 1.15,
                         fontWeight: FontWeight.w800,
@@ -2788,14 +2784,15 @@ class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       key: const Key('professional-identifier-required'),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.orangeSoft,
+        color: colors.warningContainer,
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+        border: Border.all(color: colors.warning.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2804,24 +2801,20 @@ class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.72),
+              color: colors.surfaceElevated,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.badge_outlined,
-              color: AppColors.orange,
-              size: 21,
-            ),
+            child: Icon(Icons.badge_outlined, color: colors.warning, size: 21),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Profil à compléter',
                   style: TextStyle(
-                    color: AppColors.navy,
+                    color: colors.textPrimary,
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                   ),
@@ -2835,8 +2828,8 @@ class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
                       : 'Un numéro RPPS ou ordinal est obligatoire pour '
                             'participer. Complétez votre profil avant de '
                             'confirmer votre participation.',
-                  style: const TextStyle(
-                    color: AppColors.navy,
+                  style: TextStyle(
+                    color: colors.textPrimary,
                     fontSize: 12,
                     height: 1.4,
                     fontWeight: FontWeight.w600,
@@ -2856,14 +2849,15 @@ class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       key: const Key('professional-identifier-ready'),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.greenSoft,
+        color: colors.successContainer,
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
+        border: Border.all(color: colors.success.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2872,24 +2866,24 @@ class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.78),
+              color: colors.surfaceElevated,
               borderRadius: BorderRadius.circular(13),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.check_circle_rounded,
-              color: AppColors.green,
+              color: colors.success,
               size: 23,
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Profil prêt à participer',
                   style: TextStyle(
-                    color: AppColors.navy,
+                    color: colors.textPrimary,
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
@@ -2898,7 +2892,7 @@ class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
                 Text(
                   'Votre identifiant professionnel est renseigné.',
                   style: TextStyle(
-                    color: AppColors.textMuted,
+                    color: colors.textSecondary,
                     fontSize: 12,
                     height: 1.3,
                   ),
@@ -2919,20 +2913,15 @@ class _ProfileSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _ProfessionalProfileVisuals.surface,
+        color: colors.surfaceElevated,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _ProfessionalProfileVisuals.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08173052),
-            blurRadius: 12,
-            offset: Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: colors.outline),
+        boxShadow: V5Elevation.level1(colors),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2943,12 +2932,12 @@ class _ProfileSummary extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: _ProfessionalProfileVisuals.fieldBackground,
+                  color: colors.surfaceMuted,
                   borderRadius: BorderRadius.circular(13),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.person_outline_rounded,
-                  color: _ProfessionalProfileVisuals.navy,
+                  color: colors.textPrimary,
                   size: 22,
                 ),
               ),
@@ -2957,10 +2946,10 @@ class _ProfileSummary extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'MON PROFIL',
                       style: TextStyle(
-                        color: _ProfessionalProfileVisuals.textMuted,
+                        color: colors.textSecondary,
                         fontSize: 12,
                         letterSpacing: 0.9,
                         fontWeight: FontWeight.w800,
@@ -2969,8 +2958,8 @@ class _ProfileSummary extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       profile.displayName,
-                      style: const TextStyle(
-                        color: _ProfessionalProfileVisuals.navy,
+                      style: TextStyle(
+                        color: colors.textPrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                       ),
@@ -2980,12 +2969,9 @@ class _ProfileSummary extends StatelessWidget {
               ),
             ],
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 14),
-            child: Divider(
-              height: 1,
-              color: _ProfessionalProfileVisuals.border,
-            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Divider(height: 1, color: colors.outline),
           ),
           _ProfileSummaryItem(
             icon: Icons.medical_services_outlined,
@@ -3061,10 +3047,11 @@ class _ProfileSummaryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: _ProfessionalProfileVisuals.textMuted, size: 17),
+        Icon(icon, color: colors.textSecondary, size: 17),
         const SizedBox(width: 9),
         Expanded(
           child: Column(
@@ -3072,8 +3059,8 @@ class _ProfileSummaryItem extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
-                  color: _ProfessionalProfileVisuals.textMuted,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 12,
                   letterSpacing: 0.45,
                   fontWeight: FontWeight.w800,
@@ -3082,8 +3069,8 @@ class _ProfileSummaryItem extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 value,
-                style: const TextStyle(
-                  color: _ProfessionalProfileVisuals.navy,
+                style: TextStyle(
+                  color: colors.textPrimary,
                   fontSize: 12,
                   height: 1.35,
                   fontWeight: FontWeight.w700,

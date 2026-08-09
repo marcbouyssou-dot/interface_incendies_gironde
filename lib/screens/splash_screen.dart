@@ -19,6 +19,7 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _opacity;
   late final Animation<double> _scale;
   late final Animation<Offset> _slide;
+  bool _started = false;
 
   @override
   void initState() {
@@ -37,6 +38,16 @@ class _SplashScreenState extends State<SplashScreen>
       begin: const Offset(0, .025),
       end: Offset.zero,
     ).animate(reveal);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.duration = Duration.zero;
+    }
     _controller.forward().whenComplete(dismissNativeStartupSplash);
   }
 
@@ -49,7 +60,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: AppTheme.darkSystemUiOverlayStyle,
+      value: AppTheme.splashSystemUiOverlayStyle,
       child: Scaffold(
         backgroundColor: AppColors.navy,
         body: SafeArea(

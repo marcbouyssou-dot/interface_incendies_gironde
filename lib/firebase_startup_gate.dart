@@ -13,20 +13,9 @@ import 'repositories/firestore_coordination_repository.dart';
 import 'screens/splash_screen.dart';
 import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
-import 'utils/system_theme.dart';
+import 'theme/v5_foundation.dart';
 import 'widgets/brand_mark.dart';
 import 'widgets/v5_controls.dart';
-
-abstract final class _StartupVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
-  static const navy = Color(0xFF173052);
-  static const fieldBackground = Color(0xFFF1F1EF);
-  static const border = Color(0xFFE5E5E1);
-  static const textMuted = Color(0xFF5F6865);
-  static const orange = Color(0xFFB9470A);
-  static const error = Color(0xFFD94B4B);
-}
 
 bool mustCreateAnonymousVolunteerSession({
   required bool hasUser,
@@ -129,7 +118,6 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     return FutureBuilder<CoordinationRepository>(
       future: _startup,
       builder: (context, snapshot) {
-        if (snapshot.hasError) activateLightApplicationChrome();
         if (snapshot.hasData) {
           return FireCoordinationApp(
             repository: snapshot.data,
@@ -139,13 +127,13 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: ThemeMode.system,
           builder: snapshot.hasError
-              ? AppTheme.lightSystemSurface
+              ? AppTheme.systemSurface
               : AppTheme.darkSystemSurface,
           home: Scaffold(
-            backgroundColor: snapshot.hasError
-                ? _StartupVisuals.background
-                : AppColors.navy,
+            backgroundColor: snapshot.hasError ? null : AppColors.navy,
             body: snapshot.hasError
                 ? _StartupError(onRetry: _retry)
                 : const SplashScreen(),
@@ -163,6 +151,7 @@ class _StartupError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return SafeArea(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -189,16 +178,10 @@ class _StartupError extends StatelessWidget {
                         width: double.infinity,
                         padding: const EdgeInsets.all(22),
                         decoration: BoxDecoration(
-                          color: _StartupVisuals.surface,
+                          color: colors.surfaceElevated,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _StartupVisuals.border),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x0A173052),
-                              blurRadius: 18,
-                              offset: Offset(0, 5),
-                            ),
-                          ],
+                          border: Border.all(color: colors.outline),
+                          boxShadow: V5Elevation.level1(colors),
                         ),
                         child: Column(
                           children: [
@@ -206,32 +189,32 @@ class _StartupError extends StatelessWidget {
                               width: 64,
                               height: 64,
                               decoration: BoxDecoration(
-                                color: _StartupVisuals.fieldBackground,
+                                color: colors.dangerContainer,
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.cloud_off_rounded,
-                                color: _StartupVisuals.error,
+                                color: colors.danger,
                                 size: 31,
                               ),
                             ),
                             const SizedBox(height: 17),
-                            const Text(
+                            Text(
                               'Connexion sécurisée impossible. Réessayez.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: _StartupVisuals.navy,
+                                color: colors.textPrimary,
                                 fontSize: 19,
                                 height: 1.3,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               'Vérifiez votre connexion.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: _StartupVisuals.textMuted,
+                                color: colors.textSecondary,
                                 fontSize: 14,
                                 height: 1.45,
                                 fontWeight: FontWeight.w500,
@@ -241,8 +224,8 @@ class _StartupError extends StatelessWidget {
                             V5Button(
                               expanded: true,
                               onPressed: onRetry,
-                              backgroundColor: _StartupVisuals.orange,
-                              foregroundColor: Colors.white,
+                              backgroundColor: colors.accent,
+                              foregroundColor: colors.onAccent,
                               label: 'Réessayer',
                             ),
                           ],
@@ -266,15 +249,16 @@ class _StartupIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    final colors = context.v5Colors;
+    return Row(
       children: [
-        BrandMark(size: 50),
-        SizedBox(width: 13),
+        const BrandMark(size: 50),
+        const SizedBox(width: 13),
         Expanded(
           child: Text(
             AppIdentity.productName,
             style: TextStyle(
-              color: _StartupVisuals.navy,
+              color: colors.textPrimary,
               fontSize: 22,
               height: 1.1,
               letterSpacing: -0.4,

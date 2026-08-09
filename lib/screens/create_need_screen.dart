@@ -16,18 +16,6 @@ import '../widgets/common.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
-abstract final class _CreateNeedVisuals {
-  static const navy = Color(0xFF173052);
-  static const orange = Color(0xFFB9470A);
-  static const orangeSoft = Color(0xFFFFE8DB);
-  static const background = Color(0xFFF6F7F8);
-  static const fieldBackground = Color(0xFFF1F1EF);
-  static const border = Color(0xFFE5E5E1);
-  static const borderStrong = Color(0xFFD5D8D5);
-  static const textMuted = Color(0xFF5F6865);
-  static const textDisabled = Color(0xFF66706D);
-}
-
 Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
   final liveData = LiveCoordinationDataScope.of(context);
   return Navigator.of(context).push<void>(
@@ -293,7 +281,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       TextButton.icon(
                         key: const Key('create-need-back'),
                         style: TextButton.styleFrom(
-                          foregroundColor: _CreateNeedVisuals.navy,
+                          foregroundColor: context.v5Colors.textPrimary,
                           padding: EdgeInsets.zero,
                           minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -318,8 +306,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             _isEditing
                                 ? 'Modifier la mission'
                                 : 'Créer un besoin',
-                            style: const TextStyle(
-                              color: _CreateNeedVisuals.navy,
+                            style: TextStyle(
+                              color: context.v5Colors.textPrimary,
                               fontSize: 24,
                               height: 1.12,
                               fontWeight: FontWeight.w800,
@@ -476,7 +464,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       title: 'Matériel conseillé',
                       leading: const Icon(Icons.medical_services_outlined),
                       child: equipmentProfession == null
-                          ? const Padding(
+                          ? Padding(
                               key: Key('mission-equipment-empty'),
                               padding: EdgeInsets.symmetric(vertical: 2),
                               child: Row(
@@ -487,7 +475,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                                     child: Icon(
                                       Icons.info_outline_rounded,
                                       size: 14,
-                                      color: _CreateNeedVisuals.textMuted,
+                                      color: context.v5Colors.textSecondary,
                                     ),
                                   ),
                                   SizedBox(width: 7),
@@ -496,7 +484,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                                       'Ajoutez au moins un professionnel recherché '
                                       'pour afficher le matériel correspondant.',
                                       style: TextStyle(
-                                        color: _CreateNeedVisuals.textMuted,
+                                        color: context.v5Colors.textSecondary,
                                         fontSize: 12,
                                         height: 1.4,
                                       ),
@@ -572,14 +560,14 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                               vertical: 11,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.redSoft,
+                              color: context.v5Colors.dangerContainer,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
                               _errorMessage!,
                               key: const Key('mission-form-error'),
-                              style: const TextStyle(
-                                color: AppColors.red,
+                              style: TextStyle(
+                                color: context.v5Colors.danger,
                                 fontSize: 12,
                                 height: 1.35,
                                 fontWeight: FontWeight.w700,
@@ -595,8 +583,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                         _isEditing ? 'update-mission' : 'publish-mission',
                       ),
                       expanded: true,
-                      backgroundColor: _CreateNeedVisuals.orange,
-                      foregroundColor: Colors.white,
+                      backgroundColor: context.v5Colors.accent,
+                      foregroundColor: context.v5Colors.onAccent,
                       loading: _publishing,
                       onPressed: _publishing ? null : () => _publish(access),
                       label: _publishing
@@ -613,8 +601,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                         requestedProfessionals == 0
                             ? 'Aucun professionnel demandé pour le moment'
                             : '$requestedProfessionals professionnel${requestedProfessionals > 1 ? 's' : ''} demandé${requestedProfessionals > 1 ? 's' : ''}',
-                        style: const TextStyle(
-                          color: _CreateNeedVisuals.textMuted,
+                        style: TextStyle(
+                          color: context.v5Colors.textSecondary,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -624,7 +612,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     Center(
                       child: TextButton.icon(
                         style: TextButton.styleFrom(
-                          foregroundColor: _CreateNeedVisuals.textMuted,
+                          foregroundColor: context.v5Colors.textSecondary,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 6,
@@ -805,7 +793,9 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     if (targetContext == null) return;
     await Scrollable.ensureVisible(
       targetContext,
-      duration: const Duration(milliseconds: 300),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
       alignment: 0.15,
       alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
@@ -958,6 +948,7 @@ class _NeedSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final dateLabel = date == null
         ? 'Date à définir'
         : 'Date · ${FrenchDateTime.date(date!)}';
@@ -979,8 +970,8 @@ class _NeedSummaryCard extends StatelessWidget {
       children: [
         Text(
           location == null ? 'Lieu à définir' : 'Lieu · ${location!.name}',
-          style: const TextStyle(
-            color: _CreateNeedVisuals.navy,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w800,
           ),
@@ -988,8 +979,8 @@ class _NeedSummaryCard extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           '$dateLabel · $timeLabel',
-          style: const TextStyle(
-            color: _CreateNeedVisuals.textMuted,
+          style: TextStyle(
+            color: colors.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -1002,8 +993,8 @@ class _NeedSummaryCard extends StatelessWidget {
         child: Text.rich(
           TextSpan(
             text: '$requestedProfessionals\n',
-            style: const TextStyle(
-              color: _CreateNeedVisuals.navy,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 22,
               height: 0.9,
               fontWeight: FontWeight.w800,
@@ -1011,8 +1002,8 @@ class _NeedSummaryCard extends StatelessWidget {
             children: [
               TextSpan(
                 text: professionLabel,
-                style: const TextStyle(
-                  color: _CreateNeedVisuals.textMuted,
+                style: TextStyle(
+                  color: colors.textSecondary,
                   fontSize: 12,
                   height: 1.8,
                   fontWeight: FontWeight.w600,
@@ -1028,9 +1019,9 @@ class _NeedSummaryCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(13, 12, 13, 11),
       decoration: BoxDecoration(
-        color: _CreateNeedVisuals.fieldBackground,
+        color: colors.surfaceMuted,
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: _CreateNeedVisuals.border),
+        border: Border.all(color: colors.outline),
       ),
       child: useStackedLayout
           ? Column(
@@ -1063,12 +1054,13 @@ class _EquipmentProfessionContext extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Row(
       children: [
-        const Text(
+        Text(
           'pour :',
           style: TextStyle(
-            color: _CreateNeedVisuals.textMuted,
+            color: colors.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -1078,26 +1070,24 @@ class _EquipmentProfessionContext extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: _CreateNeedVisuals.orangeSoft,
+              color: colors.warningContainer,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: _CreateNeedVisuals.orange.withValues(alpha: 0.28),
-              ),
+              border: Border.all(color: colors.warning.withValues(alpha: 0.42)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.medical_services_outlined,
                   size: 13,
-                  color: _CreateNeedVisuals.orange,
+                  color: colors.warning,
                 ),
                 const SizedBox(width: 5),
                 Flexible(
                   child: Text(
                     professionLabel,
-                    style: const TextStyle(
-                      color: _CreateNeedVisuals.navy,
+                    style: TextStyle(
+                      color: colors.textPrimary,
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                     ),
@@ -1121,8 +1111,8 @@ class _CreateNeedFieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label.toUpperCase(),
-      style: const TextStyle(
-        color: _CreateNeedVisuals.textMuted,
+      style: TextStyle(
+        color: context.v5Colors.textSecondary,
         fontSize: 12,
         letterSpacing: 0.45,
         fontWeight: FontWeight.w700,
@@ -1193,6 +1183,7 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return PageContainer(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1200,7 +1191,7 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
               ? 18.0
               : (constraints.maxWidth - 520) / 2;
           return Material(
-            color: _CreateNeedVisuals.background,
+            color: colors.canvas,
             child: ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.fromLTRB(
@@ -1216,16 +1207,10 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: colors.surfaceElevated,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _CreateNeedVisuals.border),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x0A173052),
-                        blurRadius: 18,
-                        offset: Offset(0, 5),
-                      ),
-                    ],
+                    border: Border.all(color: colors.outline),
+                    boxShadow: V5Elevation.level1(colors),
                   ),
                   child: AutofillGroup(
                     child: Column(
@@ -1258,16 +1243,16 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                               vertical: 11,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFFF1F0),
+                              color: colors.dangerContainer,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: const Color(0xFFFFD6D2),
+                                color: colors.danger.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Text(
                               _message!,
-                              style: const TextStyle(
-                                color: AppColors.red,
+                              style: TextStyle(
+                                color: colors.danger,
                                 fontSize: 13,
                                 height: 1.35,
                                 fontWeight: FontWeight.w700,
@@ -1279,8 +1264,8 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                         V5Button(
                           key: const Key('manager-sign-in'),
                           expanded: true,
-                          backgroundColor: _CreateNeedVisuals.orange,
-                          foregroundColor: Colors.white,
+                          backgroundColor: colors.accent,
+                          foregroundColor: colors.onAccent,
                           loading: _loading,
                           onPressed: _loading ? null : _signIn,
                           label: _loading ? 'Connexion…' : 'Se connecter',
@@ -1303,13 +1288,14 @@ class _ResponsibleLoginHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    final colors = context.v5Colors;
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            BrandMark(size: 52),
-            SizedBox(width: 13),
+            const BrandMark(size: 52),
+            const SizedBox(width: 13),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1317,17 +1303,17 @@ class _ResponsibleLoginHeader extends StatelessWidget {
                   Text(
                     'MobSanté',
                     style: TextStyle(
-                      color: _CreateNeedVisuals.navy,
+                      color: colors.textPrimary,
                       fontSize: 22,
                       height: 1.1,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
                     'ESPACE RESPONSABLE',
                     style: TextStyle(
-                      color: _CreateNeedVisuals.textMuted,
+                      color: colors.textSecondary,
                       fontSize: 12,
                       letterSpacing: 1.1,
                       fontWeight: FontWeight.w800,
@@ -1338,22 +1324,22 @@ class _ResponsibleLoginHeader extends StatelessWidget {
             ),
           ],
         ),
-        SizedBox(height: 22),
+        const SizedBox(height: 22),
         Text(
           'Se connecter',
           style: TextStyle(
-            color: _CreateNeedVisuals.navy,
+            color: colors.textPrimary,
             fontSize: 27,
             height: 1.12,
             letterSpacing: -0.7,
             fontWeight: FontWeight.w800,
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Text(
           'Vous devez vous connecter pour déclarer un besoin.',
           style: TextStyle(
-            color: _CreateNeedVisuals.textMuted,
+            color: colors.textSecondary,
             fontSize: 14,
             height: 1.4,
             fontWeight: FontWeight.w600,
@@ -1567,11 +1553,11 @@ class _LocationInput extends StatelessWidget {
       if (selectedLocation != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) => onSelected(null));
       }
-      return const Text(
+      return Text(
         'Aucun lieu unique n’est configuré pour ce compte.',
-        key: Key('mission-location-error'),
+        key: const Key('mission-location-error'),
         style: TextStyle(
-          color: AppColors.red,
+          color: context.v5Colors.danger,
           fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
@@ -1595,17 +1581,17 @@ class _LocationInput extends StatelessWidget {
               Expanded(
                 child: Text(
                   location.name,
-                  style: const TextStyle(
-                    color: _CreateNeedVisuals.navy,
+                  style: TextStyle(
+                    color: context.v5Colors.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.lock_outline_rounded,
                 size: 15,
-                color: _CreateNeedVisuals.textMuted,
+                color: context.v5Colors.textSecondary,
               ),
             ],
           ),
@@ -1639,21 +1625,22 @@ class _QuotaStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final valueLabel = _quotaValueLabel(profession, value);
     final professionLabel = _quotaProfessionSingular(profession);
+    final colors = context.v5Colors;
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.fromLTRB(14, 7, 8, 7),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.surfaceElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _CreateNeedVisuals.border),
+        border: Border.all(color: colors.outline),
       ),
       child: Row(
         children: [
           Expanded(
             child: Text(
               profession.missionLabel,
-              style: const TextStyle(
-                color: _CreateNeedVisuals.navy,
+              style: TextStyle(
+                color: colors.textPrimary,
                 fontSize: 12,
                 height: 1.15,
                 fontWeight: FontWeight.w700,
@@ -1675,8 +1662,8 @@ class _QuotaStepper extends StatelessWidget {
                 child: Text(
                   '$value',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: _CreateNeedVisuals.navy,
+                  style: TextStyle(
+                    color: colors.textPrimary,
                     fontSize: 20,
                     height: 1,
                     fontWeight: FontWeight.w800,
@@ -1718,6 +1705,7 @@ class _QuotaIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    final colors = context.v5Colors;
     return Semantics(
       button: true,
       enabled: enabled,
@@ -1733,14 +1721,12 @@ class _QuotaIconButton extends StatelessWidget {
           padding: EdgeInsets.zero,
           style: IconButton.styleFrom(
             minimumSize: const Size.square(44),
-            foregroundColor: _CreateNeedVisuals.navy,
-            backgroundColor: Colors.white,
-            disabledForegroundColor: _CreateNeedVisuals.textDisabled,
-            disabledBackgroundColor: _CreateNeedVisuals.fieldBackground,
+            foregroundColor: colors.textPrimary,
+            backgroundColor: colors.surfaceElevated,
+            disabledForegroundColor: colors.disabledForeground,
+            disabledBackgroundColor: colors.disabledBackground,
             side: BorderSide(
-              color: enabled
-                  ? _CreateNeedVisuals.navy
-                  : _CreateNeedVisuals.borderStrong,
+              color: enabled ? colors.textPrimary : colors.outline,
               width: 1.2,
             ),
             shape: const CircleBorder(),

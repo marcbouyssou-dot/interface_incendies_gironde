@@ -119,7 +119,10 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SplashScreen), findsOneWidget);
-    expect(_systemStyles(tester), contains(AppTheme.darkSystemUiOverlayStyle));
+    expect(
+      _systemStyles(tester),
+      contains(AppTheme.splashSystemUiOverlayStyle),
+    );
 
     startup.complete(MockCoordinationRepository());
     await tester.pump(AppIdentity.splashRevealDuration);
@@ -158,6 +161,7 @@ void _expectOnlyLightApplicationChrome(WidgetTester tester) {
   final styles = _systemStyles(tester);
   expect(styles, contains(AppTheme.lightSystemUiOverlayStyle));
   expect(styles, isNot(contains(AppTheme.darkSystemUiOverlayStyle)));
+  expect(styles, isNot(contains(AppTheme.splashSystemUiOverlayStyle)));
   final style = AppTheme.lightSystemUiOverlayStyle;
   expect(style.statusBarColor, Colors.transparent);
   expect(style.systemNavigationBarColor, V5Colors.light.canvas);

@@ -35,6 +35,17 @@ abstract final class AppTheme {
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
     statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Color(0xFF0D1622),
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarDividerColor: Color(0xFF0D1622),
+    systemStatusBarContrastEnforced: false,
+    systemNavigationBarContrastEnforced: false,
+  );
+
+  static const splashSystemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
     systemNavigationBarColor: AppColors.navy,
     systemNavigationBarIconBrightness: Brightness.light,
     systemNavigationBarDividerColor: AppColors.navy,
@@ -49,7 +60,7 @@ abstract final class AppTheme {
   static Widget darkSystemSurface(BuildContext context, Widget? child) {
     activateSplashApplicationChrome();
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: darkSystemUiOverlayStyle,
+      value: splashSystemUiOverlayStyle,
       child: ColoredBox(
         color: AppColors.navy,
         child: child ?? const SizedBox.shrink(),
@@ -58,11 +69,17 @@ abstract final class AppTheme {
   }
 
   static Widget systemSurface(BuildContext context, Widget? child) {
-    activateLightApplicationChrome();
+    final colors = context.v5Colors;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    if (dark) {
+      activateDarkApplicationChrome();
+    } else {
+      activateLightApplicationChrome();
+    }
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: lightSystemUiOverlayStyle,
+      value: dark ? darkSystemUiOverlayStyle : lightSystemUiOverlayStyle,
       child: ColoredBox(
-        color: V5Colors.light.canvas,
+        color: colors.canvas,
         child: child ?? const SizedBox.shrink(),
       ),
     );
@@ -122,6 +139,18 @@ abstract final class AppTheme {
           side: BorderSide(color: colors.outline),
         ),
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.surfaceElevated,
+        barrierColor: colors.shadow.withValues(alpha: 0.48),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surfaceElevated,
+        modalBackgroundColor: colors.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        dragHandleColor: colors.outline,
+      ),
+      dividerColor: colors.outline,
+      iconTheme: IconThemeData(color: colors.textPrimary),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colors.surface,

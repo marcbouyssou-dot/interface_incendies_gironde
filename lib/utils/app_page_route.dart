@@ -6,11 +6,22 @@ class AppPageRoute<T> extends CupertinoPageRoute<T> {
     super.settings,
     super.maintainState = true,
     super.fullscreenDialog = false,
-  });
+    bool? reduceMotion,
+  }) : _reduceMotion =
+           reduceMotion ??
+           WidgetsBinding
+               .instance
+               .platformDispatcher
+               .accessibilityFeatures
+               .disableAnimations;
+
+  final bool _reduceMotion;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 220);
+  Duration get transitionDuration =>
+      _reduceMotion ? Duration.zero : const Duration(milliseconds: 220);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
+  Duration get reverseTransitionDuration =>
+      _reduceMotion ? Duration.zero : const Duration(milliseconds: 200);
 }

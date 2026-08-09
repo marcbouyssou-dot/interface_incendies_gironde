@@ -97,7 +97,9 @@ class _V5BottomBarItem extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 160),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 160),
               child: Icon(
                 selected ? destination.selectedIcon : destination.icon,
                 key: ValueKey(selected),

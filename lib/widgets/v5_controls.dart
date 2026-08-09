@@ -32,6 +32,9 @@ class V5Button extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final animationDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 150);
     final enabled = onPressed != null && !loading;
     final resolvedBackground =
         backgroundColor ??
@@ -61,7 +64,7 @@ class V5Button extends StatelessWidget {
         ? Border.all(color: colors.outline)
         : null;
     final content = AnimatedSwitcher(
-      duration: const Duration(milliseconds: 150),
+      duration: animationDuration,
       child: loading
           ? Row(
               key: const ValueKey('loading'),
@@ -106,7 +109,7 @@ class V5Button extends StatelessWidget {
             ),
     );
     final button = AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
+      duration: animationDuration,
       decoration: BoxDecoration(
         color: effectiveBackground,
         border: border,
@@ -136,6 +139,7 @@ class V5ActivityIndicator extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox.square(
     dimension: size,
     child: CupertinoActivityIndicator(
+      animating: !MediaQuery.disableAnimationsOf(context),
       radius: size / 2,
       color: color ?? context.v5Colors.textSecondary,
     ),
@@ -178,7 +182,9 @@ class V5CheckboxTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 160),
               width: 24,
               height: 24,
               decoration: BoxDecoration(
@@ -309,7 +315,9 @@ class V5ChoiceChip extends StatelessWidget {
       button: true,
       label: label,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 160),
         decoration: BoxDecoration(
           color: selected ? colors.warningContainer : colors.surfaceElevated,
           borderRadius: BorderRadius.circular(V5Radius.pill),

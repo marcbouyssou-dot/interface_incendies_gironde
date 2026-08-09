@@ -668,6 +668,7 @@ class V5LoadingState extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 CupertinoActivityIndicator(
+                  animating: !MediaQuery.disableAnimationsOf(context),
                   radius: compact ? 10 : 13,
                   color: colors.accent,
                 ),
@@ -792,14 +793,18 @@ Future<T?> showV5Dialog<T>({
   bool barrierDismissible = true,
 }) {
   final colors = context.v5Colors;
+  final reduceMotion = MediaQuery.disableAnimationsOf(context);
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     barrierColor: colors.shadow.withValues(alpha: 0.32),
-    transitionDuration: const Duration(milliseconds: 180),
+    transitionDuration: reduceMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 180),
     pageBuilder: (context, animation, secondaryAnimation) => builder(context),
     transitionBuilder: (context, animation, secondaryAnimation, child) {
+      if (reduceMotion) return child;
       final curved = CurvedAnimation(
         parent: animation,
         curve: Curves.easeOutCubic,
@@ -928,6 +933,7 @@ class V5Toast extends StatelessWidget {
     Duration duration = const Duration(seconds: 3),
   }) {
     final overlay = Overlay.of(context, rootOverlay: true);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     late OverlayEntry entry;
     late V5ToastController controller;
     entry = OverlayEntry(
@@ -938,6 +944,7 @@ class V5Toast extends StatelessWidget {
         actionLabel: actionLabel,
         onAction: onAction,
         duration: duration,
+        reduceMotion: reduceMotion,
         onDismissed: () {
           if (entry.mounted) entry.remove();
         },
@@ -1541,6 +1548,7 @@ class _V5ToastOverlay extends StatefulWidget {
     required this.actionLabel,
     required this.onAction,
     required this.duration,
+    required this.reduceMotion,
     required this.onDismissed,
     required this.onControllerReady,
   });
@@ -1551,6 +1559,7 @@ class _V5ToastOverlay extends StatefulWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
   final Duration duration;
+  final bool reduceMotion;
   final VoidCallback onDismissed;
   final ValueChanged<VoidCallback> onControllerReady;
 
@@ -1563,6 +1572,7 @@ class _V5ToastOverlayState extends State<_V5ToastOverlay>
   late final AnimationController _animation;
   Timer? _timer;
   bool _dismissing = false;
+  bool _started = false;
 
   @override
   void initState() {
@@ -1571,9 +1581,21 @@ class _V5ToastOverlayState extends State<_V5ToastOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 180),
       reverseDuration: const Duration(milliseconds: 140),
-    )..forward();
+    );
     widget.onControllerReady(_dismiss);
     _timer = Timer(widget.duration, _dismiss);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (widget.reduceMotion) {
+      _animation.duration = Duration.zero;
+      _animation.reverseDuration = Duration.zero;
+    }
+    _animation.forward();
   }
 
   @override
@@ -1593,6 +1615,25 @@ class _V5ToastOverlayState extends State<_V5ToastOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final toast = IgnorePointer(
+      ignoring: widget.onAction == null,
+      child: V5Toast(
+        message: widget.message,
+        tone: widget.tone,
+        icon: widget.icon,
+        actionLabel: widget.actionLabel,
+        onAction: widget.onAction == null
+            ? null
+            : () {
+                widget.onAction!();
+                _dismiss();
+              },
+        onDismiss: widget.onAction == null ? null : _dismiss,
+      ),
+    );
+    if (widget.reduceMotion) {
+      return Positioned(left: 0, right: 0, bottom: 0, child: toast);
+    }
     final curved = CurvedAnimation(
       parent: _animation,
       curve: Curves.easeOutCubic,
@@ -1609,22 +1650,7 @@ class _V5ToastOverlayState extends State<_V5ToastOverlay>
             begin: const Offset(0, 0.06),
             end: Offset.zero,
           ).animate(curved),
-          child: IgnorePointer(
-            ignoring: widget.onAction == null,
-            child: V5Toast(
-              message: widget.message,
-              tone: widget.tone,
-              icon: widget.icon,
-              actionLabel: widget.actionLabel,
-              onAction: widget.onAction == null
-                  ? null
-                  : () {
-                      widget.onAction!();
-                      _dismiss();
-                    },
-              onDismiss: widget.onAction == null ? null : _dismiss,
-            ),
-          ),
+          child: toast,
         ),
       ),
     );
