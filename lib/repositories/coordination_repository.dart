@@ -2,6 +2,7 @@ import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
+import '../services/professional_verification_service.dart';
 import 'admin_invitation_repository.dart';
 import 'location_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
@@ -23,6 +24,10 @@ abstract interface class CoordinationRepository {
   Future<VolunteerProfile?> getVolunteerProfile();
 
   Future<void> saveVolunteerProfile(VolunteerProfile profile);
+
+  Future<VolunteerProfile> confirmProfessionalRpps(
+    ProfessionalVerificationResult verification,
+  );
 
   Stream<EngagementInfo?> watchMyEngagement(String missionId);
 

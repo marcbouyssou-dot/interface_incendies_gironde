@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/need.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
+import '../utils/french_date_time.dart';
 import 'v5_controls.dart';
 import 'v5_form_system.dart';
 
@@ -13,13 +16,18 @@ class ProfessionalRppsVerification extends StatefulWidget {
     required this.profession,
     required this.service,
     this.initialRpps = '',
+    this.persistedVerification,
+    this.verifiedAt,
     this.onIdentityConfirmed,
   });
 
   final VolunteerProfession profession;
   final ProfessionalVerificationService service;
   final String initialRpps;
-  final ValueChanged<ProfessionalVerificationResult>? onIdentityConfirmed;
+  final ProfessionalVerificationResult? persistedVerification;
+  final DateTime? verifiedAt;
+  final FutureOr<void> Function(ProfessionalVerificationResult)?
+  onIdentityConfirmed;
 
   static bool supportsProfession(VolunteerProfession profession) =>
       switch (profession) {
@@ -42,6 +50,7 @@ class _ProfessionalRppsVerificationState
   ProfessionalVerificationResult? _result;
   bool _loading = false;
   bool _identityConfirmed = false;
+  bool _confirming = false;
   int _requestGeneration = 0;
 
   @override
@@ -63,6 +72,7 @@ class _ProfessionalRppsVerificationState
       _result = null;
       _loading = false;
       _identityConfirmed = false;
+      _confirming = false;
     }
   }
 
@@ -79,6 +89,7 @@ class _ProfessionalRppsVerificationState
     setState(() {
       _result = null;
       _identityConfirmed = false;
+      _confirming = false;
       _loading = false;
     });
   }
@@ -102,6 +113,7 @@ class _ProfessionalRppsVerificationState
       _loading = true;
       _result = null;
       _identityConfirmed = false;
+      _confirming = false;
     });
     ProfessionalVerificationResult result;
     try {
@@ -119,9 +131,27 @@ class _ProfessionalRppsVerificationState
     });
   }
 
-  void _confirmIdentity(ProfessionalVerificationResult result) {
-    setState(() => _identityConfirmed = true);
-    widget.onIdentityConfirmed?.call(result);
+  Future<void> _confirmIdentity(ProfessionalVerificationResult result) async {
+    if (_confirming) return;
+    setState(() => _confirming = true);
+    try {
+      await widget.onIdentityConfirmed?.call(result);
+      if (!mounted) return;
+      setState(() {
+        _confirming = false;
+        _identityConfirmed = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _confirming = false;
+        _identityConfirmed = false;
+        _result = ProfessionalVerificationResult.empty(
+          status: ProfessionalVerificationStatus.unavailable,
+          rpps: result.rpps,
+        );
+      });
+    }
   }
 
   bool _isCompatible(ProfessionalVerificationResult result) {
@@ -138,6 +168,19 @@ class _ProfessionalRppsVerificationState
 
   @override
   Widget build(BuildContext context) {
+    final persisted = widget.persistedVerification;
+    if (persisted != null && widget.verifiedAt != null) {
+      return _PersistedVerifiedRpps(
+        result: persisted,
+        verifiedAt: widget.verifiedAt!,
+      );
+    }
+    if (_identityConfirmed && _result != null) {
+      return _PersistedVerifiedRpps(
+        result: _result!,
+        verifiedAt: DateTime.now(),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -199,7 +242,7 @@ class _ProfessionalRppsVerificationState
           _isCompatible(result)
               ? _VerifiedRppsResult(
                   result: result,
-                  confirmed: _identityConfirmed,
+                  confirming: _confirming,
                   onConfirm: () => _confirmIdentity(result),
                 )
               : const _RppsStatusMessage(
@@ -215,12 +258,12 @@ class _ProfessionalRppsVerificationState
 class _VerifiedRppsResult extends StatelessWidget {
   const _VerifiedRppsResult({
     required this.result,
-    required this.confirmed,
+    required this.confirming,
     required this.onConfirm,
   });
 
   final ProfessionalVerificationResult result;
-  final bool confirmed;
+  final bool confirming;
   final VoidCallback onConfirm;
 
   @override
@@ -279,19 +322,65 @@ class _VerifiedRppsResult extends StatelessWidget {
             key: const Key('confirm-professional-identity'),
             expanded: true,
             tone: V5ButtonTone.secondary,
-            onPressed: confirmed ? null : onConfirm,
-            label: confirmed ? 'Identité confirmée' : 'Confirmer mon identité',
+            loading: confirming,
+            onPressed: confirming ? null : onConfirm,
+            label: confirming ? 'Confirmation…' : 'Confirmer mon identité',
           ),
-          if (confirmed) ...[
-            const SizedBox(height: V5Spacing.xs),
-            Text(
-              'Votre identité est confirmée pour cette session.',
-              key: const Key('professional-rpps-confirmed'),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colors.success),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersistedVerifiedRpps extends StatelessWidget {
+  const _PersistedVerifiedRpps({
+    required this.result,
+    required this.verifiedAt,
+  });
+
+  final ProfessionalVerificationResult result;
+  final DateTime verifiedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final rpps = result.rpps;
+    final maskedRpps = rpps.length == 11
+        ? '•••••••${rpps.substring(7)}'
+        : '••••';
+    return Container(
+      key: const Key('professional-rpps-persisted-verified'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(V5Spacing.md),
+      decoration: BoxDecoration(
+        color: colors.successContainer,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Profil vérifié',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: colors.success,
+              fontWeight: FontWeight.w800,
             ),
-          ],
+          ),
+          const SizedBox(height: V5Spacing.xs),
+          Text(
+            '${result.firstName} ${result.lastName}'.trim(),
+            key: const Key('professional-rpps-persisted-identity'),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          Text(result.professionLabel),
+          Text('RPPS $maskedRpps'),
+          Text(
+            'Vérifié le ${FrenchDateTime.date(verifiedAt)}',
+            key: const Key('professional-rpps-verified-at'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ),
     );

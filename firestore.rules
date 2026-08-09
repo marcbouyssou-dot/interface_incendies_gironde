@@ -411,11 +411,79 @@ service cloud.firestore {
           || details.size() > 0);
     }
 
+    function hasNoVerifiedIdentityFields(data) {
+      return !('verificationSource' in data)
+        && !('verifiedFirstName' in data)
+        && !('verifiedLastName' in data)
+        && !('verifiedProfessionCode' in data)
+        && !('verifiedProfessionLabel' in data)
+        && !('verifiedAt' in data);
+    }
+
+    function isUnverifiedProfile(data) {
+      return (!('verificationStatus' in data)
+          || data.verificationStatus == 'unverified')
+        && hasNoVerifiedIdentityFields(data);
+    }
+
+    function expectedRppsProfessionCode(profession) {
+      let canonical = canonicalProfession(profession);
+      return canonical == 'physician'
+        ? '10'
+        : (canonical == 'nurse'
+          ? '60'
+          : (canonical == 'physiotherapist'
+            ? '70'
+            : (canonical == 'podiatrist' ? '80' : 'unsupported')));
+    }
+
+    function isCompleteVerifiedProfile(data) {
+      return data.get('verificationStatus', '') == 'verified'
+        && data.get('verificationSource', '') == 'ans_rpps'
+        && data.get('professionalIdType', '') == 'rpps'
+        && data.get('professionalIdValue', '').matches('^[0-9]{11}$')
+        && data.get('rpps', '') == data.professionalIdValue
+        && isNonBlankCanonicalText(data.get('verifiedFirstName', ''))
+        && isNonBlankCanonicalText(data.get('verifiedLastName', ''))
+        && data.get('verifiedProfessionCode', '')
+          == expectedRppsProfessionCode(data.profession)
+        && isNonBlankCanonicalText(data.get('verifiedProfessionLabel', ''))
+        && data.get('verifiedAt', null) is timestamp;
+    }
+
+    function validVerificationData(data) {
+      return isUnverifiedProfile(data) || isCompleteVerifiedProfile(data);
+    }
+
+    function clientVerificationUpdateIsSafe() {
+      let professionalIdentityChanged = request.resource.data.profession
+          != resource.data.profession
+        || request.resource.data.get('professionalIdType', '')
+          != resource.data.get('professionalIdType', '')
+        || request.resource.data.get('professionalIdValue', '')
+          != resource.data.get('professionalIdValue', '');
+      let verifiedFields = [
+        'verificationStatus', 'verificationSource', 'verifiedFirstName',
+        'verifiedLastName', 'verifiedProfessionCode',
+        'verifiedProfessionLabel', 'verifiedAt'
+      ];
+      return (isUnverifiedProfile(request.resource.data)
+          && (isUnverifiedProfile(resource.data) || professionalIdentityChanged))
+        || (isCompleteVerifiedProfile(request.resource.data)
+          && isCompleteVerifiedProfile(resource.data)
+          && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(verifiedFields)
+          && !professionalIdentityChanged);
+    }
+
     function validVolunteerData(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
           'rpps', 'professionalIdType', 'professionalIdValue',
           'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
+          'verificationStatus', 'verificationSource', 'verifiedFirstName',
+          'verifiedLastName', 'verifiedProfessionCode',
+          'verifiedProfessionLabel', 'verifiedAt',
           'createdAt', 'updatedAt'
         ])
         && request.resource.data.keys().hasAll([
@@ -431,6 +499,7 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.email.size() > 0
         && validProfessionalIdentity(request.resource.data)
+        && validVerificationData(request.resource.data)
         && validOptionalCpts(request.resource.data)
         && validOptionalEquipmentDetails(request.resource.data);
     }
@@ -742,10 +811,12 @@ service cloud.firestore {
     match /volunteers/{uid} {
       allow create: if isVolunteerOwner(uid)
         && validVolunteerData(uid)
+        && isUnverifiedProfile(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isVolunteerOwner(uid)
         && validVolunteerData(uid)
+        && clientVerificationUpdateIsSafe()
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time;
       allow read: if isVolunteerOwner(uid);

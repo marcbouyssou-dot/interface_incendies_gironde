@@ -4,6 +4,7 @@ import 'package:interface_incendies_gironde/models/professional_equipment.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/services/professional_verification_service.dart';
 
 void main() {
   test(
@@ -376,4 +377,126 @@ void main() {
       ]);
     },
   );
+
+  test(
+    'changing a verified RPPS clears every derived verification field',
+    () async {
+      final repository = MockCoordinationRepository(
+        initialMissions: const [],
+        initialLocations: const [],
+      );
+      const profile = VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.rpps,
+        professionalIdValue: '10123456789',
+        profession: VolunteerProfession.mk,
+      );
+      await repository.saveVolunteerProfile(profile);
+      await repository.confirmProfessionalRpps(
+        const ProfessionalVerificationResult(
+          status: ProfessionalVerificationStatus.verified,
+          rpps: '10123456789',
+          firstName: 'Alice',
+          lastName: 'MARTIN',
+          professionCode: '70',
+          professionLabel: 'Masseur-Kinésithérapeute',
+        ),
+      );
+
+      final verified = await repository.getVolunteerProfile();
+      await repository.saveVolunteerProfile(
+        verified!.copyWith(professionalIdValue: '10987654321'),
+      );
+      final invalidated = await repository.getVolunteerProfile();
+
+      expect(invalidated?.verificationStatus, 'unverified');
+      expect(invalidated?.verificationSource, isNull);
+      expect(invalidated?.verifiedFirstName, isNull);
+      expect(invalidated?.verifiedLastName, isNull);
+      expect(invalidated?.verifiedProfessionCode, isNull);
+      expect(invalidated?.verifiedProfessionLabel, isNull);
+      expect(invalidated?.verifiedAt, isNull);
+    },
+  );
+
+  test('changing a verified profession clears verification data', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+    );
+    const profile = VolunteerProfile(
+      uid: 'mock-volunteer',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      email: 'alice@example.fr',
+      professionalIdType: ProfessionalIdType.rpps,
+      professionalIdValue: '10123456789',
+      profession: VolunteerProfession.mk,
+    );
+    await repository.saveVolunteerProfile(profile);
+    await repository.confirmProfessionalRpps(
+      const ProfessionalVerificationResult(
+        status: ProfessionalVerificationStatus.verified,
+        rpps: '10123456789',
+        firstName: 'Alice',
+        lastName: 'MARTIN',
+        professionCode: '70',
+        professionLabel: 'Masseur-Kinésithérapeute',
+      ),
+    );
+
+    final verified = await repository.getVolunteerProfile();
+    await repository.saveVolunteerProfile(
+      verified!.copyWith(profession: VolunteerProfession.doctor),
+    );
+    final invalidated = await repository.getVolunteerProfile();
+
+    expect(invalidated?.profession, VolunteerProfession.doctor);
+    expect(invalidated?.verificationStatus, 'unverified');
+    expect(invalidated?.hasVerifiedProfessionalIdentity, isFalse);
+    expect(invalidated?.verifiedAt, isNull);
+  });
+
+  test('editing unrelated profile data preserves verification', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+    );
+    const profile = VolunteerProfile(
+      uid: 'mock-volunteer',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      email: 'alice@example.fr',
+      professionalIdType: ProfessionalIdType.rpps,
+      professionalIdValue: '10123456789',
+      profession: VolunteerProfession.mk,
+    );
+    await repository.saveVolunteerProfile(profile);
+    await repository.confirmProfessionalRpps(
+      const ProfessionalVerificationResult(
+        status: ProfessionalVerificationStatus.verified,
+        rpps: '10123456789',
+        firstName: 'Alice',
+        lastName: 'MARTIN',
+        professionCode: '70',
+        professionLabel: 'Masseur-Kinésithérapeute',
+      ),
+    );
+
+    final verified = await repository.getVolunteerProfile();
+    await repository.saveVolunteerProfile(
+      verified!.copyWith(phone: '0611111111'),
+    );
+    final saved = await repository.getVolunteerProfile();
+
+    expect(saved?.phone, '0611111111');
+    expect(saved?.hasVerifiedProfessionalIdentity, isTrue);
+    expect(saved?.verifiedAt, verified.verifiedAt);
+  });
 }

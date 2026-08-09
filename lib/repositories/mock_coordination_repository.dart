@@ -6,6 +6,7 @@ import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
+import '../services/professional_verification_service.dart';
 import '../utils/french_date_time.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
@@ -157,6 +158,12 @@ class MockCoordinationRepository implements CoordinationRepository {
       );
     }
     final existing = volunteerProfiles[volunteerUid];
+    final preservesVerification =
+        existing?.hasVerifiedProfessionalIdentity == true &&
+        existing!.profession == profile.profession &&
+        profile.effectiveProfessionalIdType == ProfessionalIdType.rpps &&
+        existing.effectiveProfessionalIdValue ==
+            profile.effectiveProfessionalIdValue;
     final now = DateTime.now();
     volunteerProfiles[volunteerUid] = VolunteerProfile(
       uid: volunteerUid,
@@ -179,10 +186,83 @@ class MockCoordinationRepository implements CoordinationRepository {
         profile.equipment,
       ),
       otherEquipmentDetails: _nullableTrim(profile.otherEquipmentDetails),
+      verificationStatus: preservesVerification ? 'verified' : 'unverified',
+      verificationSource: preservesVerification
+          ? existing.verificationSource
+          : null,
+      verifiedFirstName: preservesVerification
+          ? existing.verifiedFirstName
+          : null,
+      verifiedLastName: preservesVerification
+          ? existing.verifiedLastName
+          : null,
+      verifiedProfessionCode: preservesVerification
+          ? existing.verifiedProfessionCode
+          : null,
+      verifiedProfessionLabel: preservesVerification
+          ? existing.verifiedProfessionLabel
+          : null,
+      verifiedAt: preservesVerification ? existing.verifiedAt : null,
       createdAt: existing?.createdAt ?? profile.createdAt ?? now,
       updatedAt: now,
     );
   }
+
+  @override
+  Future<VolunteerProfile> confirmProfessionalRpps(
+    ProfessionalVerificationResult verification,
+  ) async {
+    final existing = volunteerProfiles[volunteerUid];
+    if (existing == null ||
+        verification.status != ProfessionalVerificationStatus.verified ||
+        !_professionMatchesCode(
+          existing.profession,
+          verification.professionCode,
+        )) {
+      throw const RepositoryException(
+        'La confirmation du RPPS n’a pas abouti.',
+      );
+    }
+    final now = DateTime.now();
+    final verified = VolunteerProfile(
+      uid: existing.uid,
+      firstName: existing.firstName,
+      lastName: existing.lastName,
+      phone: existing.phone,
+      email: existing.email,
+      rpps: verification.rpps,
+      professionalIdType: ProfessionalIdType.rpps,
+      professionalIdValue: verification.rpps,
+      cptsId: existing.cptsId,
+      cptsLabel: existing.cptsLabel,
+      profession: existing.profession,
+      equipment: existing.equipment,
+      otherEquipmentDetails: existing.otherEquipmentDetails,
+      verificationStatus: 'verified',
+      verificationSource: 'ans_rpps',
+      verifiedFirstName: verification.firstName.trim(),
+      verifiedLastName: verification.lastName.trim(),
+      verifiedProfessionCode: verification.professionCode.trim(),
+      verifiedProfessionLabel: verification.professionLabel.trim(),
+      verifiedAt: now,
+      createdAt: existing.createdAt,
+      updatedAt: now,
+    );
+    volunteerProfiles[volunteerUid] = verified;
+    return verified;
+  }
+
+  static bool _professionMatchesCode(
+    VolunteerProfession profession,
+    String code,
+  ) => switch (profession) {
+    VolunteerProfession.doctor => code == '10',
+    VolunteerProfession.nurse => code == '60',
+    VolunteerProfession.mk => code == '70',
+    VolunteerProfession.pp => code == '80',
+    VolunteerProfession.veterinarian ||
+    VolunteerProfession.otherHealthProfessional => false,
+  };
 
   List<CoordinationNeed> _activeMissions() => List.unmodifiable(
     _missions.where((mission) => mission.isActive && !mission.isCancelled),

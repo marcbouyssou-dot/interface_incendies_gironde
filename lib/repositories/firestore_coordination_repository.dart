@@ -8,6 +8,7 @@ import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
+import '../services/professional_verification_service.dart';
 import '../utils/switch_latest.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
@@ -56,12 +57,19 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     FirebaseFirestore? responsibleFirestore,
     FirebaseAuth? responsibleAuth,
     FirebaseFunctions? responsibleFunctions,
+    FirebaseFunctions? volunteerFunctions,
   }) : _responsibleFirestore = responsibleFirestore ?? _firestore,
        _responsibleAuth = responsibleAuth ?? _auth,
        _responsibleFunctions =
            responsibleFunctions ??
            FirebaseFunctions.instanceFor(
              app: (responsibleAuth ?? _auth).app,
+             region: 'europe-west1',
+           ),
+       _volunteerFunctions =
+           volunteerFunctions ??
+           FirebaseFunctions.instanceFor(
+             app: _auth.app,
              region: 'europe-west1',
            );
 
@@ -70,6 +78,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   final FirebaseFirestore _responsibleFirestore;
   final FirebaseAuth _responsibleAuth;
   final FirebaseFunctions _responsibleFunctions;
+  final FirebaseFunctions _volunteerFunctions;
   @override
   late final AdminInvitationRepository adminInvitationRepository =
       FirestoreAdminInvitationRepository.withFirebase(
@@ -267,12 +276,53 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         .runTransaction((transaction) async {
           final existing = await transaction.get(reference);
           final now = FieldValue.serverTimestamp();
+          final existingData = existing.data();
           transaction.set(reference, {
             ..._profileData(profile, now, uid: user.uid),
-            'createdAt': existing.data()?['createdAt'] ?? now,
+            ..._verificationDataForClientSave(existingData, profile),
+            'createdAt': existingData?['createdAt'] ?? now,
           });
         })
         .timeout(const Duration(seconds: 15));
+  }
+
+  @override
+  Future<VolunteerProfile> confirmProfessionalRpps(
+    ProfessionalVerificationResult verification,
+  ) async {
+    final user = _auth.currentUser;
+    if (user == null || !user.isAnonymous) {
+      throw const RepositoryException(
+        'Une session volontaire est nécessaire pour confirmer le RPPS.',
+      );
+    }
+    try {
+      final response = await _volunteerFunctions
+          .httpsCallable('confirmProfessionalRpps')
+          .call<Object?>({'rpps': verification.rpps.trim()})
+          .timeout(const Duration(seconds: 20));
+      final data = response.data;
+      if (data is! Map || data['status'] != 'verified') {
+        throw const RepositoryException(
+          'La confirmation du RPPS n’a pas abouti.',
+        );
+      }
+      final profile = await getVolunteerProfile();
+      if (profile == null || !profile.hasVerifiedProfessionalIdentity) {
+        throw const RepositoryException(
+          'Le profil vérifié n’a pas pu être relu.',
+        );
+      }
+      return profile;
+    } on RepositoryException {
+      rethrow;
+    } catch (error, stackTrace) {
+      debugPrint('Échec confirmation RPPS : ${error.runtimeType}');
+      debugPrintStack(stackTrace: stackTrace);
+      throw const RepositoryException(
+        'La confirmation du RPPS est momentanément indisponible.',
+      );
+    }
   }
 
   @override
@@ -1031,6 +1081,17 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       otherEquipmentDetails: _nullableTrim(
         data['otherEquipmentDetails'] as String?,
       ),
+      verificationStatus: _nullableTrim(data['verificationStatus'] as String?),
+      verificationSource: _nullableTrim(data['verificationSource'] as String?),
+      verifiedFirstName: _nullableTrim(data['verifiedFirstName'] as String?),
+      verifiedLastName: _nullableTrim(data['verifiedLastName'] as String?),
+      verifiedProfessionCode: _nullableTrim(
+        data['verifiedProfessionCode'] as String?,
+      ),
+      verifiedProfessionLabel: _nullableTrim(
+        data['verifiedProfessionLabel'] as String?,
+      ),
+      verifiedAt: (data['verifiedAt'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -1067,7 +1128,34 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
         profile.equipment,
       ),
       'otherEquipmentDetails': ?_nullableTrim(profile.otherEquipmentDetails),
+      'verificationStatus': 'unverified',
       'updatedAt': serverTimestamp,
+    };
+  }
+
+  static Map<String, dynamic> _verificationDataForClientSave(
+    Map<String, dynamic>? existing,
+    VolunteerProfile profile,
+  ) {
+    if (existing?['verificationStatus'] != 'verified' ||
+        existing?['professionalIdType'] != 'rpps' ||
+        existing?['profession'] != profile.profession.canonicalId ||
+        existing?['professionalIdValue'] !=
+            _normalizeProfessionalIdValue(
+              profile.effectiveProfessionalIdType,
+              profile.effectiveProfessionalIdValue,
+            ) ||
+        profile.effectiveProfessionalIdType != ProfessionalIdType.rpps) {
+      return const {'verificationStatus': 'unverified'};
+    }
+    return {
+      'verificationStatus': 'verified',
+      'verificationSource': existing?['verificationSource'],
+      'verifiedFirstName': existing?['verifiedFirstName'],
+      'verifiedLastName': existing?['verifiedLastName'],
+      'verifiedProfessionCode': existing?['verifiedProfessionCode'],
+      'verifiedProfessionLabel': existing?['verifiedProfessionLabel'],
+      'verifiedAt': existing?['verifiedAt'],
     };
   }
 

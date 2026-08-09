@@ -179,9 +179,23 @@ function volunteer(uid, overrides = {}) {
     email: 'a@example.fr', rpps: '10123456789',
     professionalIdType: 'rpps', professionalIdValue: '10123456789',
     cptsId: 'cpts-medoc', cptsLabel: 'CPTS Médoc',
+    verificationStatus: 'unverified',
     equipment: [], createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     ...overrides,
   };
+}
+
+function verifiedVolunteer(uid, overrides = {}) {
+  return volunteer(uid, {
+    verificationStatus: 'verified',
+    verificationSource: 'ans_rpps',
+    verifiedFirstName: 'Alice',
+    verifiedLastName: 'EXEMPLE',
+    verifiedProfessionCode: '70',
+    verifiedProfessionLabel: 'Masseur-Kinésithérapeute',
+    verifiedAt: Timestamp.now(),
+    ...overrides,
+  });
 }
 
 async function engage(
@@ -486,6 +500,60 @@ test('volunteers: owner create/update/read; other access denied', async () => {
   await assertSucceeds(getDoc(doc(db('alice'), 'volunteers/alice')));
   await assertFails(getDoc(doc(db('bob'), 'volunteers/alice')));
   await assertFails(updateDoc(doc(db('bob'), 'volunteers/alice'), {phone: 'x'}));
+});
+
+test('volunteers: a client cannot forge a verified profile', async () => {
+  await seed();
+  await assertFails(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    verifiedVolunteer('alice'),
+  ));
+});
+
+test('volunteers: an incomplete or incoherent verified block is denied', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'volunteers/alice'),
+      verifiedVolunteer('alice'),
+    );
+  });
+  await assertFails(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    verifiedProfessionLabel: '',
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    verifiedProfessionCode: '10',
+    updatedAt: serverTimestamp(),
+  }));
+});
+
+test('volunteers: verification is preserved or invalidated with identity changes', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'volunteers/alice'),
+      verifiedVolunteer('alice'),
+    );
+  });
+  await assertSucceeds(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    phone: '0611111111',
+    updatedAt: serverTimestamp(),
+  }));
+  await assertFails(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    verificationStatus: 'unverified',
+    verificationSource: null,
+    updatedAt: serverTimestamp(),
+  }));
+  const replacement = volunteer('alice', {
+    professionalIdValue: '10987654321',
+    rpps: '10987654321',
+    createdAt: (await getDoc(doc(db('alice'), 'volunteers/alice'))).data().createdAt,
+  });
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    replacement,
+  ));
 });
 
 test('volunteers: modular professional IDs and legacy RPPS are accepted', async () => {

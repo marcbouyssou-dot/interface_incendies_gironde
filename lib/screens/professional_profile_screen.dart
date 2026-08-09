@@ -68,6 +68,16 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
     });
   }
 
+  Future<void> _confirmProfessionalIdentity(
+    ProfessionalVerificationResult verification,
+  ) async {
+    final profile = await RepositoryScope.of(
+      context,
+    ).confirmProfessionalRpps(verification);
+    if (!mounted) return;
+    setState(() => _profile = Future.value(profile));
+  }
+
   Future<void> _editProfile(VolunteerProfile? profile) async {
     final saved = await showNativeBottomSheet<bool>(
       context: context,
@@ -158,7 +168,17 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                       if (profile != null &&
                           ProfessionalRppsVerification.supportsProfession(
                             profile.profession,
-                          ))
+                          )) ...[
+                        if (profile.effectiveProfessionalIdType ==
+                            ProfessionalIdType.ordinal) ...[
+                          _ProfileValue(
+                            label: 'Identifiant historique',
+                            value:
+                                '${profile.effectiveProfessionalIdType.label} '
+                                '${profile.effectiveProfessionalIdValue}',
+                          ),
+                          const SizedBox(height: V5Spacing.xs),
+                        ],
                         ProfessionalRppsVerification(
                           key: ValueKey(
                             'professional-rpps-${profile.profession.name}',
@@ -170,8 +190,25 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                                   ProfessionalIdType.rpps
                               ? profile.effectiveProfessionalIdValue
                               : '',
-                        )
-                      else ...[
+                          persistedVerification:
+                              profile.hasVerifiedProfessionalIdentity
+                              ? ProfessionalVerificationResult(
+                                  status:
+                                      ProfessionalVerificationStatus.verified,
+                                  rpps: profile.effectiveProfessionalIdValue,
+                                  firstName: profile.verifiedFirstName!,
+                                  lastName: profile.verifiedLastName!,
+                                  professionCode:
+                                      profile.verifiedProfessionCode!,
+                                  professionLabel:
+                                      profile.verifiedProfessionLabel!,
+                                  source: profile.verificationSource!,
+                                )
+                              : null,
+                          verifiedAt: profile.verifiedAt,
+                          onIdentityConfirmed: _confirmProfessionalIdentity,
+                        ),
+                      ] else ...[
                         _ProfileValue(
                           label: 'Type d’identifiant',
                           value:
@@ -449,6 +486,8 @@ class _ProfessionalProfileEditorState
   final _formKey = GlobalKey<FormState>();
   late VolunteerProfession _profession;
   late ProfessionalIdType _idType;
+  late final VolunteerProfession? _initialProfession;
+  late final bool _legacyOrdinalProfile;
   late final TextEditingController _firstName;
   late final TextEditingController _lastName;
   late final TextEditingController _phone;
@@ -476,7 +515,16 @@ class _ProfessionalProfileEditorState
     super.initState();
     final profile = widget.profile;
     _profession = profile?.profession ?? VolunteerProfession.mk;
-    _idType = profile?.effectiveProfessionalIdType ?? ProfessionalIdType.none;
+    _initialProfession = profile?.profession;
+    _legacyOrdinalProfile =
+        profile != null &&
+        ProfessionalRppsVerification.supportsProfession(profile.profession) &&
+        profile.effectiveProfessionalIdType == ProfessionalIdType.ordinal;
+    _idType =
+        profile?.effectiveProfessionalIdType ??
+        (ProfessionalRppsVerification.supportsProfession(_profession)
+            ? ProfessionalIdType.rpps
+            : ProfessionalIdType.none);
     _firstName = TextEditingController(text: profile?.firstName);
     _lastName = TextEditingController(text: profile?.lastName);
     _phone = TextEditingController(text: profile?.phone);
@@ -519,7 +567,17 @@ class _ProfessionalProfileEditorState
   List<ProfessionalIdType> get _idTypes =>
       _profession == VolunteerProfession.veterinarian
       ? const [ProfessionalIdType.ordinal]
+      : ProfessionalRppsVerification.supportsProfession(_profession)
+      ? const [ProfessionalIdType.rpps]
       : ProfessionalIdType.values;
+
+  bool get _keepsLegacyOrdinal =>
+      _legacyOrdinalProfile && _profession == _initialProfession;
+
+  bool get _usesFixedIdentifierType =>
+      _keepsLegacyOrdinal ||
+      ProfessionalRppsVerification.supportsProfession(_profession) ||
+      _profession == VolunteerProfession.veterinarian;
 
   List<ProfessionalEquipmentDefinition> get _equipmentOptions =>
       ProfessionalEquipmentRegistry.forProfession(_profession.canonicalId!);
@@ -578,6 +636,12 @@ class _ProfessionalProfileEditorState
                           );
                           if (value == VolunteerProfession.veterinarian) {
                             _idType = ProfessionalIdType.ordinal;
+                          } else if (ProfessionalRppsVerification.supportsProfession(
+                            value,
+                          )) {
+                            _idType = _keepsLegacyOrdinal
+                                ? ProfessionalIdType.ordinal
+                                : ProfessionalIdType.rpps;
                           }
                         });
                       },
@@ -638,26 +702,38 @@ class _ProfessionalProfileEditorState
                 leading: const Icon(Icons.verified_user_outlined),
                 child: Column(
                   children: [
-                    V5SelectField<ProfessionalIdType>(
-                      key: ValueKey(
-                        'professional-profile-id-type-${_profession.name}',
+                    if (_usesFixedIdentifierType)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _keepsLegacyOrdinal
+                              ? 'Identifiant historique : Numéro ordinal'
+                              : 'Identifiant : ${_idType.label}',
+                          key: const Key('professional-profile-fixed-id-type'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      )
+                    else
+                      V5SelectField<ProfessionalIdType>(
+                        key: ValueKey(
+                          'professional-profile-id-type-${_profession.name}',
+                        ),
+                        label: 'Type d’identifiant',
+                        focusNode: _idTypeFocus,
+                        value: _idType,
+                        options: [
+                          for (final type in _idTypes)
+                            V5SelectOption(value: type, label: type.label),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) setState(() => _idType = value);
+                        },
+                        validator: (value) =>
+                            value == ProfessionalIdType.rpps ||
+                                value == ProfessionalIdType.ordinal
+                            ? null
+                            : 'Choisissez un identifiant professionnel.',
                       ),
-                      label: 'Type d’identifiant',
-                      focusNode: _idTypeFocus,
-                      value: _idType,
-                      options: [
-                        for (final type in _idTypes)
-                          V5SelectOption(value: type, label: type.label),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) setState(() => _idType = value);
-                      },
-                      validator: (value) =>
-                          value == ProfessionalIdType.rpps ||
-                              value == ProfessionalIdType.ordinal
-                          ? null
-                          : 'Choisissez un identifiant professionnel.',
-                    ),
                     const SizedBox(height: V5Spacing.sm),
                     V5TextField(
                       key: const Key('professional-profile-id-value'),

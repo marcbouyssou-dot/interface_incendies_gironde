@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/services/professional_verification_service.dart';
 import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_location_administration_repository.dart';
@@ -635,6 +636,11 @@ class _MissionRepository implements CoordinationRepository {
 
   @override
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {}
+
+  @override
+  Future<VolunteerProfile> confirmProfessionalRpps(
+    ProfessionalVerificationResult verification,
+  ) => throw UnimplementedError();
 
   @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() =>

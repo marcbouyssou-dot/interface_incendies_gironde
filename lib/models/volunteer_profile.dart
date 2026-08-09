@@ -31,6 +31,13 @@ class VolunteerProfile {
     this.cptsLabel,
     this.equipment = const [],
     this.otherEquipmentDetails,
+    this.verificationStatus,
+    this.verificationSource,
+    this.verifiedFirstName,
+    this.verifiedLastName,
+    this.verifiedProfessionCode,
+    this.verifiedProfessionLabel,
+    this.verifiedAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -48,6 +55,13 @@ class VolunteerProfile {
   final VolunteerProfession profession;
   final List<String> equipment;
   final String? otherEquipmentDetails;
+  final String? verificationStatus;
+  final String? verificationSource;
+  final String? verifiedFirstName;
+  final String? verifiedLastName;
+  final String? verifiedProfessionCode;
+  final String? verifiedProfessionLabel;
+  final DateTime? verifiedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -70,6 +84,27 @@ class VolunteerProfile {
     effectiveProfessionalIdValue,
   );
 
+  bool get hasVerifiedProfessionalIdentity =>
+      verificationStatus == 'verified' &&
+      verificationSource == 'ans_rpps' &&
+      effectiveProfessionalIdType == ProfessionalIdType.rpps &&
+      RegExp(r'^\d{11}$').hasMatch(effectiveProfessionalIdValue) &&
+      (rpps == null || rpps!.trim() == effectiveProfessionalIdValue) &&
+      (verifiedFirstName?.trim().isNotEmpty ?? false) &&
+      (verifiedLastName?.trim().isNotEmpty ?? false) &&
+      verifiedProfessionCode?.trim() == _expectedRppsProfessionCode &&
+      (verifiedProfessionLabel?.trim().isNotEmpty ?? false) &&
+      verifiedAt != null;
+
+  String? get _expectedRppsProfessionCode => switch (profession) {
+    VolunteerProfession.doctor => '10',
+    VolunteerProfession.nurse => '60',
+    VolunteerProfession.mk => '70',
+    VolunteerProfession.pp => '80',
+    VolunteerProfession.veterinarian ||
+    VolunteerProfession.otherHealthProfessional => null,
+  };
+
   VolunteerProfile copyWith({
     String? firstName,
     String? lastName,
@@ -83,6 +118,13 @@ class VolunteerProfile {
     VolunteerProfession? profession,
     List<String>? equipment,
     String? otherEquipmentDetails,
+    String? verificationStatus,
+    String? verificationSource,
+    String? verifiedFirstName,
+    String? verifiedLastName,
+    String? verifiedProfessionCode,
+    String? verifiedProfessionLabel,
+    DateTime? verifiedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -101,6 +143,15 @@ class VolunteerProfile {
       equipment: equipment ?? this.equipment,
       otherEquipmentDetails:
           otherEquipmentDetails ?? this.otherEquipmentDetails,
+      verificationStatus: verificationStatus ?? this.verificationStatus,
+      verificationSource: verificationSource ?? this.verificationSource,
+      verifiedFirstName: verifiedFirstName ?? this.verifiedFirstName,
+      verifiedLastName: verifiedLastName ?? this.verifiedLastName,
+      verifiedProfessionCode:
+          verifiedProfessionCode ?? this.verifiedProfessionCode,
+      verifiedProfessionLabel:
+          verifiedProfessionLabel ?? this.verifiedProfessionLabel,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

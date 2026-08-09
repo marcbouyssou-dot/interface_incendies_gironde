@@ -6,10 +6,12 @@ function discoverExport(environment, exportName = 'provisionAdminInvitation') {
   const script = [
     "const module = await import('./src/index.js');",
     `const endpoint = module.${exportName}.__endpoint;`,
+    `const trigger = module.${exportName}.__trigger;`,
     'console.log(JSON.stringify({',
     '  callable: endpoint.callableTrigger !== undefined,',
     '  region: endpoint.region,',
     '  secrets: endpoint.secretEnvironmentVariables,',
+    '  appCheckEnforced: trigger?.httpsTrigger?.allowInsecure === false,',
     '}));',
   ].join('\n');
   const result = spawnSync(
@@ -79,4 +81,16 @@ test('RPPS verification binds only the ANS secret in production', () => {
   assert.equal(endpoint.callable, true);
   assert.deepEqual(endpoint.region, ['europe-west1']);
   assert.deepEqual(endpoint.secrets, [{key: 'ESANTE_API_KEY'}]);
+  assert.equal(endpoint.appCheckEnforced, true);
+});
+
+test('RPPS confirmation keeps callable, App Check, region and ANS secret', () => {
+  const endpoint = discoverExport({
+    GCLOUD_PROJECT: 'mobilisation-sante',
+  }, 'confirmProfessionalRpps');
+
+  assert.equal(endpoint.callable, true);
+  assert.deepEqual(endpoint.region, ['europe-west1']);
+  assert.deepEqual(endpoint.secrets, [{key: 'ESANTE_API_KEY'}]);
+  assert.equal(endpoint.appCheckEnforced, true);
 });

@@ -39,7 +39,7 @@ void main() {
       expect(find.text('Champ requis'), findsNWidgets(3));
       expect(find.text('Email invalide'), findsOneWidget);
       expect(
-        find.text('Choisissez un identifiant professionnel.'),
+        find.text('Le numéro RPPS doit contenir exactement 11 chiffres.'),
         findsOneWidget,
       );
       final firstNameEditable = tester.widget<EditableText>(
@@ -73,12 +73,12 @@ void main() {
         'alice@example.fr',
       );
 
-      final idType = find.byKey(const Key('professional-profile-id-type-mk'));
-      await _scrollTo(tester, idType);
-      await tester.tap(idType);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('RPPS').last);
-      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('professional-profile-id-type-mk')),
+        findsNothing,
+      );
+      expect(find.text('Identifiant : RPPS'), findsOneWidget);
+      expect(find.text('Numéro ordinal'), findsNothing);
       await tester.enterText(
         find.byKey(const Key('professional-profile-id-value')),
         '10123456789',
@@ -112,6 +112,11 @@ void main() {
       expect(find.text('alice@example.fr'), findsOneWidget);
       expect(find.text('10123456789'), findsOneWidget);
       expect(find.text('CPTS Médoc'), findsWidgets);
+      await tester.drag(
+        find.byKey(const PageStorageKey('professional-profile')),
+        const Offset(0, -350),
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Table de massage'), findsOneWidget);
 
       final saved = await repository.getVolunteerProfile();
@@ -160,6 +165,10 @@ void main() {
 
     expect(find.text('Modifier mon profil'), findsOneWidget);
     expect(
+      find.text('Identifiant historique : Numéro ordinal'),
+      findsOneWidget,
+    );
+    expect(
       _fieldText(tester, const Key('professional-profile-email')),
       'nina@example.fr',
     );
@@ -180,6 +189,62 @@ void main() {
     expect(saved?.email, 'nina.modifiee@example.fr');
     expect(saved?.phone, '0622222222');
     expect(saved?.createdAt, isNotNull);
+  });
+
+  testWidgets('changing a verified RPPS restores verification action', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      responsibleAccess: null,
+      initialProfiles: {'mock-volunteer': _verifiedProfile()},
+    );
+    await _pumpApp(tester, repository);
+    await _openProfessionalProfile(tester);
+    expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('edit-professional-profile')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('professional-profile-id-value')),
+      '10987654321',
+    );
+    await _scrollTo(tester, find.byKey(const Key('save-professional-profile')));
+    await tester.tap(find.byKey(const Key('save-professional-profile')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('verify-professional-rpps')), findsOneWidget);
+    expect(
+      (await repository.getVolunteerProfile())?.verificationStatus,
+      'unverified',
+    );
+  });
+
+  testWidgets('changing a verified profession restores verification action', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      responsibleAccess: null,
+      initialProfiles: {'mock-volunteer': _verifiedProfile()},
+    );
+    await _pumpApp(tester, repository);
+    await _openProfessionalProfile(tester);
+    expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('edit-professional-profile')));
+    await tester.pumpAndSettle();
+    final profession = find.byKey(const Key('professional-profile-profession'));
+    await tester.tap(profession);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Médecin').last);
+    await tester.pumpAndSettle();
+    await _scrollTo(tester, find.byKey(const Key('save-professional-profile')));
+    await tester.tap(find.byKey(const Key('save-professional-profile')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('verify-professional-rpps')), findsOneWidget);
+    final saved = await repository.getVolunteerProfile();
+    expect(saved?.profession, VolunteerProfession.doctor);
+    expect(saved?.verificationStatus, 'unverified');
   });
 
   for (final access in <ResponsibleAccess>[
@@ -243,6 +308,24 @@ void main() {
     );
   }
 }
+
+VolunteerProfile _verifiedProfile() => VolunteerProfile(
+  uid: 'mock-volunteer',
+  firstName: 'Alice',
+  lastName: 'MARTIN',
+  phone: '0600000000',
+  email: 'alice@example.fr',
+  profession: VolunteerProfession.mk,
+  professionalIdType: ProfessionalIdType.rpps,
+  professionalIdValue: '10123456789',
+  verificationStatus: 'verified',
+  verificationSource: 'ans_rpps',
+  verifiedFirstName: 'Alice',
+  verifiedLastName: 'MARTIN',
+  verifiedProfessionCode: '70',
+  verifiedProfessionLabel: 'Masseur-Kinésithérapeute',
+  verifiedAt: DateTime(2026, 8, 9),
+);
 
 Future<void> _pumpApp(
   WidgetTester tester,

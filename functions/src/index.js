@@ -48,6 +48,9 @@ import {
   ProfessionalRppsVerificationError,
   verifyProfessionalRpps as verifyProfessionalRppsRequest,
 } from './verify_professional_rpps.js';
+import {
+  confirmProfessionalRpps as confirmProfessionalRppsRequest,
+} from './confirm_professional_rpps.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -143,6 +146,56 @@ export const verifyProfessionalRpps = onCall(
         }),
       },
     })),
+);
+
+export const confirmProfessionalRpps = onCall(
+  {
+    region: 'europe-west1',
+    enforceAppCheck: true,
+    secrets: ansRppsApiKey === null ? [] : [ansRppsApiKey],
+  },
+  async (request) => professionalRppsVerificationCallable(() => {
+    const firestore = getFirestore();
+    return confirmProfessionalRppsRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: {
+        verifyRpps: (rpps) => verifyRpps(rpps, {
+          apiKey: ansRppsApiKey?.value() ?? process.env.ESANTE_API_KEY,
+        }),
+        getVolunteerProfile: async (uid) => {
+          const snapshot = await firestore.collection('volunteers').doc(uid).get();
+          return snapshot.exists ? snapshot.data() : null;
+        },
+        persistVerifiedProfile: (uid, result, expectedProfession) => {
+          const reference = firestore.collection('volunteers').doc(uid);
+          return firestore.runTransaction(async (transaction) => {
+            const snapshot = await transaction.get(reference);
+            if (
+              !snapshot.exists
+              || snapshot.data()?.profession !== expectedProfession
+            ) {
+              return false;
+            }
+            transaction.update(reference, {
+              professionalIdType: 'rpps',
+              professionalIdValue: result.rpps,
+              rpps: result.rpps,
+              verificationStatus: 'verified',
+              verificationSource: 'ans_rpps',
+              verifiedFirstName: result.firstName,
+              verifiedLastName: result.lastName,
+              verifiedProfessionCode: result.professionCode,
+              verifiedProfessionLabel: result.professionLabel,
+              verifiedAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+            return true;
+          });
+        },
+      },
+    });
+  }),
 );
 
 export const provisionAdminInvitation = onCall(

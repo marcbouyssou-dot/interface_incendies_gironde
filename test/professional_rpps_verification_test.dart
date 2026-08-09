@@ -179,7 +179,9 @@ void main() {
     expect(find.text('Confirmer mon identité'), findsNothing);
   });
 
-  testWidgets('confirme localement l’identité vérifiée', (tester) async {
+  testWidgets('la confirmation masque le bouton et affiche le bloc compact', (
+    tester,
+  ) async {
     ProfessionalVerificationResult? confirmed;
     final service = StubProfessionalVerificationService(
       (_) async => result(ProfessionalVerificationStatus.verified),
@@ -192,14 +194,15 @@ void main() {
     await enterAndVerify(tester, rpps);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-professional-identity')));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(confirmed?.rpps, rpps);
-    expect(find.text('Identité confirmée'), findsOneWidget);
     expect(
-      find.text('Votre identité est confirmée pour cette session.'),
+      find.byKey(const Key('professional-rpps-persisted-verified')),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
+    expect(find.text('RPPS •••••••0000'), findsOneWidget);
   });
 
   testWidgets('changer le RPPS remet la vérification à zéro', (tester) async {
@@ -253,5 +256,78 @@ void main() {
     expect(find.byKey(const Key('professional-rpps-field')), findsOneWidget);
     final field = tester.widget<TextFormField>(find.byType(TextFormField));
     expect(field.controller?.text, rpps);
+  });
+
+  testWidgets('la confirmation persiste et reste visible après redémarrage', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(
+      responsibleAccess: null,
+      initialProfiles: const {
+        'mock-volunteer': VolunteerProfile(
+          uid: 'mock-volunteer',
+          firstName: 'Alice',
+          lastName: 'EXEMPLE',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          profession: VolunteerProfession.mk,
+          professionalIdType: ProfessionalIdType.rpps,
+          professionalIdValue: rpps,
+        ),
+      },
+    );
+    final service = StubProfessionalVerificationService(
+      (_) async => result(ProfessionalVerificationStatus.verified),
+    );
+
+    Future<void> pumpApp() => tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        initialTab: 1,
+        professionalVerificationService: service,
+      ),
+    );
+
+    await pumpApp();
+    await tester.pumpAndSettle();
+    final verify = find.byKey(const Key('verify-professional-rpps'));
+    await Scrollable.ensureVisible(
+      tester.element(verify),
+      alignment: 0.4,
+      duration: const Duration(milliseconds: 100),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(verify);
+    await tester.pumpAndSettle();
+    final confirm = find.byKey(const Key('confirm-professional-identity'));
+    await Scrollable.ensureVisible(
+      tester.element(confirm),
+      alignment: 0.4,
+      duration: const Duration(milliseconds: 100),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    final stored = await repository.getVolunteerProfile();
+    expect(stored?.verificationStatus, 'verified');
+    expect(stored?.verificationSource, 'ans_rpps');
+    expect(stored?.verifiedFirstName, 'Alice');
+    expect(stored?.verifiedLastName, 'EXEMPLE');
+    expect(stored?.verifiedProfessionCode, '70');
+    expect(stored?.verifiedProfessionLabel, 'Masseur-Kinésithérapeute');
+    expect(stored?.verifiedAt, isNotNull);
+    expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await pumpApp();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('professional-rpps-persisted-verified')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
   });
 }
