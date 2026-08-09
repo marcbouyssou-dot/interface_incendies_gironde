@@ -185,6 +185,21 @@ Le runtime de référence est Node.js 20. Le fichier `.nvmrc` permet de le
 sélectionner avec `nvm use`; sur macOS, une installation Homebrew non liée peut
 être utilisée en préfixant temporairement le `PATH`.
 
+### POC Annuaire Santé : vérification RPPS
+
+Le module isolé `src/ans_rpps_verification.js` interroge les données publiques
+FHIR V2 de l'Annuaire Santé. Une clé obtenue sur le portail API de l'ANS est
+requise et ne doit pas être écrite dans le dépôt. Depuis le dossier `functions`,
+un RPPS réel peut être contrôlé manuellement avec :
+
+```bash
+read -rsp 'Clé API ANS : ' ESANTE_API_KEY && export ESANTE_API_KEY
+node --input-type=module -e 'import {verifyRpps} from "./src/ans_rpps_verification.js"; console.log(await verifyRpps(process.argv[1]));' '<RPPS_11_CHIFFRES>'
+unset ESANTE_API_KEY
+```
+
+Les tests du module injectent leur client HTTP et ne contactent jamais l'ANS.
+
 ```bash
 npm ci --prefix functions
 npm --prefix functions test
