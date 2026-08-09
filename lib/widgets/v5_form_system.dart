@@ -1060,9 +1060,7 @@ class _V5FieldLabel extends StatelessWidget {
           child: Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: enabled
-                  ? colors.textPrimary
-                  : colors.textSecondary.withValues(alpha: 0.72),
+              color: enabled ? colors.textPrimary : colors.disabledForeground,
             ),
           ),
         ),
@@ -1101,9 +1099,9 @@ InputDecoration _fieldDecoration(
       horizontal: V5Spacing.md,
       vertical: multiline ? V5Spacing.md : 15,
     ),
-    hintStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
-      color: colors.textSecondary.withValues(alpha: 0.84),
-    ),
+    hintStyle: Theme.of(
+      context,
+    ).textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
     helperStyle: Theme.of(context).textTheme.bodySmall,
     errorStyle: Theme.of(
       context,
@@ -1154,9 +1152,7 @@ class _V5PickerFormField extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final hasError = errorText != null;
-    final foreground = enabled
-        ? colors.textPrimary
-        : colors.textSecondary.withValues(alpha: 0.72);
+    final foreground = enabled ? colors.textPrimary : colors.disabledForeground;
     return _V5FieldLabel(
       label: label,
       enabled: enabled,
@@ -1205,7 +1201,7 @@ class _V5PickerFormField extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: value == null
-                              ? colors.textSecondary.withValues(alpha: 0.84)
+                              ? colors.textSecondary
                               : foreground,
                         ),
                       ),

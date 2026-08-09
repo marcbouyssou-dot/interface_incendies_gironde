@@ -1163,7 +1163,7 @@ class _MissionFilters extends StatelessWidget {
               tooltip: 'Réinitialiser les filtres',
               style: IconButton.styleFrom(
                 foregroundColor: colors.textSecondary,
-                disabledForegroundColor: colors.outline,
+                disabledForegroundColor: colors.disabledForeground,
                 minimumSize: const Size(36, 36),
                 padding: EdgeInsets.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,

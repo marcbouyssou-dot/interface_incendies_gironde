@@ -7,15 +7,15 @@ import 'v5_foundation.dart';
 abstract final class AppColors {
   static const navy = Color(0xFF10233E);
   static const navySoft = Color(0xFF1E385B);
-  static const orange = Color(0xFFF37A32);
+  static const orange = Color(0xFFB9470A);
   static const orangeSoft = Color(0xFFFFE9DB);
-  static const green = Color(0xFF168A63);
+  static const green = Color(0xFF0D7656);
   static const greenSoft = Color(0xFFE0F3EB);
-  static const red = Color(0xFFD94B4B);
+  static const red = Color(0xFFB23B48);
   static const redSoft = Color(0xFFFFE8E8);
   static const background = Color(0xFFF6F7F8);
   static const surface = Color(0xFFFFFFFF);
-  static const textMuted = Color(0xFF697586);
+  static const textMuted = Color(0xFF556070);
   static const border = Color(0xFFE4E8ED);
 }
 
@@ -90,6 +90,7 @@ abstract final class AppTheme {
           : Colors.white,
       surface: colors.surface,
       onSurface: colors.textPrimary,
+      onSurfaceVariant: colors.textSecondary,
       outline: colors.outline,
       surfaceContainerHighest: colors.surfaceMuted,
     );
@@ -98,6 +99,7 @@ abstract final class AppTheme {
       brightness: brightness,
       colorScheme: scheme,
       extensions: [colors],
+      disabledColor: colors.disabledForeground,
       scaffoldBackgroundColor: colors.canvas,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {

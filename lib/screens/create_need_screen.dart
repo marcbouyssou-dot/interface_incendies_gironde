@@ -18,14 +18,14 @@ import '../widgets/v5_form_system.dart';
 
 abstract final class _CreateNeedVisuals {
   static const navy = Color(0xFF173052);
-  static const orange = Color(0xFFF45A0A);
+  static const orange = Color(0xFFB9470A);
   static const orangeSoft = Color(0xFFFFE8DB);
   static const background = Color(0xFFF6F7F8);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const borderStrong = Color(0xFFD5D8D5);
-  static const textMuted = Color(0xFF7C817F);
-  static const textDisabled = Color(0xFFAEB2B0);
+  static const textMuted = Color(0xFF5F6865);
+  static const textDisabled = Color(0xFF66706D);
 }
 
 Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {

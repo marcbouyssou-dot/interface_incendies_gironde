@@ -28,20 +28,20 @@ class V5Colors extends ThemeExtension<V5Colors> {
   static const light = V5Colors(
     brand: Color(0xFF10233E),
     onBrand: Color(0xFFFFFFFF),
-    accent: Color(0xFFF36F32),
+    accent: Color(0xFFB9470A),
     onAccent: Color(0xFFFFFFFF),
     canvas: Color(0xFFF6F7F8),
     surface: Color(0xFFFFFFFF),
     surfaceElevated: Color(0xFFFFFFFF),
     surfaceMuted: Color(0xFFF0F2F4),
     textPrimary: Color(0xFF10233E),
-    textSecondary: Color(0xFF667085),
+    textSecondary: Color(0xFF556070),
     outline: Color(0xFFDDE2E8),
-    success: Color(0xFF168A63),
+    success: Color(0xFF0D7656),
     successContainer: Color(0xFFE0F3EB),
-    warning: Color(0xFFD96322),
+    warning: Color(0xFFA9470D),
     warningContainer: Color(0xFFFFE9DB),
-    danger: Color(0xFFC83F4D),
+    danger: Color(0xFFB23B48),
     dangerContainer: Color(0xFFFFE7EA),
     info: Color(0xFF3567A6),
     infoContainer: Color(0xFFE7F0FB),
@@ -91,6 +91,9 @@ class V5Colors extends ThemeExtension<V5Colors> {
   final Color info;
   final Color infoContainer;
   final Color shadow;
+
+  Color get disabledForeground => textSecondary;
+  Color get disabledBackground => surfaceMuted;
 
   @override
   V5Colors copyWith({

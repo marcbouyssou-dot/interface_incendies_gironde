@@ -25,8 +25,8 @@ abstract final class _ResponsibleVisuals {
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
-  static const textMuted = Color(0xFF7C817F);
-  static const orange = Color(0xFFF25C05);
+  static const textMuted = Color(0xFF5F6865);
+  static const orange = Color(0xFFB9470A);
 }
 
 class AdminInvitationsScreen extends StatefulWidget {

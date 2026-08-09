@@ -20,7 +20,7 @@ abstract final class _PlacesVisuals {
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
-  static const textMuted = Color(0xFF7C817F);
+  static const textMuted = Color(0xFF5F6865);
 }
 
 class PlacesScreen extends StatefulWidget {

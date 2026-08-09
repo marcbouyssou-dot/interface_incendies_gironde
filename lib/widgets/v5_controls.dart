@@ -49,7 +49,15 @@ class V5Button extends StatelessWidget {
           V5ButtonTone.tonal => colors.textPrimary,
           V5ButtonTone.destructive => Colors.white,
         };
-    final border = tone == V5ButtonTone.secondary
+    final effectiveBackground = enabled
+        ? resolvedBackground
+        : colors.disabledBackground;
+    final effectiveForeground = enabled
+        ? resolvedForeground
+        : colors.disabledForeground;
+    final border = !enabled
+        ? Border.all(color: colors.outline)
+        : tone == V5ButtonTone.secondary
         ? Border.all(color: colors.outline)
         : null;
     final content = AnimatedSwitcher(
@@ -61,7 +69,7 @@ class V5Button extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 V5ActivityIndicator(
-                  color: resolvedForeground,
+                  color: effectiveForeground,
                   size: compact ? 16 : 18,
                 ),
                 const SizedBox(width: V5Spacing.xs),
@@ -70,9 +78,9 @@ class V5Button extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelLarge?.copyWith(color: resolvedForeground),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: effectiveForeground,
+                    ),
                   ),
                 ),
               ],
@@ -92,32 +100,29 @@ class V5Button extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelLarge?.copyWith(color: resolvedForeground),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: effectiveForeground,
+                    ),
                   ),
                 ),
               ],
             ),
     );
-    final button = AnimatedOpacity(
+    final button = AnimatedContainer(
       duration: const Duration(milliseconds: 150),
-      opacity: enabled ? 1 : 0.52,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: resolvedBackground,
-          border: border,
-          borderRadius: BorderRadius.circular(V5Radius.control),
+      decoration: BoxDecoration(
+        color: effectiveBackground,
+        border: border,
+        borderRadius: BorderRadius.circular(V5Radius.control),
+      ),
+      child: CupertinoButton(
+        minimumSize: Size.square(compact ? 40 : 48),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? V5Spacing.sm : V5Spacing.md,
+          vertical: compact ? V5Spacing.xs : V5Spacing.sm,
         ),
-        child: CupertinoButton(
-          minimumSize: Size.square(compact ? 40 : 48),
-          padding: EdgeInsets.symmetric(
-            horizontal: compact ? V5Spacing.sm : V5Spacing.md,
-            vertical: compact ? V5Spacing.xs : V5Spacing.sm,
-          ),
-          onPressed: enabled ? onPressed : null,
-          child: content,
-        ),
+        onPressed: enabled ? onPressed : null,
+        child: content,
       ),
     );
     return expanded ? SizedBox(width: double.infinity, child: button) : button;
