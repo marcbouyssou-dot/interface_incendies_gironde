@@ -35,8 +35,17 @@ flutter run -d chrome \
   --dart-define=FIREBASE_MESSAGING_SENDER_ID=<your-messaging-sender-id> \
   --dart-define=FIREBASE_PROJECT_ID=<your-project-id> \
   --dart-define=FIREBASE_AUTH_DOMAIN=<your-auth-domain> \
-  --dart-define=FIREBASE_STORAGE_BUCKET=<your-storage-bucket>
+  --dart-define=FIREBASE_STORAGE_BUCKET=<your-storage-bucket> \
+  --dart-define=FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY=<your-recaptcha-v3-site-key>
 ```
+
+La build Web de production exige la site key publique d’un site reCAPTCHA v3.
+Sa clé secrète associée doit être enregistrée uniquement pour l’application Web
+dans Firebase Console > App Check ; la site key publique est fournie au build
+par `FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY`. Les builds Flutter en mode debug
+utilisent exclusivement le provider App Check debug officiel ; le token affiché
+localement doit être enregistré dans « Manage debug tokens » et ne doit jamais
+être commité.
 
 L’interface dépend uniquement de `CoordinationRepository`. Les
 implémentations disponibles sont :

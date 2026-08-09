@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
+import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/v5_bottom_navigation.dart';
@@ -19,6 +20,7 @@ class ProfessionalShell extends StatefulWidget {
     this.initialIndex = 0,
     this.crossRolePreviewLabel,
     this.onExitCrossRolePreview,
+    this.verificationService = const FakeProfessionalVerificationService(),
   }) : assert(initialIndex >= 0 && initialIndex < 3),
        assert(
          (crossRolePreviewLabel == null) == (onExitCrossRolePreview == null),
@@ -27,6 +29,7 @@ class ProfessionalShell extends StatefulWidget {
   final int initialIndex;
   final String? crossRolePreviewLabel;
   final VoidCallback? onExitCrossRolePreview;
+  final ProfessionalVerificationService verificationService;
 
   @override
   State<ProfessionalShell> createState() => _ProfessionalShellState();
@@ -51,6 +54,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
       onOpenSettings: _openSettings,
       onSignOut: _signOut,
       onExitCrossRolePreview: widget.onExitCrossRolePreview,
+      verificationService: widget.verificationService,
     ),
     _ => throw RangeError.index(index, _screens),
   };

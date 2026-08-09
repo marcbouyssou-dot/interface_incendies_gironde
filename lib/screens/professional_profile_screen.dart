@@ -8,9 +8,11 @@ import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
+import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/professional_rpps_verification.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
@@ -22,12 +24,14 @@ class ProfessionalProfileScreen extends StatefulWidget {
     required this.onOpenSettings,
     required this.onSignOut,
     this.onExitCrossRolePreview,
+    this.verificationService = const FakeProfessionalVerificationService(),
   });
 
   final VoidCallback onOpenResponsibleAccess;
   final VoidCallback onOpenSettings;
   final Future<void> Function() onSignOut;
   final VoidCallback? onExitCrossRolePreview;
+  final ProfessionalVerificationService verificationService;
 
   @override
   State<ProfessionalProfileScreen> createState() =>
@@ -151,22 +155,42 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                     title: 'Vérification professionnelle',
                     icon: Icons.verified_user_outlined,
                     children: [
-                      _ProfileValue(
-                        label: 'Type d’identifiant',
-                        value:
-                            profile?.effectiveProfessionalIdType.label ??
-                            'Non renseigné',
-                      ),
-                      _ProfileValue(
-                        label:
-                            profile?.effectiveProfessionalIdType.label ??
-                            'RPPS ou numéro ordinal',
-                        value:
-                            profile?.effectiveProfessionalIdValue.isNotEmpty ==
-                                true
-                            ? profile!.effectiveProfessionalIdValue
-                            : 'Non renseigné',
-                      ),
+                      if (profile != null &&
+                          ProfessionalRppsVerification.supportsProfession(
+                            profile.profession,
+                          ))
+                        ProfessionalRppsVerification(
+                          key: ValueKey(
+                            'professional-rpps-${profile.profession.name}',
+                          ),
+                          profession: profile.profession,
+                          service: widget.verificationService,
+                          initialRpps:
+                              profile.effectiveProfessionalIdType ==
+                                  ProfessionalIdType.rpps
+                              ? profile.effectiveProfessionalIdValue
+                              : '',
+                        )
+                      else ...[
+                        _ProfileValue(
+                          label: 'Type d’identifiant',
+                          value:
+                              profile?.effectiveProfessionalIdType.label ??
+                              'Non renseigné',
+                        ),
+                        _ProfileValue(
+                          label:
+                              profile?.effectiveProfessionalIdType.label ??
+                              'RPPS ou numéro ordinal',
+                          value:
+                              profile
+                                      ?.effectiveProfessionalIdValue
+                                      .isNotEmpty ==
+                                  true
+                              ? profile!.effectiveProfessionalIdValue
+                              : 'Non renseigné',
+                        ),
+                      ],
                       _ProfileValue(
                         label: 'État',
                         value: profileComplete

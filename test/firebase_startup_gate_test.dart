@@ -18,6 +18,11 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SplashScreen), findsOneWidget);
+    expect(
+      find.byKey(const Key('verify-professional-rpps')),
+      findsNothing,
+      reason: 'Le service RPPS ne doit pas être accessible avant App Check.',
+    );
     final splashImage = tester
         .widgetList<Image>(find.byType(Image))
         .firstWhere(

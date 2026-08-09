@@ -11,6 +11,7 @@ import 'repositories/location_administration_repository_scope.dart';
 import 'repositories/repository_scope.dart';
 import 'repositories/responsible_access_administration_repository_scope.dart';
 import 'screens/app_shell.dart';
+import 'services/professional_verification_service.dart';
 import 'theme/app_theme.dart';
 
 class FireCoordinationApp extends StatelessWidget {
@@ -19,10 +20,12 @@ class FireCoordinationApp extends StatelessWidget {
     this.repository,
     this.initialTab = 0,
     this.useLegacyCoordinatorShellForTesting = false,
+    this.professionalVerificationService,
   });
 
   final CoordinationRepository? repository;
   final int initialTab;
+  final ProfessionalVerificationService? professionalVerificationService;
 
   /// Explicit regression harness for screens removed from the live V5 shell.
   final bool useLegacyCoordinatorShellForTesting;
@@ -54,6 +57,9 @@ class FireCoordinationApp extends StatelessWidget {
                   builder: AppTheme.systemSurface,
                   home: AppShell(
                     initialIndex: initialTab,
+                    professionalVerificationService:
+                        professionalVerificationService ??
+                        const FakeProfessionalVerificationService(),
                     useLegacyCoordinatorShellForTesting:
                         useLegacyCoordinatorShellForTesting,
                   ),

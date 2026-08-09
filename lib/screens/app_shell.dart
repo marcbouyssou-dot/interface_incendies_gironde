@@ -8,6 +8,7 @@ import '../perspective/cross_role_perspective.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
+import '../services/professional_verification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/v5_bottom_navigation.dart';
 import 'administration_dashboard_screen.dart';
@@ -25,9 +26,12 @@ class AppShell extends StatefulWidget {
     super.key,
     this.initialIndex = 0,
     this.useLegacyCoordinatorShellForTesting = false,
+    this.professionalVerificationService =
+        const FakeProfessionalVerificationService(),
   });
 
   final int initialIndex;
+  final ProfessionalVerificationService professionalVerificationService;
 
   /// Never enabled by the application entry point outside regression tests.
   final bool useLegacyCoordinatorShellForTesting;
@@ -183,6 +187,7 @@ class _AppShellState extends State<AppShell> {
             crossRolePreview ? 'professional-perspective' : 'professional',
           ),
           initialIndex: widget.initialIndex == 1 ? 2 : 0,
+          verificationService: widget.professionalVerificationService,
           crossRolePreviewLabel: crossRolePreview
               ? automaticJourney == _AppJourney.coordinator
                     ? 'Coordinateur'

@@ -11,6 +11,7 @@ import 'firebase_bootstrap.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/firestore_coordination_repository.dart';
 import 'screens/splash_screen.dart';
+import 'services/firebase_professional_verification_service.dart';
 import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/v5_foundation.dart';
@@ -65,7 +66,7 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   }
 
   Future<CoordinationRepository> _initializeFirebaseWork() async {
-    if (Firebase.apps.isEmpty) await FirebaseBootstrap.initialize();
+    await FirebaseBootstrap.initialize();
     final volunteerAuth = FirebaseAuth.instance;
     final restoredUser = volunteerAuth.currentUser;
     if (restoredUser != null && !restoredUser.isAnonymous) {
@@ -122,6 +123,8 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
           return FireCoordinationApp(
             repository: snapshot.data,
             initialTab: widget.initialTab,
+            professionalVerificationService:
+                FirebaseProfessionalVerificationService(),
           );
         }
         return MaterialApp(

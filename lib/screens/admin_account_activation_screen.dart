@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import '../firebase_bootstrap.dart';
@@ -106,7 +105,7 @@ class _AdminAccountActivationAppState extends State<AdminAccountActivationApp> {
 
   Future<AdminAccountActivationService> _initialize() async {
     try {
-      if (Firebase.apps.isEmpty) await FirebaseBootstrap.initialize();
+      await FirebaseBootstrap.initialize();
       return FirebaseAdminAccountActivationService(FirebaseAuth.instance);
     } catch (error, stackTrace) {
       _logUnexpectedActivationError('initialization', error, stackTrace);

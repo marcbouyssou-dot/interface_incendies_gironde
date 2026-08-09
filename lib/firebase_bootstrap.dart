@@ -1,20 +1,115 @@
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
+
+typedef FirebaseBootstrapStep = Future<void> Function();
+
+class FirebaseAppCheckProviders {
+  const FirebaseAppCheckProviders({
+    required this.web,
+    required this.android,
+    required this.apple,
+  });
+
+  final WebProvider? web;
+  final AndroidAppCheckProvider android;
+  final AppleAppCheckProvider apple;
+}
 
 abstract final class FirebaseBootstrap {
   static const enabled = bool.fromEnvironment('USE_FIREBASE');
+  static const _webRecaptchaV3SiteKey = String.fromEnvironment(
+    'FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY',
+  );
+  static Future<void>? _appCheckActivation;
 
-  static Future<FirebaseApp> initialize() {
-    return Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: String.fromEnvironment('FIREBASE_API_KEY'),
-        appId: String.fromEnvironment('FIREBASE_APP_ID'),
-        messagingSenderId: String.fromEnvironment(
-          'FIREBASE_MESSAGING_SENDER_ID',
-        ),
-        projectId: String.fromEnvironment('FIREBASE_PROJECT_ID'),
-        authDomain: String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
-        storageBucket: String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
-      ),
+  static Future<FirebaseApp> initialize() async {
+    late FirebaseApp app;
+    await initializeInOrder(
+      initializeFirebase: () async {
+        app = Firebase.apps.isNotEmpty
+            ? Firebase.app()
+            : await Firebase.initializeApp(
+                options: const FirebaseOptions(
+                  apiKey: String.fromEnvironment('FIREBASE_API_KEY'),
+                  appId: String.fromEnvironment('FIREBASE_APP_ID'),
+                  messagingSenderId: String.fromEnvironment(
+                    'FIREBASE_MESSAGING_SENDER_ID',
+                  ),
+                  projectId: String.fromEnvironment('FIREBASE_PROJECT_ID'),
+                  authDomain: String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
+                  storageBucket: String.fromEnvironment(
+                    'FIREBASE_STORAGE_BUCKET',
+                  ),
+                ),
+              );
+      },
+      initializeAppCheck: () => _ensureAppCheckActivated(app),
     );
+    return app;
+  }
+
+  @visibleForTesting
+  static Future<void> initializeInOrder({
+    required FirebaseBootstrapStep initializeFirebase,
+    required FirebaseBootstrapStep initializeAppCheck,
+  }) async {
+    await initializeFirebase();
+    await initializeAppCheck();
+  }
+
+  @visibleForTesting
+  static FirebaseAppCheckProviders appCheckProvidersFor({
+    required bool isWeb,
+    required bool isDebugBuild,
+    required String webRecaptchaV3SiteKey,
+  }) {
+    if (isDebugBuild) {
+      return FirebaseAppCheckProviders(
+        web: isWeb ? WebDebugProvider() : null,
+        android: const AndroidDebugProvider(),
+        apple: const AppleDebugProvider(),
+      );
+    }
+    final siteKey = webRecaptchaV3SiteKey.trim();
+    if (isWeb && siteKey.isEmpty) {
+      throw StateError(
+        'FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY est requise sur Web.',
+      );
+    }
+    return FirebaseAppCheckProviders(
+      web: isWeb ? ReCaptchaV3Provider(siteKey) : null,
+      android: const AndroidPlayIntegrityProvider(),
+      apple: const AppleAppAttestWithDeviceCheckFallbackProvider(),
+    );
+  }
+
+  static Future<void> _activateAppCheck(FirebaseApp app) {
+    final providers = appCheckProvidersFor(
+      isWeb: kIsWeb,
+      isDebugBuild: kDebugMode,
+      webRecaptchaV3SiteKey: _webRecaptchaV3SiteKey,
+    );
+    return FirebaseAppCheck.instanceFor(app: app).activate(
+      providerWeb: providers.web,
+      providerAndroid: providers.android,
+      providerApple: providers.apple,
+    );
+  }
+
+  static Future<void> _ensureAppCheckActivated(FirebaseApp app) async {
+    final pendingActivation = _appCheckActivation;
+    if (pendingActivation != null) return pendingActivation;
+
+    final activation = _activateAppCheck(app);
+    _appCheckActivation = activation;
+    try {
+      await activation;
+    } catch (_) {
+      if (identical(_appCheckActivation, activation)) {
+        _appCheckActivation = null;
+      }
+      rethrow;
+    }
   }
 }
