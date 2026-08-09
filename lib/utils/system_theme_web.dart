@@ -40,6 +40,7 @@ void activateSplashApplicationChrome() {
     background: _splashBackground,
     splashActive: true,
     appleStatusBarStyle: 'black-translucent',
+    updateThemeColor: false,
   );
 }
 
@@ -57,10 +58,13 @@ void _setApplicationChrome({
   required String background,
   required bool splashActive,
   required String appleStatusBarStyle,
+  bool updateThemeColor = true,
 }) {
-  html.document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', background);
+  if (updateThemeColor) {
+    html.document
+        .querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', background);
+  }
   html.document
       .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
       ?.setAttribute('content', appleStatusBarStyle);
