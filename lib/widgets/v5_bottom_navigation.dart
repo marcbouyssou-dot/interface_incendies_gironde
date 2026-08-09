@@ -46,8 +46,8 @@ class V5BottomBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 64,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
           child: Row(
             children: [
               for (var index = 0; index < destinations.length; index++)
@@ -93,6 +93,7 @@ class _V5BottomBarItem extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
         onPressed: onPressed,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             AnimatedSwitcher(
@@ -107,8 +108,7 @@ class _V5BottomBarItem extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               destination.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: foreground,
                 fontWeight: selected ? FontWeight.w800 : FontWeight.w600,

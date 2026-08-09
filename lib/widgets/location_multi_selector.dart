@@ -195,11 +195,7 @@ class _LocationMultiSelectorState extends State<LocationMultiSelector> {
                     key: Key('selected-location-${location.id}'),
                     label: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text(
-                        location.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(location.name),
                     ),
                     deleteButtonTooltipMessage:
                         'Retirer ${location.name} de la sélection',

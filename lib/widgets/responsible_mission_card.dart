@@ -46,6 +46,7 @@ class ResponsibleMissionCard extends StatelessWidget {
     final coverage = required == 0
         ? 1.0
         : (registered / required).clamp(0, 1).toDouble();
+    final useStackedLayout = MediaQuery.textScalerOf(context).scale(12) >= 18;
     return Semantics(
       container: true,
       explicitChildNodes: true,
@@ -66,35 +67,32 @@ class ResponsibleMissionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    need.place,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                const SizedBox(width: V5Spacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: toneContainer,
-                    borderRadius: BorderRadius.circular(V5Radius.pill),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: toneColor,
-                      letterSpacing: 0.1,
+            if (useStackedLayout) ...[
+              Text(need.place, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: V5Spacing.xs),
+              _MissionStatusBadge(
+                label: statusLabel,
+                foreground: toneColor,
+                background: toneContainer,
+              ),
+            ] else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      need.place,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: V5Spacing.sm),
+                  _MissionStatusBadge(
+                    label: statusLabel,
+                    foreground: toneColor,
+                    background: toneContainer,
+                  ),
+                ],
+              ),
             const SizedBox(height: V5Spacing.xs),
             Row(
               children: [
@@ -206,27 +204,70 @@ class _ProfessionProgress extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final profession = HealthProfessionRegistry.byId(professionId);
+    final useStackedLayout = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final professionLabel = profession?.missionLabel ?? professionId;
+    final count = Text(
+      '$registered / $required',
+      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+        color: colors.textPrimary,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+    if (useStackedLayout) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            professionLabel,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.textPrimary),
+          ),
+          const SizedBox(height: V5Spacing.xxs),
+          count,
+        ],
+      );
+    }
     return Row(
       children: [
         Expanded(
           child: Text(
-            profession?.missionLabel ?? professionId,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            professionLabel,
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: colors.textPrimary),
           ),
         ),
         const SizedBox(width: V5Spacing.sm),
-        Text(
-          '$registered / $required',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: colors.textPrimary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        count,
       ],
     );
   }
+}
+
+class _MissionStatusBadge extends StatelessWidget {
+  const _MissionStatusBadge({
+    required this.label,
+    required this.foreground,
+    required this.background,
+  });
+
+  final String label;
+  final Color foreground;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: background,
+      borderRadius: BorderRadius.circular(V5Radius.pill),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(
+        context,
+      ).textTheme.labelSmall?.copyWith(color: foreground, letterSpacing: 0.1),
+    ),
+  );
 }

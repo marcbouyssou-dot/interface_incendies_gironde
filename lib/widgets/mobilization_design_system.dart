@@ -285,7 +285,7 @@ class ProfessionChip extends StatelessWidget {
               label,
               style: TextStyle(
                 color: colors.textPrimary,
-                fontSize: professionalPalette ? 11.5 : 12,
+                fontSize: 12,
                 fontWeight: professionalPalette
                     ? FontWeight.w700
                     : FontWeight.w800,

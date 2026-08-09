@@ -973,6 +973,57 @@ class _NeedSummaryCard extends StatelessWidget {
     final requestedLabel =
         '$requestedProfessionals $professionLabel '
         '${requestedProfessionals == 1 ? 'demandé' : 'demandés'}';
+    final useStackedLayout = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          location == null ? 'Lieu à définir' : 'Lieu · ${location!.name}',
+          style: const TextStyle(
+            color: _CreateNeedVisuals.navy,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$dateLabel · $timeLabel',
+          style: const TextStyle(
+            color: _CreateNeedVisuals.textMuted,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+    final requestedCount = Semantics(
+      label: requestedLabel,
+      child: ExcludeSemantics(
+        child: Text.rich(
+          TextSpan(
+            text: '$requestedProfessionals\n',
+            style: const TextStyle(
+              color: _CreateNeedVisuals.navy,
+              fontSize: 22,
+              height: 0.9,
+              fontWeight: FontWeight.w800,
+            ),
+            children: [
+              TextSpan(
+                text: professionLabel,
+                style: const TextStyle(
+                  color: _CreateNeedVisuals.textMuted,
+                  fontSize: 12,
+                  height: 1.8,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          textAlign: useStackedLayout ? TextAlign.start : TextAlign.center,
+        ),
+      ),
+    );
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(13, 12, 13, 11),
@@ -981,70 +1032,23 @@ class _NeedSummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: _CreateNeedVisuals.border),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
+      child: useStackedLayout
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  location == null
-                      ? 'Lieu à définir'
-                      : 'Lieu · ${location!.name}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _CreateNeedVisuals.navy,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$dateLabel · $timeLabel',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _CreateNeedVisuals.textMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                details,
+                const SizedBox(height: V5Spacing.sm),
+                requestedCount,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: details),
+                const SizedBox(width: 14),
+                requestedCount,
               ],
             ),
-          ),
-          const SizedBox(width: 14),
-          Semantics(
-            label: requestedLabel,
-            child: ExcludeSemantics(
-              child: Text.rich(
-                TextSpan(
-                  text: '$requestedProfessionals\n',
-                  style: const TextStyle(
-                    color: _CreateNeedVisuals.navy,
-                    fontSize: 22,
-                    height: 0.9,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: professionLabel,
-                      style: const TextStyle(
-                        color: _CreateNeedVisuals.textMuted,
-                        fontSize: 12,
-                        height: 1.8,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1092,8 +1096,6 @@ class _EquipmentProfessionContext extends StatelessWidget {
                 Flexible(
                   child: Text(
                     professionLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: _CreateNeedVisuals.navy,
                       fontSize: 12,
@@ -1578,10 +1580,11 @@ class _LocationInput extends StatelessWidget {
     if (selectedLocation?.id != location.id) {
       WidgetsBinding.instance.addPostFrameCallback((_) => onSelected(location));
     }
-    return SizedBox(
+    return ConstrainedBox(
       key: const Key('mission-location-locked'),
-      height: 62,
+      constraints: const BoxConstraints(minHeight: 62),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -1592,7 +1595,6 @@ class _LocationInput extends StatelessWidget {
               Expanded(
                 child: Text(
                   location.name,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: _CreateNeedVisuals.navy,
                     fontSize: 13,
@@ -1665,8 +1667,8 @@ class _QuotaStepper extends StatelessWidget {
             semanticLabel: 'Retirer un $professionLabel',
             semanticValue: valueLabel,
           ),
-          SizedBox(
-            width: 40,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 40),
             child: Semantics(
               label: valueLabel,
               child: ExcludeSemantics(

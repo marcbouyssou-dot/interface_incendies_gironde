@@ -839,6 +839,19 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useStackedHeader = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final exportButton = OutlinedButton.icon(
+      key: const Key('dashboard-export-csv'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _StatisticsVisuals.navy,
+        minimumSize: const Size(44, 46),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        side: const BorderSide(color: _StatisticsVisuals.border),
+      ),
+      onPressed: () => _exportCsv(context),
+      icon: const Icon(Icons.download_outlined, size: 18),
+      label: const Text('Exporter en CSV'),
+    );
     return Column(
       key: const Key('coordinator-global-dashboard'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -847,29 +860,26 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: _StatisticsSectionHeader(
-                      eyebrow: 'TABLEAU DE BORD GLOBAL',
-                      title: 'Période observée',
+              if (useStackedHeader) ...[
+                const _StatisticsSectionHeader(
+                  eyebrow: 'TABLEAU DE BORD GLOBAL',
+                  title: 'Période observée',
+                ),
+                const SizedBox(height: 10),
+                exportButton,
+              ] else
+                Row(
+                  children: [
+                    const Expanded(
+                      child: _StatisticsSectionHeader(
+                        eyebrow: 'TABLEAU DE BORD GLOBAL',
+                        title: 'Période observée',
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  OutlinedButton.icon(
-                    key: const Key('dashboard-export-csv'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _StatisticsVisuals.navy,
-                      minimumSize: const Size(44, 46),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      side: const BorderSide(color: _StatisticsVisuals.border),
-                    ),
-                    onPressed: () => _exportCsv(context),
-                    icon: const Icon(Icons.download_outlined, size: 18),
-                    label: const Text('Exporter en CSV'),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 10),
+                    exportButton,
+                  ],
+                ),
               const SizedBox(height: 14),
               Wrap(
                 spacing: 7,
@@ -1322,8 +1332,6 @@ class _DashboardBreakdownValue extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: AppColors.textMuted,
@@ -1378,12 +1386,10 @@ class _DashboardMetric extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             label,
-            maxLines: compactLabel ? 1 : 2,
-            overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: color,
-              fontSize: compactLabel ? 10 : 11,
+              fontSize: 12,
               height: 1.2,
               fontWeight: FontWeight.w800,
             ),
@@ -1430,8 +1436,7 @@ class _StatusMetric extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: color,
               fontSize: 12,
@@ -1463,6 +1468,8 @@ class _SituationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useStackedHeader = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final status = StatusPill(status: need.status);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1480,23 +1487,36 @@ class _SituationRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  need.place,
-                  style: const TextStyle(
-                    color: _StatisticsVisuals.navy,
-                    fontSize: 16,
-                    height: 1.2,
-                    fontWeight: FontWeight.w800,
+          if (useStackedHeader) ...[
+            Text(
+              need.place,
+              style: const TextStyle(
+                color: _StatisticsVisuals.navy,
+                fontSize: 16,
+                height: 1.2,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            status,
+          ] else
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    need.place,
+                    style: const TextStyle(
+                      color: _StatisticsVisuals.navy,
+                      fontSize: 16,
+                      height: 1.2,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              StatusPill(status: need.status),
-            ],
-          ),
+                const SizedBox(width: 8),
+                status,
+              ],
+            ),
           const SizedBox(height: 7),
           MissionTimingPill(mission: need),
           const SizedBox(height: 6),

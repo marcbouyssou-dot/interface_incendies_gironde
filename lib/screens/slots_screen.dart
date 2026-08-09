@@ -551,6 +551,35 @@ class _MissionDecisionHeader extends StatelessWidget {
         : missions.length == 1
         ? '1 mission correspond à vos critères.'
         : '${missions.length} missions correspondent à vos critères.';
+    final stackHeroFilters = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final whereFilter = _HeroFilterChip(
+      chipKey: const Key('professional-hero-where'),
+      icon: Icons.location_on_outlined,
+      label: 'Où',
+      activeValue: group?.label,
+      selectedValue: group?.name ?? 'all',
+      options: [
+        const _HeroFilterOption(value: 'all', label: 'Tous les secteurs'),
+        for (final value in TerritorialGroup.values)
+          _HeroFilterOption(value: value.name, label: value.label),
+      ],
+      onSelected: (value) => onGroupChanged(
+        value == 'all' ? null : TerritorialGroup.values.byName(value),
+      ),
+    );
+    final whenFilter = _HeroFilterChip(
+      chipKey: const Key('professional-hero-when'),
+      icon: Icons.calendar_today_outlined,
+      label: 'Quand',
+      activeValue: date,
+      selectedValue: date ?? 'all',
+      options: [
+        const _HeroFilterOption(value: 'all', label: 'Toutes les dates'),
+        for (final value in availableDates)
+          _HeroFilterOption(value: value, label: value),
+      ],
+      onSelected: (value) => onDateChanged(value == 'all' ? null : value),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -566,52 +595,22 @@ class _MissionDecisionHeader extends StatelessWidget {
           ),
         if (professionalJourney) ...[
           const SizedBox(height: V5Spacing.lg),
-          Row(
-            children: [
-              Expanded(
-                child: _HeroFilterChip(
-                  chipKey: const Key('professional-hero-where'),
-                  icon: Icons.location_on_outlined,
-                  label: 'Où',
-                  activeValue: group?.label,
-                  selectedValue: group?.name ?? 'all',
-                  options: [
-                    const _HeroFilterOption(
-                      value: 'all',
-                      label: 'Tous les secteurs',
-                    ),
-                    for (final value in TerritorialGroup.values)
-                      _HeroFilterOption(value: value.name, label: value.label),
-                  ],
-                  onSelected: (value) => onGroupChanged(
-                    value == 'all'
-                        ? null
-                        : TerritorialGroup.values.byName(value),
-                  ),
-                ),
-              ),
-              const SizedBox(width: V5Spacing.xs),
-              Expanded(
-                child: _HeroFilterChip(
-                  chipKey: const Key('professional-hero-when'),
-                  icon: Icons.calendar_today_outlined,
-                  label: 'Quand',
-                  activeValue: date,
-                  selectedValue: date ?? 'all',
-                  options: [
-                    const _HeroFilterOption(
-                      value: 'all',
-                      label: 'Toutes les dates',
-                    ),
-                    for (final value in availableDates)
-                      _HeroFilterOption(value: value, label: value),
-                  ],
-                  onSelected: (value) =>
-                      onDateChanged(value == 'all' ? null : value),
-                ),
-              ),
-            ],
-          ),
+          if (stackHeroFilters)
+            Column(
+              children: [
+                whereFilter,
+                const SizedBox(height: V5Spacing.xs),
+                whenFilter,
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(child: whereFilter),
+                const SizedBox(width: V5Spacing.xs),
+                Expanded(child: whenFilter),
+              ],
+            ),
         ],
         if (showOverview) ...[
           const SizedBox(height: 14),
@@ -706,8 +705,7 @@ class _HeroFilterChip extends StatelessWidget {
             Flexible(
               child: Text(
                 activeValue ?? label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: hasSelection ? colors.info : colors.textPrimary,
                   fontSize: 12,
@@ -948,11 +946,10 @@ class _MissionResultsHeader extends StatelessWidget {
           ),
           if (showAdvanced) ...[
             const SizedBox(height: V5Spacing.xs),
-            SizedBox(
-              height: 44,
-              child: ListView(
-                key: const Key('professional-status-filters'),
-                scrollDirection: Axis.horizontal,
+            SingleChildScrollView(
+              key: const Key('professional-status-filters'),
+              scrollDirection: Axis.horizontal,
+              child: Row(
                 children: [
                   _FilterChip(
                     label: 'Toutes',
@@ -1124,8 +1121,8 @@ class _MissionFilters extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: SizedBox(
-                height: 44,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
                 child: TerritorialGroupFilter(
                   key: const Key('slots-territorial-filter'),
                   fieldKey: ValueKey(
@@ -1175,10 +1172,9 @@ class _MissionFilters extends StatelessWidget {
         ),
         if (showAdvanced) ...[
           const SizedBox(height: 6),
-          SizedBox(
-            height: 44,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
                 _FilterChip(
                   label: 'Toutes',
@@ -1234,8 +1230,8 @@ class _FilterChip extends StatelessWidget {
       child: Semantics(
         button: true,
         selected: selected,
-        child: SizedBox(
-          height: 44,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -1243,9 +1239,12 @@ class _FilterChip extends StatelessWidget {
               customBorder: const StadiumBorder(),
               child: Center(
                 child: Container(
-                  height: 32,
+                  constraints: const BoxConstraints(minHeight: 32),
                   alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 4,
+                  ),
                   decoration: ShapeDecoration(
                     color: selected ? selectedColor : colors.surface,
                     shape: StadiumBorder(

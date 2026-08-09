@@ -298,20 +298,13 @@ class _ResponsibleRow extends StatelessWidget {
               children: [
                 Text(
                   account.identityLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: colors.textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: V5Spacing.xxs),
-                Text(
-                  scope,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text(scope, style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: V5Spacing.xxs),
                 Text(
                   account.access.active ? 'Actif' : 'Inactif',

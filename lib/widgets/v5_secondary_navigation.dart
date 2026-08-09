@@ -23,7 +23,12 @@ class V5SecondaryNavigationBar extends StatelessWidget
   final bool showBack;
 
   @override
-  Size get preferredSize => const Size.fromHeight(toolbarHeight);
+  Size get preferredSize {
+    final textScaleFactor =
+        WidgetsBinding.instance.platformDispatcher.textScaleFactor;
+    final extraHeight = ((textScaleFactor - 1).clamp(0, 2)) * 64;
+    return Size.fromHeight(toolbarHeight + extraHeight);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +41,7 @@ class V5SecondaryNavigationBar extends StatelessWidget
         child: SafeArea(
           bottom: false,
           child: SizedBox(
-            height: toolbarHeight,
+            height: preferredSize.height,
             child: Row(
               children: [
                 SizedBox(
@@ -46,8 +51,6 @@ class V5SecondaryNavigationBar extends StatelessWidget
                 Expanded(
                   child: Text(
                     title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: colors.textPrimary,

@@ -221,6 +221,8 @@ class _MissionSchedule extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final stackTimingBadge =
+        timingBadge != null && MediaQuery.textScalerOf(context).scale(12) >= 18;
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(
@@ -238,38 +240,51 @@ class _MissionSchedule extends StatelessWidget {
           professionalPalette ? V5Radius.control : V5Radius.section,
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.calendar_today_outlined,
-            color: professionalPalette
-                ? colors.textSecondary
-                : colors.textPrimary,
-            size: professionalPalette ? 16 : 20,
-          ),
-          SizedBox(width: professionalPalette ? 9 : V5Spacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  dateLabel,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontSize: professionalPalette ? 11 : null,
-                  ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  Icons.calendar_today_outlined,
+                  color: professionalPalette
+                      ? colors.textSecondary
+                      : colors.textPrimary,
+                  size: professionalPalette ? 16 : 20,
                 ),
-                SizedBox(height: professionalPalette ? 1 : V5Spacing.xxs),
-                Text(
-                  timeLabel,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontSize: professionalPalette ? 17 : null,
-                  ),
+              ),
+              SizedBox(width: professionalPalette ? 9 : V5Spacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dateLabel,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: professionalPalette ? 12 : null,
+                      ),
+                    ),
+                    SizedBox(height: professionalPalette ? 1 : V5Spacing.xxs),
+                    Text(
+                      timeLabel,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: professionalPalette ? 17 : null,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              if (timingBadge != null && !stackTimingBadge) ...[
+                const SizedBox(width: V5Spacing.xs),
+                timingBadge!,
               ],
-            ),
+            ],
           ),
-          if (timingBadge != null) ...[
-            const SizedBox(width: V5Spacing.xs),
+          if (stackTimingBadge) ...[
+            const SizedBox(height: V5Spacing.sm),
             timingBadge!,
           ],
         ],

@@ -420,7 +420,7 @@ class MissionTimingPill extends StatelessWidget {
               label,
               style: TextStyle(
                 color: color,
-                fontSize: professionalPalette ? 10.5 : 12,
+                fontSize: 12,
                 letterSpacing: 0.1,
                 fontWeight: professionalPalette
                     ? FontWeight.w700
@@ -676,7 +676,7 @@ class _MissionCardSectionTitle extends StatelessWidget {
         label,
         style: TextStyle(
           color: professionalHome ? AppColors.textMuted : AppColors.navy,
-          fontSize: professionalHome ? 12 : 11,
+          fontSize: 12,
           height: professionalHome ? 1.2 : null,
           letterSpacing: professionalHome ? 0.15 : 0.65,
           fontWeight: FontWeight.w800,
@@ -758,6 +758,8 @@ class NeedCard extends StatelessWidget {
     if (professionalHome) {
       return _buildProfessionalHomeContent();
     }
+    final useStackedHeader = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final timing = MissionTimingPill(mission: need);
     final content = Padding(
       padding: harmonized
           ? const EdgeInsets.fromLTRB(18, 18, 18, 20)
@@ -765,34 +767,50 @@ class NeedCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  need.place.toUpperCase(),
-                  style: harmonized
-                      ? const TextStyle(
-                          color: AppColors.navy,
-                          fontSize: 18,
-                          height: 1.15,
-                          letterSpacing: -0.25,
-                          fontWeight: FontWeight.w800,
-                        )
-                      : Theme.of(context).textTheme.titleLarge,
+          if (useStackedHeader) ...[
+            Text(
+              need.place.toUpperCase(),
+              style: harmonized
+                  ? const TextStyle(
+                      color: AppColors.navy,
+                      fontSize: 18,
+                      height: 1.15,
+                      letterSpacing: -0.25,
+                      fontWeight: FontWeight.w800,
+                    )
+                  : Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: V5Spacing.xs),
+            timing,
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    need.place.toUpperCase(),
+                    style: harmonized
+                        ? const TextStyle(
+                            color: AppColors.navy,
+                            fontSize: 18,
+                            height: 1.15,
+                            letterSpacing: -0.25,
+                            fontWeight: FontWeight.w800,
+                          )
+                        : Theme.of(context).textTheme.titleLarge,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              MissionTimingPill(mission: need),
-            ],
-          ),
+                const SizedBox(width: 12),
+                timing,
+              ],
+            ),
           const SizedBox(height: 5),
           Text(
             location?.type.label ?? 'Lieu d’intervention',
             key: const Key('mission-location-type'),
             style: TextStyle(
               color: harmonized ? AppColors.textMuted : AppColors.orange,
-              fontSize: harmonized ? 11 : 12,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
             ),
           ),

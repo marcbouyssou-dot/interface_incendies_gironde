@@ -743,36 +743,41 @@ class V5Dialog extends StatelessWidget {
               border: Border.all(color: colors.outline.withValues(alpha: 0.72)),
               boxShadow: V5Elevation.level2(colors),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (icon != null) ...[
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: colors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(V5Radius.control),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (icon != null) ...[
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: colors.surfaceMuted,
+                        borderRadius: BorderRadius.circular(V5Radius.control),
+                      ),
+                      child: Icon(icon, color: colors.textPrimary, size: 22),
                     ),
-                    child: Icon(icon, color: colors.textPrimary, size: 22),
+                    const SizedBox(height: V5Spacing.md),
+                  ],
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  const SizedBox(height: V5Spacing.md),
+                  if (message case final text? when text.trim().isNotEmpty) ...[
+                    const SizedBox(height: V5Spacing.xs),
+                    Text(text, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                  if (content != null) ...[
+                    const SizedBox(height: V5Spacing.md),
+                    content!,
+                  ],
+                  if (actions.isNotEmpty) ...[
+                    const SizedBox(height: V5Spacing.xl),
+                    _V5DialogActions(actions: actions),
+                  ],
                 ],
-                Text(title, style: Theme.of(context).textTheme.headlineMedium),
-                if (message case final text? when text.trim().isNotEmpty) ...[
-                  const SizedBox(height: V5Spacing.xs),
-                  Text(text, style: Theme.of(context).textTheme.bodyMedium),
-                ],
-                if (content != null) ...[
-                  const SizedBox(height: V5Spacing.md),
-                  content!,
-                ],
-                if (actions.isNotEmpty) ...[
-                  const SizedBox(height: V5Spacing.xl),
-                  _V5DialogActions(actions: actions),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -1197,8 +1202,6 @@ class _V5PickerFormField extends StatelessWidget {
                     Expanded(
                       child: Text(
                         value ?? placeholder,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: value == null
                               ? colors.textSecondary
@@ -1374,6 +1377,18 @@ class _V5PickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final useStackedHeader = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final cancel = CupertinoButton(
+      onPressed: () => Navigator.of(context).pop(),
+      child: Text('Annuler', style: TextStyle(color: colors.textSecondary)),
+    );
+    final confirm = CupertinoButton(
+      onPressed: onConfirm,
+      child: Text(
+        'Valider',
+        style: TextStyle(color: colors.accent, fontWeight: FontWeight.w700),
+      ),
+    );
     return SafeArea(
       top: false,
       child: Column(
@@ -1386,34 +1401,35 @@ class _V5PickerSheet extends StatelessWidget {
               V5Spacing.sm,
               V5Spacing.xxs,
             ),
-            child: Row(
-              children: [
-                CupertinoButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(
-                    'Annuler',
-                    style: TextStyle(color: colors.textSecondary),
+            child: useStackedHeader
+                ? Column(
+                    children: [
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Row(
+                        children: [
+                          Expanded(child: cancel),
+                          Expanded(child: confirm),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      cancel,
+                      Expanded(
+                        child: Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      confirm,
+                    ],
                   ),
-                ),
-                Expanded(
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                CupertinoButton(
-                  onPressed: onConfirm,
-                  child: Text(
-                    'Valider',
-                    style: TextStyle(
-                      color: colors.accent,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
           Divider(height: 1, color: colors.outline),
           CupertinoTheme(

@@ -253,8 +253,6 @@ class CrossRolePreviewBanner extends StatelessWidget {
                 children: [
                   Text(
                     title ?? 'Perspective Professionnel',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: colors.textPrimary,
                       fontWeight: FontWeight.w800,
@@ -262,8 +260,6 @@ class CrossRolePreviewBanner extends StatelessWidget {
                   ),
                   Text(
                     'Rôle réel : $label',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: colors.textSecondary,
                       letterSpacing: 0,

@@ -32,12 +32,12 @@ class LocationAddressLine extends StatelessWidget {
   const LocationAddressLine({
     super.key,
     required this.location,
-    this.maxLines = 2,
+    this.maxLines,
     this.selectable = false,
   });
 
   final ResponsePlace? location;
-  final int maxLines;
+  final int? maxLines;
   final bool selectable;
 
   @override
@@ -54,7 +54,7 @@ class LocationAddressLine extends StatelessWidget {
       address,
       key: const Key('location-address-line'),
       maxLines: maxLines,
-      overflow: TextOverflow.ellipsis,
+      overflow: maxLines == null ? null : TextOverflow.ellipsis,
       style: style,
     );
     return selectable ? SelectionArea(child: text) : text;
@@ -88,7 +88,7 @@ class MissionLocationDetails extends StatelessWidget {
     }
     final style = TextStyle(
       color: AppColors.textMuted,
-      fontSize: compact ? 11 : 13,
+      fontSize: compact ? 12 : 13,
       fontWeight: FontWeight.w600,
       height: 1.35,
     );

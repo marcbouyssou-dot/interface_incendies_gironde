@@ -76,8 +76,7 @@ class V5Button extends StatelessWidget {
                 Flexible(
                   child: Text(
                     label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       color: effectiveForeground,
                     ),
@@ -97,8 +96,6 @@ class V5Button extends StatelessWidget {
                 Flexible(
                   child: Text(
                     label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       color: effectiveForeground,
@@ -344,8 +341,7 @@ class V5ChoiceChip extends StatelessWidget {
               Flexible(
                 child: Text(
                   label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                   style: Theme.of(
                     context,
                   ).textTheme.labelMedium?.copyWith(color: colors.textPrimary),

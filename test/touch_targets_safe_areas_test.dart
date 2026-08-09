@@ -68,8 +68,9 @@ void main() {
               matching: find.byType(Container),
             ),
           )
-          .firstWhere((container) => container.constraints?.maxHeight == 32);
-      expect(visualChip.constraints?.maxHeight, 32);
+          .firstWhere((container) => container.constraints?.minHeight == 32);
+      expect(visualChip.constraints?.minHeight, 32);
+      expect(visualChip.constraints?.hasBoundedHeight, isFalse);
     },
   );
 

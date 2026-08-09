@@ -91,28 +91,67 @@ class TerritoryStatusRow extends StatelessWidget {
     final accent = status == null
         ? identity.accent
         : territoryStatusColor(status!, colors);
+    final useStackedLayout = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final valueText = Text(
+      value,
+      textAlign: useStackedLayout ? TextAlign.start : TextAlign.end,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        color: colors.textPrimary,
+        fontWeight: FontWeight.w700,
+      ),
+    );
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44),
-      child: Row(
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18, color: accent),
-            const SizedBox(width: V5Spacing.sm),
-          ],
-          Expanded(
-            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          ),
-          const SizedBox(width: V5Spacing.md),
-          Text(
-            value,
-            textAlign: TextAlign.end,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colors.textPrimary,
-              fontWeight: FontWeight.w700,
+      child: useStackedLayout
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: V5Spacing.xs),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (icon != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Icon(icon, size: 18, color: accent),
+                        ),
+                        const SizedBox(width: V5Spacing.sm),
+                      ],
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: V5Spacing.xxs),
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: icon == null ? 0 : 18 + V5Spacing.sm,
+                    ),
+                    child: valueText,
+                  ),
+                ],
+              ),
+            )
+          : Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 18, color: accent),
+                  const SizedBox(width: V5Spacing.sm),
+                ],
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+                const SizedBox(width: V5Spacing.md),
+                Flexible(child: valueText),
+              ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -135,6 +174,12 @@ class SectorStatusCard extends StatelessWidget {
     final identity = CoordinatorIdentity.of(context);
     final statusColor = territoryStatusColor(sector.status, colors);
     final statusContainer = territoryStatusContainer(sector.status, colors);
+    final useStackedLayout = MediaQuery.textScalerOf(context).scale(12) >= 18;
+    final statusBadge = _TerritoryStatusBadge(
+      label: sector.status.label,
+      foreground: statusColor,
+      background: statusContainer,
+    );
     return Semantics(
       container: true,
       explicitChildNodes: true,
@@ -154,35 +199,27 @@ class SectorStatusCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    sector.group.label,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                const SizedBox(width: V5Spacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusContainer,
-                    borderRadius: BorderRadius.circular(V5Radius.pill),
-                  ),
-                  child: Text(
-                    sector.status.label,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: statusColor,
-                      letterSpacing: 0.1,
+            if (useStackedLayout) ...[
+              Text(
+                sector.group.label,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: V5Spacing.xs),
+              statusBadge,
+            ] else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      sector.group.label,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: V5Spacing.sm),
+                  statusBadge,
+                ],
+              ),
             const SizedBox(height: V5Spacing.sm),
             TerritoryStatusRow(
               label: 'Besoins actifs',
@@ -228,6 +265,33 @@ class SectorStatusCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TerritoryStatusBadge extends StatelessWidget {
+  const _TerritoryStatusBadge({
+    required this.label,
+    required this.foreground,
+    required this.background,
+  });
+
+  final String label;
+  final Color foreground;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: background,
+      borderRadius: BorderRadius.circular(V5Radius.pill),
+    ),
+    child: Text(
+      label,
+      style: Theme.of(
+        context,
+      ).textTheme.labelSmall?.copyWith(color: foreground, letterSpacing: 0.1),
+    ),
+  );
 }
 
 class OperationalSummary extends StatelessWidget {
