@@ -43,6 +43,11 @@ import {
   missionUpdateMutation,
   updateMission as updateExistingMission,
 } from './update_mission.js';
+import {verifyRpps} from './ans_rpps_verification.js';
+import {
+  ProfessionalRppsVerificationError,
+  verifyProfessionalRpps as verifyProfessionalRppsRequest,
+} from './verify_professional_rpps.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -55,6 +60,9 @@ const isFunctionsEmulator = process.env.FUNCTIONS_EMULATOR === 'true';
 const resendApiKey = isFunctionsEmulator
   ? null
   : defineSecret('RESEND_API_KEY');
+const ansRppsApiKey = isFunctionsEmulator
+  ? null
+  : defineSecret('ESANTE_API_KEY');
 const injectedEmulatorFailures = new Set();
 const injectedEmulatorNotificationFailures = new Set();
 
@@ -117,6 +125,24 @@ export const updateMission = onCall(
     data: request.data,
     services: missionUpdateServices({firestore: getFirestore()}),
   })),
+);
+
+export const verifyProfessionalRpps = onCall(
+  {
+    region: 'europe-west1',
+    enforceAppCheck: true,
+    secrets: ansRppsApiKey === null ? [] : [ansRppsApiKey],
+  },
+  async (request) => professionalRppsVerificationCallable(() =>
+    verifyProfessionalRppsRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: {
+        verifyRpps: (rpps) => verifyRpps(rpps, {
+          apiKey: ansRppsApiKey?.value() ?? process.env.ESANTE_API_KEY,
+        }),
+      },
+    })),
 );
 
 export const provisionAdminInvitation = onCall(
@@ -742,6 +768,23 @@ async function missionUpdateCallable(action) {
       type: error?.constructor?.name ?? 'Unknown',
     });
     throw new HttpsError('internal', 'La mission n’a pas pu être mise à jour.');
+  }
+}
+
+async function professionalRppsVerificationCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof ProfessionalRppsVerificationError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('PROFESSIONAL_RPPS_VERIFICATION_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'La vérification RPPS n’a pas pu être exécutée.',
+    );
   }
 }
 

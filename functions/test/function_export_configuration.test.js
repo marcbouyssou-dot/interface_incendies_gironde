@@ -59,3 +59,24 @@ test('mission update is a v2 callable without notification secrets', () => {
   assert.deepEqual(endpoint.region, ['europe-west1']);
   assert.equal(endpoint.secrets, undefined);
 });
+
+test('RPPS verification is callable without secret during discovery', () => {
+  const endpoint = discoverExport({
+    FUNCTIONS_EMULATOR: 'true',
+    GCLOUD_PROJECT: 'demo-mobsante',
+  }, 'verifyProfessionalRpps');
+
+  assert.equal(endpoint.callable, true);
+  assert.deepEqual(endpoint.region, ['europe-west1']);
+  assert.deepEqual(endpoint.secrets, []);
+});
+
+test('RPPS verification binds only the ANS secret in production', () => {
+  const endpoint = discoverExport({
+    GCLOUD_PROJECT: 'mobilisation-sante',
+  }, 'verifyProfessionalRpps');
+
+  assert.equal(endpoint.callable, true);
+  assert.deepEqual(endpoint.region, ['europe-west1']);
+  assert.deepEqual(endpoint.secrets, [{key: 'ESANTE_API_KEY'}]);
+});
