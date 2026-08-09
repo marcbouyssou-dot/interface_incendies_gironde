@@ -1946,3 +1946,62 @@ test('roles dual-read: anonymous professional rights do not open admin data', as
   await assertFails(getDocs(collection(db(), 'adminInvitations')));
   await assertFails(getDocs(collection(db(), 'roles')));
 });
+
+test('platform V6: all new collections deny direct client access', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+    await setDoc(doc(admin, 'territories/gironde'), {
+      id: 'gironde',
+      name: 'Gironde',
+      code: '33',
+      active: true,
+    });
+    await setDoc(doc(admin, 'mobilizations/current'), {
+      id: 'current',
+      territoryId: 'gironde',
+      status: 'draft',
+    });
+    await setDoc(
+      doc(admin, 'mobilizationAssignments/current_coord'),
+      {
+        uid: 'coord',
+        mobilizationId: 'current',
+        role: 'coordinator',
+        active: true,
+      },
+    );
+    await setDoc(doc(admin, 'platform/config'), {
+      activeMobilizationId: null,
+    });
+  });
+
+  const paths = [
+    'platformAdministrators/platform-admin',
+    'territories/gironde',
+    'mobilizations/current',
+    'mobilizationAssignments/current_coord',
+    'platform/config',
+  ];
+  for (const uid of [null, 'alice', 'coord', 'platform-admin']) {
+    for (const path of paths) {
+      await assertFails(getDoc(doc(db(uid), path)));
+      await assertFails(setDoc(doc(db(uid), path), {forged: true}));
+      await assertFails(updateDoc(doc(db(uid), path), {forged: true}));
+      await assertFails(deleteDoc(doc(db(uid), path)));
+    }
+  }
+});
+
+test('platform V6: existing V5 permissions remain unchanged', async () => {
+  await seed();
+
+  await assertSucceeds(getDoc(doc(db(), 'locations/site-a')));
+  await assertSucceeds(getDoc(doc(db(), 'missions/mission-a')));
+  await assertSucceeds(createMissionFor('coord', 'v5-compatible'));
+  await assertFails(createMissionFor('manager', 'v5-outside', 'site-b'));
+  await assertSucceeds(getDoc(doc(db('manager'), 'roles/manager')));
+});

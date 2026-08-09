@@ -94,3 +94,24 @@ test('RPPS confirmation keeps callable, App Check, region and ANS secret', () =>
   assert.deepEqual(endpoint.secrets, [{key: 'ESANTE_API_KEY'}]);
   assert.equal(endpoint.appCheckEnforced, true);
 });
+
+for (const exportName of [
+  'createMobilization',
+  'updateMobilization',
+  'activateMobilization',
+  'deactivateMobilization',
+  'archiveMobilization',
+  'assignMobilizationCoordinator',
+  'removeMobilizationCoordinator',
+]) {
+  test(`${exportName} is an App Check enforced callable in europe-west1`, () => {
+    const endpoint = discoverExport({
+      GCLOUD_PROJECT: 'mobilisation-sante',
+    }, exportName);
+
+    assert.equal(endpoint.callable, true);
+    assert.deepEqual(endpoint.region, ['europe-west1']);
+    assert.equal(endpoint.secrets, undefined);
+    assert.equal(endpoint.appCheckEnforced, true);
+  });
+}

@@ -51,6 +51,19 @@ import {
 import {
   confirmProfessionalRpps as confirmProfessionalRppsRequest,
 } from './confirm_professional_rpps.js';
+import {
+  activateMobilization as activateMobilizationRequest,
+  archiveMobilization as archiveMobilizationRequest,
+  assignMobilizationCoordinator as assignMobilizationCoordinatorRequest,
+  createMobilization as createMobilizationRequest,
+  deactivateMobilization as deactivateMobilizationRequest,
+  PlatformAdministrationError,
+  removeMobilizationCoordinator as removeMobilizationCoordinatorRequest,
+  updateMobilization as updateMobilizationRequest,
+} from './platform_administration.js';
+import {
+  platformAdministrationServices,
+} from './platform_administration_firestore.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -128,6 +141,81 @@ export const updateMission = onCall(
     data: request.data,
     services: missionUpdateServices({firestore: getFirestore()}),
   })),
+);
+
+const platformCallableOptions = Object.freeze({
+  region: 'europe-west1',
+  enforceAppCheck: true,
+});
+
+export const createMobilization = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    createMobilizationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const updateMobilization = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    updateMobilizationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const activateMobilization = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    activateMobilizationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const deactivateMobilization = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    deactivateMobilizationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const archiveMobilization = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    archiveMobilizationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const assignMobilizationCoordinator = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    assignMobilizationCoordinatorRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const removeMobilizationCoordinator = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    removeMobilizationCoordinatorRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
 );
 
 export const verifyProfessionalRpps = onCall(
@@ -821,6 +909,30 @@ async function missionUpdateCallable(action) {
       type: error?.constructor?.name ?? 'Unknown',
     });
     throw new HttpsError('internal', 'La mission n’a pas pu être mise à jour.');
+  }
+}
+
+function platformServices() {
+  return platformAdministrationServices({
+    firestore: getFirestore(),
+    serverTimestamp: FieldValue.serverTimestamp,
+  });
+}
+
+async function platformAdministrationCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof PlatformAdministrationError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('PLATFORM_ADMINISTRATION_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'L’administration de la plateforme a échoué.',
+    );
   }
 }
 

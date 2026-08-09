@@ -867,6 +867,26 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
+    match /platformAdministrators/{uid} {
+      allow read, write: if false;
+    }
+
+    match /territories/{territoryId} {
+      allow read, write: if false;
+    }
+
+    match /mobilizations/{mobilizationId} {
+      allow read, write: if false;
+    }
+
+    match /mobilizationAssignments/{assignmentId} {
+      allow read, write: if false;
+    }
+
+    match /platform/{documentId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -293,12 +293,18 @@ class _MemoryPlatformReadRepository implements PlatformReadRepository {
   Stream<Mobilization?> watchActiveMobilization() => Stream.value(mobilization);
 
   @override
-  Stream<List<Mobilization>> watchMobilizations({String? territoryId}) {
+  Stream<List<Mobilization>> watchMobilizations({
+    String? territoryId,
+    bool includeInactive = false,
+  }) {
     return Stream.value([
       if (territoryId == null || territoryId == mobilization.territoryId)
         mobilization,
     ]);
   }
+
+  @override
+  Stream<String?> watchPlatformConfig() => Stream.value(mobilization.id);
 
   @override
   Stream<List<Territory>> watchTerritories() => Stream.value([territory]);
