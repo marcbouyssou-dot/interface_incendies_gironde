@@ -12,6 +12,7 @@ void activateLightApplicationChrome() {
   _setApplicationChrome(
     background: _applicationBackground,
     splashActive: false,
+    appleStatusBarStyle: 'default',
   );
   _markStartupMilestone(
     'mobsante-application-ready',
@@ -25,6 +26,7 @@ void activateDarkApplicationChrome() {
   _setApplicationChrome(
     background: _darkApplicationBackground,
     splashActive: false,
+    appleStatusBarStyle: 'black-translucent',
   );
   _markStartupMilestone(
     'mobsante-application-ready',
@@ -37,7 +39,7 @@ void activateSplashApplicationChrome() {
   _setApplicationChrome(
     background: _splashBackground,
     splashActive: true,
-    updateThemeColor: false,
+    appleStatusBarStyle: 'black-translucent',
   );
 }
 
@@ -54,13 +56,14 @@ void dismissNativeStartupSplash() {
 void _setApplicationChrome({
   required String background,
   required bool splashActive,
-  bool updateThemeColor = true,
+  required String appleStatusBarStyle,
 }) {
-  if (updateThemeColor) {
-    html.document
-        .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', background);
-  }
+  html.document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', background);
+  html.document
+      .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+      ?.setAttribute('content', appleStatusBarStyle);
   final documentElement = html.document.documentElement;
   documentElement?.classes.toggle(_splashClass, splashActive);
   documentElement?.style.backgroundColor = background;
