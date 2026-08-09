@@ -1,23 +1,30 @@
-// ignore: deprecated_member_use
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+
 import 'dart:html' as html;
+
+const _applicationBackground = '#F6F7F8';
+const _splashBackground = '#10233E';
+const _splashClass = 'mobsante-splash-active';
 
 void activateLightApplicationChrome() {
   dismissNativeStartupSplash();
-  html.document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', '#F6F7F8');
-  html.document
-      .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
-      ?.setAttribute('content', 'default');
-  (html.document.querySelector('html') as html.HtmlElement?)
-          ?.style
-          .backgroundColor =
-      '#F6F7F8';
-  html.document.body?.style.backgroundColor = '#F6F7F8';
+  _setApplicationChrome(
+    background: _applicationBackground,
+    splashActive: false,
+    appleStatusBarStyle: 'default',
+  );
   _markStartupMilestone(
     'mobsante-application-ready',
     measureName: 'mobsante-initialization',
     startMark: 'mobsante-flutter-first-frame',
+  );
+}
+
+void activateSplashApplicationChrome() {
+  _setApplicationChrome(
+    background: _splashBackground,
+    splashActive: true,
+    appleStatusBarStyle: 'black-translucent',
   );
 }
 
@@ -29,6 +36,23 @@ void dismissNativeStartupSplash() {
   );
   final splash = html.document.getElementById('startup-splash');
   splash?.remove();
+}
+
+void _setApplicationChrome({
+  required String background,
+  required bool splashActive,
+  required String appleStatusBarStyle,
+}) {
+  html.document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', background);
+  html.document
+      .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+      ?.setAttribute('content', appleStatusBarStyle);
+  final documentElement = html.document.documentElement;
+  documentElement?.classes.toggle(_splashClass, splashActive);
+  documentElement?.style.backgroundColor = background;
+  html.document.body?.style.backgroundColor = background;
 }
 
 void _markStartupMilestone(

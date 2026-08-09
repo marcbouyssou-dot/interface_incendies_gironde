@@ -47,6 +47,7 @@ abstract final class AppTheme {
   }
 
   static Widget darkSystemSurface(BuildContext context, Widget? child) {
+    activateSplashApplicationChrome();
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: darkSystemUiOverlayStyle,
       child: ColoredBox(

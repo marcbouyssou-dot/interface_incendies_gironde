@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 
 class V5SecondaryNavigationBar extends StatelessWidget
@@ -27,12 +28,9 @@ class V5SecondaryNavigationBar extends StatelessWidget
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final brightness = Theme.of(context).brightness;
     final canGoBack = showBack && Navigator.of(context).canPop();
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: brightness == Brightness.dark
-          ? SystemUiOverlayStyle.light
-          : SystemUiOverlayStyle.dark,
+      value: AppTheme.lightSystemUiOverlayStyle,
       child: ColoredBox(
         color: colors.canvas,
         child: SafeArea(
