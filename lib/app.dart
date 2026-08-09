@@ -10,6 +10,7 @@ import 'repositories/mock_coordination_repository.dart';
 import 'repositories/location_administration_repository_scope.dart';
 import 'repositories/repository_scope.dart';
 import 'repositories/responsible_access_administration_repository_scope.dart';
+import 'repositories/platform_runtime.dart';
 import 'screens/app_shell.dart';
 import 'services/professional_verification_service.dart';
 import 'theme/app_theme.dart';
@@ -21,11 +22,13 @@ class FireCoordinationApp extends StatelessWidget {
     this.initialTab = 0,
     this.useLegacyCoordinatorShellForTesting = false,
     this.professionalVerificationService,
+    this.platformRuntime,
   });
 
   final CoordinationRepository? repository;
   final int initialTab;
   final ProfessionalVerificationService? professionalVerificationService;
+  final PlatformRuntime? platformRuntime;
 
   /// Explicit regression harness for screens removed from the live V5 shell.
   final bool useLegacyCoordinatorShellForTesting;
@@ -34,6 +37,11 @@ class FireCoordinationApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final coordinationRepository =
         repository ?? MockCoordinationRepository.instance;
+    final resolvedPlatformRuntime =
+        platformRuntime ??
+        (coordinationRepository is PlatformRuntime
+            ? coordinationRepository as PlatformRuntime
+            : null);
     return RepositoryScope(
       repository: coordinationRepository,
       child: AdminInvitationRepositoryScope(
@@ -57,6 +65,7 @@ class FireCoordinationApp extends StatelessWidget {
                   builder: AppTheme.systemSurface,
                   home: AppShell(
                     initialIndex: initialTab,
+                    platformRuntime: resolvedPlatformRuntime,
                     professionalVerificationService:
                         professionalVerificationService ??
                         const FakeProfessionalVerificationService(),

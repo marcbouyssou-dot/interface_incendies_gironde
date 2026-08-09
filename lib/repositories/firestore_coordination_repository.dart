@@ -6,11 +6,14 @@ import 'package:flutter/foundation.dart';
 import '../models/health_profession.dart';
 import '../models/mobilization_context.dart';
 import '../models/need.dart';
+import '../models/platform_administrator_access.dart';
 import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../services/professional_verification_service.dart';
 import '../services/current_mobilization_provider.dart';
+import '../services/firebase_platform_administration_service.dart';
+import '../services/platform_administration_service.dart';
 import '../utils/switch_latest.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
@@ -18,9 +21,14 @@ import 'firestore_admin_invitation_repository.dart';
 import 'firestore_location_mapper.dart';
 import 'firestore_location_administration_repository.dart';
 import 'firestore_mission_mapper.dart';
+import 'firestore_platform_administration_read_repository.dart';
+import 'firestore_platform_read_repository.dart';
 import 'firestore_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 import 'location_administration_repository.dart';
+import 'platform_administration_read_repository.dart';
+import 'platform_read_repository.dart';
+import 'platform_runtime.dart';
 
 @visibleForTesting
 bool canStartVolunteerEngagement({
@@ -152,7 +160,11 @@ void requireDocumentsInActiveMobilization({
   }
 }
 
-class FirestoreCoordinationRepository implements CoordinationRepository {
+class FirestoreCoordinationRepository
+    implements
+        CoordinationRepository,
+        PlatformRuntime,
+        PlatformAccountAuthenticator {
   FirestoreCoordinationRepository(
     this._firestore,
     this._auth, {
@@ -184,6 +196,28 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
   final FirebaseAuth _responsibleAuth;
   final FirebaseFunctions _responsibleFunctions;
   final FirebaseFunctions _volunteerFunctions;
+
+  @override
+  late final PlatformReadRepository platformReadRepository =
+      FirestorePlatformReadRepository.withFirebase(
+        firestore: _responsibleFirestore,
+      );
+
+  @override
+  late final MobilizationContextProvider currentMobilizationProvider =
+      CurrentMobilizationProvider(repository: platformReadRepository);
+
+  @override
+  late final PlatformAdministrationReadRepository
+  platformAdministrationReadRepository =
+      FirestorePlatformAdministrationReadRepository(
+        auth: _responsibleAuth,
+        firestore: _responsibleFirestore,
+      );
+
+  @override
+  late final PlatformAdministrationService platformAdministrationService =
+      FirebasePlatformAdministrationService(functions: _responsibleFunctions);
 
   Future<MobilizationContext> _requireActiveMobilization() async {
     try {
@@ -244,6 +278,32 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
     required String email,
     required String password,
   }) async {
+    final result = await _authenticateAdministrativeAccount(
+      email: email,
+      password: password,
+      allowPlatformAdministrator: false,
+    );
+    return result.access!;
+  }
+
+  @override
+  Future<void> signInPlatformOrResponsible({
+    required String email,
+    required String password,
+  }) async {
+    await _authenticateAdministrativeAccount(
+      email: email,
+      password: password,
+      allowPlatformAdministrator: true,
+    );
+  }
+
+  Future<({ResponsibleAccess? access, bool platformAdministrator})>
+  _authenticateAdministrativeAccount({
+    required String email,
+    required String password,
+    required bool allowPlatformAdministrator,
+  }) async {
     try {
       final credential = await _responsibleAuth.signInWithEmailAndPassword(
         email: email.trim(),
@@ -253,10 +313,31 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
       if (user == null) {
         throw const RepositoryException('Identifiants incorrects.');
       }
-      final roleSnapshot = await _responsibleFirestore
-          .collection('roles')
-          .doc(user.uid)
-          .get();
+      final snapshots = await Future.wait([
+        _responsibleFirestore.collection('roles').doc(user.uid).get(),
+        _responsibleFirestore
+            .collection('platformAdministrators')
+            .doc(user.uid)
+            .get(),
+      ]);
+      final roleSnapshot = snapshots[0];
+      final administratorSnapshot = snapshots[1];
+      var platformAdministrator = false;
+      final administratorData = administratorSnapshot.data();
+      if (administratorSnapshot.exists && administratorData != null) {
+        try {
+          platformAdministrator = PlatformAdministratorAccess.fromMap(
+            uid: user.uid,
+            data: administratorData,
+          ).active;
+        } on FormatException catch (error, stackTrace) {
+          debugPrint('Autorisation plateforme invalide : $error');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
+      if (allowPlatformAdministrator && platformAdministrator) {
+        return (access: null, platformAdministrator: true);
+      }
       if (!roleSnapshot.exists) {
         await _restoreAnonymousSession();
         throw const RepositoryException(
@@ -290,7 +371,7 @@ class FirestoreCoordinationRepository implements CoordinationRepository {
           'Votre compte n’est pas autorisé à publier pour ce lieu.',
         );
       }
-      return access;
+      return (access: access, platformAdministrator: platformAdministrator);
     } on RepositoryException {
       rethrow;
     } on FirebaseAuthException catch (error, stackTrace) {

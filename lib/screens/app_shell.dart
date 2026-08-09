@@ -5,21 +5,25 @@ import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
 import '../perspective/cross_role_perspective.dart';
+import '../models/platform_administrator_access.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
+import '../repositories/platform_runtime.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../widgets/v5_bottom_navigation.dart';
 import 'administration_dashboard_screen.dart';
 import 'coordinator_shell.dart';
 import 'coordination_screen.dart';
 import 'places_screen.dart';
+import 'platform_admin_shell.dart';
 import 'professional_shell.dart';
 import 'responsible_shell.dart';
 import 'slots_screen.dart';
 
-enum _AppJourney { professional, responsible, coordinator }
+enum _AppJourney { professional, responsible, coordinator, platformAdmin }
 
 class AppShell extends StatefulWidget {
   const AppShell({
@@ -28,10 +32,12 @@ class AppShell extends StatefulWidget {
     this.useLegacyCoordinatorShellForTesting = false,
     this.professionalVerificationService =
         const FakeProfessionalVerificationService(),
+    this.platformRuntime,
   });
 
   final int initialIndex;
   final ProfessionalVerificationService professionalVerificationService;
+  final PlatformRuntime? platformRuntime;
 
   /// Never enabled by the application entry point outside regression tests.
   final bool useLegacyCoordinatorShellForTesting;
@@ -46,8 +52,12 @@ class _AppShellState extends State<AppShell> {
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
   StreamSubscription<ResponsibleAccess?>? _accessSubscription;
+  StreamSubscription<PlatformAdministratorAccess?>?
+  _platformAdministratorSubscription;
   ResponsibleAccess? _access;
+  PlatformAdministratorAccess? _platformAdministrator;
   bool _accessResolved = false;
+  bool _platformAdministratorResolved = false;
 
   @override
   void initState() {
@@ -58,6 +68,49 @@ class _AppShellState extends State<AppShell> {
         _legacyCurrentIndex,
       );
     }
+    _watchPlatformAdministrator();
+  }
+
+  @override
+  void didUpdateWidget(covariant AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.platformRuntime, widget.platformRuntime)) {
+      _watchPlatformAdministrator();
+    }
+  }
+
+  void _watchPlatformAdministrator() {
+    unawaited(_platformAdministratorSubscription?.cancel());
+    _platformAdministrator = null;
+    final runtime = widget.platformRuntime;
+    if (runtime == null) {
+      _platformAdministratorResolved = true;
+      return;
+    }
+    _platformAdministratorResolved = false;
+    _platformAdministratorSubscription = runtime
+        .platformAdministrationReadRepository
+        .watchCurrentAdministrator()
+        .listen(
+          _handlePlatformAdministrator,
+          onError: (_, _) => _handlePlatformAdministratorError(),
+        );
+  }
+
+  void _handlePlatformAdministrator(PlatformAdministratorAccess? access) {
+    if (!mounted) return;
+    setState(() {
+      _platformAdministrator = access;
+      _platformAdministratorResolved = true;
+    });
+  }
+
+  void _handlePlatformAdministratorError() {
+    if (!mounted) return;
+    setState(() {
+      _platformAdministrator = null;
+      _platformAdministratorResolved = true;
+    });
   }
 
   @override
@@ -79,6 +132,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     unawaited(_accessSubscription?.cancel());
+    unawaited(_platformAdministratorSubscription?.cancel());
     _liveData?.dispose();
     super.dispose();
   }
@@ -152,11 +206,16 @@ class _AppShellState extends State<AppShell> {
       RolePreviewMode.coordinator => _AppJourney.coordinator,
       RolePreviewMode.automatic => automaticJourney,
     };
-    var displayedJourney = journey;
+    var displayedJourney =
+        _platformAdministratorResolved &&
+            (_platformAdministrator?.active ?? false)
+        ? _AppJourney.platformAdmin
+        : journey;
     String? responsiblePreviewLocationId;
     var crossRolePreview = false;
     final access = _access;
-    if (previewMode == RolePreviewMode.automatic &&
+    if (displayedJourney != _AppJourney.platformAdmin &&
+        previewMode == RolePreviewMode.automatic &&
         _accessResolved &&
         access != null &&
         access.active) {
@@ -178,6 +237,12 @@ class _AppShellState extends State<AppShell> {
             crossRolePreview = true;
           }
       }
+    }
+    if (!_platformAdministratorResolved) {
+      return LiveCoordinationDataScope(
+        data: _liveData!,
+        child: const _PlatformRouteLoading(),
+      );
     }
     return LiveCoordinationDataScope(
       data: _liveData!,
@@ -210,6 +275,16 @@ class _AppShellState extends State<AppShell> {
           widget.useLegacyCoordinatorShellForTesting
               ? _buildLegacyShell()
               : CoordinatorShell(initialIndex: widget.initialIndex.clamp(0, 3)),
+        _AppJourney.platformAdmin => PlatformAdminShell(
+          initialIndex: widget.initialIndex.clamp(0, 3),
+          platformRepository: widget.platformRuntime!.platformReadRepository,
+          mobilizationProvider:
+              widget.platformRuntime!.currentMobilizationProvider,
+          administrationRepository:
+              widget.platformRuntime!.platformAdministrationReadRepository,
+          administrationService:
+              widget.platformRuntime!.platformAdministrationService,
+        ),
       },
     );
   }
@@ -256,4 +331,16 @@ class _AppShellState extends State<AppShell> {
       ),
     );
   }
+}
+
+class _PlatformRouteLoading extends StatelessWidget {
+  const _PlatformRouteLoading();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: context.v5Colors.canvas,
+    body: const SafeArea(
+      child: Center(child: CircularProgressIndicator.adaptive()),
+    ),
+  );
 }

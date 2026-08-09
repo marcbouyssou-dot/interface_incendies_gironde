@@ -2020,7 +2020,7 @@ test('roles dual-read: anonymous professional rights do not open admin data', as
   await assertFails(getDocs(collection(db(), 'roles')));
 });
 
-test('platform V6: only active context metadata is readable when signed in', async () => {
+test('platform V6: platform administrator reads its dashboard without client writes', async () => {
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
@@ -2039,25 +2039,78 @@ test('platform V6: only active context metadata is readable when signed in', asy
       status: 'draft',
     });
     await setDoc(
-      doc(admin, 'mobilizationAssignments/current_coord'),
+      doc(
+        admin,
+        `mobilizationAssignments/${activeMobilizationId}_coord`,
+      ),
       {
         uid: 'coord',
-        mobilizationId: 'current',
+        mobilizationId: activeMobilizationId,
         role: 'coordinator',
         active: true,
       },
     );
   });
 
-  const deniedPaths = [
+  const administrationPaths = [
     'platformAdministrators/platform-admin',
     'territories/gironde',
-    'mobilizations/current',
-    'mobilizationAssignments/current_coord',
+    `mobilizationAssignments/${activeMobilizationId}_coord`,
   ];
-  for (const uid of [null, 'alice', 'coord', 'platform-admin']) {
-    for (const path of deniedPaths) {
+  for (const uid of [null, 'alice', 'coord']) {
+    for (const path of administrationPaths) {
       await assertFails(getDoc(doc(db(uid), path)));
+    }
+  }
+  await assertSucceeds(getDoc(
+    doc(db('platform-admin'), 'platformAdministrators/platform-admin'),
+  ));
+  await assertFails(getDoc(
+    doc(db('platform-admin'), 'platformAdministrators/other-admin'),
+  ));
+  await assertSucceeds(getDoc(
+    doc(db('platform-admin'), 'territories/gironde'),
+  ));
+  await assertSucceeds(getDocs(
+    collection(db('platform-admin'), 'territories'),
+  ));
+  await assertSucceeds(getDoc(
+    doc(db('platform-admin'), 'mobilizations/current'),
+  ));
+  await assertSucceeds(getDocs(
+    collection(db('platform-admin'), 'mobilizations'),
+  ));
+  await assertSucceeds(getDocs(query(
+    collection(db('platform-admin'), 'roles'),
+    where('role', '==', 'coordinator'),
+    where('active', '==', true),
+  )));
+  await assertSucceeds(getDoc(
+    doc(
+      db('platform-admin'),
+      `mobilizationAssignments/${activeMobilizationId}_coord`,
+    ),
+  ));
+  await assertSucceeds(getDocs(query(
+    collection(db('platform-admin'), 'mobilizationAssignments'),
+    where('mobilizationId', '==', activeMobilizationId),
+    where('role', '==', 'coordinator'),
+  )));
+  await assertFails(getDocs(
+    collection(db('platform-admin'), 'platformAdministrators'),
+  ));
+  await assertFails(getDocs(collection(db('alice'), 'territories')));
+  await assertFails(getDocs(collection(db('alice'), 'mobilizations')));
+  await assertFails(getDocs(collection(db('alice'), 'roles')));
+  await assertFails(getDocs(
+    collection(db('alice'), 'mobilizationAssignments'),
+  ));
+
+  for (const uid of [null, 'alice', 'coord', 'platform-admin']) {
+    for (const path of [
+      ...administrationPaths,
+      'mobilizations/current',
+    ]) {
       await assertFails(setDoc(doc(db(uid), path), {forged: true}));
       await assertFails(updateDoc(doc(db(uid), path), {forged: true}));
       await assertFails(deleteDoc(doc(db(uid), path)));

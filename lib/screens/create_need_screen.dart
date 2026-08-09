@@ -5,6 +5,7 @@ import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../repositories/coordination_repository.dart';
+import '../repositories/platform_runtime.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
@@ -1166,9 +1167,18 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
       _message = null;
     });
     try {
-      await widget.repository
-          .signInResponsible(email: _email.text, password: _password.text)
-          .timeout(const Duration(seconds: 15));
+      final repository = widget.repository;
+      final signIn = repository is PlatformAccountAuthenticator
+          ? (repository as PlatformAccountAuthenticator)
+                .signInPlatformOrResponsible(
+                  email: _email.text,
+                  password: _password.text,
+                )
+          : repository.signInResponsible(
+              email: _email.text,
+              password: _password.text,
+            );
+      await signIn.timeout(const Duration(seconds: 15));
       widget.onSignedIn?.call();
     } on RepositoryException catch (error) {
       if (mounted) setState(() => _message = error.message);

@@ -508,6 +508,16 @@ service cloud.firestore {
       return /databases/$(database)/documents/platform/config;
     }
 
+    function platformAdministratorPath(uid) {
+      return /databases/$(database)/documents/platformAdministrators/$(uid);
+    }
+
+    function isPlatformAdministrator() {
+      return isSignedIn()
+        && exists(platformAdministratorPath(request.auth.uid))
+        && get(platformAdministratorPath(request.auth.uid)).data.active == true;
+    }
+
     function mobilizationPath(mobilizationId) {
       return /databases/$(database)/documents/mobilizations/$(mobilizationId);
     }
@@ -912,25 +922,31 @@ service cloud.firestore {
 
     match /roles/{uid} {
       allow get: if isVolunteerOwner(uid);
-      allow list, create, update, delete: if false;
+      allow list: if isPlatformAdministrator();
+      allow create, update, delete: if false;
     }
 
     match /platformAdministrators/{uid} {
-      allow read, write: if false;
+      allow get: if isVolunteerOwner(uid);
+      allow list, write: if false;
     }
 
     match /territories/{territoryId} {
-      allow read, write: if false;
+      allow read: if isPlatformAdministrator();
+      allow write: if false;
     }
 
     match /mobilizations/{mobilizationId} {
       allow get: if isSignedIn()
-        && isCurrentActiveMobilization(mobilizationId);
-      allow list, write: if false;
+        && (isCurrentActiveMobilization(mobilizationId)
+          || isPlatformAdministrator());
+      allow list: if isPlatformAdministrator();
+      allow write: if false;
     }
 
     match /mobilizationAssignments/{assignmentId} {
-      allow read, write: if false;
+      allow read: if isPlatformAdministrator();
+      allow write: if false;
     }
 
     match /platform/{documentId} {
