@@ -217,7 +217,7 @@ class SectorStatusCard extends StatelessWidget {
                   onPressed: onView,
                   style: TextButton.styleFrom(
                     foregroundColor: identity.accent,
-                    minimumSize: const Size(0, 44),
+                    minimumSize: const Size(44, 44),
                   ),
                   child: const Text('Voir'),
                 ),

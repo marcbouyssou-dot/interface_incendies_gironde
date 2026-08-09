@@ -116,7 +116,7 @@ class V5Button extends StatelessWidget {
         borderRadius: BorderRadius.circular(V5Radius.control),
       ),
       child: CupertinoButton(
-        minimumSize: Size.square(compact ? 40 : 48),
+        minimumSize: Size.square(compact ? 44 : 48),
         padding: EdgeInsets.symmetric(
           horizontal: compact ? V5Spacing.sm : V5Spacing.md,
           vertical: compact ? V5Spacing.xs : V5Spacing.sm,

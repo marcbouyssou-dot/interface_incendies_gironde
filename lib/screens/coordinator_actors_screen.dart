@@ -330,7 +330,7 @@ class _ResponsibleRow extends StatelessWidget {
               onPressed: () => _openPerspective(context),
               style: TextButton.styleFrom(
                 foregroundColor: identity.accent,
-                minimumSize: const Size(0, 44),
+                minimumSize: const Size(44, 44),
               ),
               child: const Text('Voir comme'),
             ),

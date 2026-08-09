@@ -924,7 +924,7 @@ class _MissionResultsHeader extends StatelessWidget {
                   backgroundColor: showAdvanced
                       ? colors.infoContainer
                       : Colors.transparent,
-                  minimumSize: const Size(36, 36),
+                  minimumSize: const Size(44, 44),
                   padding: EdgeInsets.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -937,7 +937,7 @@ class _MissionResultsHeader extends StatelessWidget {
                   tooltip: 'Réinitialiser les filtres',
                   style: IconButton.styleFrom(
                     foregroundColor: colors.textSecondary,
-                    minimumSize: const Size(36, 36),
+                    minimumSize: const Size(44, 44),
                     padding: EdgeInsets.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -949,7 +949,7 @@ class _MissionResultsHeader extends StatelessWidget {
           if (showAdvanced) ...[
             const SizedBox(height: V5Spacing.xs),
             SizedBox(
-              height: 32,
+              height: 44,
               child: ListView(
                 key: const Key('professional-status-filters'),
                 scrollDirection: Axis.horizontal,
@@ -1125,7 +1125,7 @@ class _MissionFilters extends StatelessWidget {
           children: [
             Expanded(
               child: SizedBox(
-                height: 40,
+                height: 44,
                 child: TerritorialGroupFilter(
                   key: const Key('slots-territorial-filter'),
                   fieldKey: ValueKey(
@@ -1150,7 +1150,7 @@ class _MissionFilters extends StatelessWidget {
                 backgroundColor: showAdvanced
                     ? colors.warningContainer
                     : Colors.transparent,
-                minimumSize: const Size(36, 36),
+                minimumSize: const Size(44, 44),
                 padding: EdgeInsets.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -1164,7 +1164,7 @@ class _MissionFilters extends StatelessWidget {
               style: IconButton.styleFrom(
                 foregroundColor: colors.textSecondary,
                 disabledForegroundColor: colors.disabledForeground,
-                minimumSize: const Size(36, 36),
+                minimumSize: const Size(44, 44),
                 padding: EdgeInsets.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -1176,7 +1176,7 @@ class _MissionFilters extends StatelessWidget {
         if (showAdvanced) ...[
           const SizedBox(height: 6),
           SizedBox(
-            height: 32,
+            height: 44,
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
@@ -1234,23 +1234,35 @@ class _FilterChip extends StatelessWidget {
       child: Semantics(
         button: true,
         selected: selected,
-        child: Material(
-          color: selected ? selectedColor : colors.surface,
-          shape: StadiumBorder(
-            side: BorderSide(color: selected ? selectedColor : colors.outline),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            customBorder: const StadiumBorder(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 11),
+        child: SizedBox(
+          height: 44,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              customBorder: const StadiumBorder(),
               child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? selectedForeground : colors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                child: Container(
+                  height: 32,
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 11),
+                  decoration: ShapeDecoration(
+                    color: selected ? selectedColor : colors.surface,
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: selected ? selectedColor : colors.outline,
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: selected
+                          ? selectedForeground
+                          : colors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),

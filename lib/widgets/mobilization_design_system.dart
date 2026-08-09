@@ -571,7 +571,7 @@ class _SecondaryDetailsDisclosureState
             style: TextButton.styleFrom(
               foregroundColor: AppColors.textMuted,
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-              minimumSize: const Size(0, 42),
+              minimumSize: const Size(44, 44),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               textStyle: const TextStyle(
                 fontSize: 12,

@@ -291,12 +291,12 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                   children: [
                     if (Navigator.of(context).canPop()) ...[
                       TextButton.icon(
+                        key: const Key('create-need-back'),
                         style: TextButton.styleFrom(
                           foregroundColor: _CreateNeedVisuals.navy,
                           padding: EdgeInsets.zero,
-                          minimumSize: const Size(0, 32),
+                          minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
                           textStyle: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -629,7 +629,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             horizontal: 8,
                             vertical: 6,
                           ),
-                          minimumSize: const Size(0, 36),
+                          minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.padded,
                           textStyle: const TextStyle(
                             fontSize: 12,

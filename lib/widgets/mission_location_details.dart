@@ -117,7 +117,7 @@ class MissionLocationDetails extends StatelessWidget {
               onPressed: () => openExternalUrl(phone),
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
-                minimumSize: const Size(44, 36),
+                minimumSize: const Size(44, 44),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(phoneButtonLabel ?? place.contactPhone!.trim()),
@@ -128,7 +128,7 @@ class MissionLocationDetails extends StatelessWidget {
               onPressed: () => openExternalUrl(directions),
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
-                minimumSize: const Size(44, 40),
+                minimumSize: const Size(44, 44),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               icon: const Icon(Icons.directions_outlined, size: 18),

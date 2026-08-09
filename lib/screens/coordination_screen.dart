@@ -860,7 +860,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                     key: const Key('dashboard-export-csv'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _StatisticsVisuals.navy,
-                      minimumSize: const Size(0, 46),
+                      minimumSize: const Size(44, 46),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       side: const BorderSide(color: _StatisticsVisuals.border),
                     ),
@@ -1577,7 +1577,7 @@ class _ResponsibleMissionActions extends StatelessWidget {
             key: Key('edit-mission-${need.id}'),
             style: OutlinedButton.styleFrom(
               foregroundColor: _StatisticsVisuals.navy,
-              minimumSize: const Size(0, 48),
+              minimumSize: const Size(44, 48),
               side: const BorderSide(color: _StatisticsVisuals.border),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

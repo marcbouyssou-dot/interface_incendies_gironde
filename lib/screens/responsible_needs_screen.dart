@@ -125,9 +125,14 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
       AppPageRoute<void>(
         builder: (_) => LiveCoordinationDataScope(
           data: liveData,
-          child: CreateNeedScreen(
-            onViewMission: () => Navigator.of(context).pop(),
-            onMissionPublished: widget.onMissionPublished,
+          child: Scaffold(
+            resizeToAvoidBottomInset: true,
+            body: SafeArea(
+              child: CreateNeedScreen(
+                onViewMission: () => Navigator.of(context).pop(),
+                onMissionPublished: widget.onMissionPublished,
+              ),
+            ),
           ),
         ),
       ),
@@ -287,7 +292,7 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                                   : null,
                               style: TextButton.styleFrom(
                                 foregroundColor: colors.accent,
-                                minimumSize: const Size(0, 44),
+                                minimumSize: const Size(44, 44),
                               ),
                               child: Text(
                                 editingMissionId == need.id
@@ -307,7 +312,7 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                             onPressed: onOpenTeam,
                             style: TextButton.styleFrom(
                               foregroundColor: colors.accent,
-                              minimumSize: const Size(0, 44),
+                              minimumSize: const Size(44, 44),
                             ),
                             child: const Text('Voir l’équipe'),
                           ),
@@ -445,7 +450,7 @@ class _NeedsEmptyState extends StatelessWidget {
             onPressed: onCreateNeed,
             style: OutlinedButton.styleFrom(
               foregroundColor: colors.accent,
-              minimumSize: const Size(0, 44),
+              minimumSize: const Size(44, 44),
               side: BorderSide(color: colors.outline),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(V5Radius.control),

@@ -20,7 +20,7 @@ Future<T?> showNativeBottomSheet<T>({
   bool isDismissible = true,
   bool enableDrag = true,
   bool? showDragHandle,
-  bool useSafeArea = false,
+  bool useSafeArea = true,
   Color? backgroundColor,
   Color? barrierColor,
 }) {

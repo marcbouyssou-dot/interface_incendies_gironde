@@ -310,7 +310,7 @@ class _MissionDetailsDisclosureState extends State<_MissionDetailsDisclosure> {
             padding: EdgeInsets.symmetric(
               vertical: widget.professionalPalette ? 2 : V5Spacing.xs,
             ),
-            minimumSize: const Size(0, 44),
+            minimumSize: const Size(44, 44),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             textStyle: TextStyle(
               fontSize: widget.professionalPalette ? 12.5 : null,

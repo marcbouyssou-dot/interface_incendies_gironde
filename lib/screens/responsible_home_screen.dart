@@ -111,9 +111,14 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
       AppPageRoute<void>(
         builder: (_) => LiveCoordinationDataScope(
           data: liveData,
-          child: CreateNeedScreen(
-            onViewMission: () => Navigator.of(context).pop(),
-            onMissionPublished: widget.onMissionPublished,
+          child: Scaffold(
+            resizeToAvoidBottomInset: true,
+            body: SafeArea(
+              child: CreateNeedScreen(
+                onViewMission: () => Navigator.of(context).pop(),
+                onMissionPublished: widget.onMissionPublished,
+              ),
+            ),
           ),
         ),
       ),
@@ -469,7 +474,7 @@ class _MissionSection extends StatelessWidget {
                       onPressed: onOpenNeeds,
                       style: TextButton.styleFrom(
                         foregroundColor: colors.accent,
-                        minimumSize: const Size(0, 44),
+                        minimumSize: const Size(44, 44),
                       ),
                       child: Text(
                         needs[index].status == NeedStatus.critical

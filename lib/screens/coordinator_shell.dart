@@ -77,6 +77,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
         builder: (_) => LiveCoordinationDataScope(
           data: liveData,
           child: Scaffold(
+            resizeToAvoidBottomInset: true,
             body: SafeArea(
               child: CreateNeedScreen(
                 onMissionPublished: _publishedNeeds.publish,
