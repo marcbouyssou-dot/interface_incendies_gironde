@@ -504,21 +504,43 @@ service cloud.firestore {
         && validOptionalEquipmentDetails(request.resource.data);
     }
 
+    function platformConfigPath() {
+      return /databases/$(database)/documents/platform/config;
+    }
+
+    function mobilizationPath(mobilizationId) {
+      return /databases/$(database)/documents/mobilizations/$(mobilizationId);
+    }
+
+    function isCurrentActiveMobilization(mobilizationId) {
+      return mobilizationId is string
+        && exists(platformConfigPath())
+        && get(platformConfigPath()).data.activeMobilizationId
+          == mobilizationId
+        && exists(mobilizationPath(mobilizationId))
+        && get(mobilizationPath(mobilizationId)).data.status == 'active';
+    }
+
     function validMissionCreate(missionId) {
       return request.resource.data.keys().hasOnly([
-          'id', 'locationId', 'locationName', 'territorialGroup', 'startAt',
+          'id', 'mobilizationId', 'locationId', 'locationName',
+          'territorialGroup', 'startAt',
           'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
           'requiredByProfession', 'registeredByProfession',
           'requestedEquipment', 'details', 'status', 'createdAt', 'updatedAt',
           'isActive', 'createdBy'
         ])
-        && request.resource.data.keys().hasAll([
-          'id', 'locationId', 'locationName', 'territorialGroup', 'startAt',
+      && request.resource.data.keys().hasAll([
+          'id', 'mobilizationId', 'locationId', 'locationName',
+          'territorialGroup', 'startAt',
           'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
           'requestedEquipment', 'details', 'status', 'createdAt', 'updatedAt',
           'isActive', 'createdBy'
         ])
         && request.resource.data.id == missionId
+        && isCurrentActiveMobilization(
+          request.resource.data.mobilizationId
+        )
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.registeredMk == 0
         && request.resource.data.registeredPp == 0
@@ -594,6 +616,7 @@ service cloud.firestore {
           'requiredByProfession', 'status', 'updatedAt'
         ])
         && resource.data.isActive == true
+        && isCurrentActiveMobilization(resource.data.mobilizationId)
         && resource.data.status != 'cancelled'
         && request.time < resource.data.endAt
         && validEngagementCounterData(
@@ -603,6 +626,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time
         && existsAfter(path)
         && engagementAfter.missionId == missionId
+        && engagementAfter.mobilizationId == resource.data.mobilizationId
         && engagementAfter.volunteerId == request.auth.uid
         && delta != 0
         && validRegisteredDelta(
@@ -618,6 +642,7 @@ service cloud.firestore {
           'requiredByProfession', 'status', 'updatedAt'
         ])
         && resource.data.isActive == true
+        && isCurrentActiveMobilization(resource.data.mobilizationId)
         && resource.data.status != 'cancelled'
         && request.time < resource.data.endAt
         && validCounterQuotaData(resource.data, request.resource.data)
@@ -630,6 +655,7 @@ service cloud.firestore {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isSignedIn()
         && resource.data.isActive == true
+        && isCurrentActiveMobilization(resource.data.mobilizationId)
         && resource.data.status != 'cancelled'
         && changed.hasOnly([
           'status', 'isActive', 'cancelledAt', 'cancelledBy',
@@ -656,15 +682,20 @@ service cloud.firestore {
       let profession = request.resource.data.profession;
       return isSignedIn()
         && request.resource.data.keys().hasOnly([
-          'missionId', 'volunteerId', 'profession', 'createdAt', 'updatedAt',
-          'status'
+          'missionId', 'mobilizationId', 'volunteerId', 'profession',
+          'createdAt', 'updatedAt', 'status'
         ])
         && request.resource.data.keys().hasAll([
-          'missionId', 'volunteerId', 'profession', 'createdAt', 'updatedAt',
-          'status'
+          'missionId', 'mobilizationId', 'volunteerId', 'profession',
+          'createdAt', 'updatedAt', 'status'
         ])
         && engagementId == missionId + '_' + request.auth.uid
         && request.resource.data.volunteerId == request.auth.uid
+        && request.resource.data.mobilizationId
+          == missionBefore.mobilizationId
+        && isCurrentActiveMobilization(
+          request.resource.data.mobilizationId
+        )
         && validProfession(profession)
         && request.resource.data.status == 'confirmed'
         && request.resource.data.createdAt == request.time
@@ -716,6 +747,9 @@ service cloud.firestore {
           : 0);
       return exists(missionPath)
         && existsAfter(missionPath)
+        && resource.data.mobilizationId == before.mobilizationId
+        && request.resource.data.mobilizationId == before.mobilizationId
+        && isCurrentActiveMobilization(before.mobilizationId)
         && before.isActive == true
         && before.status != 'cancelled'
         && request.time < before.endAt
@@ -736,6 +770,8 @@ service cloud.firestore {
       ).data;
       return isCoordinator()
         && changed.hasOnly(['status', 'updatedAt'])
+        && resource.data.mobilizationId == mission.mobilizationId
+        && isCurrentActiveMobilization(resource.data.mobilizationId)
         && validEngagementStatus(to)
         && request.resource.data.updatedAt == request.time
         && validCoordinatorTransition(from, to)
@@ -750,6 +786,8 @@ service cloud.firestore {
       return isSignedIn()
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
+        && resource.data.mobilizationId == missionAfter.mobilizationId
+        && isCurrentActiveMobilization(resource.data.mobilizationId)
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'updatedAt'])
         && request.resource.data.status == 'cancelled'
@@ -768,6 +806,8 @@ service cloud.firestore {
       return isSignedIn()
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
+        && resource.data.mobilizationId == mission.mobilizationId
+        && isCurrentActiveMobilization(resource.data.mobilizationId)
         && (resource.data.status == 'cancelled'
           || resource.data.status == 'pending')
         && changed.hasOnly(['status', 'updatedAt', 'profession'])
@@ -793,11 +833,13 @@ service cloud.firestore {
     }
 
     match /missions/{missionId} {
-      allow get: if resource.data.isActive == true
-        || (isSignedIn()
-          && exists(engagementPath(missionId, request.auth.uid)))
-        || canManageLocation(resource.data.locationId);
-      allow list: if resource.data.isActive == true;
+      allow get: if isCurrentActiveMobilization(resource.data.mobilizationId)
+        && (resource.data.isActive == true
+          || (isSignedIn()
+            && exists(engagementPath(missionId, request.auth.uid)))
+          || canManageLocation(resource.data.locationId));
+      allow list: if resource.data.isActive == true
+        && isCurrentActiveMobilization(resource.data.mobilizationId);
       allow create: if isSignedIn() && validMissionCreate(missionId);
       allow update: if existsAfter(
           engagementPath(missionId, request.auth.uid)
@@ -825,8 +867,14 @@ service cloud.firestore {
 
     match /engagements/{engagementId} {
       allow create: if validEngagementCreate(engagementId);
-      allow get: if isCoordinator() || canGetOwnEngagement(engagementId);
-      allow list: if isCoordinator();
+      allow get: if canGetOwnEngagement(engagementId)
+        && (!exists(
+            /databases/$(database)/documents/engagements/$(engagementId)
+          ) || isCurrentActiveMobilization(resource.data.mobilizationId));
+      allow get: if isCoordinator()
+        && isCurrentActiveMobilization(resource.data.mobilizationId);
+      allow list: if isCoordinator()
+        && isCurrentActiveMobilization(resource.data.mobilizationId);
       allow update: if resource.data.volunteerId == request.auth.uid
         && (validOwnerCancellation(engagementId)
           || validOwnerReengagement(engagementId));
@@ -876,7 +924,9 @@ service cloud.firestore {
     }
 
     match /mobilizations/{mobilizationId} {
-      allow read, write: if false;
+      allow get: if isSignedIn()
+        && isCurrentActiveMobilization(mobilizationId);
+      allow list, write: if false;
     }
 
     match /mobilizationAssignments/{assignmentId} {
@@ -884,7 +934,8 @@ service cloud.firestore {
     }
 
     match /platform/{documentId} {
-      allow read, write: if false;
+      allow get: if isSignedIn() && documentId == 'config';
+      allow list, write: if false;
     }
 
     match /{document=**} {

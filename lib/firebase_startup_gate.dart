@@ -10,6 +10,8 @@ import 'config/app_identity.dart';
 import 'firebase_bootstrap.dart';
 import 'repositories/coordination_repository.dart';
 import 'repositories/firestore_coordination_repository.dart';
+import 'repositories/firestore_platform_read_repository.dart';
+import 'services/current_mobilization_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/firebase_professional_verification_service.dart';
 import 'services/firestore_seed_service.dart';
@@ -99,9 +101,15 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
         store: FirestoreLocationSeedStore(firestore),
       ).seedLocationsIfEmpty();
     }
+    final mobilizationProvider = CurrentMobilizationProvider(
+      repository: FirestorePlatformReadRepository.withFirebase(
+        firestore: firestore,
+      ),
+    );
     return FirestoreCoordinationRepository(
       firestore,
       volunteerAuth,
+      mobilizationProvider: mobilizationProvider,
       responsibleFirestore: responsibleFirestore,
       responsibleAuth: responsibleAuth,
     );

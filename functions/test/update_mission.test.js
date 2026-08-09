@@ -49,6 +49,7 @@ function role({roles = ['coordinator'], locationIds = [], active = true} = {}) {
 function mission(overrides = {}) {
   return {
     id: 'mission-1',
+    mobilizationId: 'mobilization-active',
     locationId: 'location-a',
     registeredByProfession: quotas({physiotherapist: 1}),
     registeredMk: 1,
@@ -79,15 +80,23 @@ function mutation(overrides = {}) {
     mission: Object.hasOwn(overrides, 'mission')
       ? overrides.mission
       : mission(),
+    activeMobilizationId: overrides.activeMobilizationId
+      ?? 'mobilization-active',
+    activeMobilization: Object.hasOwn(overrides, 'activeMobilization')
+      ? overrides.activeMobilization
+      : {id: 'mobilization-active', status: 'active'},
     destination: Object.hasOwn(overrides, 'destination')
       ? overrides.destination
       : destination(),
     callerRole: Object.hasOwn(overrides, 'callerRole')
       ? overrides.callerRole
       : role(),
-    engagements: Object.hasOwn(overrides, 'engagements')
-      ? overrides.engagements
-      : [],
+    engagements: (
+      Object.hasOwn(overrides, 'engagements') ? overrides.engagements : []
+    ).map((engagement) => ({
+      mobilizationId: 'mobilization-active',
+      ...engagement,
+    })),
     serverTimestamp: 'server-time',
     timestampFromMillis: (value) => `timestamp:${value}`,
   });
@@ -206,6 +215,27 @@ test('missing mission and inactive destination are refused', () => {
   );
   assertCode(
     () => mutation({destination: destination({isOperational: false})}),
+    'failed-precondition',
+  );
+});
+
+test('mission update is restricted to the active mobilization', () => {
+  assertCode(
+    () => mutation({mission: mission({mobilizationId: 'other'})}),
+    'failed-precondition',
+  );
+  assertCode(
+    () => mutation({activeMobilization: {id: 'mobilization-active', status: 'inactive'}}),
+    'failed-precondition',
+  );
+  assertCode(
+    () => mutation({
+      engagements: [{
+        profession: 'mk',
+        status: 'confirmed',
+        mobilizationId: 'other',
+      }],
+    }),
     'failed-precondition',
   );
 });

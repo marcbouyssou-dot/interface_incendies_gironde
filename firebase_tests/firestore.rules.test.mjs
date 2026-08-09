@@ -8,6 +8,8 @@ import {
 import {
   doc,
   collection,
+  query,
+  where,
   getDoc,
   getDocs,
   setDoc,
@@ -30,6 +32,7 @@ const blankLocationIdVectors = [
 const hourInMilliseconds = 60 * 60 * 1000;
 const missionStartDelayInHours = 24;
 const missionDurationInHours = 4;
+const activeMobilizationId = 'incendies-gironde-2026';
 
 before(async () => {
   env = await initializeTestEnvironment({
@@ -51,6 +54,14 @@ const db = (uid) => uid
 async function seed(extra = {}) {
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
+    await setDoc(doc(admin, 'platform/config'), {
+      activeMobilizationId,
+    });
+    await setDoc(doc(admin, `mobilizations/${activeMobilizationId}`), {
+      id: activeMobilizationId,
+      territoryId: 'gironde',
+      status: 'active',
+    });
     await setDoc(doc(admin, 'locations/site-a'), {
       id: 'site-a', name: 'Site A', group: 'medoc', type: 'sdisStation',
       isActive: true,
@@ -114,6 +125,7 @@ function mission(overrides = {}) {
   );
   return {
     id: 'mission-a',
+    mobilizationId: activeMobilizationId,
     locationId: 'site-a',
     locationName: 'Site A',
     territorialGroup: 'medoc',
@@ -228,7 +240,8 @@ async function engage(
     });
   }
   batch.set(doc(userDb, `engagements/mission-a_${uid}`), {
-    missionId: 'mission-a', volunteerId: uid, profession,
+    missionId: 'mission-a', mobilizationId: activeMobilizationId,
+    volunteerId: uid, profession,
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     status: 'confirmed',
   });
@@ -322,7 +335,8 @@ function expectedStatus(data) {
 async function seedEngagement(uid, status, profession = 'mk') {
   await env.withSecurityRulesDisabled(async (context) => {
     const data = {
-      missionId: 'mission-a', volunteerId: uid, profession,
+      missionId: 'mission-a', mobilizationId: activeMobilizationId,
+      volunteerId: uid, profession,
       createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
     };
     if (status !== undefined) data.status = status;
@@ -365,6 +379,30 @@ test('missions: coordinator and authorized manager create', async () => {
   await assertSucceeds(setDoc(doc(db('manager'), 'missions/m1'), mission({
     id: 'm1', createdBy: 'manager',
   })));
+});
+
+test('missions: active mobilization is mandatory for create and list', async () => {
+  await seed();
+  const missing = mission({id: 'missing-mobilization'});
+  delete missing.mobilizationId;
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/missing-mobilization'),
+    missing,
+  ));
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/other-mobilization'),
+    mission({
+      id: 'other-mobilization',
+      mobilizationId: 'another-mobilization',
+    }),
+  ));
+  const snapshot = await assertSucceeds(getDocs(query(
+    collection(db(), 'missions'),
+    where('mobilizationId', '==', activeMobilizationId),
+    where('isActive', '==', true),
+  )));
+  assert.equal(snapshot.size, 1);
+  await assertFails(getDocs(collection(db(), 'missions')));
 });
 
 test('missions: invalid manager, quotas, counters, dates and extra fields denied', async () => {
@@ -816,6 +854,7 @@ test('engagements: owner cannot get a non-deterministic legacy document', async 
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'engagements/legacy-document'), {
       missionId: 'mission-a',
+      mobilizationId: activeMobilizationId,
       volunteerId: 'alice',
       profession: 'mk',
       createdAt: Timestamp.now(),
@@ -833,6 +872,7 @@ test('engagements: deterministic id cannot bypass an inconsistent owner field', 
       doc(context.firestore(), 'engagements/mission-a_alice'),
       {
         missionId: 'mission-a',
+        mobilizationId: activeMobilizationId,
         volunteerId: 'bob',
         profession: 'mk',
         status: 'pending',
@@ -867,7 +907,10 @@ test('engagements: coordinator keeps get and list access', async () => {
   );
   assert.equal(snapshot.exists(), true);
   const querySnapshot = await assertSucceeds(
-    getDocs(collection(db('coord'), 'engagements')),
+    getDocs(query(
+      collection(db('coord'), 'engagements'),
+      where('mobilizationId', '==', activeMobilizationId),
+    )),
   );
   assert.equal(querySnapshot.size, 1);
 });
@@ -931,9 +974,32 @@ test('engagements: confirmed creation without mission increment is denied', asyn
   const batch = writeBatch(userDb);
   batch.set(doc(userDb, 'volunteers/alice'), volunteer('alice'));
   batch.set(doc(userDb, 'engagements/mission-a_alice'), {
-    missionId: 'mission-a', volunteerId: 'alice', profession: 'mk',
+    missionId: 'mission-a', mobilizationId: activeMobilizationId,
+    volunteerId: 'alice', profession: 'mk',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     status: 'confirmed',
+  });
+  await assertFails(batch.commit());
+});
+
+test('engagements: mobilization must match the mission and active context', async () => {
+  await seed();
+  const userDb = db('alice');
+  const batch = writeBatch(userDb);
+  batch.set(doc(userDb, 'volunteers/alice'), volunteer('alice'));
+  batch.set(doc(userDb, 'engagements/mission-a_alice'), {
+    missionId: 'mission-a',
+    mobilizationId: 'another-mobilization',
+    volunteerId: 'alice',
+    profession: 'mk',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    status: 'confirmed',
+  });
+  batch.update(doc(userDb, 'missions/mission-a'), {
+    registeredMk: 1,
+    status: 'critical',
+    updatedAt: serverTimestamp(),
   });
   await assertFails(batch.commit());
 });
@@ -944,7 +1010,8 @@ test('engagements: new pending creation is denied', async () => {
   const batch = writeBatch(userDb);
   batch.set(doc(userDb, 'volunteers/alice'), volunteer('alice'));
   batch.set(doc(userDb, 'engagements/mission-a_alice'), {
-    missionId: 'mission-a', volunteerId: 'alice', profession: 'mk',
+    missionId: 'mission-a', mobilizationId: activeMobilizationId,
+    volunteerId: 'alice', profession: 'mk',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     status: 'pending',
   });
@@ -960,7 +1027,8 @@ test('engagements: old status-less document remains readable by owner', async ()
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(doc(context.firestore(), 'engagements/mission-a_alice'), {
-      missionId: 'mission-a', volunteerId: 'alice', profession: 'mk',
+      missionId: 'mission-a', mobilizationId: activeMobilizationId,
+      volunteerId: 'alice', profession: 'mk',
       createdAt: Timestamp.now(),
     });
   });
@@ -1124,7 +1192,8 @@ test('engagements: wrong owner/profession/id denied', async () => {
   const userDb = db('alice');
   const batch = writeBatch(userDb);
   batch.set(doc(userDb, 'engagements/mission-a_bob'), {
-    missionId: 'mission-a', volunteerId: 'bob', profession: 'doctor',
+    missionId: 'mission-a', mobilizationId: activeMobilizationId,
+    volunteerId: 'bob', profession: 'doctor',
     createdAt: Timestamp.now(), status: 'confirmed',
   });
   batch.update(doc(userDb, 'missions/mission-a'), {
@@ -1872,7 +1941,10 @@ test('roles dual-read: V2 coordinators retain engagement administration', async 
   await assertSucceeds(
     getDoc(doc(db('v2-coord'), 'engagements/mission-a_alice')),
   );
-  await assertSucceeds(getDocs(collection(db('v2-coord'), 'engagements')));
+  await assertSucceeds(getDocs(query(
+    collection(db('v2-coord'), 'engagements'),
+    where('mobilizationId', '==', activeMobilizationId),
+  )));
   await assertFails(
     getDoc(doc(db('v2-manager'), 'engagements/mission-a_alice')),
   );
@@ -1919,6 +1991,7 @@ test('roles dual-read: inactive cumulative role is denied everywhere', async () 
     );
     await setDoc(doc(context.firestore(), 'engagements/mission-x_alice'), {
       missionId: 'mission-x',
+      mobilizationId: activeMobilizationId,
       volunteerId: 'alice',
       profession: 'mk',
       status: 'pending',
@@ -1947,7 +2020,7 @@ test('roles dual-read: anonymous professional rights do not open admin data', as
   await assertFails(getDocs(collection(db(), 'roles')));
 });
 
-test('platform V6: all new collections deny direct client access', async () => {
+test('platform V6: only active context metadata is readable when signed in', async () => {
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
@@ -1974,25 +2047,39 @@ test('platform V6: all new collections deny direct client access', async () => {
         active: true,
       },
     );
-    await setDoc(doc(admin, 'platform/config'), {
-      activeMobilizationId: null,
-    });
   });
 
-  const paths = [
+  const deniedPaths = [
     'platformAdministrators/platform-admin',
     'territories/gironde',
     'mobilizations/current',
     'mobilizationAssignments/current_coord',
-    'platform/config',
   ];
   for (const uid of [null, 'alice', 'coord', 'platform-admin']) {
-    for (const path of paths) {
+    for (const path of deniedPaths) {
       await assertFails(getDoc(doc(db(uid), path)));
       await assertFails(setDoc(doc(db(uid), path), {forged: true}));
       await assertFails(updateDoc(doc(db(uid), path), {forged: true}));
       await assertFails(deleteDoc(doc(db(uid), path)));
     }
+  }
+  for (const uid of ['alice', 'coord', 'platform-admin']) {
+    await assertSucceeds(getDoc(doc(db(uid), 'platform/config')));
+    await assertSucceeds(getDoc(
+      doc(db(uid), `mobilizations/${activeMobilizationId}`),
+    ));
+  }
+  await assertFails(getDoc(doc(db(), 'platform/config')));
+  await assertFails(getDoc(
+    doc(db(), `mobilizations/${activeMobilizationId}`),
+  ));
+  for (const path of [
+    'platform/config',
+    `mobilizations/${activeMobilizationId}`,
+  ]) {
+    await assertFails(setDoc(doc(db('coord'), path), {forged: true}));
+    await assertFails(updateDoc(doc(db('coord'), path), {forged: true}));
+    await assertFails(deleteDoc(doc(db('coord'), path)));
   }
 });
 

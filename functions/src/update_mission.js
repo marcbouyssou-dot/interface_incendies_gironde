@@ -77,6 +77,8 @@ export function validateMissionUpdateRequest(data) {
 export function missionUpdateMutation({
   request,
   mission,
+  activeMobilizationId,
+  activeMobilization,
   destination,
   callerRole,
   engagements,
@@ -85,6 +87,22 @@ export function missionUpdateMutation({
 }) {
   if (!isPlainObject(mission)) {
     throw new MissionUpdateError('not-found', 'Mission introuvable.');
+  }
+  if (
+    !isPlainObject(activeMobilization)
+    || activeMobilization.id !== activeMobilizationId
+    || activeMobilization.status !== 'active'
+    || mission.mobilizationId !== activeMobilizationId
+    || engagements.some(
+      (engagement) =>
+        !isPlainObject(engagement)
+        || engagement.mobilizationId !== activeMobilizationId,
+    )
+  ) {
+    throw new MissionUpdateError(
+      'failed-precondition',
+      'Cette mission n’appartient pas à la mobilisation active.',
+    );
   }
   const access = parseAccess(callerRole);
   if (!canManage(access, mission.locationId)

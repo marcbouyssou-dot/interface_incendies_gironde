@@ -820,23 +820,51 @@ export function missionUpdateServices({firestore}) {
   return {
     async commitMissionUpdate({callerUid, missionId, ...request}) {
       return firestore.runTransaction(async (transaction) => {
+        const configRef = firestore.collection('platform').doc('config');
+        const config = await transaction.get(configRef);
+        const activeMobilizationId = config.exists
+          ? config.data().activeMobilizationId
+          : null;
+        if (
+          typeof activeMobilizationId !== 'string'
+          || activeMobilizationId === ''
+        ) {
+          throw new MissionUpdateError(
+            'failed-precondition',
+            'Aucune mobilisation active n’est disponible.',
+          );
+        }
         const callerRef = firestore.collection('roles').doc(callerUid);
         const missionRef = firestore.collection('missions').doc(missionId);
+        const mobilizationRef = firestore
+          .collection('mobilizations')
+          .doc(activeMobilizationId);
         const destinationRef = firestore
           .collection('locations')
           .doc(request.locationId);
         const engagementsQuery = firestore
           .collection('engagements')
           .where('missionId', '==', missionId);
-        const [caller, mission, destination, engagements] = await Promise.all([
+        const [
+          caller,
+          mission,
+          activeMobilization,
+          destination,
+          engagements,
+        ] = await Promise.all([
           transaction.get(callerRef),
           transaction.get(missionRef),
+          transaction.get(mobilizationRef),
           transaction.get(destinationRef),
           transaction.get(engagementsQuery),
         ]);
         const mutation = missionUpdateMutation({
           request: {missionId, ...request},
           mission: mission.exists ? mission.data() : null,
+          activeMobilizationId,
+          activeMobilization: activeMobilization.exists
+            ? activeMobilization.data()
+            : null,
           destination: destination.exists ? destination.data() : null,
           callerRole: caller.exists ? caller.data() : null,
           engagements: engagements.docs.map((document) => document.data()),

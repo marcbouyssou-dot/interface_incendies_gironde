@@ -20,6 +20,7 @@ import {
 } from 'firebase/functions';
 
 const projectId = 'demo-mobsante';
+const activeMobilizationId = 'incendies-gironde-2026';
 const adminApp = initializeAdminApp({projectId}, 'mission-update-tests');
 const adminAuth = getAdminAuth(adminApp);
 const db = getAdminFirestore(adminApp);
@@ -78,6 +79,7 @@ async function seedMission(sourceId, overrides = {}) {
   const id = unique('mission');
   await db.collection('missions').doc(id).set({
     id,
+    mobilizationId: activeMobilizationId,
     locationId: sourceId,
     locationName: `Centre ${sourceId}`,
     territorialGroup: 'medoc',
@@ -128,7 +130,17 @@ async function assertCode(action, code) {
   });
 }
 
-before(() => assert.equal(process.env.GCLOUD_PROJECT, projectId));
+before(async () => {
+  assert.equal(process.env.GCLOUD_PROJECT, projectId);
+  await db.collection('platform').doc('config').set({
+    activeMobilizationId,
+  });
+  await db.collection('mobilizations').doc(activeMobilizationId).set({
+    id: activeMobilizationId,
+    territoryId: 'gironde',
+    status: 'active',
+  });
+});
 
 after(async () => {
   await Promise.all(clientApps.map((app) => deleteApp(app)));
@@ -270,6 +282,7 @@ test('quota below a confirmed engagement count is refused atomically', async () 
   });
   await db.collection('engagements').doc(unique('engagement')).set({
     missionId,
+    mobilizationId: activeMobilizationId,
     volunteerId: unique('volunteer'),
     profession: 'mk',
     status: 'confirmed',

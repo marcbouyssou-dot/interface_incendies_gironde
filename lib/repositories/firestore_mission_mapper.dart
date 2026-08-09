@@ -38,6 +38,7 @@ abstract final class FirestoreMissionMapper {
 
   static Map<String, dynamic> toFirestore({
     required String id,
+    required String mobilizationId,
     required MissionDraft draft,
     required Object serverTimestamp,
     required String createdBy,
@@ -45,6 +46,7 @@ abstract final class FirestoreMissionMapper {
     final quotas = draft.professionQuotas;
     return {
       'id': id,
+      'mobilizationId': mobilizationId,
       'locationId': draft.location.id,
       'locationName': draft.location.name,
       'territorialGroup': draft.location.group.name,

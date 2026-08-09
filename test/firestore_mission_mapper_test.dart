@@ -20,6 +20,7 @@ void main() {
 
     final data = FirestoreMissionMapper.toFirestore(
       id: 'mission-stable',
+      mobilizationId: 'incendies-gironde-2026',
       draft: draft,
       serverTimestamp: Timestamp.fromDate(DateTime(2026, 7, 29)),
       createdBy: 'manager-uid',
@@ -52,6 +53,7 @@ void main() {
       'other_health_professional': 0,
     });
     expect(data['isActive'], isTrue);
+    expect(data['mobilizationId'], 'incendies-gironde-2026');
     expect(data['createdBy'], 'manager-uid');
     expect(mission.locationId, places.first.id);
     expect(mission.place, places.first.name);
@@ -138,6 +140,7 @@ void main() {
 
     final data = FirestoreMissionMapper.toFirestore(
       id: 'generic-draft',
+      mobilizationId: 'incendies-gironde-2026',
       draft: draft,
       serverTimestamp: Timestamp.fromDate(DateTime(2026, 7, 29)),
       createdBy: 'manager-uid',
