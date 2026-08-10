@@ -17,6 +17,7 @@ import '../widgets/v5_bottom_navigation.dart';
 import 'administration_dashboard_screen.dart';
 import 'coordinator_shell.dart';
 import 'coordination_screen.dart';
+import 'create_need_screen.dart';
 import 'places_screen.dart';
 import 'platform_admin_shell.dart';
 import 'professional_shell.dart';
@@ -58,6 +59,7 @@ class _AppShellState extends State<AppShell> {
   PlatformAdministratorAccess? _platformAdministrator;
   bool _accessResolved = false;
   bool _platformAdministratorResolved = false;
+  bool _showPlatformAdminAuthentication = false;
 
   @override
   void initState() {
@@ -111,6 +113,19 @@ class _AppShellState extends State<AppShell> {
       _platformAdministrator = null;
       _platformAdministratorResolved = true;
     });
+  }
+
+  Future<void> _signOutPlatformAdministrator() async {
+    await _repository!.signOutResponsible();
+    if (mounted) {
+      setState(() => _showPlatformAdminAuthentication = true);
+    }
+  }
+
+  void _handlePlatformAdminSignedIn() {
+    if (mounted) {
+      setState(() => _showPlatformAdminAuthentication = false);
+    }
   }
 
   @override
@@ -244,6 +259,21 @@ class _AppShellState extends State<AppShell> {
         child: const _PlatformRouteLoading(),
       );
     }
+    if (_showPlatformAdminAuthentication) {
+      return LiveCoordinationDataScope(
+        data: _liveData!,
+        child: Scaffold(
+          key: const Key('platform-admin-authentication'),
+          backgroundColor: context.v5Colors.canvas,
+          body: SafeArea(
+            child: ResponsibleLogin(
+              repository: _repository!,
+              onSignedIn: _handlePlatformAdminSignedIn,
+            ),
+          ),
+        ),
+      );
+    }
     return LiveCoordinationDataScope(
       data: _liveData!,
       child: switch (displayedJourney) {
@@ -284,6 +314,7 @@ class _AppShellState extends State<AppShell> {
               widget.platformRuntime!.platformAdministrationReadRepository,
           administrationService:
               widget.platformRuntime!.platformAdministrationService,
+          onSignOut: _signOutPlatformAdministrator,
         ),
       },
     );

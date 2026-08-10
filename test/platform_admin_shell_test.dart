@@ -12,7 +12,9 @@ import 'package:interface_incendies_gironde/repositories/platform_administration
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_runtime.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_shell.dart';
+import 'package:interface_incendies_gironde/screens/platform_admin_more_screen.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
+import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/services/current_mobilization_provider.dart';
 import 'package:interface_incendies_gironde/services/platform_administration_service.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
@@ -179,12 +181,66 @@ void main() {
       'Plus',
     ]);
 
-    for (final label in ['Territoires', 'Coordinateurs', 'Plus']) {
+    for (final label in ['Territoires', 'Coordinateurs']) {
       await tester.tap(find.text(label).last);
       await tester.pumpAndSettle();
       expect(find.text('À venir'), findsOneWidget);
     }
+
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlatformAdminMoreScreen), findsOneWidget);
+    expect(find.text('Se déconnecter'), findsOneWidget);
   });
+
+  testWidgets('platform sign-out confirmation can be cancelled', (
+    tester,
+  ) async {
+    final repository = _RecordingCoordinationRepository();
+    await _pumpPlatformAdmin(tester, repository: repository);
+
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    final signOut = find.byKey(const Key('platform-admin-sign-out'));
+    expect(signOut, findsOneWidget);
+    expect(tester.getSize(signOut).height, greaterThanOrEqualTo(44));
+
+    await tester.tap(signOut);
+    await tester.pumpAndSettle();
+    expect(find.text('Se déconnecter ?'), findsOneWidget);
+
+    await tester.tap(find.text('Annuler').last);
+    await tester.pumpAndSettle();
+    expect(repository.signOutCalls, 0);
+    expect(find.byType(PlatformAdminShell), findsOneWidget);
+  });
+
+  testWidgets(
+    'confirmed platform sign-out runs once and opens authentication',
+    (tester) async {
+      final repository = _RecordingCoordinationRepository();
+      await _pumpPlatformAdmin(tester, repository: repository);
+
+      await tester.tap(find.text('Plus').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('platform-admin-sign-out')));
+      await tester.pumpAndSettle();
+      final confirm = find.byKey(const Key('confirm-platform-admin-sign-out'));
+      expect(confirm, findsOneWidget);
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+
+      expect(repository.signOutCalls, 1);
+      expect(find.byType(PlatformAdminShell), findsNothing);
+      expect(
+        find.byKey(const Key('platform-admin-authentication')),
+        findsOneWidget,
+      );
+      expect(find.byType(ResponsibleLogin), findsOneWidget);
+      expect(find.text('Se connecter'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('the admin shell supports semantics and 200 percent text', (
     tester,
@@ -214,13 +270,15 @@ void main() {
 
 Future<void> _pumpPlatformAdmin(
   WidgetTester tester, {
+  MockCoordinationRepository? repository,
   Stream<MobilizationContext?>? contextStream,
   bool hasActiveMobilization = true,
   bool settle = true,
 }) async {
   await tester.pumpWidget(
     FireCoordinationApp(
-      repository: MockCoordinationRepository(responsibleAccess: null),
+      repository:
+          repository ?? MockCoordinationRepository(responsibleAccess: null),
       platformRuntime: _runtime(
         administrator: const PlatformAdministratorAccess(
           uid: 'platform-admin',
@@ -240,6 +298,17 @@ Future<void> _pumpPlatformAdmin(
     ),
   );
   if (settle) await tester.pumpAndSettle();
+}
+
+class _RecordingCoordinationRepository extends MockCoordinationRepository {
+  _RecordingCoordinationRepository() : super(responsibleAccess: null);
+
+  int signOutCalls = 0;
+
+  @override
+  Future<void> signOutResponsible() async {
+    signOutCalls++;
+  }
 }
 
 PlatformRuntime _runtime({

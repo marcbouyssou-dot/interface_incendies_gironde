@@ -9,6 +9,7 @@ import '../theme/v5_foundation.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/platform_admin_bottom_navigation.dart';
 import 'platform_admin_mobilization_screen.dart';
+import 'platform_admin_more_screen.dart';
 
 class PlatformAdminShell extends StatefulWidget {
   const PlatformAdminShell({
@@ -17,6 +18,7 @@ class PlatformAdminShell extends StatefulWidget {
     required this.mobilizationProvider,
     required this.administrationRepository,
     required this.administrationService,
+    required this.onSignOut,
     this.initialIndex = 0,
   }) : assert(initialIndex >= 0 && initialIndex < 4);
 
@@ -24,6 +26,7 @@ class PlatformAdminShell extends StatefulWidget {
   final MobilizationContextProvider mobilizationProvider;
   final PlatformAdministrationReadRepository administrationRepository;
   final PlatformAdministrationService administrationService;
+  final Future<void> Function() onSignOut;
   final int initialIndex;
 
   @override
@@ -56,10 +59,7 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
       title: 'Coordinateurs',
       icon: Icons.supervisor_account_rounded,
     ),
-    3 => const PlatformAdminComingSoonScreen(
-      title: 'Plus',
-      icon: Icons.more_horiz_rounded,
-    ),
+    3 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
     _ => throw RangeError.index(index, _screens),
   };
 
