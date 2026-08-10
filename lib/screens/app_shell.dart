@@ -306,7 +306,7 @@ class _AppShellState extends State<AppShell> {
               ? _buildLegacyShell()
               : CoordinatorShell(initialIndex: widget.initialIndex.clamp(0, 3)),
         _AppJourney.platformAdmin => PlatformAdminShell(
-          initialIndex: widget.initialIndex.clamp(0, 3),
+          initialIndex: widget.initialIndex == 3 ? 1 : 0,
           platformRepository: widget.platformRuntime!.platformReadRepository,
           mobilizationProvider:
               widget.platformRuntime!.currentMobilizationProvider,

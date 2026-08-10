@@ -103,12 +103,13 @@ void main() {
     await _pumpPlatformAdmin(tester);
 
     expect(find.byKey(const Key('active-mobilization-card')), findsOneWidget);
-    expect(find.text('Incendies Gironde'), findsWidgets);
+    expect(find.text('Incendies Gironde'), findsOneWidget);
     expect(find.text('Incendie'), findsOneWidget);
     expect(find.text('Gironde · 33'), findsOneWidget);
     expect(find.text('Active'), findsOneWidget);
     expect(find.text('Activée le'), findsOneWidget);
     expect(find.byKey(const Key('platform-activation-date')), findsOneWidget);
+    expect(find.textContaining('fonctions backend sécurisées'), findsNothing);
 
     for (final key in [
       'platform-create-mobilization',
@@ -147,6 +148,14 @@ void main() {
     expect(find.text('Actif'), findsOneWidget);
   });
 
+  testWidgets('missing coordination is explicit', (tester) async {
+    await _pumpPlatformAdmin(tester, assignments: const []);
+
+    expect(find.text('Coordination à compléter'), findsOneWidget);
+    expect(find.textContaining('Affectez un Coordinateur'), findsOneWidget);
+    expect(find.text('Aucun coordinateur affecté'), findsNothing);
+  });
+
   testWidgets('loading and read errors have explicit states', (tester) async {
     final pending = StreamController<MobilizationContext?>();
     addTearDown(pending.close);
@@ -173,7 +182,7 @@ void main() {
     expect(find.text('Lecture de la plateforme impossible'), findsOneWidget);
   });
 
-  testWidgets('secondary navigation exposes clean coming-soon states', (
+  testWidgets('admin navigation exposes only useful destinations', (
     tester,
   ) async {
     await _pumpPlatformAdmin(tester);
@@ -181,19 +190,14 @@ void main() {
     final navigation = tester.widget<V5BottomBar>(
       find.byKey(const Key('platform-admin-bottom-navigation')),
     );
-    expect(navigation.destinations, hasLength(4));
+    expect(navigation.destinations, hasLength(2));
     expect(navigation.destinations.map((destination) => destination.label), [
       'Mobilisation',
-      'Territoires',
-      'Coordinateurs',
       'Plus',
     ]);
-
-    for (final label in ['Territoires', 'Coordinateurs']) {
-      await tester.tap(find.text(label).last);
-      await tester.pumpAndSettle();
-      expect(find.text('À venir'), findsOneWidget);
-    }
+    expect(find.text('Territoires'), findsNothing);
+    expect(find.text('Coordinateurs'), findsNothing);
+    expect(find.text('À venir'), findsNothing);
 
     await tester.tap(find.text('Plus').last);
     await tester.pumpAndSettle();
@@ -281,6 +285,7 @@ Future<void> _pumpPlatformAdmin(
   MockCoordinationRepository? repository,
   Stream<MobilizationContext?>? contextStream,
   bool hasActiveMobilization = true,
+  List<MobilizationCoordinatorAssignment>? assignments,
   bool settle = true,
 }) async {
   await tester.pumpWidget(
@@ -302,6 +307,7 @@ Future<void> _pumpPlatformAdmin(
               ),
             ),
         hasActiveMobilization: hasActiveMobilization,
+        assignments: assignments,
       ),
     ),
   );
@@ -323,6 +329,7 @@ PlatformRuntime _runtime({
   required PlatformAdministratorAccess? administrator,
   Stream<MobilizationContext?>? contextStream,
   bool hasActiveMobilization = true,
+  List<MobilizationCoordinatorAssignment>? assignments,
 }) {
   return _FakePlatformRuntime(
     platformRepository: _FakePlatformReadRepository(
@@ -333,20 +340,22 @@ PlatformRuntime _runtime({
     ),
     administrationRepository: _FakeAdministrationReadRepository(
       administrator: administrator,
-      assignments: const [
-        MobilizationCoordinatorAssignment(
-          id: 'incendies-gironde-2026_coordinator-user-12345',
-          uid: 'coordinator-user-12345',
-          mobilizationId: 'incendies-gironde-2026',
-          active: true,
-          identity: UserDisplayIdentity(
-            uid: 'coordinator-user-12345',
-            displayName: 'Camille Martin',
-            professionLabel: 'Coordinateur',
-            organizationLabel: 'Périmètre départemental',
-          ),
-        ),
-      ],
+      assignments:
+          assignments ??
+          const [
+            MobilizationCoordinatorAssignment(
+              id: 'incendies-gironde-2026_coordinator-user-12345',
+              uid: 'coordinator-user-12345',
+              mobilizationId: 'incendies-gironde-2026',
+              active: true,
+              identity: UserDisplayIdentity(
+                uid: 'coordinator-user-12345',
+                displayName: 'Camille Martin',
+                professionLabel: 'Coordinateur',
+                organizationLabel: 'Périmètre départemental',
+              ),
+            ),
+          ],
     ),
   );
 }

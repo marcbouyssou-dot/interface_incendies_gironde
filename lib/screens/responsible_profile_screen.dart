@@ -121,7 +121,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
         : access == null
         ? const <String>[]
         : access!.isCoordinator
-        ? const ['Tous les centres — accès Coordinateur réel']
+        ? const ['Tous les centres — accès Coordinateur']
         : [
             for (final id in access!.locationIds)
               locationById[id]?.name ?? 'Centre attribué',
@@ -159,11 +159,6 @@ class _ResponsibleProfileContent extends StatelessWidget {
                   Text(
                     'Centre géré',
                     style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: V5Spacing.xxs),
-                  Text(
-                    'Lecture seule',
-                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: V5Spacing.sm),
                   _ProfileGroup(

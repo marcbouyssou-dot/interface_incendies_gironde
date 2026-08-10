@@ -1467,10 +1467,8 @@ class _NeedActionsState extends State<_NeedActions> {
                       engagement: engagement,
                     ),
                   ),
-                  child: Text(
-                    widget.professionalHome
-                        ? 'Je ne suis plus disponible'
-                        : 'Annuler mon engagement',
+                  child: const Text(
+                    'Annuler mon engagement pour cette mission',
                   ),
                 ),
               ],
@@ -1602,7 +1600,7 @@ class EngagementCancellationButton extends StatelessWidget {
     super.key,
     required this.need,
     required this.engagement,
-    this.label = 'Annuler mon engagement',
+    this.label = 'Annuler mon engagement pour cette mission',
   });
 
   final CoordinationNeed need;
@@ -1667,15 +1665,20 @@ class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
   @override
   Widget build(BuildContext context) {
     return V5Dialog(
-      title: 'Se désengager de cette mission ?',
+      title: 'Annuler mon engagement ?',
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.need.place),
-          Text(widget.need.date),
-          Text(widget.need.time),
-          Text(widget.engagement.profession.label),
+          Text('Mission : ${widget.need.place}'),
+          Text('Date : ${widget.need.date}'),
+          Text('Horaires : ${widget.need.time}'),
+          Text('Profession : ${widget.engagement.profession.label}'),
+          const SizedBox(height: 12),
+          const Text(
+            'Votre participation sera annulée et vous ne serez plus compté '
+            'parmi les professionnels mobilisés pour cette mission.',
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: const TextStyle(color: AppColors.red)),
@@ -1684,7 +1687,7 @@ class _CancelEngagementDialogState extends State<_CancelEngagementDialog> {
       ),
       actions: [
         V5DialogAction(
-          label: 'Annuler',
+          label: 'Retour',
           onPressed: _submitting ? null : () => Navigator.pop(context),
         ),
         V5DialogAction(
@@ -2693,6 +2696,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
       AppPageRoute<void>(
         builder: (_) => EngagementConfirmationScreen(
           need: widget.need,
+          profession: _profession,
           location: widget.location,
           result: result,
         ),

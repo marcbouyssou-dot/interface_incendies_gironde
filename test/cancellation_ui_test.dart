@@ -15,6 +15,8 @@ import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
 void main() {
+  const cancellationLabel = 'Annuler mon engagement pour cette mission';
+
   CoordinationNeed mission() => const CoordinationNeed(
     id: 'ui-mission',
     locationId: 'site-a',
@@ -144,7 +146,7 @@ void main() {
       initialLocations: const [],
     );
     await pumpApp(tester, repository);
-    expect(find.text('Je ne suis plus disponible'), findsNothing);
+    expect(find.text(cancellationLabel), findsNothing);
 
     await repository.createEngagement(
       missionId: 'ui-mission',
@@ -159,7 +161,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Je ne suis plus disponible').first,
+      find.text(cancellationLabel).first,
       200,
       scrollable: find.byType(Scrollable).first,
     );
@@ -172,14 +174,20 @@ void main() {
     expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
     expect(find.text('Confirmé'), findsOneWidget);
 
-    await tester.tap(find.text('Je ne suis plus disponible'));
+    await tester.tap(find.text(cancellationLabel));
     await tester.pumpAndSettle();
-    expect(find.text('Se désengager de cette mission ?'), findsOneWidget);
-    await tester.tap(find.text('Annuler'));
+    expect(find.text('Annuler mon engagement ?'), findsOneWidget);
+    expect(find.text('Mission : Site A'), findsOneWidget);
+    expect(find.text('Date : Aujourd’hui'), findsOneWidget);
+    expect(
+      find.textContaining('vous ne serez plus compté parmi les professionnels'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Retour'));
     await tester.pumpAndSettle();
     expect(repository.engagements, hasLength(1));
 
-    await tester.tap(find.text('Je ne suis plus disponible'));
+    await tester.tap(find.text(cancellationLabel));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-cancel-engagement')));
     await tester.pumpAndSettle();
@@ -191,6 +199,7 @@ void main() {
     expect(repository.debugMission('ui-mission')?.isCancelled, isFalse);
     expect(find.text('Je me mobilise à nouveau'), findsOneWidget);
     expect(find.text('✓ JE SUIS ENGAGÉ'), findsNothing);
+    expect(find.text(cancellationLabel), findsNothing);
     expect(find.text('Je ne suis plus disponible'), findsNothing);
     expect(
       find.text('Votre désengagement a bien été enregistré.'),
@@ -233,7 +242,7 @@ void main() {
         expect(find.text(subtitle), findsOneWidget);
       }
       expect(
-        find.text('Je ne suis plus disponible'),
+        find.text(cancellationLabel),
         status == EngagementStatus.cancelled ? findsNothing : findsOneWidget,
       );
       if (status == EngagementStatus.cancelled) {
@@ -264,7 +273,8 @@ void main() {
 
     await pumpApp(tester, repository);
 
-    expect(find.text('Je ne suis plus disponible'), findsOneWidget);
+    expect(find.text(cancellationLabel), findsOneWidget);
+    expect(find.text('Je ne suis plus disponible'), findsNothing);
     expect(find.text('Annuler ce besoin'), findsNothing);
   });
 

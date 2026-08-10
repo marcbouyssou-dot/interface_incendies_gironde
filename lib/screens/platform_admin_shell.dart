@@ -20,7 +20,7 @@ class PlatformAdminShell extends StatefulWidget {
     required this.administrationService,
     required this.onSignOut,
     this.initialIndex = 0,
-  }) : assert(initialIndex >= 0 && initialIndex < 4);
+  }) : assert(initialIndex >= 0 && initialIndex < 2);
 
   final PlatformReadRepository platformRepository;
   final MobilizationContextProvider mobilizationProvider;
@@ -35,7 +35,7 @@ class PlatformAdminShell extends StatefulWidget {
 
 class _PlatformAdminShellState extends State<PlatformAdminShell> {
   late int _currentIndex;
-  final List<Widget?> _screens = List<Widget?>.filled(4, null);
+  final List<Widget?> _screens = List<Widget?>.filled(2, null);
 
   @override
   void initState() {
@@ -51,15 +51,7 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
       administrationRepository: widget.administrationRepository,
       administrationService: widget.administrationService,
     ),
-    1 => const PlatformAdminComingSoonScreen(
-      title: 'Territoires',
-      icon: Icons.public_rounded,
-    ),
-    2 => const PlatformAdminComingSoonScreen(
-      title: 'Coordinateurs',
-      icon: Icons.supervisor_account_rounded,
-    ),
-    3 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
+    1 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
     _ => throw RangeError.index(index, _screens),
   };
 

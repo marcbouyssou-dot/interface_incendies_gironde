@@ -259,7 +259,7 @@ class CrossRolePreviewBanner extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'Rôle réel : $label',
+                    'Votre rôle : $label',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: colors.textSecondary,
                       letterSpacing: 0,

@@ -376,7 +376,8 @@ void main() {
     expect(find.byType(ProfessionalShell), findsOneWidget);
     expect(find.byKey(const Key('cross-role-preview-banner')), findsOneWidget);
     expect(find.text('Perspective Professionnel'), findsOneWidget);
-    expect(find.text('Rôle réel : Responsable de centre'), findsOneWidget);
+    expect(find.text('Votre rôle : Responsable de centre'), findsOneWidget);
+    expect(find.text('Lecture seule'), findsNothing);
 
     await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
     await tester.pumpAndSettle();
@@ -508,7 +509,7 @@ void main() {
         find.text('Perspective Responsable · ${selectedCenter.name}'),
         findsOneWidget,
       );
-      expect(find.text('Rôle réel : Coordinateur'), findsOneWidget);
+      expect(find.text('Votre rôle : Coordinateur'), findsOneWidget);
       expect(
         find.byKey(const Key('responsible-open-need-mission-merignac')),
         findsNothing,
@@ -537,7 +538,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ProfessionalShell), findsOneWidget);
       expect(find.text('Perspective Professionnel'), findsOneWidget);
-      expect(find.text('Rôle réel : Coordinateur'), findsOneWidget);
+      expect(find.text('Votre rôle : Coordinateur'), findsOneWidget);
     },
   );
 

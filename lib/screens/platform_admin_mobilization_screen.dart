@@ -563,7 +563,8 @@ class _ActiveMobilizationContent extends StatelessWidget {
                 mobilization.name,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
-              if (mobilization.subtitle.isNotEmpty) ...[
+              if (mobilization.subtitle.isNotEmpty &&
+                  mobilization.subtitle != mobilization.name) ...[
                 const SizedBox(height: V5Spacing.xxs),
                 Text(
                   mobilization.subtitle,
@@ -611,9 +612,20 @@ class _ActiveMobilizationContent extends StatelessWidget {
           title: 'Coordination',
           icon: Icons.supervisor_account_rounded,
           child: assignments.isEmpty
-              ? Text(
-                  'Aucun coordinateur affecté',
-                  style: Theme.of(context).textTheme.bodyLarge,
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Coordination à compléter',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: V5Spacing.xxs),
+                    Text(
+                      'Affectez un Coordinateur pour assurer le suivi de '
+                      'cette mobilisation.',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                 )
               : Column(
                   children: [
@@ -660,11 +672,6 @@ class _ActiveMobilizationContent extends StatelessWidget {
               tone: V5ButtonTone.secondary,
             ),
           ],
-        ),
-        const SizedBox(height: V5Spacing.sm),
-        Text(
-          'Les actions sont exécutées uniquement par les fonctions backend sécurisées.',
-          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );
@@ -902,9 +909,19 @@ class _ManagedMobilizationCard extends StatelessWidget {
           ),
           const SizedBox(height: V5Spacing.sm),
           if (activeAssignments.isEmpty)
-            Text(
-              'Aucun Coordinateur affecté',
-              style: Theme.of(context).textTheme.bodyMedium,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Coordination à compléter',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: V5Spacing.xxs),
+                Text(
+                  'Cette mobilisation n’est pas prête à être activée.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
             )
           else
             for (final assignment in activeAssignments)

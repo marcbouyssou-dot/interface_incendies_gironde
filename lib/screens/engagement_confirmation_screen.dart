@@ -20,11 +20,13 @@ class EngagementConfirmationScreen extends StatelessWidget {
   const EngagementConfirmationScreen({
     super.key,
     required this.need,
+    required this.profession,
     this.location,
     this.result = EngagementCreationResult.created,
   });
 
   final CoordinationNeed need;
+  final VolunteerProfession profession;
   final ResponsePlace? location;
   final EngagementCreationResult result;
 
@@ -141,15 +143,29 @@ class EngagementConfirmationScreen extends StatelessWidget {
                               ],
                               const _ConfirmationDivider(),
                               _ConfirmationDetail(
+                                icon: Icons.calendar_today_outlined,
+                                label: 'Date',
+                                value: need.date,
+                              ),
+                              const _ConfirmationDivider(),
+                              _ConfirmationDetail(
                                 icon: Icons.schedule_rounded,
                                 label: 'Horaires',
                                 value: need.time,
                               ),
                               const _ConfirmationDivider(),
                               _ConfirmationDetail(
+                                icon: Icons.badge_outlined,
+                                label: 'Profession',
+                                value: profession.label,
+                              ),
+                              const _ConfirmationDivider(),
+                              _ConfirmationDetail(
                                 icon: Icons.medical_services_outlined,
                                 label: 'Matériel demandé',
-                                value: need.equipment.join(' • '),
+                                value: need.equipment.isEmpty
+                                    ? 'Aucun matériel demandé'
+                                    : need.equipment.join(' • '),
                               ),
                             ],
                           ),
@@ -161,7 +177,7 @@ class EngagementConfirmationScreen extends StatelessWidget {
                           onPressed: () => Navigator.pop(context),
                           backgroundColor: _ConfirmationVisuals.orange,
                           foregroundColor: Colors.white,
-                          label: 'Retour aux interventions',
+                          label: 'Retour aux missions',
                         ),
                       ],
                     ),

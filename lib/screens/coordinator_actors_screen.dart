@@ -72,8 +72,7 @@ class _CoordinatorActorsScreenState extends State<CoordinatorActorsScreen> {
         final access = accessSnapshot.data;
         if (access?.isCoordinator != true) {
           return const CoordinatorDataUnavailable(
-            message:
-                'Les accès Acteurs restent soumis au rôle Coordinateur réel.',
+            message: 'Cette section est réservée aux Coordinateurs.',
           );
         }
         _accounts ??= _accountsRepository!.listAccounts();

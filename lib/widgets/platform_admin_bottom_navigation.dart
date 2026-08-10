@@ -8,7 +8,7 @@ class PlatformAdminBottomNavigation extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     required this.onDestinationSelected,
-  }) : assert(selectedIndex >= 0 && selectedIndex < 4);
+  }) : assert(selectedIndex >= 0 && selectedIndex < 2);
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
@@ -24,16 +24,6 @@ class PlatformAdminBottomNavigation extends StatelessWidget {
         icon: Icons.campaign_outlined,
         selectedIcon: Icons.campaign_rounded,
         label: 'Mobilisation',
-      ),
-      V5BottomBarDestination(
-        icon: Icons.public_outlined,
-        selectedIcon: Icons.public_rounded,
-        label: 'Territoires',
-      ),
-      V5BottomBarDestination(
-        icon: Icons.supervisor_account_outlined,
-        selectedIcon: Icons.supervisor_account_rounded,
-        label: 'Coordinateurs',
       ),
       V5BottomBarDestination(
         icon: Icons.more_horiz_rounded,

@@ -136,8 +136,7 @@ class _CoordinatorMoreContent extends StatelessWidget {
                     )
                   else
                     Text(
-                      'Le changement de perspective nécessite le rôle '
-                      'Coordinateur réel.',
+                      'Cette perspective est réservée aux Coordinateurs.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   const SizedBox(height: V5Spacing.xxxl),

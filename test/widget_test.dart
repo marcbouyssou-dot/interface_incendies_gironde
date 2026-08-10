@@ -82,6 +82,7 @@ void main() {
       MaterialApp(
         home: EngagementConfirmationScreen(
           need: needs.first,
+          profession: VolunteerProfession.mk,
           location: location,
         ),
       ),
@@ -91,10 +92,51 @@ void main() {
     expect(find.text('Votre engagement est confirmé.'), findsOneWidget);
     expect(find.text('Elle est en attente de validation.'), findsNothing);
     expect(find.text(needs.first.place), findsOneWidget);
+    expect(find.text(needs.first.date), findsOneWidget);
     expect(find.text(location!.verifiedAddress!), findsOneWidget);
     expect(find.text(needs.first.time), findsOneWidget);
-    expect(find.text('Retour aux interventions'), findsOneWidget);
+    expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
+    expect(find.text('Retour aux missions'), findsOneWidget);
+    expect(find.text('Retour aux interventions'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('engagement confirmation explains missing equipment', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const missionWithoutEquipment = CoordinationNeed(
+      id: 'mission-without-equipment',
+      place: 'Centre de secours',
+      group: TerritorialGroup.medoc,
+      date: 'mardi 12 août',
+      time: '08:00 — 12:00',
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: [],
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: EngagementConfirmationScreen(
+          need: missionWithoutEquipment,
+          profession: VolunteerProfession.nurse,
+        ),
+      ),
+    );
+
+    expect(find.text('mardi 12 août'), findsOneWidget);
+    expect(
+      find.text(VolunteerProfession.nurse.label, skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Aucun matériel demandé', skipOffstage: false),
+      findsOneWidget,
+    );
   });
 
   testWidgets('engagement form includes enriched professional fields', (

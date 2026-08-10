@@ -349,7 +349,6 @@ class _EngagementCard extends StatelessWidget {
                 EngagementCancellationButton(
                   need: mission,
                   engagement: engagement,
-                  label: 'Je ne suis plus disponible',
                 ),
               ],
             ),

@@ -142,6 +142,22 @@ void main() {
     final harness = _Harness(assignDraftCoordinator: false);
     await harness.pump(tester);
 
+    expect(
+      find.text('Coordination à compléter', skipOffstage: false),
+      findsWidgets,
+    );
+    expect(
+      find.text(
+        'Cette mobilisation n’est pas prête à être activée.',
+        skipOffstage: false,
+      ),
+      findsWidgets,
+    );
+    expect(
+      find.text('Aucun Coordinateur affecté', skipOffstage: false),
+      findsNothing,
+    );
+
     await _tapAction(
       tester,
       const Key('activate-mobilization-canicule-gironde-2026'),
