@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/mobilization_context.dart';
 import 'package:interface_incendies_gironde/models/platform_administrator_access.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
+import 'package:interface_incendies_gironde/models/user_display_identity.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
@@ -82,7 +83,8 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('platform-coordinator-select')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('coor•••001').last);
+    expect(find.text('coordinator-001'), findsNothing);
+    await tester.tap(find.textContaining('Camille Martin').last);
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const Key('confirm-platform-coordinator-assignment')),
@@ -124,7 +126,10 @@ void main() {
     );
     expect(find.textContaining('Canicule Gironde'), findsWidgets);
     expect(find.textContaining('Territoire : Gironde'), findsOneWidget);
-    expect(find.textContaining('Coordination : coor•••001'), findsOneWidget);
+    expect(
+      find.textContaining('Coordination : Camille Martin'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('confirm-platform-activation')));
     await tester.pumpAndSettle();
 
@@ -391,7 +396,10 @@ class _ActionsAdministrationReadRepository
   @override
   Stream<List<ActivePlatformCoordinator>> watchActiveCoordinators() =>
       Stream<List<ActivePlatformCoordinator>>.value(const [
-        ActivePlatformCoordinator(uid: 'coordinator-001'),
+        ActivePlatformCoordinator(
+          uid: 'coordinator-001',
+          identity: _coordinatorIdentity,
+        ),
       ]);
 
   @override
@@ -495,7 +503,15 @@ MobilizationCoordinatorAssignment _assignment(String mobilizationId) =>
       uid: 'coordinator-001',
       mobilizationId: mobilizationId,
       active: true,
+      identity: _coordinatorIdentity,
     );
+
+const _coordinatorIdentity = UserDisplayIdentity(
+  uid: 'coordinator-001',
+  displayName: 'Camille Martin',
+  professionLabel: 'Coordinateur',
+  organizationLabel: 'Périmètre départemental',
+);
 
 final _active = _mobilization(
   id: 'incendies-gironde-2026',

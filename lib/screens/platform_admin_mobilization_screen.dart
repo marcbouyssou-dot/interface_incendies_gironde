@@ -4,6 +4,7 @@ import '../models/mobilization.dart';
 import '../models/mobilization_context.dart';
 import '../models/platform_administrator_access.dart';
 import '../models/territory.dart';
+import '../models/user_display_identity.dart';
 import '../repositories/platform_administration_read_repository.dart';
 import '../repositories/platform_read_repository.dart';
 import '../services/current_mobilization_provider.dart';
@@ -213,7 +214,7 @@ class _PlatformAdminMobilizationScreenState
                 .map(
                   (coordinator) => V5SelectOption<String>(
                     value: coordinator.uid,
-                    label: _maskedIdentifier(coordinator.uid),
+                    label: _coordinatorOptionLabel(coordinator.displayIdentity),
                   ),
                 )
                 .toList(growable: false),
@@ -254,7 +255,7 @@ class _PlatformAdminMobilizationScreenState
     final confirmed = await _confirmation(
       title: 'Retirer ce Coordinateur ?',
       message:
-          '${_maskedIdentifier(assignment.uid)} ne coordonnera plus '
+          '${assignment.displayIdentity.displayName} ne coordonnera plus '
           '${mobilization.name}.',
       confirmLabel: 'Retirer',
       destructive: true,
@@ -283,7 +284,7 @@ class _PlatformAdminMobilizationScreenState
       return;
     }
     final coordinatorLabels = activeAssignments
-        .map((assignment) => _maskedIdentifier(assignment.uid))
+        .map((assignment) => assignment.displayIdentity.displayName)
         .join(', ');
     final confirmed = await _confirmation(
       title: 'Activer cette mobilisation ?',
@@ -913,7 +914,8 @@ class _ManagedMobilizationCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        'Coordination · ${_maskedIdentifier(assignment.uid)}',
+                        'Coordination · '
+                        '${assignment.displayIdentity.displayName}',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ),
@@ -1134,12 +1136,15 @@ class _CoordinatorLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final identity = assignment.displayIdentity;
     final statusColor = assignment.active
         ? PlatformAdminIdentity.accent(context)
         : colors.textSecondary;
     return Semantics(
       key: const Key('platform-coordinator-semantics'),
-      label: 'Coordinateur affecté, ${assignment.active ? 'actif' : 'inactif'}',
+      label:
+          '${identity.displayName}, ${_coordinatorSupportingLabel(identity)}, '
+          '${assignment.active ? 'actif' : 'inactif'}',
       child: Row(
         children: [
           Container(
@@ -1160,13 +1165,13 @@ class _CoordinatorLine extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Coordinateur affecté',
+                  identity.displayName,
                   style: Theme.of(
                     context,
                   ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 Text(
-                  _maskedIdentifier(assignment.uid),
+                  _coordinatorSupportingLabel(identity),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -1325,7 +1330,8 @@ String _statusLabel(MobilizationStatus status) => switch (status) {
   MobilizationStatus.archived => 'Archivée',
 };
 
-String _maskedIdentifier(String uid) {
-  if (uid.length <= 7) return uid;
-  return '${uid.substring(0, 4)}•••${uid.substring(uid.length - 3)}';
-}
+String _coordinatorOptionLabel(UserDisplayIdentity identity) =>
+    '${identity.displayName} · ${_coordinatorSupportingLabel(identity)}';
+
+String _coordinatorSupportingLabel(UserDisplayIdentity identity) =>
+    [identity.professionLabel, ?identity.organizationLabel].join(' · ');

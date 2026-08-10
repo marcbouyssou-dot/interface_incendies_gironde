@@ -115,3 +115,19 @@ for (const exportName of [
     assert.equal(endpoint.appCheckEnforced, true);
   });
 }
+
+for (const exportName of [
+  'listMissionTeam',
+  'listPlatformCoordinatorIdentities',
+]) {
+  test(`${exportName} is an App Check enforced identity read`, () => {
+    const endpoint = discoverExport({
+      GCLOUD_PROJECT: 'mobilisation-sante',
+    }, exportName);
+
+    assert.equal(endpoint.callable, true);
+    assert.deepEqual(endpoint.region, ['europe-west1']);
+    assert.equal(endpoint.secrets, undefined);
+    assert.equal(endpoint.appCheckEnforced, true);
+  });
+}

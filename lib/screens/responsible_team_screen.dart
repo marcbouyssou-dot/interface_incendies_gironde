@@ -340,7 +340,9 @@ class _MissionTeamSectionState extends State<_MissionTeamSection> {
                   for (var index = 0; index < engagements.length; index++) ...[
                     _TeamMemberRow(
                       engagement: engagements[index],
-                      missionLabel: widget.need.place,
+                      missionLabel:
+                          '${widget.need.place} · ${widget.need.date} · '
+                          '${widget.need.time}',
                       canManage: widget.canManage,
                     ),
                     if (index < engagements.length - 1)
@@ -404,10 +406,12 @@ class _TeamMemberRowState extends State<_TeamMemberRow> {
     final colors = context.v5Colors;
     final engagement = widget.engagement;
     final profession =
+        engagement.identity?.professionLabel ??
         HealthProfessionRegistry.byId(
           engagement.profession.canonicalId!,
         )?.missionLabel ??
         engagement.profession.label;
+    final displayName = engagement.identity?.displayName ?? 'Professionnel';
     final statusColor = switch (engagement.status) {
       EngagementStatus.confirmed => colors.success,
       EngagementStatus.pending => colors.accent,
@@ -425,7 +429,7 @@ class _TeamMemberRowState extends State<_TeamMemberRow> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    engagement.volunteerId,
+                    displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(

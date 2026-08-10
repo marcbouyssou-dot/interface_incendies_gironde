@@ -2,6 +2,7 @@ import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
+import '../models/user_display_identity.dart';
 import '../services/professional_verification_service.dart';
 import 'admin_invitation_repository.dart';
 import 'location_administration_repository.dart';
@@ -78,6 +79,7 @@ class EngagementInfo {
     required this.missionId,
     required this.volunteerId,
     required this.profession,
+    this.identity,
     this.status = EngagementStatus.confirmed,
     this.createdAt,
     this.updatedAt,
@@ -86,6 +88,7 @@ class EngagementInfo {
   final String missionId;
   final String volunteerId;
   final VolunteerProfession profession;
+  final UserDisplayIdentity? identity;
   final EngagementStatus status;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -94,6 +97,7 @@ class EngagementInfo {
 
   EngagementInfo copyWith({
     VolunteerProfession? profession,
+    UserDisplayIdentity? identity,
     EngagementStatus? status,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -101,6 +105,7 @@ class EngagementInfo {
     missionId: missionId,
     volunteerId: volunteerId,
     profession: profession ?? this.profession,
+    identity: identity ?? this.identity,
     status: status ?? this.status,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,

@@ -6,6 +6,7 @@ import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
+import '../models/user_display_identity.dart';
 import '../services/professional_verification_service.dart';
 import '../utils/french_date_time.dart';
 import 'admin_invitation_repository.dart';
@@ -85,23 +86,43 @@ class MockCoordinationRepository implements CoordinationRepository {
       volunteerId: 'mock-pending',
       profession: VolunteerProfession.mk,
       status: EngagementStatus.pending,
+      identity: UserDisplayIdentity(
+        uid: 'mock-pending',
+        displayName: 'Camille Martin',
+        professionLabel: 'Masseur-Kinésithérapeute',
+      ),
     ),
     EngagementInfo(
       missionId: 'mission-merignac',
       volunteerId: 'mock-confirmed',
       profession: VolunteerProfession.pp,
+      identity: UserDisplayIdentity(
+        uid: 'mock-confirmed',
+        displayName: 'Marc BOUYSSOU',
+        professionLabel: 'Pédicure-Podologue',
+      ),
     ),
     EngagementInfo(
       missionId: 'mission-langon',
       volunteerId: 'mock-standby',
       profession: VolunteerProfession.mk,
       status: EngagementStatus.standby,
+      identity: UserDisplayIdentity(
+        uid: 'mock-standby',
+        displayName: 'Sophie Bernard',
+        professionLabel: 'Masseur-Kinésithérapeute',
+      ),
     ),
     EngagementInfo(
       missionId: 'mission-libourne',
       volunteerId: 'mock-cancelled',
       profession: VolunteerProfession.pp,
       status: EngagementStatus.cancelled,
+      identity: UserDisplayIdentity(
+        uid: 'mock-cancelled',
+        displayName: 'Alex Robin',
+        professionLabel: 'Pédicure-Podologue',
+      ),
     ),
   ];
 
@@ -283,15 +304,38 @@ class MockCoordinationRepository implements CoordinationRepository {
     return Stream.multi((controller) {
       void emit(_) => controller.add(
         List.unmodifiable(
-          missionEngagements.where(
-            (engagement) => engagement.missionId == missionId,
-          ),
+          missionEngagements
+              .where((engagement) => engagement.missionId == missionId)
+              .map(_withDisplayIdentity),
         ),
       );
       emit(null);
       final subscription = _missionUpdates.stream.listen(emit);
       controller.onCancel = subscription.cancel;
     });
+  }
+
+  EngagementInfo _withDisplayIdentity(EngagementInfo engagement) {
+    if (engagement.identity != null) return engagement;
+    final profile = volunteerProfiles[engagement.volunteerId];
+    final identity = profile == null
+        ? UserDisplayIdentity(
+            uid: engagement.volunteerId,
+            displayName: 'Professionnel',
+            professionLabel: engagement.profession.label,
+          )
+        : UserDisplayIdentity(
+            uid: profile.uid,
+            displayName: profile.displayName.isEmpty
+                ? 'Professionnel'
+                : profile.displayName,
+            professionLabel:
+                profile.verifiedProfessionLabel?.trim().isNotEmpty == true
+                ? profile.verifiedProfessionLabel!.trim()
+                : profile.profession.label,
+            organizationLabel: profile.cptsLabel,
+          );
+    return engagement.copyWith(identity: identity);
   }
 
   @override

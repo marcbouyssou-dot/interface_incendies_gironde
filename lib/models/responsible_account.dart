@@ -12,7 +12,10 @@ class ResponsibleAccount {
   final String? email;
 
   String get uid => access.uid;
-  String get identityLabel => displayName ?? email ?? uid;
+  String get identityLabel =>
+      displayName ??
+      email ??
+      (access.isCoordinator ? 'Coordinateur' : 'Responsable');
 
   ResponsibleAccount copyWith({ResponsibleAccess? access}) =>
       ResponsibleAccount(

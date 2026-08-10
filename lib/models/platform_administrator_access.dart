@@ -1,3 +1,5 @@
+import 'user_display_identity.dart';
+
 class PlatformAdministratorAccess {
   const PlatformAdministratorAccess({required this.uid, required this.active});
 
@@ -22,6 +24,7 @@ class MobilizationCoordinatorAssignment {
     required this.uid,
     required this.mobilizationId,
     required this.active,
+    this.identity,
   });
 
   factory MobilizationCoordinatorAssignment.fromMap({
@@ -56,10 +59,24 @@ class MobilizationCoordinatorAssignment {
   final String uid;
   final String mobilizationId;
   final bool active;
+  final UserDisplayIdentity? identity;
+
+  UserDisplayIdentity get displayIdentity =>
+      identity ?? UserDisplayIdentity.coordinatorFallback(uid);
+
+  MobilizationCoordinatorAssignment copyWithIdentity(
+    UserDisplayIdentity? identity,
+  ) => MobilizationCoordinatorAssignment(
+    id: id,
+    uid: uid,
+    mobilizationId: mobilizationId,
+    active: active,
+    identity: identity,
+  );
 }
 
 class ActivePlatformCoordinator {
-  const ActivePlatformCoordinator({required this.uid});
+  const ActivePlatformCoordinator({required this.uid, this.identity});
 
   factory ActivePlatformCoordinator.fromMap({
     required String uid,
@@ -78,4 +95,11 @@ class ActivePlatformCoordinator {
   }
 
   final String uid;
+  final UserDisplayIdentity? identity;
+
+  UserDisplayIdentity get displayIdentity =>
+      identity ?? UserDisplayIdentity.coordinatorFallback(uid);
+
+  ActivePlatformCoordinator copyWithIdentity(UserDisplayIdentity? identity) =>
+      ActivePlatformCoordinator(uid: uid, identity: identity);
 }

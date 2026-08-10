@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
+import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/development_settings_screen.dart';
@@ -322,14 +323,17 @@ void main() {
       find.byKey(const Key('responsible-team-filter-confirmed')),
       findsOneWidget,
     );
-    expect(find.text('mock-confirmed'), findsOneWidget);
+    expect(find.text('Marc BOUYSSOU'), findsOneWidget);
+    expect(find.textContaining('Pédicure-Podologue'), findsOneWidget);
+    expect(find.text('mock-confirmed'), findsNothing);
     expect(
       find.byKey(const Key('engagement-menu-mission-merignac_mock-confirmed')),
       findsNothing,
     );
     await tester.tap(find.byKey(const Key('responsible-team-filter-pending')));
     await tester.pumpAndSettle();
-    expect(find.text('mock-pending'), findsOneWidget);
+    expect(find.text('Camille Martin'), findsOneWidget);
+    expect(find.text('mock-pending'), findsNothing);
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
@@ -379,6 +383,41 @@ void main() {
 
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byKey(const Key('cross-role-preview-banner')), findsNothing);
+  });
+
+  testWidgets('responsible team uses a neutral fallback without exposing UID', (
+    tester,
+  ) async {
+    final merignac = places.firstWhere((place) => place.name == 'Mérignac');
+    final mission = needs.firstWhere(
+      (candidate) => candidate.id == 'mission-merignac',
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: [mission],
+      initialLocations: [merignac],
+      initialEngagements: const [
+        EngagementInfo(
+          missionId: 'mission-merignac',
+          volunteerId: 'raw-technical-uid',
+          profession: VolunteerProfession.nurse,
+        ),
+      ],
+      responsibleAccess: ResponsibleAccess(
+        uid: 'manager',
+        role: ResponsibleRole.siteManager,
+        locationIds: {merignac.id},
+        active: true,
+      ),
+    );
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Équipe').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Professionnel'), findsOneWidget);
+    expect(find.textContaining('Infirmier'), findsOneWidget);
+    expect(find.text('raw-technical-uid'), findsNothing);
   });
 
   testWidgets('responsible empty states communicate operational serenity', (

@@ -10,6 +10,7 @@ import '../models/platform_administrator_access.dart';
 import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
+import '../models/user_display_identity.dart';
 import '../services/professional_verification_service.dart';
 import '../services/current_mobilization_provider.dart';
 import '../services/firebase_platform_administration_service.dart';
@@ -29,6 +30,7 @@ import 'location_administration_repository.dart';
 import 'platform_administration_read_repository.dart';
 import 'platform_read_repository.dart';
 import 'platform_runtime.dart';
+import 'user_display_identity_resolver.dart';
 
 @visibleForTesting
 bool canStartVolunteerEngagement({
@@ -187,7 +189,11 @@ class FirestoreCoordinationRepository
            FirebaseFunctions.instanceFor(
              app: _auth.app,
              region: 'europe-west1',
-           );
+           ) {
+    _identityResolver = FirebaseUserDisplayIdentityResolver(
+      functions: _responsibleFunctions,
+    );
+  }
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -196,6 +202,7 @@ class FirestoreCoordinationRepository
   final FirebaseAuth _responsibleAuth;
   final FirebaseFunctions _responsibleFunctions;
   final FirebaseFunctions _volunteerFunctions;
+  late final UserDisplayIdentityResolver _identityResolver;
 
   @override
   late final PlatformReadRepository platformReadRepository =
@@ -213,6 +220,7 @@ class FirestoreCoordinationRepository
       FirestorePlatformAdministrationReadRepository(
         auth: _responsibleAuth,
         firestore: _responsibleFirestore,
+        identityResolver: _identityResolver,
       );
 
   @override
@@ -576,20 +584,70 @@ class FirestoreCoordinationRepository
       if (context == null || !context.isActive) {
         return Stream<List<EngagementInfo>>.value(const []);
       }
-      return _responsibleFirestore
-          .collection('engagements')
-          .where('missionId', isEqualTo: missionId)
-          .where('mobilizationId', isEqualTo: context.mobilizationId)
-          .snapshots()
-          .map(
-            (snapshot) => scopedEngagementsFromDocuments(
-              documents: snapshot.docs.map(
-                (document) => (id: document.id, data: document.data()),
-              ),
-              missionId: missionId,
-              context: context,
-            ),
-          );
+      return switchLatest(watchResponsibleAccess(), (access) {
+        if (access == null || !access.active) {
+          return Stream<List<EngagementInfo>>.value(const []);
+        }
+        if (!access.isCoordinator) {
+          return _responsibleFirestore
+              .collection('missions')
+              .doc(missionId)
+              .snapshots()
+              .asyncMap(
+                (snapshot) => !snapshot.exists
+                    ? const <EngagementInfo>[]
+                    : _identityResolver.listMissionTeam(missionId),
+              );
+        }
+        return _responsibleFirestore
+            .collection('engagements')
+            .where('missionId', isEqualTo: missionId)
+            .where('mobilizationId', isEqualTo: context.mobilizationId)
+            .snapshots()
+            .asyncMap((snapshot) async {
+              final engagements = scopedEngagementsFromDocuments(
+                documents: snapshot.docs.map(
+                  (document) => (id: document.id, data: document.data()),
+                ),
+                missionId: missionId,
+                context: context,
+              );
+              try {
+                final resolved = await _identityResolver.listMissionTeam(
+                  missionId,
+                );
+                final identities = {
+                  for (final engagement in resolved)
+                    engagement.volunteerId: engagement.identity,
+                };
+                return engagements
+                    .map(
+                      (engagement) => engagement.copyWith(
+                        identity:
+                            identities[engagement.volunteerId] ??
+                            UserDisplayIdentity(
+                              uid: engagement.volunteerId,
+                              displayName: 'Professionnel',
+                              professionLabel: engagement.profession.label,
+                            ),
+                      ),
+                    )
+                    .toList(growable: false);
+              } catch (_) {
+                return engagements
+                    .map(
+                      (engagement) => engagement.copyWith(
+                        identity: UserDisplayIdentity(
+                          uid: engagement.volunteerId,
+                          displayName: 'Professionnel',
+                          professionLabel: engagement.profession.label,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false);
+              }
+            });
+      });
     });
   }
 

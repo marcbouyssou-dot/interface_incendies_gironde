@@ -101,5 +101,14 @@ void main() {
     expect(find.text('Réglages'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
     expect(find.text('Se déconnecter'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('coordinator-profile')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CoordinatorProfileScreen), findsOneWidget);
+    expect(find.text('Coordinateur MobSanté'), findsOneWidget);
+    expect(find.text('Coordinateur territorial'), findsOneWidget);
+    expect(find.text('Périmètre départemental'), findsOneWidget);
+    expect(find.text('mock-coordinator'), findsNothing);
   });
 }

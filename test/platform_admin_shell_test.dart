@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/mobilization_context.dart';
 import 'package:interface_incendies_gironde/models/platform_administrator_access.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
+import 'package:interface_incendies_gironde/models/user_display_identity.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
@@ -38,6 +39,12 @@ void main() {
 
     expect(administrator.active, isTrue);
     expect(assignment.active, isTrue);
+    expect(
+      const ActivePlatformCoordinator(
+        uid: 'technical-coordinator-uid',
+      ).displayIdentity.displayName,
+      'Coordinateur',
+    );
     expect(
       () => MobilizationCoordinatorAssignment.fromMap(
         id: 'incoherent',
@@ -134,8 +141,9 @@ void main() {
     await _pumpPlatformAdmin(tester);
 
     expect(find.byKey(const Key('platform-coordination-card')), findsOneWidget);
-    expect(find.text('Coordinateur affecté'), findsOneWidget);
-    expect(find.text('coor•••345'), findsOneWidget);
+    expect(find.text('Camille Martin'), findsOneWidget);
+    expect(find.text('Coordinateur · Périmètre départemental'), findsOneWidget);
+    expect(find.text('coordinator-user-12345'), findsNothing);
     expect(find.text('Actif'), findsOneWidget);
   });
 
@@ -331,6 +339,12 @@ PlatformRuntime _runtime({
           uid: 'coordinator-user-12345',
           mobilizationId: 'incendies-gironde-2026',
           active: true,
+          identity: UserDisplayIdentity(
+            uid: 'coordinator-user-12345',
+            displayName: 'Camille Martin',
+            professionLabel: 'Coordinateur',
+            organizationLabel: 'Périmètre départemental',
+          ),
         ),
       ],
     ),

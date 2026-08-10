@@ -64,6 +64,13 @@ import {
 import {
   platformAdministrationServices,
 } from './platform_administration_firestore.js';
+import {
+  listMissionTeam as listMissionTeamRequest,
+  listPlatformCoordinatorIdentities as listPlatformCoordinatorIdentitiesRequest,
+  safeCoordinatorIdentity,
+  safeProfessionalIdentity,
+  UserDisplayIdentityError,
+} from './user_display_identity.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -103,6 +110,30 @@ export const updateResponsibleAccess = onCall(
       auth: getAuth(),
     }),
   })),
+);
+
+export const listMissionTeam = onCall(
+  {region: 'europe-west1', enforceAppCheck: true},
+  async (request) => userDisplayIdentityCallable(() => listMissionTeamRequest({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: userDisplayIdentityServices({
+      firestore: getFirestore(),
+      auth: getAuth(),
+    }),
+  })),
+);
+
+export const listPlatformCoordinatorIdentities = onCall(
+  {region: 'europe-west1', enforceAppCheck: true},
+  async (request) => userDisplayIdentityCallable(() =>
+    listPlatformCoordinatorIdentitiesRequest({
+      callerUid: request.auth?.uid,
+      services: userDisplayIdentityServices({
+        firestore: getFirestore(),
+        auth: getAuth(),
+      }),
+    })),
 );
 
 export const manageAdminInvitation = onCall(
@@ -947,6 +978,111 @@ function platformServices() {
   });
 }
 
+export function userDisplayIdentityServices({firestore, auth}) {
+  return {
+    async listMissionTeam({callerUid, missionId}) {
+      const [callerSnapshot, missionSnapshot, configSnapshot] =
+        await Promise.all([
+          firestore.collection('roles').doc(callerUid).get(),
+          firestore.collection('missions').doc(missionId).get(),
+          firestore.collection('platform').doc('config').get(),
+        ]);
+      if (!callerSnapshot.exists || !missionSnapshot.exists) {
+        throw new UserDisplayIdentityError(
+          'permission-denied',
+          'Accès à cette équipe refusé.',
+        );
+      }
+      let access;
+      try {
+        access = parseResponsibleAccess(callerSnapshot.data());
+      } catch {
+        throw new UserDisplayIdentityError(
+          'permission-denied',
+          'Accès à cette équipe refusé.',
+        );
+      }
+      const mission = missionSnapshot.data();
+      const activeMobilizationId = configSnapshot.data()?.activeMobilizationId;
+      const canReadTerritory = access.active
+        && access.roles.includes('coordinator');
+      const canReadLocation = access.active
+        && access.roles.includes('site_manager')
+        && access.locationIds.includes(mission.locationId);
+      if (
+        (!canReadTerritory && !canReadLocation)
+        || typeof activeMobilizationId !== 'string'
+        || mission.mobilizationId !== activeMobilizationId
+        || mission.isActive !== true
+      ) {
+        throw new UserDisplayIdentityError(
+          'permission-denied',
+          'Accès à cette équipe refusé.',
+        );
+      }
+      const engagementsSnapshot = await firestore
+        .collection('engagements')
+        .where('missionId', '==', missionId)
+        .where('mobilizationId', '==', activeMobilizationId)
+        .get();
+      const engagements = engagementsSnapshot.docs.map((snapshot) =>
+        snapshot.data());
+      const volunteerIds = [...new Set(engagements
+        .map((engagement) => engagement.volunteerId)
+        .filter((uid) => typeof uid === 'string' && uid !== ''))];
+      const profiles = new Map();
+      if (volunteerIds.length > 0) {
+        const snapshots = await firestore.getAll(...volunteerIds.map((uid) =>
+          firestore.collection('volunteers').doc(uid)));
+        for (const snapshot of snapshots) {
+          if (snapshot.exists) profiles.set(snapshot.id, snapshot.data());
+        }
+      }
+      return engagements.map((engagement) => safeProfessionalIdentity({
+        engagement,
+        profile: profiles.get(engagement.volunteerId),
+      }));
+    },
+
+    async listPlatformCoordinators({callerUid}) {
+      const administrator = await firestore
+        .collection('platformAdministrators')
+        .doc(callerUid)
+        .get();
+      if (!administrator.exists || administrator.data()?.active !== true) {
+        throw new UserDisplayIdentityError(
+          'permission-denied',
+          'Accès Administrateur plateforme requis.',
+        );
+      }
+      const rolesSnapshot = await firestore.collection('roles').get();
+      const coordinators = rolesSnapshot.docs.flatMap((snapshot) => {
+        try {
+          const access = parseResponsibleAccess(snapshot.data());
+          return access.roles.includes('coordinator')
+            ? [{uid: snapshot.id, access}]
+            : [];
+        } catch {
+          return [];
+        }
+      });
+      const identities = new Map();
+      for (let start = 0; start < coordinators.length; start += 100) {
+        const batch = coordinators.slice(start, start + 100);
+        const result = await auth.getUsers(
+          batch.map(({uid}) => ({uid})),
+        );
+        for (const user of result.users) identities.set(user.uid, user);
+      }
+      return coordinators.map(({uid}) => safeCoordinatorIdentity({
+        uid,
+        identity: identities.get(uid),
+        organizationLabel: 'Périmètre départemental',
+      }));
+    },
+  };
+}
+
 async function platformAdministrationCallable(action) {
   try {
     return await action();
@@ -960,6 +1096,23 @@ async function platformAdministrationCallable(action) {
     throw new HttpsError(
       'internal',
       'L’administration de la plateforme a échoué.',
+    );
+  }
+}
+
+async function userDisplayIdentityCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof UserDisplayIdentityError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('USER_DISPLAY_IDENTITY_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'Les identités ne sont pas disponibles pour le moment.',
     );
   }
 }

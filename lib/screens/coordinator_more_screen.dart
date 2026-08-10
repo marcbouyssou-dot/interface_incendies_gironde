@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../models/need.dart';
 import '../models/responsible_access.dart';
+import '../models/responsible_account.dart';
 import '../repositories/live_data_scope.dart';
+import '../repositories/responsible_access_administration_repository.dart';
+import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/perspective_switcher.dart';
@@ -265,50 +268,101 @@ class _MoreRow extends StatelessWidget {
   }
 }
 
-class CoordinatorProfileScreen extends StatelessWidget {
+class CoordinatorProfileScreen extends StatefulWidget {
   const CoordinatorProfileScreen({super.key});
+
+  @override
+  State<CoordinatorProfileScreen> createState() =>
+      _CoordinatorProfileScreenState();
+}
+
+class _CoordinatorProfileScreenState extends State<CoordinatorProfileScreen> {
+  LiveCoordinationData? _liveData;
+  Stream<ResponsibleAccess?>? _access;
+  ResponsibleAccessAdministrationRepository? _accountsRepository;
+  Future<List<ResponsibleAccount>>? _accounts;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final liveData = LiveCoordinationDataScope.of(context);
+    final accountsRepository =
+        ResponsibleAccessAdministrationRepositoryScope.of(context);
+    if (!identical(liveData, _liveData)) {
+      _liveData = liveData;
+      _access = liveData.watchResponsibleAccess();
+    }
+    if (!identical(accountsRepository, _accountsRepository)) {
+      _accountsRepository = accountsRepository;
+      _accounts = accountsRepository.listAccounts();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     return StreamBuilder<ResponsibleAccess?>(
-      stream: LiveCoordinationDataScope.of(context).watchResponsibleAccess(),
-      builder: (context, snapshot) => Scaffold(
-        backgroundColor: colors.canvas,
-        appBar: const V5SecondaryNavigationBar(title: 'Profil'),
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(V5Spacing.xl),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(V5Spacing.lg),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceElevated,
-                    borderRadius: BorderRadius.circular(V5Radius.card),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Coordinateur territorial',
-                        style: Theme.of(context).textTheme.titleMedium,
+      stream: _access,
+      builder: (context, accessSnapshot) =>
+          FutureBuilder<List<ResponsibleAccount>>(
+            future: _accounts,
+            builder: (context, accountsSnapshot) {
+              final access = accessSnapshot.data;
+              final account = accountsSnapshot.data
+                  ?.where((candidate) => candidate.uid == access?.uid)
+                  .firstOrNull;
+              final displayName = account?.identityLabel ?? 'Coordinateur';
+              return Scaffold(
+                backgroundColor: colors.canvas,
+                appBar: const V5SecondaryNavigationBar(title: 'Profil'),
+                body: SafeArea(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(V5Spacing.xl),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(V5Spacing.lg),
+                          decoration: BoxDecoration(
+                            color: colors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(V5Radius.card),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                key: const Key('coordinator-profile-name'),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: V5Spacing.xs),
+                              Text(
+                                'Coordinateur territorial',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                              const SizedBox(height: V5Spacing.xxs),
+                              Text(
+                                'Périmètre départemental',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              if (account?.email case final email?) ...[
+                                const SizedBox(height: V5Spacing.xs),
+                                Text(
+                                  email,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: V5Spacing.xs),
-                      Text(
-                        snapshot.data?.uid ?? 'Aucun compte Coordinateur actif',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
-        ),
-      ),
     );
   }
 }
