@@ -68,6 +68,11 @@
     .startup-splash__content {
       width: min(100%, 420px);
       text-align: center;
+      visibility: hidden;
+    }
+
+    html.mobsante-splash-composed .startup-splash__content {
+      visibility: visible;
     }
 
     .startup-splash__logo {
@@ -159,6 +164,37 @@
   </div>
   <script>
     performance.mark('mobsante-launch-shell-visible');
+    (() => {
+      const splash = document.getElementById('startup-splash');
+      const images = Array.from(splash.querySelectorAll('img'));
+      const decodeImage = (image) => {
+        const decode = () => typeof image.decode === 'function'
+          ? image.decode().catch(() => {})
+          : Promise.resolve();
+        if (image.complete) return decode();
+        return new Promise((resolve) => {
+          image.addEventListener('load', () => decode().then(resolve), {
+            once: true,
+          });
+          image.addEventListener('error', resolve, { once: true });
+        });
+      };
+
+      Promise.all(images.map(decodeImage)).then(() => {
+        requestAnimationFrame(() => {
+          if (!splash.isConnected) return;
+          document.documentElement.classList.add(
+            'mobsante-splash-composed',
+          );
+          performance.mark('mobsante-native-splash-composed');
+          performance.measure(
+            'mobsante-native-splash-composition',
+            'mobsante-launch-shell-visible',
+            'mobsante-native-splash-composed',
+          );
+        });
+      });
+    })();
   </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.

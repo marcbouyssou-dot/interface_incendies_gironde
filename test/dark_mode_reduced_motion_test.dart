@@ -156,17 +156,30 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.dark,
-        home: const MediaQuery(
-          data: MediaQueryData(disableAnimations: true),
-          child: SplashScreen(),
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: SplashScreen(prepareVisuals: (_) async {}),
         ),
       ),
     );
-    await tester.pump();
-    final splashFade = tester.widget<FadeTransition>(
-      find.byKey(const Key('splash-animated-identity')),
+    await tester.pumpAndSettle();
+    final splashIdentity = tester.widget<Visibility>(
+      find.byKey(const Key('splash-composed-identity')),
     );
-    expect(splashFade.opacity.value, 1);
+    expect(splashIdentity.visible, isTrue);
+    final splash = find.byKey(const Key('splash-composed-identity'));
+    expect(
+      find.descendant(of: splash, matching: find.byType(FadeTransition)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: splash, matching: find.byType(ScaleTransition)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: splash, matching: find.byType(SlideTransition)),
+      findsNothing,
+    );
 
     await tester.pumpWidget(
       MaterialApp(

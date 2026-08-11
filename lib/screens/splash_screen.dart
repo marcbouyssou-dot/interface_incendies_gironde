@@ -6,55 +6,48 @@ import '../theme/app_theme.dart';
 import '../utils/system_theme.dart';
 import '../widgets/brand_mark.dart';
 
+typedef SplashVisualPreparation = Future<void> Function(BuildContext context);
+
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({super.key, this.prepareVisuals, this.onComposed});
+
+  final SplashVisualPreparation? prepareVisuals;
+  final VoidCallback? onComposed;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
-  late final Animation<double> _scale;
-  late final Animation<Offset> _slide;
-  bool _started = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: AppIdentity.splashRevealDuration,
-    );
-    final reveal = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    );
-    _opacity = reveal;
-    _scale = Tween<double>(begin: .985, end: 1).animate(reveal);
-    _slide = Tween<Offset>(
-      begin: const Offset(0, .025),
-      end: Offset.zero,
-    ).animate(reveal);
-  }
+class _SplashScreenState extends State<SplashScreen> {
+  bool _preparationStarted = false;
+  bool _composed = false;
+  bool _compositionReported = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_started) return;
-    _started = true;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.duration = Duration.zero;
-    }
-    _controller.forward().whenComplete(dismissNativeStartupSplash);
+    if (_preparationStarted) return;
+    _preparationStarted = true;
+    _prepareVisuals();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  Future<void> _prepareVisuals() async {
+    try {
+      await (widget.prepareVisuals?.call(context) ??
+          _precacheSplashAssets(context));
+    } catch (error, stackTrace) {
+      debugPrint('Préchargement visuel du splash impossible : $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+    if (!mounted) return;
+    setState(() => _composed = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _compositionReported) return;
+      _compositionReported = true;
+      markFlutterSplashComposed();
+      dismissNativeStartupSplash();
+      widget.onComposed?.call();
+    });
   }
 
   @override
@@ -78,16 +71,13 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 420),
-                      child: FadeTransition(
-                        key: const Key('splash-animated-identity'),
-                        opacity: _opacity,
-                        child: ScaleTransition(
-                          scale: _scale,
-                          child: SlideTransition(
-                            position: _slide,
-                            child: const _SplashIdentity(),
-                          ),
-                        ),
+                      child: Visibility(
+                        key: const Key('splash-composed-identity'),
+                        visible: _composed,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: const _SplashIdentity(),
                       ),
                     ),
                   ),
@@ -100,6 +90,11 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 }
+
+Future<void> _precacheSplashAssets(BuildContext context) => Future.wait([
+  precacheImage(const AssetImage(AppIdentity.pictogramAsset), context),
+  precacheImage(const AssetImage(AppIdentity.mobilizationSymbolAsset), context),
+]);
 
 class _SplashIdentity extends StatelessWidget {
   const _SplashIdentity();

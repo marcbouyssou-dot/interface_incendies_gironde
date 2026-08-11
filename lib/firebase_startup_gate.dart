@@ -26,10 +26,16 @@ bool mustCreateAnonymousVolunteerSession({
 }) => !hasUser || !isAnonymous;
 
 class FirebaseStartupGate extends StatefulWidget {
-  const FirebaseStartupGate({super.key, this.startup, this.initialTab = 0});
+  const FirebaseStartupGate({
+    super.key,
+    this.startup,
+    this.initialTab = 0,
+    this.splashPreparation,
+  });
 
   final Future<CoordinationRepository> Function()? startup;
   final int initialTab;
+  final SplashVisualPreparation? splashPreparation;
 
   @override
   State<FirebaseStartupGate> createState() => _FirebaseStartupGateState();
@@ -37,10 +43,12 @@ class FirebaseStartupGate extends StatefulWidget {
 
 class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   late Future<CoordinationRepository> _startup;
+  late final Completer<void> _splashVisualReady;
 
   @override
   void initState() {
     super.initState();
+    _splashVisualReady = Completer<void>();
     _startup = _start(preserveSplash: true);
   }
 
@@ -51,8 +59,13 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     await Future.wait<void>([
       startup.then<void>((_) {}),
       Future<void>.delayed(AppIdentity.splashRevealDuration),
+      _splashVisualReady.future,
     ], eagerError: true);
     return startup;
+  }
+
+  void _markSplashComposed() {
+    if (!_splashVisualReady.isCompleted) _splashVisualReady.complete();
   }
 
   Future<CoordinationRepository> _initializeFirebase() async {
@@ -147,7 +160,10 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
             backgroundColor: snapshot.hasError ? null : AppColors.navy,
             body: snapshot.hasError
                 ? _StartupError(onRetry: _retry)
-                : const SplashScreen(),
+                : SplashScreen(
+                    prepareVisuals: widget.splashPreparation,
+                    onComposed: _markSplashComposed,
+                  ),
           ),
         );
       },

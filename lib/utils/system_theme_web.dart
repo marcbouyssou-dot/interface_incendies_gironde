@@ -45,13 +45,24 @@ void activateSplashApplicationChrome() {
 }
 
 void dismissNativeStartupSplash() {
+  final splash = html.document.getElementById('startup-splash');
+  splash?.remove();
+}
+
+void markFlutterFirstFrame() {
   _markStartupMilestone(
     'mobsante-flutter-first-frame',
     measureName: 'mobsante-bootstrap',
     startMark: 'mobsante-launch-shell-visible',
   );
-  final splash = html.document.getElementById('startup-splash');
-  splash?.remove();
+}
+
+void markFlutterSplashComposed() {
+  _markStartupMilestone(
+    'mobsante-flutter-splash-composed',
+    measureName: 'mobsante-splash-composition',
+    startMark: 'mobsante-flutter-first-frame',
+  );
 }
 
 void _setApplicationChrome({

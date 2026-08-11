@@ -6,15 +6,21 @@ import 'package:interface_incendies_gironde/config/app_identity.dart';
 import 'package:interface_incendies_gironde/firebase_startup_gate.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/screens/app_shell.dart';
 import 'package:interface_incendies_gironde/screens/splash_screen.dart';
 
 void main() {
-  testWidgets('startup displays one animated identity while work is pending', (
+  testWidgets('startup keeps one complete identity while work is pending', (
     tester,
   ) async {
     final pending = Completer<CoordinationRepository>();
 
-    await tester.pumpWidget(FirebaseStartupGate(startup: () => pending.future));
+    await tester.pumpWidget(
+      FirebaseStartupGate(
+        startup: () => pending.future,
+        splashPreparation: (_) async {},
+      ),
+    );
     await tester.pump();
 
     expect(find.byType(SplashScreen), findsOneWidget);
@@ -37,25 +43,25 @@ void main() {
     );
     expect(find.text('InterfaceRecup33'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    final animatedIdentity = find.byKey(const Key('splash-animated-identity'));
-    expect(animatedIdentity, findsOneWidget);
+    final composedIdentity = find.byKey(const Key('splash-composed-identity'));
+    expect(composedIdentity, findsOneWidget);
     expect(
       find.descendant(
-        of: animatedIdentity,
+        of: composedIdentity,
         matching: find.byKey(const Key('splash-pictogram')),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: animatedIdentity,
+        of: composedIdentity,
         matching: find.byKey(const Key('splash-product-name')),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: animatedIdentity,
+        of: composedIdentity,
         matching: find.byKey(const Key('splash-mobilization-subtitle')),
       ),
       findsOneWidget,
@@ -66,6 +72,67 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SplashScreen), findsNothing);
   });
+
+  testWidgets(
+    'startup waits for one complete splash frame before entering AppShell',
+    (tester) async {
+      final visuals = Completer<void>();
+
+      await tester.pumpWidget(
+        FirebaseStartupGate(
+          startup: () async => MockCoordinationRepository.instance,
+          splashPreparation: (_) => visuals.future,
+        ),
+      );
+      await tester.pump(AppIdentity.splashRevealDuration);
+
+      expect(find.byType(SplashScreen), findsOneWidget);
+      expect(find.byType(AppShell), findsNothing);
+      expect(
+        tester
+            .widget<Visibility>(
+              find.byKey(const Key('splash-composed-identity')),
+            )
+            .visible,
+        isFalse,
+      );
+
+      visuals.complete();
+      await tester.pump();
+      await tester.pump();
+
+      final identity = find.byKey(const Key('splash-composed-identity'));
+      expect(tester.widget<Visibility>(identity).visible, isTrue);
+      expect(
+        find.descendant(
+          of: identity,
+          matching: find.byKey(const Key('splash-pictogram')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: identity,
+          matching: find.byKey(const Key('splash-product-name')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: identity,
+          matching: find.byKey(const Key('splash-mobilization-subtitle')),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(AppShell), findsNothing);
+
+      await tester.pumpAndSettle();
+      expect(find.byType(SplashScreen), findsNothing);
+      expect(find.byType(AppShell), findsOneWidget);
+      await tester.pump();
+      expect(find.byType(AppShell), findsOneWidget);
+    },
+  );
 
   testWidgets('a startup failure replaces the spinner with a retry state', (
     tester,

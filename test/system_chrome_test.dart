@@ -141,6 +141,10 @@ void main() {
     expect(index, contains('background: #F6F7F8;'));
     expect(index, contains('html.mobsante-splash-active body'));
     expect(index, contains('#startup-splash'));
+    expect(index, contains('visibility: hidden'));
+    expect(index, contains('mobsante-splash-composed'));
+    expect(index, contains('image.decode()'));
+    expect(index, contains('mobsante-native-splash-composed'));
     expect(manifest, contains('"theme_color": "#F6F7F8"'));
   });
 }
