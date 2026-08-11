@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
+import '../models/need.dart';
 import '../perspective/cross_role_perspective.dart';
 import '../models/platform_administrator_access.dart';
 import '../repositories/coordination_repository.dart';
@@ -13,6 +14,7 @@ import '../repositories/platform_runtime.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
+import '../utils/system_theme.dart';
 import '../widgets/v5_bottom_navigation.dart';
 import 'administration_dashboard_screen.dart';
 import 'coordinator_shell.dart';
@@ -53,13 +55,17 @@ class _AppShellState extends State<AppShell> {
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
   StreamSubscription<ResponsibleAccess?>? _accessSubscription;
+  StreamSubscription<List<CoordinationNeed>>? _missionsWarmupSubscription;
+  StreamSubscription<List<ResponsePlace>>? _locationsWarmupSubscription;
   StreamSubscription<PlatformAdministratorAccess?>?
   _platformAdministratorSubscription;
   ResponsibleAccess? _access;
   PlatformAdministratorAccess? _platformAdministrator;
   bool _accessResolved = false;
+  bool _accessResolutionFailed = false;
   bool _platformAdministratorResolved = false;
   bool _showPlatformAdminAuthentication = false;
+  bool _applicationRevealScheduled = false;
 
   @override
   void initState() {
@@ -90,6 +96,7 @@ class _AppShellState extends State<AppShell> {
       return;
     }
     _platformAdministratorResolved = false;
+    markStartupEvent('mobsante-platform-route-start');
     _platformAdministratorSubscription = runtime
         .platformAdministrationReadRepository
         .watchCurrentAdministrator()
@@ -101,6 +108,7 @@ class _AppShellState extends State<AppShell> {
 
   void _handlePlatformAdministrator(PlatformAdministratorAccess? access) {
     if (!mounted) return;
+    markStartupEvent('mobsante-platform-route-ready');
     setState(() {
       _platformAdministrator = access;
       _platformAdministratorResolved = true;
@@ -109,6 +117,7 @@ class _AppShellState extends State<AppShell> {
 
   void _handlePlatformAdministratorError() {
     if (!mounted) return;
+    markStartupEvent('mobsante-platform-route-ready');
     setState(() {
       _platformAdministrator = null;
       _platformAdministratorResolved = true;
@@ -134,19 +143,25 @@ class _AppShellState extends State<AppShell> {
     final repository = RepositoryScope.of(context);
     if (!identical(repository, _repository)) {
       unawaited(_accessSubscription?.cancel());
+      unawaited(_missionsWarmupSubscription?.cancel());
+      unawaited(_locationsWarmupSubscription?.cancel());
       _liveData?.dispose();
       _repository = repository;
       _liveData = LiveCoordinationData(repository);
+      markStartupEvent('mobsante-role-route-start');
       _accessSubscription = _liveData!.watchResponsibleAccess().listen(
         _handleAccess,
         onError: (_, _) => _handleAccessError(),
       );
+      _prewarmMissionData();
     }
   }
 
   @override
   void dispose() {
     unawaited(_accessSubscription?.cancel());
+    unawaited(_missionsWarmupSubscription?.cancel());
+    unawaited(_locationsWarmupSubscription?.cancel());
     unawaited(_platformAdministratorSubscription?.cancel());
     _liveData?.dispose();
     super.dispose();
@@ -154,15 +169,43 @@ class _AppShellState extends State<AppShell> {
 
   void _handleAccess(ResponsibleAccess? access) {
     if (!mounted) return;
+    markStartupEvent('mobsante-role-route-ready');
     setState(() {
       _access = access;
       _accessResolved = true;
+      _accessResolutionFailed = false;
     });
   }
 
   void _handleAccessError() {
     if (!mounted) return;
-    if (_access == null) setState(() => _accessResolved = false);
+    markStartupEvent('mobsante-role-route-ready');
+    setState(() {
+      _access = null;
+      _accessResolved = true;
+      _accessResolutionFailed = true;
+    });
+  }
+
+  void _prewarmMissionData() {
+    _missionsWarmupSubscription = _liveData!.watchMissions().listen((_) {
+      markStartupEvent('mobsante-missions-data-ready');
+      unawaited(_missionsWarmupSubscription?.cancel());
+    }, onError: (_, _) => unawaited(_missionsWarmupSubscription?.cancel()));
+    _locationsWarmupSubscription = _liveData!.watchLocations().listen((_) {
+      markStartupEvent('mobsante-locations-data-ready');
+      unawaited(_locationsWarmupSubscription?.cancel());
+    }, onError: (_, _) => unawaited(_locationsWarmupSubscription?.cancel()));
+  }
+
+  void _scheduleApplicationReveal() {
+    if (_applicationRevealScheduled) return;
+    _applicationRevealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      markStartupEvent('mobsante-app-shell-ready');
+      revealApplication();
+    });
   }
 
   Widget _createLegacyScreen(int index) => switch (index) {
@@ -192,6 +235,7 @@ class _AppShellState extends State<AppShell> {
       _liveData = next;
       _access = null;
       _accessResolved = false;
+      _accessResolutionFailed = false;
     });
     _accessSubscription = next.watchResponsibleAccess().listen(
       _handleAccess,
@@ -206,7 +250,7 @@ class _AppShellState extends State<AppShell> {
         ? RolePreviewScope.of(context).mode
         : RolePreviewMode.automatic;
     final perspectiveController = CrossRolePerspectiveScope.of(context);
-    final automaticJourney = !_accessResolved
+    final automaticJourney = !_accessResolved || _accessResolutionFailed
         ? _AppJourney.coordinator
         : _access == null
         ? _AppJourney.professional
@@ -253,12 +297,13 @@ class _AppShellState extends State<AppShell> {
           }
       }
     }
-    if (!_platformAdministratorResolved) {
+    if (!_platformAdministratorResolved || !_accessResolved) {
       return LiveCoordinationDataScope(
         data: _liveData!,
         child: const _PlatformRouteLoading(),
       );
     }
+    _scheduleApplicationReveal();
     if (_showPlatformAdminAuthentication) {
       return LiveCoordinationDataScope(
         data: _liveData!,

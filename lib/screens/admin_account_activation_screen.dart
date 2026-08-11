@@ -7,6 +7,7 @@ import '../firebase_bootstrap.dart';
 import '../firebase_startup_gate.dart';
 import '../theme/app_theme.dart';
 import '../utils/app_page_route.dart';
+import '../utils/system_theme.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/v5_controls.dart';
 
@@ -102,6 +103,14 @@ class AdminAccountActivationApp extends StatefulWidget {
 
 class _AdminAccountActivationAppState extends State<AdminAccountActivationApp> {
   late final Future<AdminAccountActivationService> _service = _initialize();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) revealApplication();
+    });
+  }
 
   Future<AdminAccountActivationService> _initialize() async {
     try {

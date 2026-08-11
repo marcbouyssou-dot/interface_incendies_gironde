@@ -147,6 +147,35 @@ void main() {
     expect(index, contains('mobsante-native-splash-composed'));
     expect(manifest, contains('"theme_color": "#F6F7F8"'));
   });
+
+  test(
+    'native splash has one handoff owned by the final application frame',
+    () {
+      final splashScreen = File(
+        'lib/screens/splash_screen.dart',
+      ).readAsStringSync();
+      final appShell = File('lib/screens/app_shell.dart').readAsStringSync();
+      final systemTheme = File(
+        'lib/utils/system_theme_web.dart',
+      ).readAsStringSync();
+
+      expect(splashScreen, isNot(contains('dismissNativeStartupSplash();')));
+      expect(
+        appShell,
+        contains("markStartupEvent('mobsante-app-shell-ready')"),
+      );
+      expect(appShell, contains('revealApplication();'));
+      expect(systemTheme, contains('if (_applicationRevealed)'));
+      expect(systemTheme, contains('_applyPendingApplicationChrome();'));
+      expect(
+        RegExp(r'dismissNativeStartupSplash\(\);').allMatches(systemTheme),
+        hasLength(1),
+        reason:
+            'Le splash HTML ne doit disparaître que pendant la révélation du '
+            'frame applicatif final.',
+      );
+    },
+  );
 }
 
 Future<void> _expectLightRoot(

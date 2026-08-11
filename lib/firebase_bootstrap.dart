@@ -2,6 +2,8 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
+import 'utils/system_theme.dart';
+
 typedef FirebaseBootstrapStep = Future<void> Function();
 
 class FirebaseAppCheckProviders {
@@ -27,6 +29,7 @@ abstract final class FirebaseBootstrap {
     late FirebaseApp app;
     await initializeInOrder(
       initializeFirebase: () async {
+        markStartupEvent('mobsante-firebase-start');
         app = Firebase.apps.isNotEmpty
             ? Firebase.app()
             : await Firebase.initializeApp(
@@ -43,8 +46,13 @@ abstract final class FirebaseBootstrap {
                   ),
                 ),
               );
+        markStartupEvent('mobsante-firebase-ready');
       },
-      initializeAppCheck: () => _ensureAppCheckActivated(app),
+      initializeAppCheck: () async {
+        markStartupEvent('mobsante-app-check-start');
+        await _ensureAppCheckActivated(app);
+        markStartupEvent('mobsante-app-check-ready');
+      },
     );
     return app;
   }

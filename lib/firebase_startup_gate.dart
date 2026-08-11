@@ -17,6 +17,7 @@ import 'services/firebase_professional_verification_service.dart';
 import 'services/firestore_seed_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/v5_foundation.dart';
+import 'utils/system_theme.dart';
 import 'widgets/brand_mark.dart';
 import 'widgets/v5_controls.dart';
 
@@ -44,6 +45,7 @@ class FirebaseStartupGate extends StatefulWidget {
 class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   late Future<CoordinationRepository> _startup;
   late final Completer<void> _splashVisualReady;
+  bool _errorRevealScheduled = false;
 
   @override
   void initState() {
@@ -83,6 +85,8 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   Future<CoordinationRepository> _initializeFirebaseWork() async {
     await FirebaseBootstrap.initialize();
     final volunteerAuth = FirebaseAuth.instance;
+    final responsibleAppFuture = _initializeResponsibleApp();
+    markStartupEvent('mobsante-auth-start');
     final restoredUser = volunteerAuth.currentUser;
     if (restoredUser != null && !restoredUser.isAnonymous) {
       await volunteerAuth.signOut();
@@ -93,16 +97,9 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     )) {
       await volunteerAuth.signInAnonymously();
     }
+    markStartupEvent('mobsante-auth-ready');
     final firestore = FirebaseFirestore.instance;
-    final responsibleApp = Firebase.apps
-        .where((app) => app.name == 'responsible')
-        .firstOrNull;
-    final managerApp =
-        responsibleApp ??
-        await Firebase.initializeApp(
-          name: 'responsible',
-          options: Firebase.app().options,
-        );
+    final managerApp = await responsibleAppFuture;
     final responsibleAuth = FirebaseAuth.instanceFor(app: managerApp);
     final responsibleFirestore = FirebaseFirestore.instanceFor(app: managerApp);
     const enableLocationSeed = bool.fromEnvironment(
@@ -119,13 +116,34 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
         firestore: firestore,
       ),
     );
-    return FirestoreCoordinationRepository(
+    final repository = FirestoreCoordinationRepository(
       firestore,
       volunteerAuth,
       mobilizationProvider: mobilizationProvider,
       responsibleFirestore: responsibleFirestore,
       responsibleAuth: responsibleAuth,
     );
+    markStartupEvent('mobsante-firestore-session-ready');
+    return repository;
+  }
+
+  Future<FirebaseApp> _initializeResponsibleApp() async {
+    final existing = Firebase.apps
+        .where((app) => app.name == 'responsible')
+        .firstOrNull;
+    if (existing != null) return existing;
+    return Firebase.initializeApp(
+      name: 'responsible',
+      options: Firebase.app().options,
+    );
+  }
+
+  void _scheduleErrorReveal() {
+    if (_errorRevealScheduled) return;
+    _errorRevealScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) revealApplication();
+    });
   }
 
   void _retry() {
@@ -148,6 +166,7 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
                 FirebaseProfessionalVerificationService(),
           );
         }
+        if (snapshot.hasError) _scheduleErrorReveal();
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,

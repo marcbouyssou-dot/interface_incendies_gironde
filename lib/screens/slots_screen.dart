@@ -10,6 +10,7 @@ import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/french_date_time.dart';
 import '../utils/mission_timing.dart';
+import '../utils/system_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/decision_header.dart';
 import '../widgets/mobilization_design_system.dart';
@@ -45,6 +46,8 @@ class _SlotsScreenState extends State<SlotsScreen> {
   Stream<ResponsibleAccess?>? _responsibleAccess;
   Object? _repositoryIdentity;
   Future<VolunteerProfile?>? _profile;
+  bool _structureFrameScheduled = false;
+  bool _stableFrameScheduled = false;
 
   @override
   void didChangeDependencies() {
@@ -86,10 +89,9 @@ class _SlotsScreenState extends State<SlotsScreen> {
                 ),
               );
             }
-            if (!snapshot.hasData) {
-              return const _MissionsPageSurface(
-                child: Center(child: V5ActivityIndicator()),
-              );
+            if (!snapshot.hasData ||
+                profileSnapshot.connectionState == ConnectionState.waiting) {
+              return _missionsLoadingState();
             }
             return StreamBuilder<List<ResponsePlace>>(
               stream: _locations,
@@ -110,9 +112,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                   );
                 }
                 if (!locationsSnapshot.hasData) {
-                  return const _MissionsPageSurface(
-                    child: Center(child: V5ActivityIndicator()),
-                  );
+                  return _missionsLoadingState();
                 }
                 return _buildContent(
                   snapshot.data!,
@@ -134,6 +134,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
     ResponsibleAccess? access,
     VolunteerProfile? profile,
   ) {
+    _scheduleStableFrame();
     final professionalJourney = widget.professionalJourney;
     final statusNeeds = professionalJourney
         ? missions
@@ -323,6 +324,34 @@ class _SlotsScreenState extends State<SlotsScreen> {
         },
       ),
     );
+  }
+
+  Widget _missionsLoadingState() {
+    if (!widget.professionalJourney) {
+      return const _MissionsPageSurface(
+        child: Center(child: V5ActivityIndicator()),
+      );
+    }
+    _scheduleStructureFrame();
+    return const _ProfessionalMissionsLoadingState();
+  }
+
+  void _scheduleStructureFrame() {
+    if (_structureFrameScheduled) return;
+    _structureFrameScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        markStartupEvent('mobsante-missions-structure-ready');
+      }
+    });
+  }
+
+  void _scheduleStableFrame() {
+    if (!widget.professionalJourney || _stableFrameScheduled) return;
+    _stableFrameScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) markStartupEvent('mobsante-missions-stable-frame');
+    });
   }
 
   bool _isActionableForProfile(
@@ -1107,6 +1136,124 @@ class _MissionsEmptyState extends StatelessWidget {
               color: colors.textSecondary,
               fontSize: 12,
               height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfessionalMissionsLoadingState extends StatelessWidget {
+  const _ProfessionalMissionsLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return PageContainer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding = constraints.maxWidth <= 556
+              ? 18.0
+              : (constraints.maxWidth - 520) / 2;
+          return ColoredBox(
+            color: colors.canvas,
+            child: CustomScrollView(
+              key: const Key('professional-missions-loading'),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    24,
+                    horizontalPadding,
+                    36,
+                  ),
+                  sliver: SliverList.list(
+                    children: [
+                      const MobSanteJourneyHeader(
+                        journey: MobSanteJourney.professional,
+                        pageTitle: 'Missions à venir',
+                        pageTitleKey: Key('professional-page-title'),
+                      ),
+                      const SizedBox(height: V5Spacing.lg),
+                      const Row(
+                        children: [
+                          Expanded(child: _LoadingFilter(label: 'Où')),
+                          SizedBox(width: V5Spacing.xs),
+                          Expanded(child: _LoadingFilter(label: 'Quand')),
+                        ],
+                      ),
+                      const SizedBox(height: V5Spacing.lg),
+                      Text(
+                        'À venir',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: V5Spacing.sm),
+                      Container(
+                        key: const Key('professional-missions-loading-card'),
+                        constraints: const BoxConstraints(minHeight: 176),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceElevated,
+                          borderRadius: BorderRadius.circular(V5Radius.card),
+                          boxShadow: V5Elevation.level1(colors),
+                        ),
+                        child: const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(V5Spacing.lg),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                V5ActivityIndicator(size: 20),
+                                SizedBox(height: V5Spacing.sm),
+                                Text('Chargement des missions…'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LoadingFilter extends StatelessWidget {
+  const _LoadingFilter({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(V5Radius.pill),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            label == 'Où'
+                ? Icons.location_on_outlined
+                : Icons.calendar_today_outlined,
+            size: 16,
+            color: colors.textSecondary,
+          ),
+          const SizedBox(width: V5Spacing.xs),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: colors.textSecondary,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

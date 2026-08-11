@@ -6,33 +6,20 @@ const _applicationBackground = '#F6F7F8';
 const _darkApplicationBackground = '#0D1622';
 const _splashBackground = '#10233E';
 const _splashClass = 'mobsante-splash-active';
+var _pendingApplicationBackground = _applicationBackground;
+var _pendingAppleStatusBarStyle = 'default';
+var _applicationRevealed = false;
 
 void activateLightApplicationChrome() {
-  dismissNativeStartupSplash();
-  _setApplicationChrome(
-    background: _applicationBackground,
-    splashActive: false,
-    appleStatusBarStyle: 'default',
-  );
-  _markStartupMilestone(
-    'mobsante-application-ready',
-    measureName: 'mobsante-initialization',
-    startMark: 'mobsante-flutter-first-frame',
-  );
+  _pendingApplicationBackground = _applicationBackground;
+  _pendingAppleStatusBarStyle = 'default';
+  if (_applicationRevealed) _applyPendingApplicationChrome();
 }
 
 void activateDarkApplicationChrome() {
-  dismissNativeStartupSplash();
-  _setApplicationChrome(
-    background: _darkApplicationBackground,
-    splashActive: false,
-    appleStatusBarStyle: 'black-translucent',
-  );
-  _markStartupMilestone(
-    'mobsante-application-ready',
-    measureName: 'mobsante-initialization',
-    startMark: 'mobsante-flutter-first-frame',
-  );
+  _pendingApplicationBackground = _darkApplicationBackground;
+  _pendingAppleStatusBarStyle = 'black-translucent';
+  if (_applicationRevealed) _applyPendingApplicationChrome();
 }
 
 void activateSplashApplicationChrome() {
@@ -62,6 +49,32 @@ void markFlutterSplashComposed() {
     'mobsante-flutter-splash-composed',
     measureName: 'mobsante-splash-composition',
     startMark: 'mobsante-flutter-first-frame',
+  );
+}
+
+void markStartupEvent(String name) {
+  final performance = html.window.performance;
+  if (performance.getEntriesByName(name, 'mark').isEmpty) {
+    performance.mark(name);
+  }
+}
+
+void revealApplication() {
+  _applicationRevealed = true;
+  _applyPendingApplicationChrome();
+  dismissNativeStartupSplash();
+  _markStartupMilestone(
+    'mobsante-application-ready',
+    measureName: 'mobsante-initialization',
+    startMark: 'mobsante-flutter-first-frame',
+  );
+}
+
+void _applyPendingApplicationChrome() {
+  _setApplicationChrome(
+    background: _pendingApplicationBackground,
+    splashActive: false,
+    appleStatusBarStyle: _pendingAppleStatusBarStyle,
   );
 }
 

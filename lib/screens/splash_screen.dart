@@ -45,7 +45,6 @@ class _SplashScreenState extends State<SplashScreen> {
       if (!mounted || _compositionReported) return;
       _compositionReported = true;
       markFlutterSplashComposed();
-      dismissNativeStartupSplash();
       widget.onComposed?.call();
     });
   }

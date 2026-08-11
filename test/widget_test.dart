@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
@@ -70,6 +73,79 @@ void main() {
     );
     expect(find.text('Mérignac'), findsOneWidget);
     expect(find.text('Je me mobilise'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'professional shell precedes delayed missions without moving its frame',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repository = _DelayedMissionRepository();
+      addTearDown(repository.dispose);
+
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      for (var index = 0; index < 4; index++) {
+        await tester.pump();
+      }
+
+      expect(find.byType(AppShell), findsOneWidget);
+      expect(find.byType(V5BottomNavigation), findsOneWidget);
+      expect(find.text('Professionnel de santé'), findsOneWidget);
+      expect(find.text('Missions à venir'), findsOneWidget);
+      expect(find.text('Chargement des missions…'), findsOneWidget);
+      expect(
+        find.byKey(const Key('professional-missions-loading-card')),
+        findsOneWidget,
+      );
+      final headerTop = tester
+          .getTopLeft(find.byKey(const Key('mobsante-journey-header')))
+          .dy;
+      final navigationRect = tester.getRect(
+        find.byKey(const Key('v5-bottom-navigation')),
+      );
+
+      repository.publishStartupData();
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('professional-missions-loading-card')),
+        findsNothing,
+      );
+      expect(find.text('Mérignac'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('mobsante-journey-header'))).dy,
+        headerTop,
+      );
+      expect(
+        tester.getRect(find.byKey(const Key('v5-bottom-navigation'))),
+        navigationRect,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('missions loading structure supports 200 percent text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final repository = _DelayedMissionRepository();
+    addTearDown(repository.dispose);
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    for (var index = 0; index < 4; index++) {
+      await tester.pump();
+    }
+
+    expect(find.byType(V5BottomNavigation), findsOneWidget);
+    expect(find.text('Professionnel de santé'), findsOneWidget);
+    expect(find.text('Missions à venir'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -343,6 +419,34 @@ void main() {
     expect(find.text('Mérignac'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _DelayedMissionRepository extends MockCoordinationRepository {
+  _DelayedMissionRepository() : super(responsibleAccess: null);
+
+  final _missions = StreamController<List<CoordinationNeed>>.broadcast();
+  final _locations = StreamController<List<ResponsePlace>>.broadcast();
+  final _profile = Completer<VolunteerProfile?>();
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissions() => _missions.stream;
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() => _locations.stream;
+
+  @override
+  Future<VolunteerProfile?> getVolunteerProfile() => _profile.future;
+
+  void publishStartupData() {
+    _missions.add(needs);
+    _locations.add(places);
+    _profile.complete();
+  }
+
+  Future<void> dispose() async {
+    await _missions.close();
+    await _locations.close();
+  }
 }
 
 class _CountingRepository extends MockCoordinationRepository {
