@@ -222,11 +222,14 @@ class _SlotsScreenState extends State<SlotsScreen> {
                           onReset: _resetFilters,
                         ),
                       ],
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 16),
                       _MissionResultsHeader(
                         count: visibleNeeds.length,
                         filtered: _hasActiveFilters,
                         professionalJourney: professionalJourney,
+                        periodLabel: professionalJourney
+                            ? _professionalPeriodLabel(_date)
+                            : null,
                         status: _filter,
                         showAdvanced: _showAdvancedFilters,
                         hasActiveFilters: _hasActiveFilters,
@@ -248,7 +251,12 @@ class _SlotsScreenState extends State<SlotsScreen> {
                       36,
                     ),
                     sliver: SliverToBoxAdapter(
-                      child: _MissionsEmptyState(filtered: _hasActiveFilters),
+                      child: _MissionsEmptyState(
+                        filtered: _hasActiveFilters,
+                        periodLabel: professionalJourney
+                            ? _professionalPeriodLabel(_date)
+                            : null,
+                      ),
                     ),
                   )
                 else if (professionalJourney)
@@ -433,6 +441,19 @@ String _missionDateLabel(CoordinationNeed mission) => mission.startAt == null
     ? mission.date
     : FrenchDateTime.relativeDate(mission.startAt!);
 
+String _professionalPeriodLabel(String? selectedDate) => switch (selectedDate) {
+  'Aujourd’hui' => 'Aujourd’hui',
+  'Demain' => 'Demain',
+  _ => 'À venir',
+};
+
+String _professionalEmptyMissionTitle(String periodLabel) =>
+    switch (periodLabel) {
+      'Aujourd’hui' => 'Aucune mission aujourd’hui.',
+      'Demain' => 'Aucune mission demain.',
+      _ => 'Aucune mission à venir.',
+    };
+
 class _ProfessionalMissionSection extends StatelessWidget {
   const _ProfessionalMissionSection({
     required this.sectionKey,
@@ -543,7 +564,7 @@ class _MissionDecisionHeader extends StatelessWidget {
         ? 'Une mission prioritaire attend encore des renforts.'
         : 'Des équipes ont besoin de vous.';
     final professionalVerdict = missions.isEmpty
-        ? 'Aucune mission disponible pour le moment.'
+        ? _professionalEmptyMissionTitle(_professionalPeriodLabel(date))
         : urgentCount == 1
         ? '1 mission urgente nécessite votre attention.'
         : urgentCount > 1
@@ -868,6 +889,7 @@ class _MissionResultsHeader extends StatelessWidget {
     required this.count,
     required this.filtered,
     required this.professionalJourney,
+    required this.periodLabel,
     required this.status,
     required this.showAdvanced,
     required this.hasActiveFilters,
@@ -879,6 +901,7 @@ class _MissionResultsHeader extends StatelessWidget {
   final int count;
   final bool filtered;
   final bool professionalJourney;
+  final String? periodLabel;
   final int status;
   final bool showAdvanced;
   final bool hasActiveFilters;
@@ -894,20 +917,20 @@ class _MissionResultsHeader extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            periodLabel!,
+            key: const Key('professional-missions-period'),
+            style: TextStyle(
+              color: colors.info,
+              fontSize: 18,
+              height: 1.25,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: V5Spacing.xs),
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  'Missions',
-                  key: const Key('professional-missions-section-title'),
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 16,
-                    height: 1.25,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
+              const Spacer(),
               _MissionCount(label: label),
               const SizedBox(width: V5Spacing.xxs),
               IconButton(
@@ -1030,9 +1053,13 @@ class _MissionCount extends StatelessWidget {
 }
 
 class _MissionsEmptyState extends StatelessWidget {
-  const _MissionsEmptyState({required this.filtered});
+  const _MissionsEmptyState({
+    required this.filtered,
+    required this.periodLabel,
+  });
 
   final bool filtered;
+  final String? periodLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1051,7 +1078,9 @@ class _MissionsEmptyState extends StatelessWidget {
           Icon(Icons.search_off_rounded, color: colors.textSecondary, size: 30),
           const SizedBox(height: 11),
           Text(
-            filtered
+            periodLabel != null
+                ? _professionalEmptyMissionTitle(periodLabel!)
+                : filtered
                 ? 'Aucune mission ne correspond à vos choix'
                 : 'Aucune mission n’attend de renfort',
             textAlign: TextAlign.center,
@@ -1066,6 +1095,8 @@ class _MissionsEmptyState extends StatelessWidget {
           Text(
             filtered
                 ? 'Essayez un autre secteur ou un autre niveau de besoin.'
+                : periodLabel != null
+                ? 'Les nouvelles missions de cette période apparaîtront ici.'
                 : 'Revenez bientôt pour découvrir les prochains besoins.',
             textAlign: TextAlign.center,
             style: TextStyle(

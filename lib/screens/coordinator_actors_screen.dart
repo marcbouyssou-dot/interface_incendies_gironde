@@ -159,11 +159,7 @@ class _CoordinatorActorsContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const MobSantePageHeader(
-                    title: 'Acteurs',
-                    subtitle:
-                        'Responsables, professionnels mobilisés et lieux du dispositif.',
-                  ),
+                  const MobSantePageHeader(title: 'Acteurs'),
                   const SizedBox(height: V5Spacing.xxl),
                   _ActorSectionHeader(
                     title: 'Responsables',

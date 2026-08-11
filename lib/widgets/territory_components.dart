@@ -185,7 +185,7 @@ class SectorStatusCard extends StatelessWidget {
       explicitChildNodes: true,
       label:
           'Secteur ${sector.group.label}. État : ${sector.status.label}. '
-          '${sector.activeNeeds} besoins actifs, '
+          '${sector.activeNeeds} besoins aujourd’hui et à venir, '
           '${sector.uncoveredNeeds} non couverts. '
           'Prochaine échéance : ${sector.nextDeadline}.',
       child: Container(
@@ -222,7 +222,7 @@ class SectorStatusCard extends StatelessWidget {
               ),
             const SizedBox(height: V5Spacing.sm),
             TerritoryStatusRow(
-              label: 'Besoins actifs',
+              label: 'Besoins aujourd’hui et à venir',
               value: '${sector.activeNeeds}',
               icon: Icons.assignment_outlined,
               status: sector.status,
@@ -330,7 +330,7 @@ class OperationalSummary extends StatelessWidget {
           ),
           Divider(height: 1, thickness: 0.5, color: colors.outline),
           TerritoryStatusRow(
-            label: 'Besoins actifs',
+            label: 'Besoins aujourd’hui et à venir',
             value: '$activeNeeds',
             icon: Icons.assignment_outlined,
           ),

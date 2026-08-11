@@ -132,11 +132,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                   36,
                 ),
                 children: [
-                  const ProfessionalPageHeader(
-                    title: 'Mon profil',
-                    subtitle:
-                        'Vos informations professionnelles et vos préférences.',
-                  ),
+                  const ProfessionalPageHeader(title: 'Mon profil'),
                   const SizedBox(height: V5Spacing.lg),
                   _ProfileSection(
                     title: 'Identité professionnelle',

@@ -144,11 +144,7 @@ class _ResponsibleTeamContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(
-                        title: 'Mon équipe',
-                        subtitle:
-                            'Retrouvez les professionnels mobilisés sur vos besoins.',
-                      ),
+                      const MobSantePageHeader(title: 'Mon équipe'),
                       const SizedBox(height: V5Spacing.lg),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -176,7 +172,8 @@ class _ResponsibleTeamContent extends StatelessWidget {
             const SliverFillRemaining(
               hasScrollBody: false,
               child: _TeamStateMessage(
-                message: 'Aucun besoin actif sur votre périmètre.',
+                message:
+                    'Aucune mission aujourd’hui ou à venir sur votre périmètre.',
               ),
             )
           else

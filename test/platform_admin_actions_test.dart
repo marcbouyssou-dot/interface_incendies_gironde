@@ -20,7 +20,8 @@ void main() {
     final harness = _Harness();
     await harness.pump(tester);
 
-    await _tapAction(tester, const Key('platform-create-draft'));
+    await _tapAction(tester, const Key('platform-create-mobilization'));
+    expect(find.text('Préparer la mobilisation'), findsOneWidget);
     await _fillMobilizationForm(
       tester,
       name: 'Canicule Gironde',
@@ -41,7 +42,7 @@ void main() {
     final harness = _Harness();
     await harness.pump(tester);
 
-    await _tapAction(tester, const Key('platform-create-draft'));
+    await _tapAction(tester, const Key('platform-create-mobilization'));
     await tester.tap(find.byKey(const Key('submit-platform-mobilization')));
     await tester.pump();
 
@@ -71,6 +72,20 @@ void main() {
       'canicule-gironde-2026',
     );
     expect(harness.service.updateCalls.single.name, contains('renforcée'));
+  });
+
+  testWidgets('prepared mobilizations use human lifecycle labels', (
+    tester,
+  ) async {
+    final harness = _Harness();
+    await harness.pump(tester);
+
+    expect(
+      find.text('Mobilisation préparée', skipOffstage: false),
+      findsNWidgets(2),
+    );
+    expect(find.text('Brouillon', skipOffstage: false), findsNothing);
+    expect(find.text('Inactive', skipOffstage: false), findsNothing);
   });
 
   testWidgets('active V5 coordinator can be assigned', (tester) async {

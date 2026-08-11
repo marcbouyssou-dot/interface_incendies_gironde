@@ -31,6 +31,34 @@ void main() {
     expect(find.text('Sous contrôle'), findsOneWidget);
     expect(find.text('Actions rapides'), findsOneWidget);
     expect(
+      find.byKey(const Key('coordinator-critical-centers')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('coordinator-critical-profession')),
+      findsOneWidget,
+    );
+    final criticalTerritory = find.byKey(const Key('territory-verdict'));
+    final criticalCenters = find.byKey(
+      const Key('coordinator-critical-centers'),
+    );
+    final criticalProfession = find.byKey(
+      const Key('coordinator-critical-profession'),
+    );
+    final primaryActions = find.byKey(const Key('coordinator-primary-actions'));
+    expect(
+      tester.getTopLeft(criticalTerritory).dy,
+      lessThan(tester.getTopLeft(criticalCenters).dy),
+    );
+    expect(
+      tester.getTopLeft(criticalCenters).dy,
+      lessThan(tester.getTopLeft(criticalProfession).dy),
+    );
+    expect(
+      tester.getTopLeft(criticalProfession).dy,
+      lessThan(tester.getTopLeft(primaryActions).dy),
+    );
+    expect(
       find.byKey(const Key('coordinator-operational-summary')),
       findsOneWidget,
     );
@@ -52,8 +80,12 @@ void main() {
     expect(find.byType(CoordinatorTerritoryScreen), findsOneWidget);
     expect(
       find.text(
-        'Repérez les secteurs stables, sous surveillance ou critiques.',
+        'Situation aujourd’hui et à venir : secteurs stables, sous surveillance ou critiques.',
       ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('coordinator-territory-period')),
       findsOneWidget,
     );
     expect(
@@ -83,7 +115,7 @@ void main() {
       find.text(
         'Responsables, professionnels mobilisés et lieux du dispositif.',
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text('Responsables'), findsOneWidget);
     expect(find.text('Professionnels'), findsOneWidget);
@@ -110,5 +142,29 @@ void main() {
     expect(find.text('Coordinateur territorial'), findsOneWidget);
     expect(find.text('Périmètre départemental'), findsOneWidget);
     expect(find.text('mock-coordinator'), findsNothing);
+  });
+
+  testWidgets('territory statistics use the shared temporal vocabulary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpAndSettle();
+    expect(find.text('Gironde  •  Aujourd’hui et à venir'), findsOneWidget);
+    expect(find.text('Besoins actifs'), findsNothing);
+
+    await tester.tap(find.text('Plus'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Statistiques globales'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Période observée'), findsOneWidget);
+    expect(find.text('Aujourd’hui'), findsWidgets);
+    expect(find.text('À venir'), findsOneWidget);
+    expect(find.text('Passés'), findsOneWidget);
+    expect(find.text('En cours'), findsNothing);
   });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
@@ -168,22 +169,32 @@ class _ResponsibleHomeContent extends StatelessWidget {
       0,
       (total, quota) => total + quota.missing,
     );
+    final missingProfessions = quotas.values
+        .where((quota) => quota.missing > 0)
+        .map((quota) {
+          final label =
+              HealthProfessionRegistry.byId(quota.professionId)?.missionLabel ??
+              quota.professionId;
+          return '$label · ${quota.missing}';
+        })
+        .toList(growable: false);
+    final nextNeed = _nextResponsibleNeed(planningNeeds);
+    final deadline = nextNeed == null
+        ? 'Aucune échéance demain.'
+        : '${nextNeed.date} · ${nextNeed.time}';
     final verdict = switch (remaining) {
       0 => 'Tout est couvert pour demain.',
       1 => '1 poste reste à couvrir demain.',
       _ => '$remaining postes restent à couvrir demain.',
     };
     final teamSummary = quotas.requiredTotal == 0
-        ? 'Aucun professionnel mobilisé actuellement.'
+        ? 'Aucun professionnel mobilisé pour demain.'
         : quotas.registeredTotal == 0
-        ? 'Aucun professionnel mobilisé actuellement.'
+        ? 'Aucun professionnel mobilisé pour demain.'
         : quotas.registeredTotal == 1
         ? '1 confirmé sur ${quotas.requiredTotal} attendus demain.'
         : '${quotas.registeredTotal} confirmés sur '
               '${quotas.requiredTotal} attendus demain.';
-    final teamSupportingText = quotas.registeredTotal == 0
-        ? 'Les confirmations apparaîtront ici.'
-        : null;
     final centerContext = _centerContext(
       planningNeeds: planningNeeds,
       locations: locations,
@@ -204,9 +215,7 @@ class _ResponsibleHomeContent extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const MobSantePageHeader(
-                      title: 'Mon établissement',
-                      subtitle:
-                          'Suivez la couverture de vos besoins et de votre équipe.',
+                      title: 'Demain dans mon établissement',
                     ),
                     const SizedBox(height: V5Spacing.lg),
                     _PlanningHero(
@@ -214,7 +223,12 @@ class _ResponsibleHomeContent extends StatelessWidget {
                       centerContext: centerContext,
                       secured: remaining == 0,
                     ),
-                    const SizedBox(height: V5Spacing.xxl),
+                    const SizedBox(height: V5Spacing.lg),
+                    _ResponsibleDecisionPriorities(
+                      missingProfessions: missingProfessions,
+                      deadline: deadline,
+                    ),
+                    const SizedBox(height: V5Spacing.xl),
                     V5Button(
                       key: const Key('responsible-create-need'),
                       expanded: true,
@@ -227,7 +241,7 @@ class _ResponsibleHomeContent extends StatelessWidget {
                           : colors.onAccent,
                       label: 'Créer un besoin',
                     ),
-                    const SizedBox(height: V5Spacing.xxxl),
+                    const SizedBox(height: V5Spacing.xxl),
                     _MissionSection(
                       title: 'À traiter',
                       emptyMessage:
@@ -235,27 +249,23 @@ class _ResponsibleHomeContent extends StatelessWidget {
                       needs: toHandle,
                       onOpenNeeds: onOpenNeeds,
                     ),
-                    const SizedBox(height: V5Spacing.xxxl),
+                    const SizedBox(height: V5Spacing.xxl),
                     _MissionSection(
                       title: 'Sous contrôle',
-                      description: 'Les besoins couverts ou bien avancés.',
                       emptyMessage: toHandle.isEmpty
-                          ? 'Tous les besoins prévus sont sécurisés.'
-                          : 'Les confirmations apparaîtront ici au fil des '
+                          ? 'Tous les besoins de demain sont couverts.'
+                          : 'Les confirmations pour demain apparaîtront ici au fil des '
                                 'mobilisations.',
                       needs: underControl,
                       onOpenNeeds: onOpenNeeds,
                     ),
-                    const SizedBox(height: V5Spacing.xxxl),
+                    const SizedBox(height: V5Spacing.xxl),
                     Text(
                       'Équipe',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: V5Spacing.sm),
-                    _TeamSummary(
-                      message: teamSummary,
-                      supportingText: teamSupportingText,
-                    ),
+                    _TeamSummary(message: teamSummary),
                   ],
                 ),
               ),
@@ -265,6 +275,20 @@ class _ResponsibleHomeContent extends StatelessWidget {
       ],
     );
   }
+}
+
+CoordinationNeed? _nextResponsibleNeed(List<CoordinationNeed> needs) {
+  if (needs.isEmpty) return null;
+  final ordered = needs.toList(growable: false)
+    ..sort((left, right) {
+      final leftDate = left.startAt;
+      final rightDate = right.startAt;
+      if (leftDate == null && rightDate == null) return 0;
+      if (leftDate == null) return 1;
+      if (rightDate == null) return -1;
+      return leftDate.compareTo(rightDate);
+    });
+  return ordered.first;
 }
 
 String _centerContext({
@@ -376,20 +400,103 @@ class _PlanningHero extends StatelessWidget {
   }
 }
 
+class _ResponsibleDecisionPriorities extends StatelessWidget {
+  const _ResponsibleDecisionPriorities({
+    required this.missingProfessions,
+    required this.deadline,
+  });
+
+  final List<String> missingProfessions;
+  final String deadline;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      key: const Key('responsible-decision-priorities'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(V5Spacing.md),
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ResponsibleDecisionLine(
+            key: const Key('responsible-missing-professions'),
+            icon: Icons.medical_services_outlined,
+            label: 'Profession(s) manquante(s)',
+            value: missingProfessions.isEmpty
+                ? 'Aucune profession manquante.'
+                : missingProfessions.join(' · '),
+          ),
+          Divider(height: V5Spacing.xl, color: colors.outline),
+          _ResponsibleDecisionLine(
+            key: const Key('responsible-next-deadline'),
+            icon: Icons.schedule_rounded,
+            label: 'Échéance',
+            value: deadline,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResponsibleDecisionLine extends StatelessWidget {
+  const _ResponsibleDecisionLine({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 19, color: colors.accent),
+        const SizedBox(width: V5Spacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: V5Spacing.xxs),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _MissionSection extends StatelessWidget {
   const _MissionSection({
     required this.title,
     required this.emptyMessage,
     required this.needs,
     required this.onOpenNeeds,
-    this.description,
   });
 
   final String title;
   final String emptyMessage;
   final List<CoordinationNeed> needs;
   final VoidCallback onOpenNeeds;
-  final String? description;
 
   @override
   Widget build(BuildContext context) {
@@ -416,10 +523,6 @@ class _MissionSection extends StatelessWidget {
               ),
           ],
         ),
-        if (description != null) ...[
-          const SizedBox(height: V5Spacing.xxs),
-          Text(description!, style: Theme.of(context).textTheme.bodySmall),
-        ],
         const SizedBox(height: V5Spacing.sm),
         if (needs.isEmpty)
           Container(
@@ -508,10 +611,9 @@ String _homeStatusForNeed(CoordinationNeed need) => switch (need.status) {
 };
 
 class _TeamSummary extends StatelessWidget {
-  const _TeamSummary({required this.message, this.supportingText});
+  const _TeamSummary({required this.message});
 
   final String message;
-  final String? supportingText;
 
   @override
   Widget build(BuildContext context) {
@@ -542,13 +644,6 @@ class _TeamSummary extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (supportingText != null) ...[
-                  const SizedBox(height: V5Spacing.xxs),
-                  Text(
-                    supportingText!,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
               ],
             ),
           ),

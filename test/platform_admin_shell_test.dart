@@ -106,10 +106,41 @@ void main() {
     expect(find.text('Incendies Gironde'), findsOneWidget);
     expect(find.text('Incendie'), findsOneWidget);
     expect(find.text('Gironde · 33'), findsOneWidget);
-    expect(find.text('Active'), findsOneWidget);
+    expect(find.text('Mobilisation active'), findsWidgets);
+    expect(find.text('Active'), findsNothing);
+    expect(find.text('Brouillon'), findsNothing);
+    expect(find.text('Inactive'), findsNothing);
     expect(find.text('Activée le'), findsOneWidget);
+    expect(find.byKey(const Key('platform-preparation-state')), findsOneWidget);
+    expect(find.byKey(const Key('platform-territory-card')), findsOneWidget);
     expect(find.byKey(const Key('platform-activation-date')), findsOneWidget);
     expect(find.textContaining('fonctions backend sécurisées'), findsNothing);
+
+    final activeMobilization = find.byKey(
+      const Key('active-mobilization-card'),
+    );
+    final preparationState = find.byKey(
+      const Key('platform-preparation-state'),
+    );
+    final coordinator = find.byKey(const Key('platform-coordination-card'));
+    final territory = find.byKey(const Key('platform-territory-card'));
+    final actions = find.byKey(const Key('platform-primary-actions'));
+    expect(
+      tester.getTopLeft(activeMobilization).dy,
+      lessThan(tester.getTopLeft(preparationState).dy),
+    );
+    expect(
+      tester.getTopLeft(preparationState).dy,
+      lessThan(tester.getTopLeft(coordinator).dy),
+    );
+    expect(
+      tester.getTopLeft(coordinator).dy,
+      lessThan(tester.getTopLeft(territory).dy),
+    );
+    expect(
+      tester.getTopLeft(territory).dy,
+      lessThan(tester.getTopLeft(actions).dy),
+    );
 
     for (final key in [
       'platform-create-mobilization',
@@ -274,7 +305,7 @@ void main() {
       tester.getSize(mobilizationTab.first).height,
       greaterThanOrEqualTo(44),
     );
-    expect(find.byKey(const Key('platform-admin-question')), findsOneWidget);
+    expect(find.byKey(const Key('platform-admin-question')), findsNothing);
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });

@@ -62,10 +62,52 @@ void main() {
     expect(find.text('Les missions qui ont besoin de vous'), findsNothing);
     expect(
       find.byKey(const Key('professional-missions-section-title')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('professional-missions-period')),
       findsOneWidget,
     );
+    expect(find.text('À venir'), findsOneWidget);
     expect(find.text('Voir les détails'), findsWidgets);
     expect(find.text('Détails de la mission'), findsNothing);
+
+    final firstMission = find.byKey(const ValueKey('mission-merignac'));
+    final missionLocation = find.descendant(
+      of: firstMission,
+      matching: find.text('Mérignac'),
+    );
+    final missionDate = find.descendant(
+      of: firstMission,
+      matching: find.text('mardi 29 juillet'),
+    );
+    final missionProfession = find.descendant(
+      of: firstMission,
+      matching: find.text('Profession recherchée'),
+    );
+    final missionUrgency = find.byKey(
+      const Key('mission-priority-mission-merignac'),
+    );
+    final missionAction = find.descendant(
+      of: firstMission,
+      matching: find.text('Je me mobilise'),
+    );
+    expect(
+      tester.getTopLeft(missionLocation).dy,
+      lessThan(tester.getTopLeft(missionDate).dy),
+    );
+    expect(
+      tester.getTopLeft(missionDate).dy,
+      lessThan(tester.getTopLeft(missionProfession).dy),
+    );
+    expect(
+      tester.getTopLeft(missionProfession).dy,
+      lessThan(tester.getTopLeft(missionUrgency).dy),
+    );
+    expect(
+      tester.getTopLeft(missionUrgency).dy,
+      lessThan(tester.getTopLeft(missionAction).dy),
+    );
 
     final colors = Theme.of(
       tester.element(find.byType(ProfessionalShell)),
@@ -145,6 +187,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Mes engagements'), findsOneWidget);
     expect(find.text('Aucun engagement à venir.'), findsOneWidget);
+    expect(find.text('Aujourd’hui'), findsOneWidget);
+    expect(find.text('À venir'), findsOneWidget);
+    expect(find.text('Passés'), findsOneWidget);
+    expect(find.text('En cours'), findsNothing);
     expect(
       find.text('Vos engagements seront bientôt disponibles ici.'),
       findsNothing,
@@ -164,6 +210,27 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('open-responsible-access')), findsOneWidget);
+  });
+
+  testWidgets('professional mission empty state repeats its active period', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: MockCoordinationRepository(
+          initialMissions: const [],
+          responsibleAccess: null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('À venir'), findsOneWidget);
+    expect(find.text('Aucune mission à venir.'), findsNWidgets(2));
+    expect(
+      find.text('Les nouvelles missions de cette période apparaîtront ici.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a real coordinator receives the territorial V5 journey', (
@@ -219,6 +286,7 @@ void main() {
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
     expect(find.text('Mon planning est-il sécurisé ?'), findsNothing);
     expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
+    expect(find.text('Demain dans mon établissement'), findsOneWidget);
     expect(
       find.byKey(const Key('responsible-planning-context')),
       findsOneWidget,
@@ -256,6 +324,29 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('1 confirmé sur 4 attendus demain.'), findsOneWidget);
+    expect(
+      find.byKey(const Key('responsible-missing-professions')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('responsible-next-deadline')), findsOneWidget);
+    final globalState = find.byKey(const Key('responsible-planning-verdict'));
+    final missingProfessions = find.byKey(
+      const Key('responsible-missing-professions'),
+    );
+    final deadline = find.byKey(const Key('responsible-next-deadline'));
+    final action = find.byKey(const Key('responsible-create-need'));
+    expect(
+      tester.getTopLeft(globalState).dy,
+      lessThan(tester.getTopLeft(missingProfessions).dy),
+    );
+    expect(
+      tester.getTopLeft(missingProfessions).dy,
+      lessThan(tester.getTopLeft(deadline).dy),
+    );
+    expect(
+      tester.getTopLeft(deadline).dy,
+      lessThan(tester.getTopLeft(action).dy),
+    );
     expect(find.text('Statistiques'), findsNothing);
     expect(find.text('Tableau de bord'), findsNothing);
     final colors = Theme.of(
@@ -450,14 +541,17 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text('Tous les besoins prévus sont sécurisés.'),
+      find.text('Tous les besoins de demain sont couverts.'),
       findsOneWidget,
     );
     expect(
-      find.text('Aucun professionnel mobilisé actuellement.'),
+      find.text('Aucun professionnel mobilisé pour demain.'),
       findsOneWidget,
     );
-    expect(find.text('Les confirmations apparaîtront ici.'), findsOneWidget);
+    expect(
+      find.text('Les confirmations pour demain apparaîtront ici.'),
+      findsNothing,
+    );
     final colors = Theme.of(
       tester.element(find.byType(ResponsibleShell)),
     ).extension<V5Colors>()!;
@@ -472,13 +566,24 @@ void main() {
     await tester.tap(find.text('Besoins'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Aucun besoin ouvert'), findsOneWidget);
+    expect(find.byKey(const Key('responsible-needs-period')), findsOneWidget);
+    expect(find.text('Aujourd’hui et à venir'), findsOneWidget);
+    expect(find.text('Aucun besoin aujourd’hui ou à venir'), findsOneWidget);
     expect(
-      find.text('Votre planning est actuellement couvert.'),
+      find.text('Votre planning est couvert pour cette période.'),
       findsOneWidget,
     );
+    expect(find.text('En cours'), findsNothing);
     expect(
       find.byKey(const Key('responsible-needs-empty-create')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Passés'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aucun besoin passé'), findsOneWidget);
+    expect(
+      find.text('L’historique de votre établissement apparaîtra ici.'),
       findsOneWidget,
     );
   });

@@ -139,7 +139,7 @@ class _PlatformMobilizationFormDialogState
         ),
         V5DialogAction(
           key: const Key('submit-platform-mobilization'),
-          label: editing ? 'Enregistrer' : 'Créer en brouillon',
+          label: editing ? 'Enregistrer' : 'Préparer la mobilisation',
           style: V5DialogActionStyle.primary,
           onPressed: _submit,
         ),

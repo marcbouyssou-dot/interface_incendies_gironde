@@ -18,7 +18,7 @@ enum _NeedsFilter { attention, inProgress, covered, past }
 extension on _NeedsFilter {
   String get label => switch (this) {
     _NeedsFilter.attention => 'À traiter',
-    _NeedsFilter.inProgress => 'En cours',
+    _NeedsFilter.inProgress => 'À compléter',
     _NeedsFilter.covered => 'Couverts',
     _NeedsFilter.past => 'Passés',
   };
@@ -193,11 +193,7 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(
-                        title: 'Mes besoins',
-                        subtitle:
-                            'Créez, suivez et ajustez les besoins de vos centres.',
-                      ),
+                      const MobSantePageHeader(title: 'Mes besoins'),
                       const SizedBox(height: V5Spacing.md),
                       Align(
                         alignment: Alignment.centerRight,
@@ -211,6 +207,14 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: V5Spacing.lg),
+                      Text(
+                        selectedFilter == _NeedsFilter.past
+                            ? 'Passés'
+                            : 'Aujourd’hui et à venir',
+                        key: const Key('responsible-needs-period'),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: V5Spacing.sm),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -240,7 +244,10 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 560),
-                    child: _NeedsEmptyState(onCreateNeed: onCreateNeed),
+                    child: _NeedsEmptyState(
+                      filter: selectedFilter,
+                      onCreateNeed: onCreateNeed,
+                    ),
                   ),
                 ),
               ),
@@ -391,7 +398,7 @@ String _statusForNeed(CoordinationNeed need) {
   }
   return switch (need.status) {
     NeedStatus.critical => 'À traiter',
-    NeedStatus.toComplete => 'En cours',
+    NeedStatus.toComplete => 'À compléter',
     NeedStatus.complete => 'Couvert',
   };
 }
@@ -406,8 +413,9 @@ class _NeedsLoading extends StatelessWidget {
 }
 
 class _NeedsEmptyState extends StatelessWidget {
-  const _NeedsEmptyState({required this.onCreateNeed});
+  const _NeedsEmptyState({required this.filter, required this.onCreateNeed});
 
+  final _NeedsFilter filter;
   final VoidCallback onCreateNeed;
 
   @override
@@ -436,12 +444,16 @@ class _NeedsEmptyState extends StatelessWidget {
           ),
           const SizedBox(height: V5Spacing.md),
           Text(
-            'Aucun besoin ouvert',
+            filter == _NeedsFilter.past
+                ? 'Aucun besoin passé'
+                : 'Aucun besoin aujourd’hui ou à venir',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: V5Spacing.xs),
           Text(
-            'Votre planning est actuellement couvert.',
+            filter == _NeedsFilter.past
+                ? 'L’historique de votre établissement apparaîtra ici.'
+                : 'Votre planning est couvert pour cette période.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: V5Spacing.lg),
@@ -474,15 +486,15 @@ class _FilteredNeedsEmptyState extends StatelessWidget {
     final colors = context.v5Colors;
     final (title, message) = switch (filter) {
       _NeedsFilter.attention => (
-        'Rien à traiter',
+        'Aucun besoin à traiter aujourd’hui ou à venir',
         'Votre planning ne demande aucune intervention.',
       ),
       _NeedsFilter.inProgress => (
-        'Aucun besoin en cours',
+        'Aucun besoin à compléter aujourd’hui ou à venir',
         'Les prochains remplissages apparaîtront ici.',
       ),
       _NeedsFilter.covered => (
-        'Aucun besoin couvert',
+        'Aucun besoin couvert aujourd’hui ou à venir',
         'Les besoins sécurisés apparaîtront ici.',
       ),
       _NeedsFilter.past => (

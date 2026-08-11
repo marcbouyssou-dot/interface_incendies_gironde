@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../coordinator/territory_view_data.dart';
+import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/coordinator_identity.dart';
@@ -97,8 +99,39 @@ class _CoordinatorOverviewScreenState extends State<CoordinatorOverviewScreen> {
                   missions: visibleMissions,
                   locations: visibleLocations,
                 );
+                final now = DateTime.now();
+                final criticalMissions = visibleMissions
+                    .where(
+                      (mission) =>
+                          mission.isActive &&
+                          !mission.isCancelled &&
+                          mission.status == NeedStatus.critical &&
+                          (mission.endAt == null ||
+                              now.isBefore(mission.endAt!)),
+                    )
+                    .toList(growable: false);
+                final criticalCenters = <String>{
+                  for (final mission in criticalMissions)
+                    responsePlaceForNeed(mission, visibleLocations)?.name ??
+                        mission.place,
+                }.toList(growable: false)..sort();
+                final criticalQuotas = ProfessionQuotas.aggregate(
+                  criticalMissions.map((mission) => mission.professionQuotas),
+                );
+                final missingQuotas =
+                    criticalQuotas.values
+                        .where((quota) => quota.missing > 0)
+                        .toList(growable: false)
+                      ..sort(
+                        (left, right) => right.missing.compareTo(left.missing),
+                      );
+                final criticalProfession = missingQuotas.isEmpty
+                    ? 'Aucune profession critique.'
+                    : '${HealthProfessionRegistry.byId(missingQuotas.first.professionId)?.missionLabel ?? missingQuotas.first.professionId} · ${missingQuotas.first.missing} poste${missingQuotas.first.missing > 1 ? 's' : ''}';
                 return _CoordinatorOverviewContent(
                   territory: territory,
+                  criticalCenters: criticalCenters,
+                  criticalProfession: criticalProfession,
                   canAdminister: accessSnapshot.data?.isCoordinator == true,
                   onOpenTerritory: widget.onOpenTerritory,
                   onCreateNeed: widget.onCreateNeed,
@@ -117,6 +150,8 @@ class _CoordinatorOverviewScreenState extends State<CoordinatorOverviewScreen> {
 class _CoordinatorOverviewContent extends StatelessWidget {
   const _CoordinatorOverviewContent({
     required this.territory,
+    required this.criticalCenters,
+    required this.criticalProfession,
     required this.canAdminister,
     required this.onOpenTerritory,
     required this.onCreateNeed,
@@ -125,6 +160,8 @@ class _CoordinatorOverviewContent extends StatelessWidget {
   });
 
   final CoordinatorTerritoryViewData territory;
+  final List<String> criticalCenters;
+  final String criticalProfession;
   final bool canAdminister;
   final VoidCallback onOpenTerritory;
   final VoidCallback onCreateNeed;
@@ -135,11 +172,14 @@ class _CoordinatorOverviewContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final attention = territory.sectorsRequiringAttention;
-    final verdict = attention.isEmpty
-        ? 'Territoire stable.'
-        : attention.length == 1
-        ? '1 zone nécessite votre attention.'
-        : '${attention.length} zones nécessitent votre attention.';
+    final criticalSectors = territory.sectors
+        .where((sector) => sector.status == TerritoryOperationalStatus.critical)
+        .toList(growable: false);
+    final verdict = criticalSectors.isEmpty
+        ? 'Aucun territoire critique.'
+        : criticalSectors.length == 1
+        ? 'Territoire critique : ${criticalSectors.single.group.label}.'
+        : '${criticalSectors.length} territoires critiques.';
     return ColoredBox(
       color: colors.canvas,
       child: CustomScrollView(
@@ -154,18 +194,32 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(
-                        title: 'Pilotage territorial',
-                        subtitle: 'Suivez l’état de mobilisation en Gironde.',
-                      ),
+                      const MobSantePageHeader(title: 'Pilotage territorial'),
                       const SizedBox(height: V5Spacing.lg),
                       TerritoryVerdict(
                         verdict: verdict,
-                        contextLine:
-                            'Gironde  •  Besoins actifs  •  Données en direct',
-                        stable: attention.isEmpty,
+                        contextLine: 'Gironde  •  Aujourd’hui et à venir',
+                        stable: criticalSectors.isEmpty,
                       ),
-                      const SizedBox(height: V5Spacing.xxxl),
+                      const SizedBox(height: V5Spacing.lg),
+                      _CoordinatorDecisionPriorities(
+                        criticalCenters: criticalCenters,
+                        criticalProfession: criticalProfession,
+                      ),
+                      const SizedBox(height: V5Spacing.xxl),
+                      Text(
+                        'Actions rapides',
+                        key: const Key('coordinator-primary-actions'),
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: V5Spacing.sm),
+                      _QuickActions(
+                        canAdminister: canAdminister,
+                        onCreateNeed: onCreateNeed,
+                        onManageResponsibles: onManageResponsibles,
+                        onManageLocations: onManageLocations,
+                      ),
+                      const SizedBox(height: V5Spacing.xxl),
                       Text(
                         'À surveiller',
                         style: Theme.of(context).textTheme.titleLarge,
@@ -186,7 +240,7 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                           if (index < attention.length - 1)
                             const SizedBox(height: V5Spacing.sm),
                         ],
-                      const SizedBox(height: V5Spacing.xxxl),
+                      const SizedBox(height: V5Spacing.xxl),
                       Text(
                         'Sous contrôle',
                         style: Theme.of(context).textTheme.titleLarge,
@@ -198,18 +252,6 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                         mobilizedProfessionals:
                             territory.mobilizedProfessionals,
                       ),
-                      const SizedBox(height: V5Spacing.xxxl),
-                      Text(
-                        'Actions rapides',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: V5Spacing.sm),
-                      _QuickActions(
-                        canAdminister: canAdminister,
-                        onCreateNeed: onCreateNeed,
-                        onManageResponsibles: onManageResponsibles,
-                        onManageLocations: onManageLocations,
-                      ),
                     ],
                   ),
                 ),
@@ -218,6 +260,90 @@ class _CoordinatorOverviewContent extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CoordinatorDecisionPriorities extends StatelessWidget {
+  const _CoordinatorDecisionPriorities({
+    required this.criticalCenters,
+    required this.criticalProfession,
+  });
+
+  final List<String> criticalCenters;
+  final String criticalProfession;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      key: const Key('coordinator-decision-priorities'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(V5Spacing.md),
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      child: Column(
+        children: [
+          _CoordinatorDecisionLine(
+            key: const Key('coordinator-critical-centers'),
+            icon: Icons.location_city_outlined,
+            label: 'Centres critiques',
+            value: criticalCenters.isEmpty
+                ? 'Aucun centre critique.'
+                : criticalCenters.join(' · '),
+          ),
+          Divider(height: V5Spacing.xl, color: colors.outline),
+          _CoordinatorDecisionLine(
+            key: const Key('coordinator-critical-profession'),
+            icon: Icons.medical_services_outlined,
+            label: 'Profession critique',
+            value: criticalProfession,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CoordinatorDecisionLine extends StatelessWidget {
+  const _CoordinatorDecisionLine({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 19, color: CoordinatorIdentity.of(context).accent),
+        const SizedBox(width: V5Spacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: V5Spacing.xxs),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -245,7 +371,7 @@ class _StableTerritoryState extends StatelessWidget {
           const SizedBox(width: V5Spacing.sm),
           Expanded(
             child: Text(
-              'Aucune zone ne nécessite d’intervention.',
+              'Aucune zone ne nécessite d’intervention aujourd’hui ou à venir.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: colors.textPrimary,
                 fontWeight: FontWeight.w600,

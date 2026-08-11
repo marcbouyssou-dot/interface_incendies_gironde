@@ -32,7 +32,10 @@ void main() {
       final sector = find.byKey(Key('sector-status-${location.group.name}'));
       expect(sector, findsOneWidget);
       expect(
-        find.descendant(of: sector, matching: find.text('Besoins actifs')),
+        find.descendant(
+          of: sector,
+          matching: find.text('Besoins aujourd’hui et à venir'),
+        ),
         findsOneWidget,
       );
       expect(
@@ -127,8 +130,10 @@ Future<void> _openAndCompleteForm(
 
   await _chooseTime(tester, const Key('mission-start-time'));
   await _chooseTime(tester, const Key('mission-end-time'));
-  await tester.ensureVisible(find.byKey(const Key('physiotherapist-add')));
-  await tester.tap(find.byKey(const Key('physiotherapist-add')));
+  final physiotherapistAdd = find.byKey(const Key('physiotherapist-add'));
+  await tester.ensureVisible(physiotherapistAdd);
+  await tester.pumpAndSettle();
+  await tester.tap(physiotherapistAdd);
   await _scrollIntoView(tester, find.byKey(const Key('publish-mission')));
 }
 

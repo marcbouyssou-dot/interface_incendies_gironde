@@ -148,12 +148,14 @@ class _TerritoryContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(
-                        title: 'Territoire',
-                        subtitle:
-                            'Repérez les secteurs stables, sous surveillance ou critiques.',
-                      ),
+                      const MobSantePageHeader(title: 'Territoire'),
                       const SizedBox(height: V5Spacing.lg),
+                      Text(
+                        'Aujourd’hui et à venir',
+                        key: const Key('coordinator-territory-period'),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: V5Spacing.sm),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -180,7 +182,8 @@ class _TerritoryContent extends StatelessWidget {
             const SliverFillRemaining(
               hasScrollBody: false,
               child: CoordinatorDataUnavailable(
-                message: 'Aucun secteur ne correspond à ce filtre.',
+                message:
+                    'Aucun secteur ne correspond à ce filtre aujourd’hui ou à venir.',
               ),
             )
           else

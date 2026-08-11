@@ -189,10 +189,7 @@ class _ProfessionalEngagementCollectionState
               ),
               sliver: SliverList.list(
                 children: [
-                  const ProfessionalPageHeader(
-                    title: 'Mes engagements',
-                    subtitle: 'Retrouvez vos mobilisations à venir et passées.',
-                  ),
+                  const ProfessionalPageHeader(title: 'Mes engagements'),
                   const SizedBox(height: V5Spacing.lg),
                   CupertinoSlidingSegmentedControl<_EngagementPeriod>(
                     key: const Key('professional-engagement-periods'),
@@ -203,13 +200,13 @@ class _ProfessionalEngagementCollectionState
                       if (value != null) setState(() => _period = value);
                     },
                     children: const {
+                      _EngagementPeriod.current: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 9),
+                        child: Text('Aujourd’hui'),
+                      ),
                       _EngagementPeriod.upcoming: Padding(
                         padding: EdgeInsets.symmetric(vertical: 9),
                         child: Text('À venir'),
-                      ),
-                      _EngagementPeriod.current: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 9),
-                        child: Text('En cours'),
                       ),
                       _EngagementPeriod.past: Padding(
                         padding: EdgeInsets.symmetric(vertical: 9),
@@ -418,7 +415,7 @@ class _EngagementEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final message = switch (period) {
       _EngagementPeriod.upcoming => 'Aucun engagement à venir.',
-      _EngagementPeriod.current => 'Aucune mission en cours.',
+      _EngagementPeriod.current => 'Aucun engagement aujourd’hui.',
       _EngagementPeriod.past => 'Aucun engagement passé.',
     };
     return Padding(

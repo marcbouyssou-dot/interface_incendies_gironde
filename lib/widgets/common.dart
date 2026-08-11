@@ -382,7 +382,7 @@ class MissionTimingPill extends StatelessWidget {
         colors.surfaceMuted,
       ),
       _MissionTiming.current => (
-        'En cours',
+        'Aujourd’hui',
         Icons.play_circle_outline_rounded,
         professionalPalette ? colors.info : colors.success,
         professionalPalette ? colors.infoContainer : colors.successContainer,
@@ -1060,6 +1060,7 @@ class NeedCard extends StatelessWidget {
         professionalPalette: professionalJourney,
       ),
       need: ImpactBanner(
+        key: Key('mission-priority-${need.id}'),
         type: impactType,
         message: remainingLabel,
         messageIcon: Icons.groups_2_rounded,

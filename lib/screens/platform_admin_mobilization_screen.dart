@@ -46,7 +46,6 @@ class _PlatformAdminMobilizationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.v5Colors;
     return CustomScrollView(
       key: const PageStorageKey('platform-admin-mobilization'),
       slivers: [
@@ -59,14 +58,14 @@ class _PlatformAdminMobilizationScreenState
           ),
           sliver: SliverList.list(
             children: [
-              _PlatformHeader(colors: colors),
+              const _PlatformHeader(),
               if (_mutationInProgress) ...[
                 const SizedBox(height: V5Spacing.md),
                 const LinearProgressIndicator(
                   key: Key('platform-mutation-loading'),
                 ),
               ],
-              const SizedBox(height: V5Spacing.xl),
+              const SizedBox(height: V5Spacing.lg),
               StreamBuilder<MobilizationContext?>(
                 stream: widget.mobilizationProvider.watchContext(),
                 builder: (context, contextSnapshot) {
@@ -104,13 +103,12 @@ class _PlatformAdminMobilizationScreenState
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       activeContent,
-                      const SizedBox(height: V5Spacing.xl),
+                      const SizedBox(height: V5Spacing.lg),
                       _ManagedMobilizationsSection(
                         platformRepository: widget.platformRepository,
                         administrationRepository:
                             widget.administrationRepository,
                         actionsEnabled: _actionsEnabled,
-                        onCreate: _openCreateMobilization,
                         onEdit: _openEditMobilization,
                         onAssign: _assignCoordinator,
                         onRemove: _removeCoordinator,
@@ -153,7 +151,7 @@ class _PlatformAdminMobilizationScreenState
     if (draft == null || !mounted) return;
     await _runMutation(
       () => widget.administrationService.createMobilization(draft),
-      successMessage: 'Mobilisation créée en brouillon.',
+      successMessage: 'Mobilisation préparée.',
     );
   }
 
@@ -306,7 +304,7 @@ class _PlatformAdminMobilizationScreenState
     final confirmed = await _confirmation(
       title: 'Désactiver cette mobilisation ?',
       message:
-          '${mobilization.name} deviendra inactive. Aucune archive ne sera créée.',
+          '${mobilization.name} redeviendra une mobilisation préparée. Aucune archive ne sera créée.',
       confirmLabel: 'Désactiver',
       destructive: true,
       confirmKey: const Key('confirm-platform-deactivation'),
@@ -393,9 +391,7 @@ class _PlatformAdminMobilizationScreenState
 }
 
 class _PlatformHeader extends StatelessWidget {
-  const _PlatformHeader({required this.colors});
-
-  final V5Colors colors;
+  const _PlatformHeader();
 
   @override
   Widget build(BuildContext context) {
@@ -431,19 +427,6 @@ class _PlatformHeader extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: V5Spacing.md),
-          Text(
-            'Quelle mobilisation est active, et qui la coordonne ?',
-            key: const Key('platform-admin-question'),
-            style: Theme.of(context).textTheme.headlineLarge,
-          ),
-          const SizedBox(height: V5Spacing.xs),
-          Text(
-            'Vue institutionnelle du dispositif actuellement ouvert.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
           ),
         ],
       ),
@@ -582,26 +565,13 @@ class _ActiveMobilizationContent extends StatelessWidget {
                     icon: _contextIcon(mobilization.contextType),
                     label: _contextLabel(mobilization.contextType),
                   ),
-                  _MetadataChip(
-                    icon: Icons.public_rounded,
-                    label: '${territory.name} · ${territory.code}',
-                  ),
-                  _MetadataChip(
-                    icon: Icons.check_circle_rounded,
-                    label: _statusLabel(mobilization.status),
-                    accent: true,
-                  ),
                 ],
               ),
               const SizedBox(height: V5Spacing.md),
               _DataLine(
-                label: 'Activée le',
-                valueKey: const Key('platform-activation-date'),
-                value: mobilization.activatedAt == null
-                    ? 'Date non renseignée'
-                    : MaterialLocalizations.of(
-                        context,
-                      ).formatMediumDate(mobilization.activatedAt!.toLocal()),
+                label: 'État de préparation',
+                valueKey: const Key('platform-preparation-state'),
+                value: assignments.isEmpty ? 'À compléter' : 'Complet',
               ),
             ],
           ),
@@ -641,9 +611,34 @@ class _ActiveMobilizationContent extends StatelessWidget {
                   ],
                 ),
         ),
+        const SizedBox(height: V5Spacing.md),
+        _AdminSectionCard(
+          key: const Key('platform-territory-card'),
+          title: 'Territoire',
+          icon: Icons.public_rounded,
+          child: Column(
+            children: [
+              _DataLine(
+                label: 'Périmètre',
+                value: '${territory.name} · ${territory.code}',
+              ),
+              const SizedBox(height: V5Spacing.sm),
+              _DataLine(
+                label: 'Activée le',
+                valueKey: const Key('platform-activation-date'),
+                value: mobilization.activatedAt == null
+                    ? 'Date non renseignée'
+                    : MaterialLocalizations.of(
+                        context,
+                      ).formatMediumDate(mobilization.activatedAt!.toLocal()),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: V5Spacing.lg),
         Text(
           'Actions',
+          key: const Key('platform-primary-actions'),
           style: Theme.of(
             context,
           ).textTheme.titleMedium?.copyWith(color: accent),
@@ -695,7 +690,6 @@ class _ManagedMobilizationsSection extends StatelessWidget {
     required this.platformRepository,
     required this.administrationRepository,
     required this.actionsEnabled,
-    required this.onCreate,
     required this.onEdit,
     required this.onAssign,
     required this.onRemove,
@@ -706,7 +700,6 @@ class _ManagedMobilizationsSection extends StatelessWidget {
   final PlatformReadRepository platformRepository;
   final PlatformAdministrationReadRepository administrationRepository;
   final bool actionsEnabled;
-  final VoidCallback onCreate;
   final ValueChanged<Mobilization> onEdit;
   final ValueChanged<Mobilization> onAssign;
   final _MobilizationAssignmentAction onRemove;
@@ -750,24 +743,9 @@ class _ManagedMobilizationsSection extends StatelessWidget {
               key: const Key('platform-managed-mobilizations'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Mobilisations à préparer',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                    const SizedBox(width: V5Spacing.xs),
-                    V5Button(
-                      key: const Key('platform-create-draft'),
-                      onPressed: actionsEnabled ? onCreate : null,
-                      label: 'Nouvelle',
-                      icon: Icons.add_rounded,
-                      compact: true,
-                      tone: V5ButtonTone.tonal,
-                    ),
-                  ],
+                Text(
+                  'Mobilisations à préparer',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: V5Spacing.sm),
                 if (manageable.isEmpty)
@@ -779,7 +757,7 @@ class _ManagedMobilizationsSection extends StatelessWidget {
                       border: Border.all(color: context.v5Colors.outline),
                     ),
                     child: Text(
-                      'Aucune mobilisation en brouillon ou inactive.',
+                      'Aucune mobilisation préparée.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   )
@@ -1102,11 +1080,13 @@ class _MetadataChip extends StatelessWidget {
         children: [
           Icon(icon, color: foreground, size: 16),
           const SizedBox(width: V5Spacing.xs),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -1341,10 +1321,10 @@ IconData _contextIcon(MobilizationContextType type) => switch (type) {
 };
 
 String _statusLabel(MobilizationStatus status) => switch (status) {
-  MobilizationStatus.draft => 'Brouillon',
-  MobilizationStatus.active => 'Active',
-  MobilizationStatus.inactive => 'Inactive',
-  MobilizationStatus.archived => 'Archivée',
+  MobilizationStatus.draft => 'Mobilisation préparée',
+  MobilizationStatus.active => 'Mobilisation active',
+  MobilizationStatus.inactive => 'Mobilisation préparée',
+  MobilizationStatus.archived => 'Mobilisation archivée',
 };
 
 String _coordinatorOptionLabel(UserDisplayIdentity identity) =>

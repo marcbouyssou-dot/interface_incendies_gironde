@@ -138,11 +138,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const MobSantePageHeader(
-                    title: 'Mon profil responsable',
-                    subtitle:
-                        'Votre périmètre, vos réglages et vos perspectives.',
-                  ),
+                  const MobSantePageHeader(title: 'Mon profil responsable'),
                   if (access?.isCoordinator == true) ...[
                     const SizedBox(height: V5Spacing.xxl),
                     CoordinatorPerspectiveSection(

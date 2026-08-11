@@ -122,11 +122,7 @@ class _CoordinatorMoreContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const MobSantePageHeader(
-                    title: 'Coordination',
-                    subtitle:
-                        'Perspectives, statistiques, réglages et administration.',
-                  ),
+                  const MobSantePageHeader(title: 'Coordination'),
                   const SizedBox(height: V5Spacing.xxl),
                   if (access?.isCoordinator == true)
                     CoordinatorPerspectiveSection(

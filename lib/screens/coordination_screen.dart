@@ -194,7 +194,7 @@ String _coordinatorDashboardCsv({
       'Période',
       'Nombre de missions',
       'Missions passées',
-      'Missions en cours',
+      'Missions aujourd’hui',
       'Missions à venir',
       'Quota total demandé',
       'Professionnels mobilisés',
@@ -560,7 +560,7 @@ class _StatisticsPageHeader extends StatelessWidget {
               ),
               SizedBox(height: 8),
               Text(
-                'Couverture opérationnelle des missions.',
+                'Couverture des missions pour la période sélectionnée.',
                 style: TextStyle(
                   color: _StatisticsVisuals.textMuted,
                   fontSize: 14,
@@ -985,18 +985,8 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _DashboardMetric(
-                      metricKey: const Key('dashboard-past-missions'),
-                      label: 'Passées',
-                      value: pastMissions,
-                      color: _StatisticsVisuals.textMuted,
-                      background: _StatisticsVisuals.fieldBackground,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _DashboardMetric(
                       metricKey: const Key('dashboard-current-missions'),
-                      label: 'En cours',
+                      label: 'Aujourd’hui',
                       value: currentMissions,
                       color: AppColors.green,
                       background: AppColors.greenSoft,
@@ -1010,6 +1000,16 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                       value: upcomingMissions,
                       color: AppColors.orange,
                       background: AppColors.orangeSoft,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _DashboardMetric(
+                      metricKey: const Key('dashboard-past-missions'),
+                      label: 'Passés',
+                      value: pastMissions,
+                      color: _StatisticsVisuals.textMuted,
+                      background: _StatisticsVisuals.fieldBackground,
                     ),
                   ),
                 ],
