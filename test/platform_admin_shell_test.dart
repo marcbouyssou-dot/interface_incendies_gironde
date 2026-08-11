@@ -94,7 +94,8 @@ void main() {
     expect(find.byType(PlatformAdminShell), findsOneWidget);
     expect(find.byKey(const Key('platform-admin-shell')), findsOneWidget);
     expect(find.byType(ProfessionalShell), findsNothing);
-    expect(find.text('Administration plateforme'), findsOneWidget);
+    expect(find.text('Administrateur plateforme'), findsOneWidget);
+    expect(find.text('Préparez et pilotez les mobilisations.'), findsOneWidget);
   });
 
   testWidgets('the active mobilization and territory are displayed', (

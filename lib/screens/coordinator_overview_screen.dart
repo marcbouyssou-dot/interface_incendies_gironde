@@ -194,7 +194,10 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(title: 'Pilotage territorial'),
+                      const MobSanteJourneyHeader(
+                        journey: MobSanteJourney.coordinator,
+                        pageTitle: 'Pilotage territorial',
+                      ),
                       const SizedBox(height: V5Spacing.lg),
                       TerritoryVerdict(
                         verdict: verdict,

@@ -214,8 +214,9 @@ class _ResponsibleHomeContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const MobSantePageHeader(
-                      title: 'Demain dans mon établissement',
+                    const MobSanteJourneyHeader(
+                      journey: MobSanteJourney.responsible,
+                      pageTitle: 'Demain dans mon établissement',
                     ),
                     const SizedBox(height: V5Spacing.lg),
                     _PlanningHero(

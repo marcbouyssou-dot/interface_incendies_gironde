@@ -605,7 +605,11 @@ class _MissionDecisionHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (professionalJourney)
-          ProfessionalPageHeader(title: professionalVerdict)
+          MobSanteJourneyHeader(
+            journey: MobSanteJourney.professional,
+            pageTitle: professionalVerdict,
+            pageTitleKey: const Key('professional-page-title'),
+          )
         else
           DecisionHeader(
             state: decisionState,

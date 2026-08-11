@@ -11,6 +11,7 @@ import '../services/current_mobilization_provider.dart';
 import '../services/platform_administration_service.dart';
 import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
+import '../widgets/professional_page_header.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 import 'platform_mobilization_form_dialog.dart';
@@ -58,7 +59,9 @@ class _PlatformAdminMobilizationScreenState
           ),
           sliver: SliverList.list(
             children: [
-              const _PlatformHeader(),
+              const MobSanteJourneyHeader(
+                journey: MobSanteJourney.administrator,
+              ),
               if (_mutationInProgress) ...[
                 const SizedBox(height: V5Spacing.md),
                 const LinearProgressIndicator(
@@ -387,50 +390,6 @@ class _PlatformAdminMobilizationScreenState
 
   void _showError(String message) {
     V5Toast.show(context, message: message, tone: V5ToastTone.danger);
-  }
-}
-
-class _PlatformHeader extends StatelessWidget {
-  const _PlatformHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = PlatformAdminIdentity.accent(context);
-    return Semantics(
-      header: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: PlatformAdminIdentity.container(context),
-                  borderRadius: BorderRadius.circular(V5Radius.control),
-                ),
-                child: Icon(
-                  Icons.account_balance_outlined,
-                  color: accent,
-                  size: 23,
-                ),
-              ),
-              const SizedBox(width: V5Spacing.sm),
-              Expanded(
-                child: Text(
-                  'Administration plateforme',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: accent,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 }
 

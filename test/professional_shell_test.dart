@@ -44,6 +44,12 @@ void main() {
 
     expect(find.byType(ProfessionalShell), findsOneWidget);
     expect(find.byType(V5BottomNavigation), findsOneWidget);
+    expect(find.text('MobSanté'), findsOneWidget);
+    expect(find.text('Professionnel de santé'), findsOneWidget);
+    expect(
+      find.text('Trouvez rapidement où vous pouvez être utile.'),
+      findsOneWidget,
+    );
     expect(find.text('Bonjour'), findsNothing);
     expect(
       find.text('1 mission urgente nécessite votre attention.'),
@@ -284,6 +290,11 @@ void main() {
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
+    expect(find.text('Responsable d’établissement'), findsOneWidget);
+    expect(
+      find.text('Organisez la couverture de votre établissement.'),
+      findsOneWidget,
+    );
     expect(find.text('Mon planning est-il sécurisé ?'), findsNothing);
     expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
     expect(find.text('Demain dans mon établissement'), findsOneWidget);

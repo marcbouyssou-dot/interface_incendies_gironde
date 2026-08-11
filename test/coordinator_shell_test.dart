@@ -25,6 +25,11 @@ void main() {
     expect(find.byType(CoordinatorShell), findsOneWidget);
     expect(find.byType(CoordinatorOverviewScreen), findsOneWidget);
     expect(find.byType(CoordinatorBottomNavigation), findsOneWidget);
+    expect(find.text('Coordinateur départemental'), findsOneWidget);
+    expect(
+      find.text('Supervisez la couverture du territoire.'),
+      findsOneWidget,
+    );
     expect(find.text('Pilotage territorial'), findsOneWidget);
     expect(find.byKey(const Key('territory-verdict')), findsOneWidget);
     expect(find.text('À surveiller'), findsWidgets);
