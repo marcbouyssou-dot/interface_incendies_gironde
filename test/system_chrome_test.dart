@@ -145,7 +145,40 @@ void main() {
     expect(index, contains('mobsante-splash-composed'));
     expect(index, contains('image.decode()'));
     expect(index, contains('mobsante-native-splash-composed'));
+    expect(index, contains('padding: var(--startup-splash-safe-block) 28px;'));
     expect(manifest, contains('"theme_color": "#F6F7F8"'));
+  });
+
+  test('iPhone safe areas cannot recenter the native splash', () {
+    final index = File('web/index.html').readAsStringSync();
+
+    expect(
+      index,
+      contains(
+        '--startup-splash-safe-block: max(\n'
+        '        20px,\n'
+        '        env(safe-area-inset-top),\n'
+        '        env(safe-area-inset-bottom)\n'
+        '      );',
+      ),
+    );
+    expect(index, isNot(contains('max(20px, env(safe-area-inset-top)) 28px')));
+
+    const viewportHeight = 844.0;
+    const contentHeight = 407.125;
+    double centeredTop(double safeBlock) =>
+        safeBlock + (viewportHeight - 2 * safeBlock - contentHeight) / 2;
+    double asymmetricTop(double safeTop, double safeBottom) =>
+        safeTop + (viewportHeight - safeTop - safeBottom - contentHeight) / 2;
+
+    expect(centeredTop(20), centeredTop(47));
+    expect(
+      asymmetricTop(47, 34) - asymmetricTop(20, 20),
+      6.5,
+      reason:
+          'Le padding vertical asymétrique précédent décalait tout le bloc '
+          'de 6,5 px sur un iPhone 390 × 844.',
+    );
   });
 
   test(
