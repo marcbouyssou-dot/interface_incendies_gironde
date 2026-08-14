@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-enum CrossRolePerspective { actual, responsible, professional }
+enum CrossRolePerspective { actual, professional, responsible, coordinator }
 
 class CrossRolePerspectiveController extends ChangeNotifier {
   CrossRolePerspective _perspective = CrossRolePerspective.actual;
@@ -26,13 +26,20 @@ class CrossRolePerspectiveController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void showResponsible(String locationId) {
+  void showResponsible([String? locationId]) {
     if (_perspective == CrossRolePerspective.responsible &&
         _responsibleLocationId == locationId) {
       return;
     }
     _perspective = CrossRolePerspective.responsible;
     _responsibleLocationId = locationId;
+    notifyListeners();
+  }
+
+  void showCoordinator() {
+    if (_perspective == CrossRolePerspective.coordinator) return;
+    _perspective = CrossRolePerspective.coordinator;
+    _responsibleLocationId = null;
     notifyListeners();
   }
 }

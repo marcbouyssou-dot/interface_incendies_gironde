@@ -6,7 +6,6 @@ import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/v5_bottom_navigation.dart';
-import '../widgets/perspective_switcher.dart';
 import '../widgets/native_interactions.dart';
 import 'create_need_screen.dart';
 import 'development_settings_screen.dart';
@@ -18,17 +17,10 @@ class ProfessionalShell extends StatefulWidget {
   const ProfessionalShell({
     super.key,
     this.initialIndex = 0,
-    this.crossRolePreviewLabel,
-    this.onExitCrossRolePreview,
     this.verificationService = const FakeProfessionalVerificationService(),
-  }) : assert(initialIndex >= 0 && initialIndex < 3),
-       assert(
-         (crossRolePreviewLabel == null) == (onExitCrossRolePreview == null),
-       );
+  }) : assert(initialIndex >= 0 && initialIndex < 3);
 
   final int initialIndex;
-  final String? crossRolePreviewLabel;
-  final VoidCallback? onExitCrossRolePreview;
   final ProfessionalVerificationService verificationService;
 
   @override
@@ -53,7 +45,6 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
       onOpenResponsibleAccess: _openResponsibleAccess,
       onOpenSettings: _openSettings,
       onSignOut: _signOut,
-      onExitCrossRolePreview: widget.onExitCrossRolePreview,
       verificationService: widget.verificationService,
     ),
     _ => throw RangeError.index(index, _screens),
@@ -102,34 +93,15 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.v5Colors.canvas,
-      body: Column(
-        children: [
-          if (widget.crossRolePreviewLabel case final label?)
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                child: CrossRolePreviewBanner(
-                  label: label,
-                  onExit: widget.onExitCrossRolePreview!,
-                  compact: true,
-                ),
-              ),
-            ),
-          Expanded(
-            child: SafeArea(
-              top: widget.crossRolePreviewLabel == null,
-              bottom: false,
-              child: NativeTabView(
-                index: _currentIndex,
-                children: List.generate(
-                  _screens.length,
-                  (index) => _screens[index] ?? const SizedBox.shrink(),
-                ),
-              ),
-            ),
+      body: SafeArea(
+        bottom: false,
+        child: NativeTabView(
+          index: _currentIndex,
+          children: List.generate(
+            _screens.length,
+            (index) => _screens[index] ?? const SizedBox.shrink(),
           ),
-        ],
+        ),
       ),
       bottomNavigationBar: V5BottomNavigation(
         selectedIndex: _currentIndex,

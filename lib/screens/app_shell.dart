@@ -16,6 +16,7 @@ import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/system_theme.dart';
 import '../widgets/v5_bottom_navigation.dart';
+import '../widgets/perspective_switcher.dart';
 import 'administration_dashboard_screen.dart';
 import 'coordinator_shell.dart';
 import 'coordination_screen.dart';
@@ -54,6 +55,7 @@ class _AppShellState extends State<AppShell> {
   final List<Widget?> _legacyScreens = List<Widget?>.filled(4, null);
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
+  LiveCoordinationData? _platformAdminPreviewData;
   StreamSubscription<ResponsibleAccess?>? _accessSubscription;
   StreamSubscription<List<CoordinationNeed>>? _missionsWarmupSubscription;
   StreamSubscription<List<ResponsePlace>>? _locationsWarmupSubscription;
@@ -125,6 +127,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _signOutPlatformAdministrator() async {
+    CrossRolePerspectiveScope.of(context).showActualRole();
     await _repository!.signOutResponsible();
     if (mounted) {
       setState(() => _showPlatformAdminAuthentication = true);
@@ -146,6 +149,8 @@ class _AppShellState extends State<AppShell> {
       unawaited(_missionsWarmupSubscription?.cancel());
       unawaited(_locationsWarmupSubscription?.cancel());
       _liveData?.dispose();
+      _platformAdminPreviewData?.dispose();
+      _platformAdminPreviewData = null;
       _repository = repository;
       _liveData = LiveCoordinationData(repository);
       markStartupEvent('mobsante-role-route-start');
@@ -164,8 +169,22 @@ class _AppShellState extends State<AppShell> {
     unawaited(_locationsWarmupSubscription?.cancel());
     unawaited(_platformAdministratorSubscription?.cancel());
     _liveData?.dispose();
+    _platformAdminPreviewData?.dispose();
     super.dispose();
   }
+
+  LiveCoordinationData _adminPreviewData() =>
+      _platformAdminPreviewData ??= LiveCoordinationData(
+        _repository!,
+        responsibleAccessOverride: () => Stream<ResponsibleAccess?>.value(
+          ResponsibleAccess(
+            uid: _platformAdministrator?.uid ?? 'platform-administrator',
+            role: ResponsibleRole.coordinator,
+            locationIds: const {},
+            active: true,
+          ),
+        ),
+      );
 
   void _handleAccess(ResponsibleAccess? access) {
     if (!mounted) return;
@@ -265,38 +284,21 @@ class _AppShellState extends State<AppShell> {
       RolePreviewMode.coordinator => _AppJourney.coordinator,
       RolePreviewMode.automatic => automaticJourney,
     };
-    var displayedJourney =
+    final isPlatformAdministrator =
         _platformAdministratorResolved &&
-            (_platformAdministrator?.active ?? false)
-        ? _AppJourney.platformAdmin
+        (_platformAdministrator?.active ?? false);
+    var displayedJourney = isPlatformAdministrator
+        ? switch (perspectiveController.perspective) {
+            CrossRolePerspective.actual => _AppJourney.platformAdmin,
+            CrossRolePerspective.professional => _AppJourney.professional,
+            CrossRolePerspective.responsible => _AppJourney.responsible,
+            CrossRolePerspective.coordinator => _AppJourney.coordinator,
+          }
         : journey;
-    String? responsiblePreviewLocationId;
     var crossRolePreview = false;
-    final access = _access;
-    if (displayedJourney != _AppJourney.platformAdmin &&
-        previewMode == RolePreviewMode.automatic &&
-        _accessResolved &&
-        access != null &&
-        access.active) {
-      switch (perspectiveController.perspective) {
-        case CrossRolePerspective.actual:
-          break;
-        case CrossRolePerspective.professional:
-          if (access.isCoordinator || access.isSiteManager) {
-            displayedJourney = _AppJourney.professional;
-            crossRolePreview = displayedJourney != automaticJourney;
-          }
-        case CrossRolePerspective.responsible:
-          final locationId = perspectiveController.responsibleLocationId;
-          if (access.isCoordinator &&
-              locationId != null &&
-              access.canManage(locationId)) {
-            displayedJourney = _AppJourney.responsible;
-            responsiblePreviewLocationId = locationId;
-            crossRolePreview = true;
-          }
-      }
-    }
+    crossRolePreview =
+        isPlatformAdministrator &&
+        perspectiveController.perspective != CrossRolePerspective.actual;
     if (!_platformAdministratorResolved || !_accessResolved) {
       return LiveCoordinationDataScope(
         data: _liveData!,
@@ -319,49 +321,49 @@ class _AppShellState extends State<AppShell> {
         ),
       );
     }
+    final displayedShell = switch (displayedJourney) {
+      _AppJourney.professional => ProfessionalShell(
+        key: ValueKey(crossRolePreview ? 'admin-professional' : 'professional'),
+        initialIndex: widget.initialIndex == 1 ? 2 : 0,
+        verificationService: widget.professionalVerificationService,
+      ),
+      _AppJourney.responsible => ResponsibleShell(
+        key: ValueKey(crossRolePreview ? 'admin-responsible' : 'responsible'),
+        initialIndex: widget.initialIndex.clamp(0, 3),
+      ),
+      _AppJourney.coordinator =>
+        widget.useLegacyCoordinatorShellForTesting
+            ? _buildLegacyShell()
+            : CoordinatorShell(initialIndex: widget.initialIndex.clamp(0, 3)),
+      _AppJourney.platformAdmin => PlatformAdminShell(
+        initialIndex: widget.initialIndex == 3 ? 1 : 0,
+        platformRepository: widget.platformRuntime!.platformReadRepository,
+        mobilizationProvider:
+            widget.platformRuntime!.currentMobilizationProvider,
+        administrationRepository:
+            widget.platformRuntime!.platformAdministrationReadRepository,
+        administrationService:
+            widget.platformRuntime!.platformAdministrationService,
+        onSignOut: _signOutPlatformAdministrator,
+      ),
+    };
+    final previewedJourney = switch (perspectiveController.perspective) {
+      CrossRolePerspective.professional => 'Professionnel de santé',
+      CrossRolePerspective.responsible => 'Responsable d’établissement',
+      CrossRolePerspective.coordinator => 'Coordinateur départemental',
+      CrossRolePerspective.actual => 'Administrateur plateforme',
+    };
     return LiveCoordinationDataScope(
-      data: _liveData!,
-      child: switch (displayedJourney) {
-        _AppJourney.professional => ProfessionalShell(
-          key: ValueKey(
-            crossRolePreview ? 'professional-perspective' : 'professional',
-          ),
-          initialIndex: widget.initialIndex == 1 ? 2 : 0,
-          verificationService: widget.professionalVerificationService,
-          crossRolePreviewLabel: crossRolePreview
-              ? automaticJourney == _AppJourney.coordinator
-                    ? 'Coordinateur'
-                    : 'Responsable de centre'
-              : null,
-          onExitCrossRolePreview: crossRolePreview
-              ? perspectiveController.showActualRole
-              : null,
-        ),
-        _AppJourney.responsible => ResponsibleShell(
-          key: ValueKey(
-            responsiblePreviewLocationId == null
-                ? 'responsible'
-                : 'responsible-$responsiblePreviewLocationId',
-          ),
-          initialIndex: widget.initialIndex.clamp(0, 3),
-          previewLocationId: responsiblePreviewLocationId,
-        ),
-        _AppJourney.coordinator =>
-          widget.useLegacyCoordinatorShellForTesting
-              ? _buildLegacyShell()
-              : CoordinatorShell(initialIndex: widget.initialIndex.clamp(0, 3)),
-        _AppJourney.platformAdmin => PlatformAdminShell(
-          initialIndex: widget.initialIndex == 3 ? 1 : 0,
-          platformRepository: widget.platformRuntime!.platformReadRepository,
-          mobilizationProvider:
-              widget.platformRuntime!.currentMobilizationProvider,
-          administrationRepository:
-              widget.platformRuntime!.platformAdministrationReadRepository,
-          administrationService:
-              widget.platformRuntime!.platformAdministrationService,
-          onSignOut: _signOutPlatformAdministrator,
-        ),
-      },
+      data: crossRolePreview && displayedJourney != _AppJourney.professional
+          ? _adminPreviewData()
+          : _liveData!,
+      child: crossRolePreview
+          ? _PlatformAdminPreviewFrame(
+              journey: previewedJourney,
+              onExit: perspectiveController.showActualRole,
+              child: displayedShell,
+            )
+          : displayedShell,
     );
   }
 
@@ -407,6 +409,41 @@ class _AppShellState extends State<AppShell> {
       ),
     );
   }
+}
+
+class _PlatformAdminPreviewFrame extends StatelessWidget {
+  const _PlatformAdminPreviewFrame({
+    required this.journey,
+    required this.onExit,
+    required this.child,
+  });
+
+  final String journey;
+  final VoidCallback onExit;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: context.v5Colors.canvas,
+    child: Column(
+      children: [
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+            child: CrossRolePreviewBanner(
+              label: 'Administrateur plateforme',
+              title: 'Prévisualisation : $journey',
+              exitLabel: 'Revenir à l’Administrateur plateforme',
+              onExit: onExit,
+              compact: true,
+            ),
+          ),
+        ),
+        Expanded(child: child),
+      ],
+    ),
+  );
 }
 
 class _PlatformRouteLoading extends StatelessWidget {

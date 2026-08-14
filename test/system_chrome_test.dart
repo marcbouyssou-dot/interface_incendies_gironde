@@ -90,7 +90,7 @@ void main() {
     _expectOnlyLightApplicationChrome(tester);
   });
 
-  testWidgets('perspective changes never restore the splash system style', (
+  testWidgets('non-admin shell never exposes a runtime perspective selector', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -99,15 +99,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Plus'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('perspective-professional')));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ProfessionalShell), findsOneWidget);
-    _expectOnlyLightApplicationChrome(tester);
-
-    await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
-    await tester.pumpAndSettle();
     expect(find.byType(CoordinatorShell), findsOneWidget);
+    expect(find.byKey(const Key('perspective-professional')), findsNothing);
     _expectOnlyLightApplicationChrome(tester);
   });
 
@@ -132,12 +125,19 @@ void main() {
     _expectOnlyLightApplicationChrome(tester);
   });
 
-  test('PWA chrome defaults to light and scopes navy to the splash', () {
+  test('PWA paints navy before CSS and restores application chrome later', () {
     final index = File('web/index.html').readAsStringSync();
     final manifest = File('web/manifest.json').readAsStringSync();
 
-    expect(index, contains('<meta name="theme-color" content="#F6F7F8">'));
-    expect(index, contains('<html class="mobsante-splash-active">'));
+    expect(index, contains('<meta name="theme-color" content="#10233E">'));
+    expect(
+      index,
+      contains(
+        '<html class="mobsante-splash-active" '
+        'style="background-color: #10233E;">',
+      ),
+    );
+    expect(index, contains('<body style="background-color: #10233E;">'));
     expect(index, contains('background: #F6F7F8;'));
     expect(index, contains('html.mobsante-splash-active body'));
     expect(index, contains('#startup-splash'));

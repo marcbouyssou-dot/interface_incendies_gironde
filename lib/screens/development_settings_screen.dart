@@ -2,37 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
-import '../models/need.dart';
-import '../models/responsible_access.dart';
-import '../repositories/live_data_scope.dart';
-import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
-import '../widgets/perspective_switcher.dart';
-import '../widgets/v5_controls.dart';
 import '../widgets/v5_secondary_navigation.dart';
 
-class DevelopmentSettingsScreen extends StatefulWidget {
+class DevelopmentSettingsScreen extends StatelessWidget {
   const DevelopmentSettingsScreen({super.key});
-
-  @override
-  State<DevelopmentSettingsScreen> createState() =>
-      _DevelopmentSettingsScreenState();
-}
-
-class _DevelopmentSettingsScreenState extends State<DevelopmentSettingsScreen> {
-  LiveCoordinationData? _liveData;
-  Stream<ResponsibleAccess?>? _access;
-  Stream<List<ResponsePlace>>? _locations;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final liveData = LiveCoordinationDataScope.of(context);
-    if (identical(liveData, _liveData)) return;
-    _liveData = liveData;
-    _access = liveData.watchResponsibleAccess();
-    _locations = liveData.watchLocations();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,40 +49,11 @@ class _DevelopmentSettingsScreenState extends State<DevelopmentSettingsScreen> {
               ),
               const SizedBox(height: V5Spacing.xxl),
             ],
-            StreamBuilder<ResponsibleAccess?>(
-              stream: _access,
-              builder: (context, accessSnapshot) =>
-                  StreamBuilder<List<ResponsePlace>>(
-                    stream: _locations,
-                    builder: (context, locationsSnapshot) {
-                      final access = accessSnapshot.data;
-                      if (access?.isCoordinator != true ||
-                          !locationsSnapshot.hasData) {
-                        if (!kDebugMode &&
-                            (accessSnapshot.connectionState ==
-                                    ConnectionState.waiting ||
-                                locationsSnapshot.connectionState ==
-                                    ConnectionState.waiting)) {
-                          return const Center(child: V5ActivityIndicator());
-                        }
-                        if (!kDebugMode && access?.isSiteManager == true) {
-                          return Text(
-                            'Aucun réglage supplémentaire n’est disponible '
-                            'pour le moment.',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      }
-                      return CoordinatorPerspectiveSection(
-                        access: access!,
-                        locations: locationsSnapshot.data!,
-                        accentColor: CoordinatorIdentity.of(context).accent,
-                        onSelectionComplete: () => Navigator.of(context).pop(),
-                      );
-                    },
-                  ),
-            ),
+            if (!kDebugMode)
+              Text(
+                'Aucun réglage supplémentaire n’est disponible pour le moment.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
           ],
         ),
       ),

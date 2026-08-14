@@ -4,13 +4,11 @@ import '../coordinator/territory_view_data.dart';
 import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../models/responsible_account.dart';
-import '../perspective/cross_role_perspective.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/responsible_access_administration_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
-import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
 import 'coordinator_overview_screen.dart';
 
@@ -273,7 +271,6 @@ class _ResponsibleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final identity = CoordinatorIdentity.of(context);
     final locationNames = [
       for (final id in account.access.locationIds)
         locations.where((location) => location.id == id).firstOrNull?.name ??
@@ -282,9 +279,8 @@ class _ResponsibleRow extends StatelessWidget {
     final scope = locationNames.isEmpty
         ? 'Aucun centre attribué'
         : locationNames.join(' · ');
-    final canPreview = account.access.active && locationNames.isNotEmpty;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       child: Row(
         children: [
           Expanded(
@@ -312,31 +308,9 @@ class _ResponsibleRow extends StatelessWidget {
               ],
             ),
           ),
-          if (canPreview)
-            TextButton(
-              key: Key('coordinator-preview-${account.uid}'),
-              onPressed: () => _openPerspective(context),
-              style: TextButton.styleFrom(
-                foregroundColor: identity.accent,
-                minimumSize: const Size(44, 44),
-              ),
-              child: const Text('Voir comme'),
-            ),
         ],
       ),
     );
-  }
-
-  Future<void> _openPerspective(BuildContext context) async {
-    final selected = await showResponsibleCenterPicker(
-      context,
-      access: account.access,
-      locations: locations,
-      accentColor: CoordinatorIdentity.of(context).accent,
-    );
-    if (selected != null && context.mounted) {
-      CrossRolePerspectiveScope.of(context).showResponsible(selected.id);
-    }
   }
 }
 

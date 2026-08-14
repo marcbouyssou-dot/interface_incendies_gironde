@@ -1,6 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../models/responsible_account.dart';
 import '../repositories/live_data_scope.dart';
@@ -8,7 +8,6 @@ import '../repositories/responsible_access_administration_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
-import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/v5_secondary_navigation.dart';
 import 'coordinator_overview_screen.dart';
@@ -34,7 +33,6 @@ class CoordinatorMoreScreen extends StatefulWidget {
 class _CoordinatorMoreScreenState extends State<CoordinatorMoreScreen> {
   LiveCoordinationData? _liveData;
   Stream<ResponsibleAccess?>? _access;
-  Stream<List<ResponsePlace>>? _locations;
   bool _signingOut = false;
 
   @override
@@ -44,7 +42,6 @@ class _CoordinatorMoreScreenState extends State<CoordinatorMoreScreen> {
     if (identical(liveData, _liveData)) return;
     _liveData = liveData;
     _access = liveData.watchResponsibleAccess();
-    _locations = liveData.watchLocations();
   }
 
   Future<void> _signOut() async {
@@ -61,28 +58,25 @@ class _CoordinatorMoreScreenState extends State<CoordinatorMoreScreen> {
   Widget build(BuildContext context) {
     return StreamBuilder<ResponsibleAccess?>(
       stream: _access,
-      builder: (context, accessSnapshot) => StreamBuilder<List<ResponsePlace>>(
-        stream: _locations,
-        builder: (context, locationsSnapshot) {
-          if (accessSnapshot.hasError || locationsSnapshot.hasError) {
-            return const CoordinatorDataUnavailable(
-              message: 'Les accès Coordinateur sont indisponibles.',
-            );
-          }
-          if (!locationsSnapshot.hasData) {
-            return const CoordinatorLoadingState();
-          }
-          return _CoordinatorMoreContent(
-            access: accessSnapshot.data,
-            locations: locationsSnapshot.data!,
-            signingOut: _signingOut,
-            onOpenStatistics: widget.onOpenStatistics,
-            onOpenSettings: widget.onOpenSettings,
-            onOpenProfile: widget.onOpenProfile,
-            onSignOut: _signOut,
+      builder: (context, accessSnapshot) {
+        if (accessSnapshot.hasError) {
+          return const CoordinatorDataUnavailable(
+            message: 'Les accès Coordinateur sont indisponibles.',
           );
-        },
-      ),
+        }
+        if (!accessSnapshot.hasData &&
+            accessSnapshot.connectionState == ConnectionState.waiting) {
+          return const CoordinatorLoadingState();
+        }
+        return _CoordinatorMoreContent(
+          access: accessSnapshot.data,
+          signingOut: _signingOut,
+          onOpenStatistics: widget.onOpenStatistics,
+          onOpenSettings: widget.onOpenSettings,
+          onOpenProfile: widget.onOpenProfile,
+          onSignOut: _signOut,
+        );
+      },
     );
   }
 }
@@ -90,7 +84,6 @@ class _CoordinatorMoreScreenState extends State<CoordinatorMoreScreen> {
 class _CoordinatorMoreContent extends StatelessWidget {
   const _CoordinatorMoreContent({
     required this.access,
-    required this.locations,
     required this.signingOut,
     required this.onOpenStatistics,
     required this.onOpenSettings,
@@ -99,7 +92,6 @@ class _CoordinatorMoreContent extends StatelessWidget {
   });
 
   final ResponsibleAccess? access;
-  final List<ResponsePlace> locations;
   final bool signingOut;
   final VoidCallback onOpenStatistics;
   final VoidCallback onOpenSettings;
@@ -109,7 +101,6 @@ class _CoordinatorMoreContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final identity = CoordinatorIdentity.of(context);
     return ColoredBox(
       color: colors.canvas,
       child: ListView(
@@ -124,18 +115,6 @@ class _CoordinatorMoreContent extends StatelessWidget {
                 children: [
                   const MobSantePageHeader(title: 'Coordination'),
                   const SizedBox(height: V5Spacing.xxl),
-                  if (access?.isCoordinator == true)
-                    CoordinatorPerspectiveSection(
-                      access: access!,
-                      locations: locations,
-                      accentColor: identity.accent,
-                    )
-                  else
-                    Text(
-                      'Cette perspective est réservée aux Coordinateurs.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  const SizedBox(height: V5Spacing.xxxl),
                   _MoreGroup(
                     children: [
                       if (access?.isCoordinator == true)
@@ -145,12 +124,13 @@ class _CoordinatorMoreContent extends StatelessWidget {
                           label: 'Statistiques globales',
                           onTap: onOpenStatistics,
                         ),
-                      _MoreRow(
-                        key: const Key('open-development-settings'),
-                        icon: Icons.settings_outlined,
-                        label: 'Réglages',
-                        onTap: onOpenSettings,
-                      ),
+                      if (kDebugMode)
+                        _MoreRow(
+                          key: const Key('open-development-settings'),
+                          icon: Icons.settings_outlined,
+                          label: 'Réglages',
+                          onTap: onOpenSettings,
+                        ),
                       _MoreRow(
                         key: const Key('coordinator-profile'),
                         icon: Icons.person_outline_rounded,

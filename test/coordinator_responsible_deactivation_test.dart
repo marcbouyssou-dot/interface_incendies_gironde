@@ -6,6 +6,7 @@ import 'package:interface_incendies_gironde/models/responsible_access.dart';
 import 'package:interface_incendies_gironde/models/responsible_account.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/responsible_access_administration_repository.dart';
+import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 
 void main() {
   testWidgets(
@@ -36,7 +37,7 @@ void main() {
         isFalse,
       );
 
-      await tester.tap(find.byType(BackButton));
+      await tester.tap(find.byType(V5BackButton));
       await tester.pumpAndSettle();
       expect(find.text('Inactif'), findsOneWidget);
       expect(
@@ -81,7 +82,7 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(find.byType(V5BackButton));
     await tester.pumpAndSettle();
     final managerCard = find.byKey(const Key('responsible-account-manager'));
     expect(

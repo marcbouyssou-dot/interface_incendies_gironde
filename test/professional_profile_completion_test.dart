@@ -262,7 +262,7 @@ void main() {
     ),
   ]) {
     testWidgets(
-      '${access.role} professional perspective only edits the volunteer profile',
+      '${access.role} debug shell preview only edits the volunteer profile',
       (tester) async {
         final repository = MockCoordinationRepository(
           responsibleAccess: access,
@@ -356,9 +356,17 @@ Future<void> _enterProfessionalPerspective(
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
   }
-  final perspective = find.byKey(const Key('perspective-professional'));
-  await tester.ensureVisible(perspective);
-  await tester.tap(perspective);
+  final settings = access.roles.contains(ResponsibleRole.coordinator)
+      ? find.byKey(const Key('open-development-settings'))
+      : find.byKey(const Key('responsible-development-settings'));
+  await tester.ensureVisible(settings);
+  await tester.tap(settings);
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('role-preview-selector')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Professionnel').last);
+  await tester.pumpAndSettle();
+  Navigator.of(tester.element(find.text('Mode Développement'))).pop();
   await tester.pumpAndSettle();
 }
 

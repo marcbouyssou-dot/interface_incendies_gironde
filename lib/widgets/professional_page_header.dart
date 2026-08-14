@@ -33,8 +33,7 @@ class MobSanteJourneyHeader extends StatelessWidget {
     this.pageTitleKey = const Key('role-page-title'),
   });
 
-  static const slogan =
-      'Le bon professionnel.\nAu bon endroit.\nAu bon moment.';
+  static const slogan = 'Le bon professionnel, au bon endroit, au bon moment.';
 
   final MobSanteJourney journey;
   final String? pageTitle;
@@ -76,15 +75,31 @@ class MobSanteJourneyHeader extends StatelessWidget {
                               ),
                         ),
                         const SizedBox(height: 1),
-                        Text(
-                          slogan,
-                          key: const Key('mobsante-product-slogan'),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: colors.textSecondary,
-                                fontSize: 11,
-                                height: 1.18,
-                              ),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final allowScalingToWrap =
+                                MediaQuery.textScalerOf(context).scale(1) > 1;
+                            final sloganText = Text(
+                              slogan,
+                              key: const Key('mobsante-product-slogan'),
+                              maxLines: allowScalingToWrap ? null : 1,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: colors.textSecondary,
+                                    fontSize: constraints.maxWidth < 320
+                                        ? 10.5
+                                        : 11,
+                                    height: 1.22,
+                                  ),
+                            );
+                            if (allowScalingToWrap) return sloganText;
+                            return FittedBox(
+                              key: const Key('mobsante-slogan-one-line'),
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: sloganText,
+                            );
+                          },
                         ),
                       ],
                     ),

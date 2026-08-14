@@ -1,16 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
-import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
-import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
-import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/professional_rpps_verification.dart';
 import '../widgets/native_interactions.dart';
@@ -23,14 +21,12 @@ class ProfessionalProfileScreen extends StatefulWidget {
     required this.onOpenResponsibleAccess,
     required this.onOpenSettings,
     required this.onSignOut,
-    this.onExitCrossRolePreview,
     this.verificationService = const FakeProfessionalVerificationService(),
   });
 
   final VoidCallback onOpenResponsibleAccess;
   final VoidCallback onOpenSettings;
   final Future<void> Function() onSignOut;
-  final VoidCallback? onExitCrossRolePreview;
   final ProfessionalVerificationService verificationService;
 
   @override
@@ -41,9 +37,6 @@ class ProfessionalProfileScreen extends StatefulWidget {
 class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
   Object? _repositoryIdentity;
   Future<VolunteerProfile?>? _profile;
-  LiveCoordinationData? _liveData;
-  Stream<ResponsibleAccess?>? _access;
-  Stream<List<ResponsePlace>>? _locations;
   bool _signingOut = false;
 
   @override
@@ -53,12 +46,6 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
     if (!identical(repository, _repositoryIdentity)) {
       _repositoryIdentity = repository;
       _profile = repository.getVolunteerProfile();
-    }
-    final liveData = LiveCoordinationDataScope.of(context);
-    if (!identical(liveData, _liveData)) {
-      _liveData = liveData;
-      _access = liveData.watchResponsibleAccess();
-      _locations = liveData.watchLocations();
     }
   }
 
@@ -296,60 +283,16 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                       ),
                     ],
                   ),
-                  StreamBuilder<ResponsibleAccess?>(
-                    stream: _access,
-                    builder: (context, accessSnapshot) {
-                      final access = accessSnapshot.data;
-                      if (access?.hasPrivilegedAccess != true) {
-                        return const SizedBox.shrink();
-                      }
-                      return StreamBuilder<List<ResponsePlace>>(
-                        stream: _locations,
-                        builder: (context, locationSnapshot) {
-                          if (!locationSnapshot.hasData) {
-                            return const SizedBox.shrink();
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(top: V5Spacing.sm),
-                            child: _ProfileSection(
-                              title: 'Accès privilégié',
-                              icon: Icons.admin_panel_settings_outlined,
-                              children: [
-                                if (widget.onExitCrossRolePreview != null)
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: V5Button(
-                                      onPressed: widget.onExitCrossRolePreview,
-                                      icon: Icons.arrow_back_rounded,
-                                      tone: V5ButtonTone.tonal,
-                                      label: 'Revenir à mon espace réel',
-                                    ),
-                                  ),
-                                const SizedBox(height: V5Spacing.sm),
-                                if (access!.isCoordinator)
-                                  CoordinatorPerspectiveSection(
-                                    access: access,
-                                    locations: locationSnapshot.data!,
-                                  )
-                                else
-                                  const SiteManagerPerspectiveSection(
-                                    title: 'Changer de perspective',
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
                   const SizedBox(height: V5Spacing.lg),
-                  OutlinedButton.icon(
-                    key: const Key('open-development-settings'),
-                    onPressed: widget.onOpenSettings,
-                    icon: const Icon(Icons.settings_outlined),
-                    label: const Text('Réglages'),
-                  ),
-                  const SizedBox(height: V5Spacing.xs),
+                  if (kDebugMode) ...[
+                    OutlinedButton.icon(
+                      key: const Key('open-development-settings'),
+                      onPressed: widget.onOpenSettings,
+                      icon: const Icon(Icons.settings_outlined),
+                      label: const Text('Réglages'),
+                    ),
+                    const SizedBox(height: V5Spacing.xs),
+                  ],
                   TextButton.icon(
                     key: const Key('open-responsible-access'),
                     onPressed: widget.onOpenResponsibleAccess,

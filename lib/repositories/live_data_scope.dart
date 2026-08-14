@@ -6,14 +6,18 @@ import '../models/need.dart';
 import 'coordination_repository.dart';
 
 class LiveCoordinationData {
-  LiveCoordinationData(CoordinationRepository repository)
-    : _repository = repository {
+  LiveCoordinationData(
+    CoordinationRepository repository, {
+    Stream<ResponsibleAccess?> Function()? responsibleAccessOverride,
+  }) : _repository = repository {
     _missions = _SharedLatestStream(
       repository.watchMissions,
       onValue: _pruneMissionStreams,
     );
     _locations = _SharedLatestStream(repository.watchLocations);
-    _responsibleAccess = _SharedLatestStream(repository.watchResponsibleAccess);
+    _responsibleAccess = _SharedLatestStream(
+      responsibleAccessOverride ?? repository.watchResponsibleAccess,
+    );
   }
 
   final CoordinationRepository _repository;

@@ -10,6 +10,25 @@ import 'package:interface_incendies_gironde/screens/app_shell.dart';
 import 'package:interface_incendies_gironde/screens/splash_screen.dart';
 
 void main() {
+  testWidgets('ready startup keeps the composed splash for 900 ms', (
+    tester,
+  ) async {
+    expect(AppIdentity.splashRevealDuration, const Duration(milliseconds: 900));
+    await tester.pumpWidget(
+      FirebaseStartupGate(
+        startup: () async => MockCoordinationRepository.instance,
+        splashPreparation: (_) async {},
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 899));
+    expect(find.byType(SplashScreen), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.byType(SplashScreen), findsNothing);
+  });
+
   testWidgets('startup keeps one complete identity while work is pending', (
     tester,
   ) async {

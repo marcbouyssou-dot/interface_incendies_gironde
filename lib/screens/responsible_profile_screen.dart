@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
@@ -6,7 +7,6 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
-import '../widgets/perspective_switcher.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/v5_controls.dart';
 import 'development_settings_screen.dart';
@@ -139,18 +139,6 @@ class _ResponsibleProfileContent extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const MobSantePageHeader(title: 'Mon profil responsable'),
-                  if (access?.isCoordinator == true) ...[
-                    const SizedBox(height: V5Spacing.xxl),
-                    CoordinatorPerspectiveSection(
-                      access: access!,
-                      locations: locations,
-                      accentColor: colors.accent,
-                      title: 'Perspective',
-                    ),
-                  ] else if (access?.isSiteManager == true) ...[
-                    const SizedBox(height: V5Spacing.xxl),
-                    const SiteManagerPerspectiveSection(title: 'Perspective'),
-                  ],
                   const SizedBox(height: V5Spacing.xxl),
                   Text(
                     'Centre géré',
@@ -171,20 +159,22 @@ class _ResponsibleProfileContent extends StatelessWidget {
                           ],
                   ),
                   const SizedBox(height: V5Spacing.xxl),
-                  OutlinedButton(
-                    key: const Key('responsible-development-settings'),
-                    onPressed: onOpenSettings,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      foregroundColor: colors.accent,
-                      side: BorderSide(color: colors.outline),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(V5Radius.control),
+                  if (kDebugMode) ...[
+                    OutlinedButton(
+                      key: const Key('responsible-development-settings'),
+                      onPressed: onOpenSettings,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        foregroundColor: colors.accent,
+                        side: BorderSide(color: colors.outline),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(V5Radius.control),
+                        ),
                       ),
+                      child: const Text('Réglages'),
                     ),
-                    child: const Text('Réglages'),
-                  ),
-                  const SizedBox(height: V5Spacing.md),
+                    const SizedBox(height: V5Spacing.md),
+                  ],
                   SizedBox(
                     width: double.infinity,
                     child: TextButton(

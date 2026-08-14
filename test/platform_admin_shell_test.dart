@@ -6,6 +6,7 @@ import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/mobilization_context.dart';
 import 'package:interface_incendies_gironde/models/platform_administrator_access.dart';
+import 'package:interface_incendies_gironde/models/responsible_access.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/models/user_display_identity.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
@@ -15,11 +16,14 @@ import 'package:interface_incendies_gironde/repositories/platform_runtime.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_shell.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_more_screen.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
+import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
+import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/services/current_mobilization_provider.dart';
 import 'package:interface_incendies_gironde/services/platform_administration_service.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
+import 'package:interface_incendies_gironde/widgets/perspective_switcher.dart';
 
 void main() {
   test('platform authority and coordinator assignment are parsed strictly', () {
@@ -70,6 +74,8 @@ void main() {
 
     expect(find.byType(PlatformAdminShell), findsNothing);
     expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.byType(PlatformAdminPerspectiveSection), findsNothing);
+    expect(find.text('Prévisualiser un parcours'), findsNothing);
 
     await tester.pumpWidget(
       FireCoordinationApp(
@@ -237,6 +243,73 @@ void main() {
     expect(find.text('Se déconnecter'), findsOneWidget);
   });
 
+  testWidgets('only an admin can preview and leave all four journeys', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _RecordingCoordinationRepository();
+    await _pumpPlatformAdmin(tester, repository: repository);
+
+    Future<void> openMore() async {
+      await tester.tap(find.text('Plus').last);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> preview({
+      required Key option,
+      required String title,
+      required Type shell,
+    }) async {
+      await tester.tap(find.byKey(option));
+      await tester.pumpAndSettle();
+      expect(find.byType(shell), findsOneWidget);
+      expect(find.text('Prévisualisation : $title'), findsOneWidget);
+      expect(
+        find.text('Votre rôle : Administrateur plateforme'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Revenir à l’Administrateur plateforme'),
+        findsOneWidget,
+      );
+      expect(repository.signOutCalls, 0);
+      expect(repository.lastObservedAccess, isNull);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
+      await tester.pumpAndSettle();
+      expect(find.byType(PlatformAdminShell), findsOneWidget);
+    }
+
+    await openMore();
+    expect(find.byType(PlatformAdminPerspectiveSection), findsOneWidget);
+    expect(find.byKey(const Key('perspective-professional')), findsOneWidget);
+    expect(find.byKey(const Key('perspective-responsible')), findsOneWidget);
+    expect(find.byKey(const Key('perspective-coordinator')), findsOneWidget);
+    expect(find.byKey(const Key('perspective-platform-admin')), findsOneWidget);
+    await preview(
+      option: const Key('perspective-professional'),
+      title: 'Professionnel de santé',
+      shell: ProfessionalShell,
+    );
+
+    await openMore();
+    await preview(
+      option: const Key('perspective-responsible'),
+      title: 'Responsable d’établissement',
+      shell: ResponsibleShell,
+    );
+
+    await openMore();
+    await preview(
+      option: const Key('perspective-coordinator'),
+      title: 'Coordinateur départemental',
+      shell: CoordinatorShell,
+    );
+  });
+
   testWidgets('platform sign-out confirmation can be cancelled', (
     tester,
   ) async {
@@ -308,6 +381,22 @@ void main() {
     );
     expect(find.byKey(const Key('platform-admin-question')), findsNothing);
     expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    final professionalPreview = find.byKey(
+      const Key('perspective-professional'),
+    );
+    await tester.ensureVisible(professionalPreview);
+    await tester.drag(
+      find.byKey(const PageStorageKey('platform-admin-more')),
+      const Offset(0, -160),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(professionalPreview);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('cross-role-preview-banner')), findsOneWidget);
+    expect(tester.takeException(), isNull);
     semantics.dispose();
   });
 }
@@ -337,7 +426,7 @@ Future<void> _pumpPlatformAdmin(
                 territoryId: 'gironde',
                 status: MobilizationStatus.active,
               ),
-            ),
+            ).asBroadcastStream(),
         hasActiveMobilization: hasActiveMobilization,
         assignments: assignments,
       ),
@@ -350,6 +439,13 @@ class _RecordingCoordinationRepository extends MockCoordinationRepository {
   _RecordingCoordinationRepository() : super(responsibleAccess: null);
 
   int signOutCalls = 0;
+  ResponsibleAccess? lastObservedAccess;
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() async* {
+    lastObservedAccess = null;
+    yield lastObservedAccess;
+  }
 
   @override
   Future<void> signOutResponsible() async {

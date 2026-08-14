@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
@@ -112,14 +113,16 @@ class _PlacesScreenState extends State<PlacesScreen> {
                             builder: (_) => const LegalNoticeScreen(),
                           ),
                         ),
-                        onOpenSettings: () => Navigator.of(context).push(
-                          AppPageRoute<void>(
-                            builder: (_) => LiveCoordinationDataScope(
-                              data: _liveData!,
-                              child: const DevelopmentSettingsScreen(),
-                            ),
-                          ),
-                        ),
+                        onOpenSettings: kDebugMode
+                            ? () => Navigator.of(context).push(
+                                AppPageRoute<void>(
+                                  builder: (_) => LiveCoordinationDataScope(
+                                    data: _liveData!,
+                                    child: const DevelopmentSettingsScreen(),
+                                  ),
+                                ),
+                              )
+                            : null,
                       ),
                       const SizedBox(height: 16),
                       Container(

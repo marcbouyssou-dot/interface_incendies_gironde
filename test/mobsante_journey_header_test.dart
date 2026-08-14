@@ -18,6 +18,28 @@ void main() {
     }
   });
 
+  testWidgets('the common slogan stays on one line at 390 logical pixels', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      const _HeaderHarness(
+        journey: MobSanteJourney.professional,
+        size: Size(390, 844),
+      ),
+    );
+
+    final slogan = find.byKey(const Key('mobsante-product-slogan'));
+    final text = tester.widget<Text>(slogan);
+    expect(text.data, isNot(contains('\n')));
+    expect(text.maxLines, 1);
+    expect(find.byKey(const Key('mobsante-slogan-one-line')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the header remains responsive with Dynamic Type and dark mode', (
     tester,
   ) async {
@@ -38,6 +60,13 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('mobsante-product-slogan')))
+          .maxLines,
+      isNull,
+    );
+    expect(find.byKey(const Key('mobsante-slogan-one-line')), findsNothing);
     expect(
       tester.getTopLeft(find.byKey(const Key('mobsante-journey-header'))).dy,
       greaterThanOrEqualTo(24),
@@ -74,7 +103,7 @@ void main() {
     expect(
       productIdentity.label,
       contains(
-        'MobSanté. Le bon professionnel. Au bon endroit. Au bon moment.',
+        'MobSanté. Le bon professionnel, au bon endroit, au bon moment.',
       ),
     );
     final journeyTitle = tester.getSemantics(
@@ -97,6 +126,7 @@ class _HeaderHarness extends StatelessWidget {
     this.disableAnimations = false,
     this.viewPadding = EdgeInsets.zero,
     this.pageTitle,
+    this.size = const Size(320, 568),
   });
 
   final MobSanteJourney journey;
@@ -105,6 +135,7 @@ class _HeaderHarness extends StatelessWidget {
   final bool disableAnimations;
   final EdgeInsets viewPadding;
   final String? pageTitle;
+  final Size size;
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +147,7 @@ class _HeaderHarness extends StatelessWidget {
           : ThemeMode.light,
       home: MediaQuery(
         data: MediaQueryData(
-          size: const Size(320, 568),
+          size: size,
           textScaler: textScaler,
           platformBrightness: brightness,
           disableAnimations: disableAnimations,

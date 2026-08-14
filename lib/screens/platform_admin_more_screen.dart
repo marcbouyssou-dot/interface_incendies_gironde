@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
+import '../widgets/perspective_switcher.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
@@ -99,6 +100,8 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: V5Spacing.xxl),
+                  const PlatformAdminPerspectiveSection(),
                   const SizedBox(height: V5Spacing.xxl),
                   V5Section(
                     title: 'Session',

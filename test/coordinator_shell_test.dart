@@ -133,7 +133,8 @@ void main() {
 
     expect(find.byType(CoordinatorMoreScreen), findsOneWidget);
     expect(find.text('Coordination'), findsOneWidget);
-    expect(find.text('Changer de perspective'), findsOneWidget);
+    expect(find.text('Changer de perspective'), findsNothing);
+    expect(find.byKey(const Key('perspective-professional')), findsNothing);
     expect(find.text('Statistiques globales'), findsOneWidget);
     expect(find.text('Réglages'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);

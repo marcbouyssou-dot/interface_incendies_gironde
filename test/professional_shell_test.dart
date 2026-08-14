@@ -440,7 +440,7 @@ void main() {
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
     expect(find.text('Mérignac'), findsOneWidget);
-    expect(find.text('Perspective'), findsOneWidget);
+    expect(find.text('Perspective'), findsNothing);
     expect(find.text('Centre géré'), findsOneWidget);
     expect(find.text('Identité'), findsNothing);
     expect(find.text('Identifiant du compte'), findsNothing);
@@ -449,7 +449,7 @@ void main() {
     expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
   });
 
-  testWidgets('site manager can view and immediately leave professional UI', (
+  testWidgets('site manager never sees the technical perspective selector', (
     tester,
   ) async {
     final merignac = places.firstWhere((place) => place.name == 'Mérignac');
@@ -467,23 +467,8 @@ void main() {
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Perspective'), findsOneWidget);
-    final professionalPerspective = find.byKey(
-      const Key('perspective-professional'),
-    );
-    await tester.ensureVisible(professionalPerspective);
-    await tester.tap(professionalPerspective);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ProfessionalShell), findsOneWidget);
-    expect(find.byKey(const Key('cross-role-preview-banner')), findsOneWidget);
-    expect(find.text('Perspective Professionnel'), findsOneWidget);
-    expect(find.text('Votre rôle : Responsable de centre'), findsOneWidget);
-    expect(find.text('Lecture seule'), findsNothing);
-
-    await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
-    await tester.pumpAndSettle();
-
+    expect(find.text('Perspective'), findsNothing);
+    expect(find.byKey(const Key('perspective-professional')), findsNothing);
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byKey(const Key('cross-role-preview-banner')), findsNothing);
   });
@@ -598,65 +583,6 @@ void main() {
       findsOneWidget,
     );
   });
-
-  testWidgets(
-    'coordinator selects an authorized center before responsible preview',
-    (tester) async {
-      final selectedCenter = places.first;
-
-      await tester.pumpWidget(const FireCoordinationApp());
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Plus'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('open-development-settings')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Changer de perspective'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('perspective-responsible')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Choisir un centre'), findsOneWidget);
-      final center = find.byKey(Key('preview-center-${selectedCenter.id}'));
-      await tester.tap(center);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(ResponsibleShell), findsOneWidget);
-      expect(
-        find.text('Perspective Responsable · ${selectedCenter.name}'),
-        findsOneWidget,
-      );
-      expect(find.text('Votre rôle : Coordinateur'), findsOneWidget);
-      expect(
-        find.byKey(const Key('responsible-open-need-mission-merignac')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const Key('responsible-open-need-mission-langon')),
-        findsNothing,
-      );
-
-      await tester.tap(find.byKey(const Key('change-preview-center')));
-      await tester.pumpAndSettle();
-      expect(find.text('Choisir un centre'), findsOneWidget);
-      Navigator.of(tester.element(find.text('Choisir un centre'))).pop();
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
-      await tester.pumpAndSettle();
-      expect(find.byType(ResponsibleShell), findsNothing);
-      await tester.tap(find.text('Plus'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('open-development-settings')));
-      await tester.pumpAndSettle();
-      expect(find.text('Changer de perspective'), findsOneWidget);
-
-      await tester.tap(find.byKey(const Key('perspective-professional')));
-      await tester.pumpAndSettle();
-      expect(find.byType(ProfessionalShell), findsOneWidget);
-      expect(find.text('Perspective Professionnel'), findsOneWidget);
-      expect(find.text('Votre rôle : Coordinateur'), findsOneWidget);
-    },
-  );
 
   testWidgets('debug settings switch the displayed shell instantly', (
     tester,
