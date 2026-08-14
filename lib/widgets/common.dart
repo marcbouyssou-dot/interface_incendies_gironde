@@ -1864,8 +1864,8 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _professionalIdController = TextEditingController();
-  final _cptsIdController = TextEditingController();
   final _cptsController = TextEditingController();
+  String? _legacyCptsId;
   final _otherEquipmentController = TextEditingController();
   bool _submitting = false;
   bool _loadingProfile = true;
@@ -1974,7 +1974,6 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     _phoneController.dispose();
     _emailController.dispose();
     _professionalIdController.dispose();
-    _cptsIdController.dispose();
     _cptsController.dispose();
     _otherEquipmentController.dispose();
     super.dispose();
@@ -1991,11 +1990,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         _emailController.text = profile.email ?? '';
         _professionalIdType = profile.effectiveProfessionalIdType;
         _professionalIdController.text = profile.effectiveProfessionalIdValue;
-        _cptsIdController.text = profile.cptsId ?? '';
+        _legacyCptsId = profile.cptsId;
         _cptsController.text = profile.cptsLabel ?? '';
-        _hasCpts =
-            (profile.cptsId?.trim().isNotEmpty ?? false) ||
-            (profile.cptsLabel?.trim().isNotEmpty ?? false);
+        _hasCpts = profile.cptsLabel?.trim().isNotEmpty ?? false;
         _selectedEquipment
           ..clear()
           ..addAll(
@@ -2472,7 +2469,6 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 setState(() {
                                   _hasCpts = hasCpts;
                                   if (!hasCpts) {
-                                    _cptsIdController.clear();
                                     _cptsController.clear();
                                   }
                                 });
@@ -2483,20 +2479,10 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 height: AppFormLayout.fieldSpacing,
                               ),
                               TextFormField(
-                                controller: _cptsIdController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Identifiant CPTS',
-                                ),
-                                validator: _required,
-                              ),
-                              const SizedBox(
-                                height: AppFormLayout.fieldSpacing,
-                              ),
-                              TextFormField(
                                 controller: _cptsController,
                                 textCapitalization: TextCapitalization.words,
                                 decoration: const InputDecoration(
-                                  labelText: 'CPTS',
+                                  labelText: 'Nom de la CPTS',
                                 ),
                                 validator: _required,
                               ),
@@ -2661,7 +2647,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         email: _emailController.text,
         professionalIdType: _professionalIdType,
         professionalIdValue: _professionalIdController.text,
-        cptsId: _hasCpts ? _cptsIdController.text : null,
+        cptsId: _legacyCptsId,
         cptsLabel: _hasCpts ? _cptsController.text : null,
         profession: _profession,
         equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(

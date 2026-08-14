@@ -237,14 +237,62 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                   ),
                   const SizedBox(height: V5Spacing.sm),
                   _ProfileSection(
-                    title: 'Territoire',
+                    title: 'Adresse professionnelle',
                     icon: Icons.location_on_outlined,
+                    children: [
+                      _ProfileValue(
+                        label: 'Adresse',
+                        value:
+                            profile
+                                    ?.professionalAddress
+                                    .addressLineLabel
+                                    .isNotEmpty ==
+                                true
+                            ? profile!.professionalAddress.addressLineLabel
+                            : 'Adresse professionnelle à compléter',
+                        valueColor: profile?.hasProfessionalAddress == true
+                            ? null
+                            : context.v5Colors.warning,
+                      ),
+                      _ProfileValue(
+                        label: 'Code postal · Ville',
+                        value:
+                            profile
+                                    ?.professionalAddress
+                                    .localityLabel
+                                    .isNotEmpty ==
+                                true
+                            ? profile!.professionalAddress.localityLabel
+                            : 'À compléter',
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          key: const Key('edit-professional-address'),
+                          onPressed: () => _editProfile(profile),
+                          child: const Text('Modifier'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: V5Spacing.sm),
+                  _ProfileSection(
+                    title: 'CPTS',
+                    icon: Icons.hub_outlined,
                     children: [
                       _ProfileValue(
                         label: 'CPTS',
                         value: profile?.cptsLabel?.trim().isNotEmpty == true
                             ? profile!.cptsLabel!.trim()
-                            : 'Non renseignée',
+                            : 'Aucune CPTS renseignée',
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          key: const Key('edit-professional-cpts'),
+                          onPressed: () => _editProfile(profile),
+                          child: const Text('Modifier'),
+                        ),
                       ),
                     ],
                   ),
@@ -335,13 +383,10 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
         profile.lastName.trim().isNotEmpty &&
         profile.phone.trim().isNotEmpty &&
         RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
-    final hasCompleteCpts =
-        (profile.cptsId?.trim().isNotEmpty ?? false) ==
-        (profile.cptsLabel?.trim().isNotEmpty ?? false);
     final hasEquipmentDetails =
         !ProfessionalEquipmentRegistry.requiresDetails(profile.equipment) ||
         (profile.otherEquipmentDetails?.trim().isNotEmpty ?? false);
-    return hasIdentity && hasCompleteCpts && hasEquipmentDetails;
+    return hasIdentity && hasEquipmentDetails;
   }
 }
 
@@ -432,8 +477,12 @@ class _ProfessionalProfileEditorState
   late final TextEditingController _phone;
   late final TextEditingController _email;
   late final TextEditingController _idValue;
-  late final TextEditingController _cptsId;
   late final TextEditingController _cptsLabel;
+  late final TextEditingController _professionalAddressLine1;
+  late final TextEditingController _professionalAddressLine2;
+  late final TextEditingController _professionalPostalCode;
+  late final TextEditingController _professionalCity;
+  late final TextEditingController _professionalCountryCode;
   late final TextEditingController _equipmentDetails;
   late final Set<String> _equipment;
   final _firstNameFocus = FocusNode(debugLabel: 'profile-first-name');
@@ -442,8 +491,22 @@ class _ProfessionalProfileEditorState
   final _emailFocus = FocusNode(debugLabel: 'profile-email');
   final _idTypeFocus = FocusNode(debugLabel: 'profile-id-type');
   final _idValueFocus = FocusNode(debugLabel: 'profile-id-value');
-  final _cptsIdFocus = FocusNode(debugLabel: 'profile-cpts-id');
   final _cptsLabelFocus = FocusNode(debugLabel: 'profile-cpts-label');
+  final _professionalAddressLine1Focus = FocusNode(
+    debugLabel: 'profile-professional-address-line-1',
+  );
+  final _professionalAddressLine2Focus = FocusNode(
+    debugLabel: 'profile-professional-address-line-2',
+  );
+  final _professionalPostalCodeFocus = FocusNode(
+    debugLabel: 'profile-professional-postal-code',
+  );
+  final _professionalCityFocus = FocusNode(
+    debugLabel: 'profile-professional-city',
+  );
+  final _professionalCountryCodeFocus = FocusNode(
+    debugLabel: 'profile-professional-country-code',
+  );
   final _equipmentDetailsFocus = FocusNode(
     debugLabel: 'profile-equipment-details',
   );
@@ -471,8 +534,20 @@ class _ProfessionalProfileEditorState
     _idValue = TextEditingController(
       text: profile?.effectiveProfessionalIdValue,
     );
-    _cptsId = TextEditingController(text: profile?.cptsId);
     _cptsLabel = TextEditingController(text: profile?.cptsLabel);
+    _professionalAddressLine1 = TextEditingController(
+      text: profile?.professionalAddressLine1,
+    );
+    _professionalAddressLine2 = TextEditingController(
+      text: profile?.professionalAddressLine2,
+    );
+    _professionalPostalCode = TextEditingController(
+      text: profile?.professionalPostalCode,
+    );
+    _professionalCity = TextEditingController(text: profile?.professionalCity);
+    _professionalCountryCode = TextEditingController(
+      text: profile?.professionalCountryCode ?? 'FR',
+    );
     _equipmentDetails = TextEditingController(
       text: profile?.otherEquipmentDetails,
     );
@@ -488,8 +563,12 @@ class _ProfessionalProfileEditorState
     _phone.dispose();
     _email.dispose();
     _idValue.dispose();
-    _cptsId.dispose();
     _cptsLabel.dispose();
+    _professionalAddressLine1.dispose();
+    _professionalAddressLine2.dispose();
+    _professionalPostalCode.dispose();
+    _professionalCity.dispose();
+    _professionalCountryCode.dispose();
     _equipmentDetails.dispose();
     _firstNameFocus.dispose();
     _lastNameFocus.dispose();
@@ -497,8 +576,12 @@ class _ProfessionalProfileEditorState
     _emailFocus.dispose();
     _idTypeFocus.dispose();
     _idValueFocus.dispose();
-    _cptsIdFocus.dispose();
     _cptsLabelFocus.dispose();
+    _professionalAddressLine1Focus.dispose();
+    _professionalAddressLine2Focus.dispose();
+    _professionalPostalCodeFocus.dispose();
+    _professionalCityFocus.dispose();
+    _professionalCountryCodeFocus.dispose();
     _equipmentDetailsFocus.dispose();
     super.dispose();
   }
@@ -697,24 +780,92 @@ class _ProfessionalProfileEditorState
               ),
               const SizedBox(height: V5Spacing.sm),
               V5Section(
-                title: 'Territoire',
+                title: 'Adresse professionnelle principale',
                 leading: const Icon(Icons.location_on_outlined),
                 child: Column(
                   children: [
                     V5TextField(
-                      key: const Key('professional-profile-cpts-id'),
-                      label: 'Identifiant CPTS (facultatif)',
-                      controller: _cptsId,
-                      focusNode: _cptsIdFocus,
+                      key: const Key('professional-profile-address-line-1'),
+                      label: 'Adresse',
+                      controller: _professionalAddressLine1,
+                      focusNode: _professionalAddressLine1Focus,
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLength: 240,
+                      validator: _professionalAddressLine1Validator,
+                      onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: V5Spacing.sm),
                     V5TextField(
-                      key: const Key('professional-profile-cpts-label'),
-                      label: 'CPTS (facultatif)',
-                      controller: _cptsLabel,
-                      focusNode: _cptsLabelFocus,
+                      key: const Key('professional-profile-address-line-2'),
+                      label: 'Complément d’adresse (facultatif)',
+                      controller: _professionalAddressLine2,
+                      focusNode: _professionalAddressLine2Focus,
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLength: 240,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: V5Spacing.sm),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: V5TextField(
+                            key: const Key('professional-profile-postal-code'),
+                            label: 'Code postal',
+                            controller: _professionalPostalCode,
+                            focusNode: _professionalPostalCodeFocus,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(5),
+                            ],
+                            validator: _professionalPostalCodeValidator,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: V5Spacing.xs),
+                        Expanded(
+                          child: V5TextField(
+                            key: const Key('professional-profile-city'),
+                            label: 'Ville',
+                            controller: _professionalCity,
+                            focusNode: _professionalCityFocus,
+                            textCapitalization: TextCapitalization.words,
+                            maxLength: 120,
+                            validator: _professionalCityValidator,
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: V5Spacing.sm),
+                    V5TextField(
+                      key: const Key('professional-profile-country-code'),
+                      label: 'Code pays',
+                      supportingText: 'FR par défaut',
+                      controller: _professionalCountryCode,
+                      focusNode: _professionalCountryCodeFocus,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp('[A-Za-z]')),
+                        LengthLimitingTextInputFormatter(2),
+                      ],
+                      validator: _professionalCountryCodeValidator,
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: V5Spacing.sm),
+              V5Section(
+                title: 'CPTS',
+                leading: const Icon(Icons.hub_outlined),
+                child: V5TextField(
+                  key: const Key('professional-profile-cpts-label'),
+                  label: 'Nom de la CPTS (facultatif)',
+                  supportingText: 'Laissez vide si vous n’avez aucune CPTS.',
+                  controller: _cptsLabel,
+                  focusNode: _cptsLabelFocus,
+                  textCapitalization: TextCapitalization.words,
+                  maxLength: 160,
                 ),
               ),
               const SizedBox(height: V5Spacing.sm),
@@ -792,24 +943,55 @@ class _ProfessionalProfileEditorState
     return null;
   }
 
+  bool get _hasProfessionalAddressInput => [
+    _professionalAddressLine1.text,
+    _professionalAddressLine2.text,
+    _professionalPostalCode.text,
+    _professionalCity.text,
+  ].any((value) => value.trim().isNotEmpty);
+
+  String get _normalizedProfessionalCountryCode {
+    final value = _professionalCountryCode.text.trim().toUpperCase();
+    return value.isEmpty ? 'FR' : value;
+  }
+
+  String? _professionalAddressLine1Validator(String? value) {
+    if (!_hasProfessionalAddressInput) return null;
+    return _required(value) == null
+        ? null
+        : 'Renseignez l’adresse professionnelle.';
+  }
+
+  String? _professionalPostalCodeValidator(String? value) {
+    if (!_hasProfessionalAddressInput) return null;
+    final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) return 'Renseignez le code postal professionnel.';
+    if (_normalizedProfessionalCountryCode == 'FR' &&
+        !RegExp(r'^\d{5}$').hasMatch(normalized)) {
+      return 'Le code postal doit contenir exactement 5 chiffres.';
+    }
+    return null;
+  }
+
+  String? _professionalCityValidator(String? value) {
+    if (!_hasProfessionalAddressInput) return null;
+    return _required(value) == null
+        ? null
+        : 'Renseignez la ville professionnelle.';
+  }
+
+  String? _professionalCountryCodeValidator(String? value) {
+    if (!_hasProfessionalAddressInput) return null;
+    final normalized = value?.trim().toUpperCase() ?? '';
+    if (normalized.isEmpty) return null;
+    return RegExp(r'^[A-Z]{2}$').hasMatch(normalized)
+        ? null
+        : 'Le code pays doit contenir deux lettres.';
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) {
       await _focusFirstInvalidField();
-      return;
-    }
-    if ((_cptsId.text.trim().isEmpty) != (_cptsLabel.text.trim().isEmpty)) {
-      final missingCptsId = _cptsId.text.trim().isEmpty;
-      await _focusAndAnnounce(
-        focusNode: missingCptsId ? _cptsIdFocus : _cptsLabelFocus,
-        label: missingCptsId ? 'Identifiant CPTS' : 'CPTS',
-        error: 'Renseignez ensemble l’identifiant et le nom CPTS.',
-      );
-      if (!mounted) return;
-      V5Toast.show(
-        context,
-        message: 'Renseignez ensemble l’identifiant et le nom CPTS.',
-        tone: V5ToastTone.warning,
-      );
       return;
     }
     setState(() => _saving = true);
@@ -831,8 +1013,12 @@ class _ProfessionalProfileEditorState
         profession: _profession,
         professionalIdType: _idType,
         professionalIdValue: _idValue.text.trim(),
-        cptsId: _cptsId.text.trim(),
         cptsLabel: _cptsLabel.text.trim(),
+        professionalAddressLine1: _professionalAddressLine1.text.trim(),
+        professionalAddressLine2: _professionalAddressLine2.text.trim(),
+        professionalPostalCode: _professionalPostalCode.text.trim(),
+        professionalCity: _professionalCity.text.trim(),
+        professionalCountryCode: _normalizedProfessionalCountryCode,
         equipment: _equipment.toList(growable: false),
         otherEquipmentDetails:
             ProfessionalEquipmentRegistry.requiresDetails(_equipment)
@@ -897,6 +1083,28 @@ class _ProfessionalProfileEditorState
         focusNode: _idValueFocus,
         label: _idType.label,
         error: _idValidator(_idValue.text),
+      ),
+      (
+        focusNode: _professionalAddressLine1Focus,
+        label: 'Adresse professionnelle',
+        error: _professionalAddressLine1Validator(
+          _professionalAddressLine1.text,
+        ),
+      ),
+      (
+        focusNode: _professionalPostalCodeFocus,
+        label: 'Code postal professionnel',
+        error: _professionalPostalCodeValidator(_professionalPostalCode.text),
+      ),
+      (
+        focusNode: _professionalCityFocus,
+        label: 'Ville professionnelle',
+        error: _professionalCityValidator(_professionalCity.text),
+      ),
+      (
+        focusNode: _professionalCountryCodeFocus,
+        label: 'Code pays',
+        error: _professionalCountryCodeValidator(_professionalCountryCode.text),
       ),
       if (ProfessionalEquipmentRegistry.requiresDetails(_equipment))
         (

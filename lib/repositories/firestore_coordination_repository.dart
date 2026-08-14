@@ -464,6 +464,11 @@ class FirestoreCoordinationRepository
       professionalIdValue: profile.effectiveProfessionalIdValue,
       cptsId: profile.cptsId,
       cptsLabel: profile.cptsLabel,
+      professionalAddressLine1: profile.professionalAddressLine1,
+      professionalAddressLine2: profile.professionalAddressLine2,
+      professionalPostalCode: profile.professionalPostalCode,
+      professionalCity: profile.professionalCity,
+      professionalCountryCode: profile.professionalCountryCode,
       equipment: profile.equipment,
       otherEquipmentDetails: profile.otherEquipmentDetails,
     );
@@ -1374,6 +1379,18 @@ class FirestoreCoordinationRepository
       professionalIdValue: _professionalIdValueFromData(data),
       cptsId: _nullableTrim(data['cptsId'] as String?),
       cptsLabel: _nullableTrim(data['cptsLabel'] as String?),
+      professionalAddressLine1: _nullableTrim(
+        data['professionalAddressLine1'] as String?,
+      ),
+      professionalAddressLine2: _nullableTrim(
+        data['professionalAddressLine2'] as String?,
+      ),
+      professionalPostalCode: _nullableTrim(
+        data['professionalPostalCode'] as String?,
+      ),
+      professionalCity: _nullableTrim(data['professionalCity'] as String?),
+      professionalCountryCode:
+          _nullableTrim(data['professionalCountryCode'] as String?) ?? 'FR',
       profession: profession,
       equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
         List<String>.from(data['equipment'] as List? ?? const []),
@@ -1410,6 +1427,7 @@ class FirestoreCoordinationRepository
     );
     final cptsId = _nullableTrim(profile.cptsId);
     final cptsLabel = _nullableTrim(profile.cptsLabel);
+    final professionalAddress = profile.professionalAddress;
     return {
       'uid': uid,
       'firstName': profile.firstName.trim(),
@@ -1423,6 +1441,11 @@ class FirestoreCoordinationRepository
           : null),
       'cptsId': ?cptsId,
       'cptsLabel': ?cptsLabel,
+      'professionalAddressLine1': ?professionalAddress.normalizedLine1,
+      'professionalAddressLine2': ?professionalAddress.normalizedLine2,
+      'professionalPostalCode': ?professionalAddress.normalizedPostalCode,
+      'professionalCity': ?professionalAddress.normalizedCity,
+      'professionalCountryCode': professionalAddress.normalizedCountryCode,
       'profession': profile.profession.canonicalId,
       'equipment': ProfessionalEquipmentRegistry.normalizeStoredValues(
         profile.equipment,
@@ -1510,6 +1533,11 @@ class FirestoreCoordinationRepository
     required String professionalIdValue,
     required String? cptsId,
     required String? cptsLabel,
+    String? professionalAddressLine1,
+    String? professionalAddressLine2,
+    String? professionalPostalCode,
+    String? professionalCity,
+    String professionalCountryCode = 'FR',
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) {
@@ -1538,12 +1566,20 @@ class FirestoreCoordinationRepository
         'Aucun identifiant professionnel ne doit être renseigné.',
       );
     }
-    final normalizedCptsId = _nullableTrim(cptsId);
-    final normalizedCptsLabel = _nullableTrim(cptsLabel);
-    if ((normalizedCptsId == null) != (normalizedCptsLabel == null)) {
-      throw const RepositoryException(
-        'Renseignez complètement votre CPTS ou choisissez Aucune.',
-      );
+    if ((_nullableTrim(cptsId)?.length ?? 0) > 160 ||
+        (_nullableTrim(cptsLabel)?.length ?? 0) > 160) {
+      throw const RepositoryException('Le nom de la CPTS est trop long.');
+    }
+    final address = ProfessionalAddress(
+      line1: professionalAddressLine1,
+      line2: professionalAddressLine2,
+      postalCode: professionalPostalCode,
+      city: professionalCity,
+      countryCode: professionalCountryCode,
+    );
+    final addressError = address.validationMessage;
+    if (addressError != null) {
+      throw RepositoryException(addressError);
     }
     if (ProfessionalEquipmentRegistry.requiresDetails(equipment) &&
         _nullableTrim(otherEquipmentDetails) == null) {

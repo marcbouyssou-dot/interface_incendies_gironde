@@ -102,11 +102,7 @@ void main() {
     await tester.tap(find.text('Renseigner une CPTS').last);
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Identifiant CPTS'),
-      'cpts-medoc',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'CPTS'),
+      find.widgetWithText(TextFormField, 'Nom de la CPTS'),
       'CPTS Médoc',
     );
   }
@@ -281,17 +277,17 @@ void main() {
   testWidgets(
     'waiting engagement status never displays the engagement action',
     (tester) async {
-      final engagementStream = StreamController<EngagementInfo?>();
-      addTearDown(engagementStream.close);
       final repository = _EngagementUiRepository(
         mission: mission(),
-        engagementStream: engagementStream.stream,
+        engagementStream: Stream<EngagementInfo?>.multi((_) {}),
       );
 
       await pumpApp(tester, repository, settle: false);
 
       expect(find.text('Je me mobilise'), findsNothing);
       expect(find.byType(V5ActivityIndicator), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     },
   );
 
@@ -447,7 +443,7 @@ void main() {
 
     await tester.tap(find.text('Modifier mes informations'));
     await tester.pumpAndSettle();
-    expect(find.byType(TextFormField), findsNWidgets(7));
+    expect(find.byType(TextFormField), findsNWidgets(6));
     expect(
       tester
           .widget<TextFormField>(find.widgetWithText(TextFormField, 'Prénom'))
@@ -462,18 +458,12 @@ void main() {
           ?.text,
       '10123456789',
     );
+    expect(find.text('Identifiant CPTS'), findsNothing);
     expect(
       tester
           .widget<TextFormField>(
-            find.widgetWithText(TextFormField, 'Identifiant CPTS'),
+            find.widgetWithText(TextFormField, 'Nom de la CPTS'),
           )
-          .controller
-          ?.text,
-      'cpts-medoc',
-    );
-    expect(
-      tester
-          .widget<TextFormField>(find.widgetWithText(TextFormField, 'CPTS'))
           .controller
           ?.text,
       'CPTS Médoc',

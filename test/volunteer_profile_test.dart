@@ -135,6 +135,18 @@ void main() {
     final repository = MockCoordinationRepository(
       initialMissions: [mission],
       initialLocations: const [],
+      initialProfiles: const {
+        'mock-volunteer': VolunteerProfile(
+          uid: 'mock-volunteer',
+          firstName: 'Profil',
+          lastName: 'Existant',
+          phone: '0611111111',
+          profession: VolunteerProfession.mk,
+          professionalAddressLine1: '10 rue de la Santé',
+          professionalPostalCode: '33000',
+          professionalCity: 'Bordeaux',
+        ),
+      },
     );
 
     await repository.createEngagement(
@@ -156,6 +168,9 @@ void main() {
     expect(profile?.cptsId, 'cpts-medoc');
     expect(profile?.cptsLabel, 'CPTS Médoc');
     expect(profile?.equipment, [ProfessionalEquipmentId.massageTable]);
+    expect(profile?.professionalAddressLine1, '10 rue de la Santé');
+    expect(profile?.professionalPostalCode, '33000');
+    expect(profile?.professionalCity, 'Bordeaux');
   });
 
   test('legacy profiles without RPPS or CPTS remain compatible', () async {
@@ -293,16 +308,6 @@ void main() {
         email: 'alice@example.fr',
         professionalIdType: ProfessionalIdType.none,
         professionalIdValue: 'unexpected',
-        profession: VolunteerProfession.mk,
-      ),
-      const VolunteerProfile(
-        uid: 'mock-volunteer',
-        firstName: 'Alice',
-        lastName: 'Martin',
-        phone: '0600000000',
-        email: 'alice@example.fr',
-        professionalIdType: ProfessionalIdType.none,
-        cptsId: 'cpts-medoc',
         profession: VolunteerProfession.mk,
       ),
     ]) {
@@ -496,6 +501,145 @@ void main() {
     final saved = await repository.getVolunteerProfile();
 
     expect(saved?.phone, '0611111111');
+    expect(saved?.hasVerifiedProfessionalIdentity, isTrue);
+    expect(saved?.verifiedAt, verified.verifiedAt);
+  });
+
+  test(
+    'historical profiles remain valid without address and with legacy CPTS id',
+    () {
+      const profile = VolunteerProfile(
+        uid: 'legacy',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        cptsId: 'legacy-cpts-id',
+        profession: VolunteerProfession.mk,
+      );
+
+      expect(profile.hasProfessionalAddress, isFalse);
+      expect(profile.hasCompleteProfessionalAddress, isTrue);
+      expect(profile.professionalAddress.validationMessage, isNull);
+      expect(profile.professionalCountryCode, 'FR');
+      expect(profile.cptsId, 'legacy-cpts-id');
+      expect(profile.cptsLabel, isNull);
+    },
+  );
+
+  test(
+    'professional address and CPTS label are normalized without an id',
+    () async {
+      final repository = MockCoordinationRepository(
+        initialMissions: const [],
+        initialLocations: const [],
+      );
+      await repository.saveVolunteerProfile(
+        const VolunteerProfile(
+          uid: 'mock-volunteer',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          professionalIdType: ProfessionalIdType.rpps,
+          professionalIdValue: '10123456789',
+          cptsLabel: '  CPTS Haute-Corrèze  ',
+          professionalAddressLine1: '  10 rue de la Santé  ',
+          professionalAddressLine2: '  Cabinet 2  ',
+          professionalPostalCode: ' 33000 ',
+          professionalCity: ' Bordeaux ',
+          professionalCountryCode: ' fr ',
+          profession: VolunteerProfession.mk,
+        ),
+      );
+
+      final saved = await repository.getVolunteerProfile();
+      expect(saved?.cptsId, isNull);
+      expect(saved?.cptsLabel, 'CPTS Haute-Corrèze');
+      expect(saved?.professionalAddressLine1, '10 rue de la Santé');
+      expect(saved?.professionalAddressLine2, 'Cabinet 2');
+      expect(saved?.professionalPostalCode, '33000');
+      expect(saved?.professionalCity, 'Bordeaux');
+      expect(saved?.professionalCountryCode, 'FR');
+      expect(saved?.hasCompleteProfessionalAddress, isTrue);
+
+      await repository.saveVolunteerProfile(
+        saved!.copyWith(professionalAddressLine2: ''),
+      );
+      final withoutLine2 = await repository.getVolunteerProfile();
+      expect(withoutLine2?.professionalAddressLine2, isNull);
+      expect(withoutLine2?.hasCompleteProfessionalAddress, isTrue);
+    },
+  );
+
+  test('professional address requires a valid postal code and city', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+    );
+    VolunteerProfile profile({String? postalCode, String? city}) =>
+        VolunteerProfile(
+          uid: 'mock-volunteer',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          professionalIdType: ProfessionalIdType.rpps,
+          professionalIdValue: '10123456789',
+          professionalAddressLine1: '10 rue de la Santé',
+          professionalPostalCode: postalCode,
+          professionalCity: city,
+          profession: VolunteerProfession.mk,
+        );
+
+    await expectLater(
+      repository.saveVolunteerProfile(
+        profile(postalCode: '3300', city: 'Bordeaux'),
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+    await expectLater(
+      repository.saveVolunteerProfile(profile(postalCode: '33000')),
+      throwsA(isA<RepositoryException>()),
+    );
+  });
+
+  test('address editing preserves RPPS verification', () async {
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: const [],
+    );
+    const profile = VolunteerProfile(
+      uid: 'mock-volunteer',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      email: 'alice@example.fr',
+      professionalIdType: ProfessionalIdType.rpps,
+      professionalIdValue: '10123456789',
+      profession: VolunteerProfession.mk,
+    );
+    await repository.saveVolunteerProfile(profile);
+    await repository.confirmProfessionalRpps(
+      const ProfessionalVerificationResult(
+        status: ProfessionalVerificationStatus.verified,
+        rpps: '10123456789',
+        firstName: 'Alice',
+        lastName: 'MARTIN',
+        professionCode: '70',
+        professionLabel: 'Masseur-Kinésithérapeute',
+      ),
+    );
+    final verified = await repository.getVolunteerProfile();
+
+    await repository.saveVolunteerProfile(
+      verified!.copyWith(
+        professionalAddressLine1: '10 rue de la Santé',
+        professionalPostalCode: '33000',
+        professionalCity: 'Bordeaux',
+      ),
+    );
+
+    final saved = await repository.getVolunteerProfile();
     expect(saved?.hasVerifiedProfessionalIdentity, isTrue);
     expect(saved?.verifiedAt, verified.verifiedAt);
   });

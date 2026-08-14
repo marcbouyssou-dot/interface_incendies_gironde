@@ -170,6 +170,11 @@ class MockCoordinationRepository implements CoordinationRepository {
       professionalIdValue: profile.effectiveProfessionalIdValue,
       cptsId: profile.cptsId,
       cptsLabel: profile.cptsLabel,
+      professionalAddressLine1: profile.professionalAddressLine1,
+      professionalAddressLine2: profile.professionalAddressLine2,
+      professionalPostalCode: profile.professionalPostalCode,
+      professionalCity: profile.professionalCity,
+      professionalCountryCode: profile.professionalCountryCode,
       equipment: profile.equipment,
       otherEquipmentDetails: profile.otherEquipmentDetails,
     );
@@ -202,6 +207,12 @@ class MockCoordinationRepository implements CoordinationRepository {
       ),
       cptsId: _nullableTrim(profile.cptsId),
       cptsLabel: _nullableTrim(profile.cptsLabel),
+      professionalAddressLine1: profile.professionalAddress.normalizedLine1,
+      professionalAddressLine2: profile.professionalAddress.normalizedLine2,
+      professionalPostalCode: profile.professionalAddress.normalizedPostalCode,
+      professionalCity: profile.professionalAddress.normalizedCity,
+      professionalCountryCode:
+          profile.professionalAddress.normalizedCountryCode,
       profession: profile.profession,
       equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
         profile.equipment,
@@ -256,6 +267,11 @@ class MockCoordinationRepository implements CoordinationRepository {
       professionalIdValue: verification.rpps,
       cptsId: existing.cptsId,
       cptsLabel: existing.cptsLabel,
+      professionalAddressLine1: existing.professionalAddressLine1,
+      professionalAddressLine2: existing.professionalAddressLine2,
+      professionalPostalCode: existing.professionalPostalCode,
+      professionalCity: existing.professionalCity,
+      professionalCountryCode: existing.professionalCountryCode,
       profession: existing.profession,
       equipment: existing.equipment,
       otherEquipmentDetails: existing.otherEquipmentDetails,
@@ -743,6 +759,11 @@ class MockCoordinationRepository implements CoordinationRepository {
       ),
       cptsId: _nullableTrim(cptsId),
       cptsLabel: _nullableTrim(cptsLabel),
+      professionalAddressLine1: existingProfile?.professionalAddressLine1,
+      professionalAddressLine2: existingProfile?.professionalAddressLine2,
+      professionalPostalCode: existingProfile?.professionalPostalCode,
+      professionalCity: existingProfile?.professionalCity,
+      professionalCountryCode: existingProfile?.professionalCountryCode ?? 'FR',
       profession: profession,
       equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(equipment),
       otherEquipmentDetails: _nullableTrim(otherEquipmentDetails),
@@ -893,6 +914,11 @@ class MockCoordinationRepository implements CoordinationRepository {
     required String professionalIdValue,
     required String? cptsId,
     required String? cptsLabel,
+    String? professionalAddressLine1,
+    String? professionalAddressLine2,
+    String? professionalPostalCode,
+    String? professionalCity,
+    String professionalCountryCode = 'FR',
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) {
@@ -921,12 +947,20 @@ class MockCoordinationRepository implements CoordinationRepository {
         'Aucun identifiant professionnel ne doit être renseigné.',
       );
     }
-    final normalizedCptsId = _nullableTrim(cptsId);
-    final normalizedCptsLabel = _nullableTrim(cptsLabel);
-    if ((normalizedCptsId == null) != (normalizedCptsLabel == null)) {
-      throw const RepositoryException(
-        'Renseignez complètement votre CPTS ou choisissez Aucune.',
-      );
+    if ((_nullableTrim(cptsId)?.length ?? 0) > 160 ||
+        (_nullableTrim(cptsLabel)?.length ?? 0) > 160) {
+      throw const RepositoryException('Le nom de la CPTS est trop long.');
+    }
+    final address = ProfessionalAddress(
+      line1: professionalAddressLine1,
+      line2: professionalAddressLine2,
+      postalCode: professionalPostalCode,
+      city: professionalCity,
+      countryCode: professionalCountryCode,
+    );
+    final addressError = address.validationMessage;
+    if (addressError != null) {
+      throw RepositoryException(addressError);
     }
     if (ProfessionalEquipmentRegistry.requiresDetails(equipment) &&
         _nullableTrim(otherEquipmentDetails) == null) {

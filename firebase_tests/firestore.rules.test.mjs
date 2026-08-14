@@ -711,19 +711,56 @@ test('volunteers: other equipment requires non-empty details', async () => {
   ));
 });
 
-test('volunteers: CPTS identifiers and labels remain paired', async () => {
+test('volunteers: CPTS label is primary and legacy identifiers stay valid', async () => {
   await seed();
   const missingLabel = volunteer('alice', {cptsId: 'cpts-medoc'});
   delete missingLabel.cptsLabel;
-  await assertFails(setDoc(
+  await assertSucceeds(setDoc(
     doc(db('alice'), 'volunteers/alice'),
     missingLabel,
   ));
   const missingId = volunteer('bob', {cptsLabel: 'CPTS Médoc'});
   delete missingId.cptsId;
-  await assertFails(setDoc(
+  await assertSucceeds(setDoc(
     doc(db('bob'), 'volunteers/bob'),
     missingId,
+  ));
+  await assertFails(setDoc(
+    doc(db('charlie'), 'volunteers/charlie'),
+    volunteer('charlie', {cptsLabel: 42}),
+  ));
+});
+
+test('volunteers: professional address is optional, structured and private', async () => {
+  await seed();
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice', {
+      professionalAddressLine1: '10 rue de la Santé',
+      professionalAddressLine2: 'Cabinet 2',
+      professionalPostalCode: '33000',
+      professionalCity: 'Bordeaux',
+      professionalCountryCode: 'FR',
+    }),
+  ));
+  await assertFails(getDoc(doc(db('bob'), 'volunteers/alice')));
+
+  await assertFails(setDoc(
+    doc(db('bob'), 'volunteers/bob'),
+    volunteer('bob', {
+      professionalAddressLine1: '10 rue de la Santé',
+      professionalPostalCode: '3300',
+      professionalCity: 'Bordeaux',
+      professionalCountryCode: 'FR',
+    }),
+  ));
+  await assertFails(setDoc(
+    doc(db('charlie'), 'volunteers/charlie'),
+    volunteer('charlie', {
+      professionalAddressLine1: '10 rue de la Santé',
+      professionalPostalCode: '33000',
+      professionalCountryCode: 'FR',
+    }),
   ));
 });
 

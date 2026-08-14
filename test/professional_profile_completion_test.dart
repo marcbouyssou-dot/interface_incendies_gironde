@@ -83,12 +83,37 @@ void main() {
         find.byKey(const Key('professional-profile-id-value')),
         '10123456789',
       );
-      await tester.enterText(
+      expect(
         find.byKey(const Key('professional-profile-cpts-id')),
-        'cpts-medoc',
+        findsNothing,
+      );
+      expect(find.textContaining('Identifiant CPTS'), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-address-line-1')),
+        '10 rue de la Santé',
+      );
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-address-line-2')),
+        'Cabinet 2',
+      );
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-postal-code')),
+        '33000',
+      );
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-city')),
+        'Bordeaux',
+      );
+      await _scrollTo(
+        tester,
+        find.byKey(const Key('professional-profile-cpts-label')),
       );
       await tester.enterText(
         find.byKey(const Key('professional-profile-cpts-label')),
+        'CPTS Médoc',
+      );
+      expect(
+        _fieldText(tester, const Key('professional-profile-cpts-label')),
         'CPTS Médoc',
       );
 
@@ -111,7 +136,14 @@ void main() {
       expect(find.text('Alice Martin'), findsOneWidget);
       expect(find.text('alice@example.fr'), findsOneWidget);
       expect(find.text('10123456789'), findsOneWidget);
+      await tester.drag(
+        find.byKey(const PageStorageKey('professional-profile')),
+        const Offset(0, -550),
+      );
+      await tester.pumpAndSettle();
       expect(find.text('CPTS Médoc'), findsWidgets);
+      expect(find.text('10 rue de la Santé, Cabinet 2'), findsOneWidget);
+      expect(find.text('33000 · Bordeaux'), findsOneWidget);
       await tester.drag(
         find.byKey(const PageStorageKey('professional-profile')),
         const Offset(0, -350),
@@ -124,6 +156,11 @@ void main() {
       expect(saved?.profession, VolunteerProfession.mk);
       expect(saved?.effectiveProfessionalIdType, ProfessionalIdType.rpps);
       expect(saved?.equipment, [ProfessionalEquipmentId.massageTable]);
+      expect(saved?.professionalAddressLine1, '10 rue de la Santé');
+      expect(saved?.professionalAddressLine2, 'Cabinet 2');
+      expect(saved?.professionalPostalCode, '33000');
+      expect(saved?.professionalCity, 'Bordeaux');
+      expect(saved?.professionalCountryCode, 'FR');
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -133,7 +170,13 @@ void main() {
 
       expect(find.text('Profil complet'), findsOneWidget);
       expect(find.text('alice@example.fr'), findsOneWidget);
+      await tester.drag(
+        find.byKey(const PageStorageKey('professional-profile')),
+        const Offset(0, -550),
+      );
+      await tester.pumpAndSettle();
       expect(find.text('CPTS Médoc'), findsWidgets);
+      expect(find.text('33000 · Bordeaux'), findsOneWidget);
       semantics.dispose();
     },
   );
@@ -153,6 +196,8 @@ void main() {
           profession: VolunteerProfession.nurse,
           professionalIdType: ProfessionalIdType.ordinal,
           professionalIdValue: 'ORD-123',
+          cptsId: 'legacy-cpts-id',
+          cptsLabel: 'CPTS Historique',
         ),
       },
     );
@@ -160,6 +205,7 @@ void main() {
     await _pumpApp(tester, repository);
     await _openProfessionalProfile(tester);
     expect(find.text('Profil complet'), findsOneWidget);
+    expect(find.text('Adresse professionnelle à compléter'), findsOneWidget);
     await tester.tap(find.byKey(const Key('edit-professional-profile')));
     await tester.pumpAndSettle();
 
@@ -171,6 +217,11 @@ void main() {
     expect(
       _fieldText(tester, const Key('professional-profile-email')),
       'nina@example.fr',
+    );
+    expect(find.textContaining('Identifiant CPTS'), findsNothing);
+    expect(
+      _fieldText(tester, const Key('professional-profile-cpts-label')),
+      'CPTS Historique',
     );
     await tester.enterText(
       find.byKey(const Key('professional-profile-email')),
@@ -188,6 +239,8 @@ void main() {
     final saved = await repository.getVolunteerProfile();
     expect(saved?.email, 'nina.modifiee@example.fr');
     expect(saved?.phone, '0622222222');
+    expect(saved?.cptsId, 'legacy-cpts-id');
+    expect(saved?.cptsLabel, 'CPTS Historique');
     expect(saved?.createdAt, isNotNull);
   });
 

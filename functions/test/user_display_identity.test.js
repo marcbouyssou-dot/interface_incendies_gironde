@@ -66,6 +66,11 @@ test('professional identity exposes only contextual display fields', () => {
       phone: '0600000000',
       email: 'secret@example.test',
       rpps: '12345678901',
+      professionalAddressLine1: '10 rue confidentielle',
+      professionalAddressLine2: 'Bâtiment B',
+      professionalPostalCode: '33000',
+      professionalCity: 'Bordeaux',
+      professionalCountryCode: 'FR',
       verificationStatus: 'verified',
       verificationSource: 'ans_rpps',
       verifiedFirstName: 'Marc',
@@ -86,6 +91,9 @@ test('professional identity exposes only contextual display fields', () => {
   assert.equal(Object.hasOwn(value, 'phone'), false);
   assert.equal(Object.hasOwn(value, 'email'), false);
   assert.equal(Object.hasOwn(value, 'rpps'), false);
+  assert.equal(Object.hasOwn(value, 'professionalAddressLine1'), false);
+  assert.equal(Object.hasOwn(value, 'professionalPostalCode'), false);
+  assert.equal(Object.hasOwn(value, 'professionalCity'), false);
 });
 
 test('missing professional identity remains human and neutral', () => {

@@ -400,8 +400,36 @@ service cloud.firestore {
       let cptsLabel = data.get('cptsLabel', '');
       return cptsId is string
         && cptsLabel is string
-        && ((cptsId == '' && cptsLabel == '')
-          || (cptsId.size() > 0 && cptsLabel.size() > 0));
+        && cptsId.size() <= 160
+        && cptsLabel.size() <= 160;
+    }
+
+    function validProfessionalAddress(data) {
+      let line1 = data.get('professionalAddressLine1', '');
+      let line2 = data.get('professionalAddressLine2', '');
+      let postalCode = data.get('professionalPostalCode', '');
+      let city = data.get('professionalCity', '');
+      let countryCode = data.get('professionalCountryCode', 'FR');
+      let hasAddress = line1 != ''
+        || line2 != ''
+        || postalCode != ''
+        || city != '';
+      return line1 is string
+        && line2 is string
+        && postalCode is string
+        && city is string
+        && countryCode is string
+        && line1.size() <= 240
+        && line2.size() <= 240
+        && postalCode.size() <= 16
+        && city.size() <= 120
+        && countryCode.matches('^[A-Z]{2}$')
+        && (!hasAddress
+          || (isNonBlankCanonicalText(line1)
+            && isNonBlankCanonicalText(city)
+            && (countryCode == 'FR'
+              ? postalCode.matches('^[0-9]{5}$')
+              : postalCode.matches('^[A-Za-z0-9][A-Za-z0-9 -]{1,15}$'))));
     }
 
     function validOptionalEquipmentDetails(data) {
@@ -481,6 +509,9 @@ service cloud.firestore {
           'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
           'rpps', 'professionalIdType', 'professionalIdValue',
           'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
+          'professionalAddressLine1', 'professionalAddressLine2',
+          'professionalPostalCode', 'professionalCity',
+          'professionalCountryCode',
           'verificationStatus', 'verificationSource', 'verifiedFirstName',
           'verifiedLastName', 'verifiedProfessionCode',
           'verifiedProfessionLabel', 'verifiedAt',
@@ -501,6 +532,7 @@ service cloud.firestore {
         && validProfessionalIdentity(request.resource.data)
         && validVerificationData(request.resource.data)
         && validOptionalCpts(request.resource.data)
+        && validProfessionalAddress(request.resource.data)
         && validOptionalEquipmentDetails(request.resource.data);
     }
 

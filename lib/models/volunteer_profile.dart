@@ -16,6 +16,83 @@ bool isValidProfessionalIdentifier(ProfessionalIdType type, String? value) {
       (value?.trim().isNotEmpty ?? false);
 }
 
+class ProfessionalAddress {
+  const ProfessionalAddress({
+    this.line1,
+    this.line2,
+    this.postalCode,
+    this.city,
+    this.countryCode = 'FR',
+  });
+
+  final String? line1;
+  final String? line2;
+  final String? postalCode;
+  final String? city;
+  final String countryCode;
+
+  String? get normalizedLine1 => _trimmedOrNull(line1);
+  String? get normalizedLine2 => _trimmedOrNull(line2);
+  String? get normalizedPostalCode => _trimmedOrNull(postalCode);
+  String? get normalizedCity => _trimmedOrNull(city);
+  String get normalizedCountryCode {
+    final value = countryCode.trim().toUpperCase();
+    return value.isEmpty ? 'FR' : value;
+  }
+
+  bool get isEmpty =>
+      normalizedLine1 == null &&
+      normalizedLine2 == null &&
+      normalizedPostalCode == null &&
+      normalizedCity == null;
+
+  bool get isComplete => isEmpty || validationMessage == null;
+
+  String? get validationMessage {
+    if (isEmpty) return null;
+    if ((normalizedLine1?.length ?? 0) > 240 ||
+        (normalizedLine2?.length ?? 0) > 240 ||
+        (normalizedPostalCode?.length ?? 0) > 16 ||
+        (normalizedCity?.length ?? 0) > 120) {
+      return 'L’adresse professionnelle est trop longue.';
+    }
+    if (normalizedLine1 == null) {
+      return 'Renseignez l’adresse professionnelle.';
+    }
+    if (normalizedPostalCode == null) {
+      return 'Renseignez le code postal professionnel.';
+    }
+    if (normalizedCity == null) {
+      return 'Renseignez la ville professionnelle.';
+    }
+    if (!RegExp(r'^[A-Z]{2}$').hasMatch(normalizedCountryCode)) {
+      return 'Le code pays doit contenir deux lettres.';
+    }
+    final postalCode = normalizedPostalCode!;
+    if (normalizedCountryCode == 'FR') {
+      if (!RegExp(r'^\d{5}$').hasMatch(postalCode)) {
+        return 'Le code postal doit contenir exactement 5 chiffres.';
+      }
+    } else if (!RegExp(
+      r'^[A-Za-z0-9][A-Za-z0-9 -]{1,15}$',
+    ).hasMatch(postalCode)) {
+      return 'Le code postal est invalide.';
+    }
+    return null;
+  }
+
+  String get addressLineLabel =>
+      [normalizedLine1, normalizedLine2].whereType<String>().join(', ');
+
+  String get localityLabel =>
+      [normalizedPostalCode, normalizedCity].whereType<String>().join(' · ');
+}
+
+String? _trimmedOrNull(String? value) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : trimmed;
+}
+
 class VolunteerProfile {
   const VolunteerProfile({
     required this.uid,
@@ -29,6 +106,11 @@ class VolunteerProfile {
     this.professionalIdValue,
     this.cptsId,
     this.cptsLabel,
+    this.professionalAddressLine1,
+    this.professionalAddressLine2,
+    this.professionalPostalCode,
+    this.professionalCity,
+    this.professionalCountryCode = 'FR',
     this.equipment = const [],
     this.otherEquipmentDetails,
     this.verificationStatus,
@@ -52,6 +134,11 @@ class VolunteerProfile {
   final String? professionalIdValue;
   final String? cptsId;
   final String? cptsLabel;
+  final String? professionalAddressLine1;
+  final String? professionalAddressLine2;
+  final String? professionalPostalCode;
+  final String? professionalCity;
+  final String professionalCountryCode;
   final VolunteerProfession profession;
   final List<String> equipment;
   final String? otherEquipmentDetails;
@@ -84,6 +171,17 @@ class VolunteerProfile {
     effectiveProfessionalIdValue,
   );
 
+  ProfessionalAddress get professionalAddress => ProfessionalAddress(
+    line1: professionalAddressLine1,
+    line2: professionalAddressLine2,
+    postalCode: professionalPostalCode,
+    city: professionalCity,
+    countryCode: professionalCountryCode,
+  );
+
+  bool get hasProfessionalAddress => !professionalAddress.isEmpty;
+  bool get hasCompleteProfessionalAddress => professionalAddress.isComplete;
+
   bool get hasVerifiedProfessionalIdentity =>
       verificationStatus == 'verified' &&
       verificationSource == 'ans_rpps' &&
@@ -115,6 +213,11 @@ class VolunteerProfile {
     String? professionalIdValue,
     String? cptsId,
     String? cptsLabel,
+    String? professionalAddressLine1,
+    String? professionalAddressLine2,
+    String? professionalPostalCode,
+    String? professionalCity,
+    String? professionalCountryCode,
     VolunteerProfession? profession,
     List<String>? equipment,
     String? otherEquipmentDetails,
@@ -139,6 +242,15 @@ class VolunteerProfile {
       professionalIdValue: professionalIdValue ?? this.professionalIdValue,
       cptsId: cptsId ?? this.cptsId,
       cptsLabel: cptsLabel ?? this.cptsLabel,
+      professionalAddressLine1:
+          professionalAddressLine1 ?? this.professionalAddressLine1,
+      professionalAddressLine2:
+          professionalAddressLine2 ?? this.professionalAddressLine2,
+      professionalPostalCode:
+          professionalPostalCode ?? this.professionalPostalCode,
+      professionalCity: professionalCity ?? this.professionalCity,
+      professionalCountryCode:
+          professionalCountryCode ?? this.professionalCountryCode,
       profession: profession ?? this.profession,
       equipment: equipment ?? this.equipment,
       otherEquipmentDetails:
