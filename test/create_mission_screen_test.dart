@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
+import 'package:interface_incendies_gironde/models/app_notification.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
@@ -589,6 +590,35 @@ class _MissionRepository implements CoordinationRepository {
   final ResponsibleAccess access;
   final List<ResponsePlace> locations;
   final Completer<String> _completer = Completer<String>();
+
+  @override
+  Future<CoordinationNeed?> getMission(String missionId) async => null;
+
+  @override
+  Stream<List<AppNotification>> watchNotifications() => Stream.value(const []);
+
+  @override
+  Future<void> setNotificationRead(
+    String notificationId, {
+    required bool read,
+  }) async {}
+
+  @override
+  Stream<NotificationPreferences> watchNotificationPreferences() =>
+      Stream.value(const NotificationPreferences());
+
+  @override
+  Future<void> saveNotificationPreferences(
+    NotificationPreferences preferences,
+  ) async {}
+
+  @override
+  Future<void> registerPushSubscription(
+    PushSubscriptionRegistration registration,
+  ) async {}
+
+  @override
+  Future<void> disablePushSubscription(String installationId) async {}
   int calls = 0;
   int updateCalls = 0;
   String? updatedMissionId;

@@ -3,6 +3,7 @@ import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
 import '../models/user_display_identity.dart';
+import '../models/app_notification.dart';
 import '../services/professional_verification_service.dart';
 import 'admin_invitation_repository.dart';
 import 'location_administration_repository.dart';
@@ -72,6 +73,22 @@ abstract interface class CoordinationRepository {
   Future<void> cancelEngagement(String missionId);
 
   Future<void> cancelMission(String missionId, String? reason);
+
+  Future<CoordinationNeed?> getMission(String missionId);
+
+  Stream<List<AppNotification>> watchNotifications();
+
+  Future<void> setNotificationRead(String notificationId, {required bool read});
+
+  Stream<NotificationPreferences> watchNotificationPreferences();
+
+  Future<void> saveNotificationPreferences(NotificationPreferences preferences);
+
+  Future<void> registerPushSubscription(
+    PushSubscriptionRegistration registration,
+  );
+
+  Future<void> disablePushSubscription(String installationId);
 }
 
 class EngagementInfo {

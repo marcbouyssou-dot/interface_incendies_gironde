@@ -1,6 +1,7 @@
 {
     "name": "MobSanté",
     "short_name": "MobSanté",
+    "id": "/",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#10233E",

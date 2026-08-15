@@ -23,12 +23,14 @@ class FireCoordinationApp extends StatelessWidget {
     this.useLegacyCoordinatorShellForTesting = false,
     this.professionalVerificationService,
     this.platformRuntime,
+    this.initialNotificationId,
   });
 
   final CoordinationRepository? repository;
   final int initialTab;
   final ProfessionalVerificationService? professionalVerificationService;
   final PlatformRuntime? platformRuntime;
+  final String? initialNotificationId;
 
   /// Explicit regression harness for screens removed from the live V5 shell.
   final bool useLegacyCoordinatorShellForTesting;
@@ -71,6 +73,7 @@ class FireCoordinationApp extends StatelessWidget {
                         const FakeProfessionalVerificationService(),
                     useLegacyCoordinatorShellForTesting:
                         useLegacyCoordinatorShellForTesting,
+                    initialNotificationId: initialNotificationId,
                   ),
                 ),
               ),

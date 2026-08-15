@@ -11,6 +11,7 @@ import 'create_need_screen.dart';
 import 'development_settings_screen.dart';
 import 'professional_engagements_screen.dart';
 import 'professional_profile_screen.dart';
+import 'notification_center_screen.dart';
 import 'slots_screen.dart';
 
 class ProfessionalShell extends StatefulWidget {
@@ -44,6 +45,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     2 => ProfessionalProfileScreen(
       onOpenResponsibleAccess: _openResponsibleAccess,
       onOpenSettings: _openSettings,
+      onOpenNotifications: _openNotifications,
       onSignOut: _signOut,
       verificationService: widget.verificationService,
     ),
@@ -84,6 +86,12 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
           child: const DevelopmentSettingsScreen(),
         ),
       ),
+    );
+  }
+
+  void _openNotifications() {
+    Navigator.of(context).push(
+      AppPageRoute<void>(builder: (_) => const NotificationCenterScreen()),
     );
   }
 

@@ -10,6 +10,7 @@ import '../utils/app_page_route.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/v5_controls.dart';
 import 'development_settings_screen.dart';
+import 'notification_center_screen.dart';
 
 class ResponsibleProfileScreen extends StatefulWidget {
   const ResponsibleProfileScreen({super.key, this.previewLocationId});
@@ -62,6 +63,7 @@ class _ResponsibleProfileScreenState extends State<ResponsibleProfileScreen> {
             locations: locationsSnapshot.data!,
             signingOut: _signingOut,
             onOpenSettings: _openSettings,
+            onOpenNotifications: _openNotifications,
             onSignOut: _signOut,
             previewLocationId: widget.previewLocationId,
           );
@@ -82,6 +84,12 @@ class _ResponsibleProfileScreenState extends State<ResponsibleProfileScreen> {
     );
   }
 
+  void _openNotifications() {
+    Navigator.of(context).push(
+      AppPageRoute<void>(builder: (_) => const NotificationCenterScreen()),
+    );
+  }
+
   Future<void> _signOut() async {
     if (_signingOut) return;
     setState(() => _signingOut = true);
@@ -99,6 +107,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
     required this.locations,
     required this.signingOut,
     required this.onOpenSettings,
+    required this.onOpenNotifications,
     required this.onSignOut,
     required this.previewLocationId,
   });
@@ -107,6 +116,7 @@ class _ResponsibleProfileContent extends StatelessWidget {
   final List<ResponsePlace> locations;
   final bool signingOut;
   final VoidCallback onOpenSettings;
+  final VoidCallback onOpenNotifications;
   final VoidCallback onSignOut;
   final String? previewLocationId;
 
@@ -159,6 +169,13 @@ class _ResponsibleProfileContent extends StatelessWidget {
                           ],
                   ),
                   const SizedBox(height: V5Spacing.xxl),
+                  OutlinedButton.icon(
+                    key: const Key('responsible-notification-center'),
+                    onPressed: onOpenNotifications,
+                    icon: const Icon(Icons.notifications_outlined),
+                    label: const Text('Notifications'),
+                  ),
+                  const SizedBox(height: V5Spacing.md),
                   if (kDebugMode) ...[
                     OutlinedButton(
                       key: const Key('responsible-development-settings'),

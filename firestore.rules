@@ -925,6 +925,84 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /notificationEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /notificationDeliveries/{deliveryId} {
+      allow read, write: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn()
+        && resource.data.recipientUid == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.recipientUid == request.auth.uid
+        && request.resource.data.recipientUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['readAt'])
+        && (request.resource.data.readAt == null
+          || request.resource.data.readAt == request.time);
+      allow create, delete: if false;
+    }
+
+    match /notificationPreferences/{uid} {
+      allow get: if isVolunteerOwner(uid);
+      allow create, update: if isVolunteerOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'uid', 'compatibleMissions', 'engagementUpdates',
+          'operationalAlerts', 'quietHoursStart', 'quietHoursEnd',
+          'updatedAt'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.compatibleMissions is bool
+        && request.resource.data.engagementUpdates is bool
+        && request.resource.data.operationalAlerts is bool
+        && request.resource.data.quietHoursStart is int
+        && request.resource.data.quietHoursStart >= 0
+        && request.resource.data.quietHoursStart <= 23
+        && request.resource.data.quietHoursEnd is int
+        && request.resource.data.quietHoursEnd >= 0
+        && request.resource.data.quietHoursEnd <= 23
+        && request.resource.data.updatedAt == request.time;
+      allow list, delete: if false;
+    }
+
+    match /pushSubscriptions/{subscriptionId} {
+      allow get, list: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'installationId', 'token', 'platform', 'active',
+          'lastUsedAt', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && isNonBlankCanonicalText(request.resource.data.installationId)
+        && request.resource.data.installationId.size() <= 160
+        && isNonBlankCanonicalText(request.resource.data.token)
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.platform == 'web'
+        && request.resource.data.active == true
+        && request.resource.data.lastUsedAt == request.time
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.installationId == resource.data.installationId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'token', 'platform', 'active', 'lastUsedAt', 'updatedAt'
+        ])
+        && isNonBlankCanonicalText(request.resource.data.token)
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.platform == 'web'
+        && request.resource.data.active is bool
+        && request.resource.data.lastUsedAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
     match /adminInvitations/{invitationId} {
       allow read: if isCoordinator();
       allow create: if isCoordinator()

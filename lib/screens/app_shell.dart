@@ -15,6 +15,7 @@ import '../services/professional_verification_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/system_theme.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/v5_bottom_navigation.dart';
 import '../widgets/perspective_switcher.dart';
 import 'administration_dashboard_screen.dart';
@@ -26,6 +27,7 @@ import 'platform_admin_shell.dart';
 import 'professional_shell.dart';
 import 'responsible_shell.dart';
 import 'slots_screen.dart';
+import 'notification_center_screen.dart';
 
 enum _AppJourney { professional, responsible, coordinator, platformAdmin }
 
@@ -37,11 +39,13 @@ class AppShell extends StatefulWidget {
     this.professionalVerificationService =
         const FakeProfessionalVerificationService(),
     this.platformRuntime,
+    this.initialNotificationId,
   });
 
   final int initialIndex;
   final ProfessionalVerificationService professionalVerificationService;
   final PlatformRuntime? platformRuntime;
+  final String? initialNotificationId;
 
   /// Never enabled by the application entry point outside regression tests.
   final bool useLegacyCoordinatorShellForTesting;
@@ -68,6 +72,7 @@ class _AppShellState extends State<AppShell> {
   bool _platformAdministratorResolved = false;
   bool _showPlatformAdminAuthentication = false;
   bool _applicationRevealScheduled = false;
+  bool _initialNotificationScheduled = false;
 
   @override
   void initState() {
@@ -306,6 +311,9 @@ class _AppShellState extends State<AppShell> {
       );
     }
     _scheduleApplicationReveal();
+    if (displayedJourney != _AppJourney.platformAdmin) {
+      _scheduleInitialNotification();
+    }
     if (_showPlatformAdminAuthentication) {
       return LiveCoordinationDataScope(
         data: _liveData!,
@@ -365,6 +373,25 @@ class _AppShellState extends State<AppShell> {
             )
           : displayedShell,
     );
+  }
+
+  void _scheduleInitialNotification() {
+    final notificationId = widget.initialNotificationId;
+    if (_initialNotificationScheduled ||
+        notificationId == null ||
+        notificationId.isEmpty) {
+      return;
+    }
+    _initialNotificationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        AppPageRoute<void>(
+          builder: (_) =>
+              NotificationCenterScreen(initialNotificationId: notificationId),
+        ),
+      );
+    });
   }
 
   Widget _buildLegacyShell() {

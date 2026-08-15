@@ -20,12 +20,14 @@ class ProfessionalProfileScreen extends StatefulWidget {
     super.key,
     required this.onOpenResponsibleAccess,
     required this.onOpenSettings,
+    required this.onOpenNotifications,
     required this.onSignOut,
     this.verificationService = const FakeProfessionalVerificationService(),
   });
 
   final VoidCallback onOpenResponsibleAccess;
   final VoidCallback onOpenSettings;
+  final VoidCallback onOpenNotifications;
   final Future<void> Function() onSignOut;
   final ProfessionalVerificationService verificationService;
 
@@ -332,6 +334,13 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: V5Spacing.lg),
+                  OutlinedButton.icon(
+                    key: const Key('open-notification-center'),
+                    onPressed: widget.onOpenNotifications,
+                    icon: const Icon(Icons.notifications_outlined),
+                    label: const Text('Notifications'),
+                  ),
+                  const SizedBox(height: V5Spacing.xs),
                   if (kDebugMode) ...[
                     OutlinedButton.icon(
                       key: const Key('open-development-settings'),

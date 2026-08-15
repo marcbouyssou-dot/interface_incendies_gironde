@@ -29,9 +29,12 @@ class MobSanteEntry extends StatelessWidget {
     }
     return standardBuilder?.call(context) ??
         (FirebaseBootstrap.enabled
-            ? const FirebaseStartupGate()
+            ? FirebaseStartupGate(
+                initialNotificationId: uri.queryParameters['notification'],
+              )
             : FireCoordinationApp(
                 repository: MockCoordinationRepository.instance,
+                initialNotificationId: uri.queryParameters['notification'],
               ));
   }
 }

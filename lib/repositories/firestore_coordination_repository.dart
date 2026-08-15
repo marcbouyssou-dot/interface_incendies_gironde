@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/health_profession.dart';
+import '../models/app_notification.dart';
 import '../models/mobilization_context.dart';
 import '../models/need.dart';
 import '../models/platform_administrator_access.dart';
@@ -203,6 +204,24 @@ class FirestoreCoordinationRepository
   final FirebaseFunctions _responsibleFunctions;
   final FirebaseFunctions _volunteerFunctions;
   late final UserDisplayIdentityResolver _identityResolver;
+
+  FirebaseAuth get _notificationAuth =>
+      _responsibleAuth.currentUser?.isAnonymous == false
+      ? _responsibleAuth
+      : _auth;
+
+  FirebaseFirestore get _notificationFirestore =>
+      identical(_notificationAuth, _responsibleAuth)
+      ? _responsibleFirestore
+      : _firestore;
+
+  String get _notificationUid {
+    final uid = _notificationAuth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      throw const RepositoryException('Authentification requise.');
+    }
+    return uid;
+  }
 
   @override
   late final PlatformReadRepository platformReadRepository =
@@ -1597,6 +1616,139 @@ class FirestoreCoordinationRepository
           EngagementStatus.confirmed;
     }
     return EngagementStatus.confirmed;
+  }
+
+  @override
+  Stream<List<AppNotification>> watchNotifications() {
+    final uid = _notificationUid;
+    return _notificationFirestore
+        .collection('notifications')
+        .where('recipientUid', isEqualTo: uid)
+        .snapshots()
+        .map((snapshot) {
+          final values =
+              snapshot.docs
+                  .map((document) {
+                    final data = document.data();
+                    return AppNotification(
+                      id: document.id,
+                      eventId: data['eventId'] as String? ?? '',
+                      type: appNotificationTypeFromValue(
+                        data['eventType'] as String? ?? '',
+                      ),
+                      title: data['title'] as String? ?? 'Notification',
+                      body: data['body'] as String? ?? '',
+                      occurredAt:
+                          (data['occurredAt'] as Timestamp?)?.toDate() ??
+                          DateTime.fromMillisecondsSinceEpoch(0),
+                      missionId: data['missionId'] as String? ?? '',
+                      engagementId: data['engagementId'] as String?,
+                      readAt: (data['readAt'] as Timestamp?)?.toDate(),
+                    );
+                  })
+                  .toList(growable: false)
+                ..sort(
+                  (left, right) => right.occurredAt.compareTo(left.occurredAt),
+                );
+          return List.unmodifiable(values.take(50));
+        });
+  }
+
+  @override
+  Future<void> setNotificationRead(
+    String notificationId, {
+    required bool read,
+  }) => _notificationFirestore
+      .collection('notifications')
+      .doc(notificationId)
+      .update({'readAt': read ? FieldValue.serverTimestamp() : null});
+
+  @override
+  Future<CoordinationNeed?> getMission(String missionId) async {
+    final document = await _notificationFirestore
+        .collection('missions')
+        .doc(missionId)
+        .get();
+    final data = document.data();
+    return data == null
+        ? null
+        : FirestoreMissionMapper.fromFirestore(id: document.id, data: data);
+  }
+
+  @override
+  Stream<NotificationPreferences> watchNotificationPreferences() {
+    final uid = _notificationUid;
+    return _notificationFirestore
+        .collection('notificationPreferences')
+        .doc(uid)
+        .snapshots()
+        .map((snapshot) {
+          final data = snapshot.data();
+          if (data == null) return const NotificationPreferences();
+          return NotificationPreferences(
+            compatibleMissions: data['compatibleMissions'] as bool? ?? false,
+            engagementUpdates: data['engagementUpdates'] as bool? ?? true,
+            operationalAlerts: data['operationalAlerts'] as bool? ?? true,
+            quietHoursStart: data['quietHoursStart'] as int? ?? 22,
+            quietHoursEnd: data['quietHoursEnd'] as int? ?? 7,
+          );
+        });
+  }
+
+  @override
+  Future<void> saveNotificationPreferences(
+    NotificationPreferences preferences,
+  ) {
+    final uid = _notificationUid;
+    return _notificationFirestore
+        .collection('notificationPreferences')
+        .doc(uid)
+        .set({
+          'uid': uid,
+          'compatibleMissions': preferences.compatibleMissions,
+          'engagementUpdates': preferences.engagementUpdates,
+          'operationalAlerts': preferences.operationalAlerts,
+          'quietHoursStart': preferences.quietHoursStart,
+          'quietHoursEnd': preferences.quietHoursEnd,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> registerPushSubscription(
+    PushSubscriptionRegistration registration,
+  ) async {
+    final uid = _notificationUid;
+    final reference = _notificationFirestore
+        .collection('pushSubscriptions')
+        .doc('${uid}_${registration.installationId}');
+    await _notificationFirestore.runTransaction((transaction) async {
+      final existing = await transaction.get(reference);
+      final now = FieldValue.serverTimestamp();
+      transaction.set(reference, {
+        'uid': uid,
+        'installationId': registration.installationId,
+        'token': registration.token,
+        'platform': registration.platform,
+        'active': true,
+        'lastUsedAt': now,
+        'createdAt': existing.data()?['createdAt'] ?? now,
+        'updatedAt': now,
+      }, SetOptions(merge: true));
+    });
+  }
+
+  @override
+  Future<void> disablePushSubscription(String installationId) {
+    final uid = _notificationUid;
+    return _notificationFirestore
+        .collection('pushSubscriptions')
+        .doc('${uid}_$installationId')
+        .update({
+          'active': false,
+          'lastUsedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
   }
 
   static String _missionUpdateMessage(String code) => switch (code) {

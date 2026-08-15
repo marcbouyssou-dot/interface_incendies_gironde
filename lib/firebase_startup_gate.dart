@@ -32,11 +32,13 @@ class FirebaseStartupGate extends StatefulWidget {
     this.startup,
     this.initialTab = 0,
     this.splashPreparation,
+    this.initialNotificationId,
   });
 
   final Future<CoordinationRepository> Function()? startup;
   final int initialTab;
   final SplashVisualPreparation? splashPreparation;
+  final String? initialNotificationId;
 
   @override
   State<FirebaseStartupGate> createState() => _FirebaseStartupGateState();
@@ -164,6 +166,7 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
             initialTab: widget.initialTab,
             professionalVerificationService:
                 FirebaseProfessionalVerificationService(),
+            initialNotificationId: widget.initialNotificationId,
           );
         }
         if (snapshot.hasError) _scheduleErrorReveal();

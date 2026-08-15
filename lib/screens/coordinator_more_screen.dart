@@ -18,12 +18,14 @@ class CoordinatorMoreScreen extends StatefulWidget {
     required this.onOpenStatistics,
     required this.onOpenSettings,
     required this.onOpenProfile,
+    required this.onOpenNotifications,
     required this.onSignOut,
   });
 
   final VoidCallback onOpenStatistics;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenProfile;
+  final VoidCallback onOpenNotifications;
   final Future<void> Function() onSignOut;
 
   @override
@@ -74,6 +76,7 @@ class _CoordinatorMoreScreenState extends State<CoordinatorMoreScreen> {
           onOpenStatistics: widget.onOpenStatistics,
           onOpenSettings: widget.onOpenSettings,
           onOpenProfile: widget.onOpenProfile,
+          onOpenNotifications: widget.onOpenNotifications,
           onSignOut: _signOut,
         );
       },
@@ -88,6 +91,7 @@ class _CoordinatorMoreContent extends StatelessWidget {
     required this.onOpenStatistics,
     required this.onOpenSettings,
     required this.onOpenProfile,
+    required this.onOpenNotifications,
     required this.onSignOut,
   });
 
@@ -96,6 +100,7 @@ class _CoordinatorMoreContent extends StatelessWidget {
   final VoidCallback onOpenStatistics;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenProfile;
+  final VoidCallback onOpenNotifications;
   final VoidCallback onSignOut;
 
   @override
@@ -131,6 +136,12 @@ class _CoordinatorMoreContent extends StatelessWidget {
                           label: 'Réglages',
                           onTap: onOpenSettings,
                         ),
+                      _MoreRow(
+                        key: const Key('coordinator-notification-center'),
+                        icon: Icons.notifications_outlined,
+                        label: 'Notifications',
+                        onTap: onOpenNotifications,
+                      ),
                       _MoreRow(
                         key: const Key('coordinator-profile'),
                         icon: Icons.person_outline_rounded,

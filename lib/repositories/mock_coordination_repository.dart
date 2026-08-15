@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../data/mock_data.dart';
 import '../models/admin_location.dart';
+import '../models/app_notification.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/profession_quotas.dart';
@@ -23,6 +24,7 @@ class MockCoordinationRepository implements CoordinationRepository {
     List<ResponsePlace>? initialLocations,
     List<EngagementInfo>? initialEngagements,
     Map<String, VolunteerProfile>? initialProfiles,
+    List<AppNotification>? initialNotifications,
     AdminInvitationRepository? adminInvitationRepository,
     LocationAdministrationRepository? locationAdministrationRepository,
     ResponsibleAccessAdministrationRepository?
@@ -35,6 +37,7 @@ class MockCoordinationRepository implements CoordinationRepository {
          initialEngagements ?? _mockMissionEngagements,
        ),
        volunteerProfiles = Map.of(initialProfiles ?? const {}),
+       notifications = List.of(initialNotifications ?? const []),
        _responsibleAccess = responsibleAccess,
        adminInvitationRepository =
            adminInvitationRepository ??
@@ -71,6 +74,14 @@ class MockCoordinationRepository implements CoordinationRepository {
   final Map<String, VolunteerProfile> volunteerProfiles;
   final Map<String, EngagementInfo> engagements = {};
   final List<EngagementInfo> missionEngagements;
+  final List<AppNotification> notifications;
+  NotificationPreferences notificationPreferences =
+      const NotificationPreferences();
+  final Map<String, PushSubscriptionRegistration> pushSubscriptions = {};
+  final _notificationUpdates =
+      StreamController<List<AppNotification>>.broadcast();
+  final _preferenceUpdates =
+      StreamController<NotificationPreferences>.broadcast();
 
   final _missionUpdates = StreamController<List<CoordinationNeed>>.broadcast();
   final _locationUpdates = StreamController<List<ResponsePlace>>.broadcast();
@@ -141,6 +152,68 @@ class MockCoordinationRepository implements CoordinationRepository {
 
   @override
   Future<void> signOutResponsible() async {}
+
+  @override
+  Stream<List<AppNotification>> watchNotifications() =>
+      Stream.multi((controller) {
+        controller.add(List.unmodifiable(notifications));
+        final subscription = _notificationUpdates.stream.listen(controller.add);
+        controller.onCancel = subscription.cancel;
+      });
+
+  @override
+  Future<void> setNotificationRead(
+    String notificationId, {
+    required bool read,
+  }) async {
+    final index = notifications.indexWhere((item) => item.id == notificationId);
+    if (index < 0) throw const RepositoryException('Notification introuvable.');
+    final current = notifications[index];
+    notifications[index] = AppNotification(
+      id: current.id,
+      eventId: current.eventId,
+      type: current.type,
+      title: current.title,
+      body: current.body,
+      occurredAt: current.occurredAt,
+      missionId: current.missionId,
+      engagementId: current.engagementId,
+      readAt: read ? DateTime.now() : null,
+    );
+    _notificationUpdates.add(List.unmodifiable(notifications));
+  }
+
+  @override
+  Future<CoordinationNeed?> getMission(String missionId) async =>
+      debugMission(missionId);
+
+  @override
+  Stream<NotificationPreferences> watchNotificationPreferences() =>
+      Stream.multi((controller) {
+        controller.add(notificationPreferences);
+        final subscription = _preferenceUpdates.stream.listen(controller.add);
+        controller.onCancel = subscription.cancel;
+      });
+
+  @override
+  Future<void> saveNotificationPreferences(
+    NotificationPreferences preferences,
+  ) async {
+    notificationPreferences = preferences;
+    _preferenceUpdates.add(preferences);
+  }
+
+  @override
+  Future<void> registerPushSubscription(
+    PushSubscriptionRegistration registration,
+  ) async {
+    pushSubscriptions[registration.installationId] = registration;
+  }
+
+  @override
+  Future<void> disablePushSubscription(String installationId) async {
+    pushSubscriptions.remove(installationId);
+  }
 
   @override
   Stream<List<CoordinationNeed>> watchMissions() {

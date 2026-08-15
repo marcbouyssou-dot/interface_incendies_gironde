@@ -1,7 +1,10 @@
 import {getApps, initializeApp} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
-import {FieldValue, getFirestore} from 'firebase-admin/firestore';
+import {FieldValue, getFirestore, Timestamp} from 'firebase-admin/firestore';
+import {getMessaging} from 'firebase-admin/messaging';
 import {HttpsError, onCall} from 'firebase-functions/v2/https';
+import {onDocumentCreated, onDocumentUpdated} from 'firebase-functions/v2/firestore';
+import {onSchedule} from 'firebase-functions/v2/scheduler';
 import {defineSecret, defineString} from 'firebase-functions/params';
 
 import {
@@ -71,8 +74,124 @@ import {
   safeProfessionalIdentity,
   UserDisplayIdentityError,
 } from './user_display_identity.js';
+import {
+  engagementCreatedEvents,
+  engagementUpdatedEvents,
+  missionCreatedEvents,
+  missionUpdatedEvents,
+} from './operational_notifications/event_factory.js';
+import {
+  dispatchOperationalEvent,
+  persistCanonicalEvents,
+  processPendingDeliveries,
+} from './operational_notifications/firestore_service.js';
 
 if (getApps().length === 0) initializeApp();
+
+const operationalTriggerOptions = Object.freeze({
+  region: 'europe-west1',
+  retry: true,
+});
+
+export const emitMissionPublished = onDocumentCreated(
+  {...operationalTriggerOptions, document: 'missions/{missionId}'},
+  async (event) => {
+    const mission = {id: event.params.missionId, ...event.data.data()};
+    await persistCanonicalEvents({
+      firestore: getFirestore(),
+      events: missionCreatedEvents({
+        mission,
+        sourceEventId: event.id,
+        occurredAt: eventTimestamp(event),
+      }),
+    });
+  },
+);
+
+export const emitMissionChanges = onDocumentUpdated(
+  {...operationalTriggerOptions, document: 'missions/{missionId}'},
+  async (event) => {
+    const before = {id: event.params.missionId, ...event.data.before.data()};
+    const after = {id: event.params.missionId, ...event.data.after.data()};
+    await persistCanonicalEvents({
+      firestore: getFirestore(),
+      events: missionUpdatedEvents({
+        before,
+        after,
+        sourceEventId: event.id,
+        occurredAt: eventTimestamp(event),
+      }),
+    });
+  },
+);
+
+export const emitEngagementCreated = onDocumentCreated(
+  {...operationalTriggerOptions, document: 'engagements/{engagementId}'},
+  async (event) => {
+    const firestore = getFirestore();
+    const engagement = {
+      id: event.params.engagementId,
+      ...event.data.data(),
+    };
+    const mission = await missionForEngagement(firestore, engagement);
+    await persistCanonicalEvents({
+      firestore,
+      events: engagementCreatedEvents({
+        engagement,
+        mission,
+        sourceEventId: event.id,
+        occurredAt: eventTimestamp(event),
+      }),
+    });
+  },
+);
+
+export const emitEngagementChanges = onDocumentUpdated(
+  {...operationalTriggerOptions, document: 'engagements/{engagementId}'},
+  async (event) => {
+    const firestore = getFirestore();
+    const before = {id: event.params.engagementId, ...event.data.before.data()};
+    const after = {id: event.params.engagementId, ...event.data.after.data()};
+    const mission = await missionForEngagement(firestore, after);
+    await persistCanonicalEvents({
+      firestore,
+      events: engagementUpdatedEvents({
+        before,
+        after,
+        mission,
+        sourceEventId: event.id,
+        occurredAt: eventTimestamp(event),
+      }),
+    });
+  },
+);
+
+export const dispatchOperationalNotification = onDocumentCreated(
+  {...operationalTriggerOptions, document: 'notificationEvents/{eventId}'},
+  async (event) => dispatchOperationalEvent({
+    firestore: getFirestore(),
+    messaging: getMessaging(),
+    event: event.data.data(),
+  }),
+);
+
+export const retryDeferredNotifications = onSchedule(
+  {region: 'europe-west1', schedule: 'every 15 minutes', retryCount: 3},
+  async () => processPendingDeliveries({
+    firestore: getFirestore(),
+    messaging: getMessaging(),
+  }),
+);
+
+function eventTimestamp(event) {
+  const date = new Date(event.time);
+  return Timestamp.fromDate(Number.isNaN(date.getTime()) ? new Date() : date);
+}
+
+async function missionForEngagement(firestore, engagement) {
+  const mission = await firestore.collection('missions').doc(engagement.missionId).get();
+  return mission.exists ? {id: mission.id, ...mission.data()} : null;
+}
 
 const appUrl = defineString('MOBSANTE_APP_URL');
 const emailFrom = defineString('MOBSANTE_EMAIL_FROM');

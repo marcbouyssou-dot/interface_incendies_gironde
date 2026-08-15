@@ -1,0 +1,453 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../models/app_notification.dart';
+import '../models/need.dart';
+import '../repositories/coordination_repository.dart';
+import '../repositories/live_data_scope.dart';
+import '../repositories/repository_scope.dart';
+import '../services/push_notification_gateway.dart';
+import '../theme/v5_foundation.dart';
+import '../utils/app_page_route.dart';
+import '../widgets/common.dart';
+import '../widgets/v5_controls.dart';
+import '../widgets/v5_form_system.dart';
+
+class NotificationCenterScreen extends StatefulWidget {
+  const NotificationCenterScreen({
+    super.key,
+    this.pushGateway,
+    this.initialNotificationId,
+  });
+
+  final PushNotificationGateway? pushGateway;
+  final String? initialNotificationId;
+
+  @override
+  State<NotificationCenterScreen> createState() =>
+      _NotificationCenterScreenState();
+}
+
+class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
+  late final PushNotificationGateway _pushGateway;
+  CoordinationRepository? _repository;
+  Stream<List<AppNotification>>? _notifications;
+  Stream<NotificationPreferences>? _preferences;
+  PushPermissionState? _permission;
+  bool _activating = false;
+  bool _consentDeferred = false;
+  bool _initialNotificationHandled = false;
+  StreamSubscription<PushSubscriptionRegistration>? _registrationSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _pushGateway = widget.pushGateway ?? createPushNotificationGateway();
+    _pushGateway.permissionState().then((value) {
+      if (mounted) setState(() => _permission = value);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final repository = RepositoryScope.of(context);
+    if (identical(repository, _repository)) return;
+    _repository = repository;
+    _notifications = repository.watchNotifications();
+    _preferences = repository.watchNotificationPreferences();
+    unawaited(_registrationSubscription?.cancel());
+    _registrationSubscription = _pushGateway.registrationUpdates.listen(
+      (registration) =>
+          unawaited(repository.registerPushSubscription(registration)),
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Actualisation du token Push ignorée : $error');
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_registrationSubscription?.cancel());
+    super.dispose();
+  }
+
+  Future<void> _activate() async {
+    if (_activating) return;
+    setState(() => _activating = true);
+    try {
+      final result = await _pushGateway.activate();
+      if (result.registration case final registration?) {
+        await _repository!.registerPushSubscription(registration);
+      }
+      if (mounted) setState(() => _permission = result.state);
+    } finally {
+      if (mounted) setState(() => _activating = false);
+    }
+  }
+
+  Future<void> _open(AppNotification notification) async {
+    if (!notification.isRead) {
+      await _repository!.setNotificationRead(notification.id, read: true);
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) => RepositoryScope(
+          repository: _repository!,
+          child: _NotificationMissionDestination(notification: notification),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: context.v5Colors.canvas,
+    body: SafeArea(
+      child: StreamBuilder<List<AppNotification>>(
+        stream: _notifications,
+        builder: (context, snapshot) {
+          final notifications = snapshot.data ?? const <AppNotification>[];
+          _scheduleInitialNotification(notifications);
+          final unreadNotifications = notifications
+              .where((item) => !item.isRead)
+              .toList(growable: false);
+          final recentNotifications = notifications
+              .where((item) => item.isRead)
+              .toList(growable: false);
+          final unread = unreadNotifications.length;
+          unawaited(_pushGateway.updateBadge(unread));
+          return ListView(
+            key: const Key('notification-center'),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 36),
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    key: const Key('notification-center-close'),
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Fermer',
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                  const SizedBox(width: V5Spacing.xs),
+                  Expanded(
+                    child: Text(
+                      'Notifications',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                  ),
+                  if (unread > 0)
+                    Semantics(
+                      label: '$unread notifications non lues',
+                      child: Badge(label: Text('$unread')),
+                    ),
+                ],
+              ),
+              const SizedBox(height: V5Spacing.lg),
+              if (!_consentDeferred) ...[
+                _ConsentCard(
+                  permission: _permission,
+                  activating: _activating,
+                  onActivate: _activate,
+                  onLater: () => setState(() => _consentDeferred = true),
+                ),
+                const SizedBox(height: V5Spacing.lg),
+              ],
+              StreamBuilder<NotificationPreferences>(
+                stream: _preferences,
+                builder: (context, preferenceSnapshot) => _PreferencesCard(
+                  preferences:
+                      preferenceSnapshot.data ??
+                      const NotificationPreferences(),
+                  onChanged: _repository!.saveNotificationPreferences,
+                ),
+              ),
+              const SizedBox(height: V5Spacing.xl),
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const V5LoadingState(label: 'Chargement des notifications…')
+              else if (snapshot.hasError)
+                const V5EmptyState(
+                  title: 'Notifications indisponibles',
+                  message: 'Réessayez dans quelques instants.',
+                )
+              else if (notifications.isEmpty)
+                const V5EmptyState(
+                  title: 'Aucune notification',
+                  message: 'Les informations utiles apparaîtront ici.',
+                )
+              else ...[
+                if (unreadNotifications.isNotEmpty) ...[
+                  Text(
+                    'Non lues',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: V5Spacing.sm),
+                ],
+                for (final notification in unreadNotifications)
+                  _NotificationTile(
+                    notification: notification,
+                    onTap: () => _open(notification),
+                    onToggleRead: () => _repository!.setNotificationRead(
+                      notification.id,
+                      read: !notification.isRead,
+                    ),
+                  ),
+                if (recentNotifications.isNotEmpty) ...[
+                  const SizedBox(height: V5Spacing.lg),
+                  Text(
+                    'Récentes',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: V5Spacing.sm),
+                ],
+                for (final notification in recentNotifications)
+                  _NotificationTile(
+                    notification: notification,
+                    onTap: () => _open(notification),
+                    onToggleRead: () => _repository!.setNotificationRead(
+                      notification.id,
+                      read: !notification.isRead,
+                    ),
+                  ),
+              ],
+            ],
+          );
+        },
+      ),
+    ),
+  );
+
+  void _scheduleInitialNotification(List<AppNotification> notifications) {
+    final initialId = widget.initialNotificationId;
+    if (_initialNotificationHandled || initialId == null) return;
+    final notification = notifications
+        .where((item) => item.id == initialId)
+        .firstOrNull;
+    if (notification == null) return;
+    _initialNotificationHandled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_open(notification));
+    });
+  }
+}
+
+class _ConsentCard extends StatelessWidget {
+  const _ConsentCard({
+    required this.permission,
+    required this.activating,
+    required this.onActivate,
+    required this.onLater,
+  });
+
+  final PushPermissionState? permission;
+  final bool activating;
+  final VoidCallback onActivate;
+  final VoidCallback onLater;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final unavailable =
+        permission == PushPermissionState.unsupported ||
+        permission == PushPermissionState.misconfigured;
+    final granted = permission == PushPermissionState.granted;
+    return Container(
+      key: const Key('notification-consent-card'),
+      padding: const EdgeInsets.all(V5Spacing.md),
+      decoration: BoxDecoration(
+        color: granted ? colors.successContainer : colors.infoContainer,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            granted
+                ? 'Notifications activées'
+                : 'Être alerté lorsqu’une mission vous concerne',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          if (!granted) ...[
+            const SizedBox(height: V5Spacing.xs),
+            Text(
+              unavailable
+                  ? 'Cet appareil ne permet pas encore les notifications.'
+                  : permission == PushPermissionState.denied
+                  ? 'La permission est refusée. MobSanté reste utilisable.'
+                  : 'Vous gardez le contrôle et pourrez les désactiver.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: V5Spacing.sm),
+            Wrap(
+              spacing: V5Spacing.sm,
+              children: [
+                V5Button(
+                  key: const Key('activate-notifications'),
+                  label: 'Activer les notifications',
+                  icon: Icons.notifications_active_outlined,
+                  onPressed: unavailable || activating ? null : onActivate,
+                ),
+                TextButton(
+                  key: const Key('notifications-later'),
+                  onPressed: onLater,
+                  child: const Text('Plus tard'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PreferencesCard extends StatelessWidget {
+  const _PreferencesCard({required this.preferences, required this.onChanged});
+  final NotificationPreferences preferences;
+  final ValueChanged<NotificationPreferences> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Préférences', style: Theme.of(context).textTheme.titleLarge),
+      V5SwitchTile(
+        title: 'Missions compatibles',
+        value: preferences.compatibleMissions,
+        onChanged: (value) =>
+            onChanged(preferences.copyWith(compatibleMissions: value)),
+      ),
+      V5SwitchTile(
+        title: 'Modifications de mes engagements',
+        value: preferences.engagementUpdates,
+        onChanged: (value) =>
+            onChanged(preferences.copyWith(engagementUpdates: value)),
+      ),
+      V5SwitchTile(
+        title: 'Alertes opérationnelles',
+        value: preferences.operationalAlerts,
+        onChanged: (value) =>
+            onChanged(preferences.copyWith(operationalAlerts: value)),
+      ),
+    ],
+  );
+}
+
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({
+    required this.notification,
+    required this.onTap,
+    required this.onToggleRead,
+  });
+  final AppNotification notification;
+  final VoidCallback onTap;
+  final VoidCallback onToggleRead;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    key: Key('notification-${notification.id}'),
+    minVerticalPadding: 10,
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(
+      notification.isRead
+          ? Icons.notifications_none_rounded
+          : Icons.notifications_active_rounded,
+      color: notification.isRead
+          ? context.v5Colors.textSecondary
+          : context.v5Colors.info,
+    ),
+    title: Text(notification.title),
+    subtitle: Text(
+      '${notification.body}\n${_relative(notification.occurredAt)}',
+    ),
+    isThreeLine: true,
+    trailing: IconButton(
+      key: Key('notification-read-${notification.id}'),
+      tooltip: notification.isRead
+          ? 'Marquer comme non lue'
+          : 'Marquer comme lue',
+      onPressed: onToggleRead,
+      icon: Icon(
+        notification.isRead
+            ? Icons.mark_email_unread_outlined
+            : Icons.mark_email_read_outlined,
+      ),
+    ),
+    onTap: onTap,
+  );
+}
+
+class _NotificationMissionDestination extends StatefulWidget {
+  const _NotificationMissionDestination({required this.notification});
+  final AppNotification notification;
+
+  @override
+  State<_NotificationMissionDestination> createState() =>
+      _NotificationMissionDestinationState();
+}
+
+class _NotificationMissionDestinationState
+    extends State<_NotificationMissionDestination> {
+  CoordinationRepository? _repository;
+  LiveCoordinationData? _liveData;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final repository = RepositoryScope.of(context);
+    if (identical(repository, _repository)) return;
+    unawaited(_liveData?.dispose());
+    _repository = repository;
+    _liveData = LiveCoordinationData(repository);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_liveData?.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: context.v5Colors.canvas,
+    appBar: AppBar(title: const Text('Mission')),
+    body: SafeArea(
+      child: FutureBuilder<CoordinationNeed?>(
+        future: _repository!.getMission(widget.notification.missionId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const V5LoadingState(label: 'Ouverture de la mission…');
+          }
+          if (snapshot.hasError || snapshot.data == null) {
+            return const V5EmptyState(
+              title: 'Mission inaccessible',
+              message:
+                  'Elle n’existe plus ou vos droits ne permettent plus de '
+                  'la consulter.',
+            );
+          }
+          return LiveCoordinationDataScope(
+            data: _liveData!,
+            child: ListView(
+              padding: const EdgeInsets.all(18),
+              children: [
+                NeedCard(need: snapshot.data!, professionalJourney: true),
+              ],
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+String _relative(DateTime date) {
+  final elapsed = DateTime.now().difference(date);
+  if (elapsed.inMinutes < 1) return 'À l’instant';
+  if (elapsed.inMinutes < 60) return 'Il y a ${elapsed.inMinutes} min';
+  if (elapsed.inHours < 24) return 'Il y a ${elapsed.inHours} h';
+  return '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}';
+}

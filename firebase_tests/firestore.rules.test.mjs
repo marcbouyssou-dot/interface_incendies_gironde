@@ -370,6 +370,117 @@ test('missions: public active read and anonymous create denied', async () => {
   await assertFails(setDoc(doc(db(), 'missions/new'), mission({id: 'new'})));
 });
 
+test('notifications: owner can read and toggle readAt only', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'notifications/notif-a'), {
+      notificationId: 'notif-a',
+      recipientUid: 'professional-a',
+      eventId: 'event-a',
+      eventType: 'mission.updated',
+      title: 'Mission modifiée',
+      body: 'Langon',
+      missionId: 'mission-a',
+      occurredAt: Timestamp.now(),
+      readAt: null,
+    });
+  });
+  await assertSucceeds(getDoc(doc(db('professional-a'), 'notifications/notif-a')));
+  await assertFails(getDoc(doc(db('professional-b'), 'notifications/notif-a')));
+  await assertSucceeds(updateDoc(
+    doc(db('professional-a'), 'notifications/notif-a'),
+    {readAt: serverTimestamp()},
+  ));
+  await assertSucceeds(updateDoc(
+    doc(db('professional-a'), 'notifications/notif-a'),
+    {readAt: null},
+  ));
+  await assertFails(updateDoc(
+    doc(db('professional-a'), 'notifications/notif-a'),
+    {title: 'Contenu falsifié'},
+  ));
+  await assertFails(setDoc(
+    doc(db('professional-a'), 'notifications/forged'),
+    {recipientUid: 'professional-a'},
+  ));
+});
+
+test('notification events and delivery journal remain server-only', async () => {
+  await seed();
+  for (const collectionName of ['notificationEvents', 'notificationDeliveries']) {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `${collectionName}/entry-a`), {uid: 'professional-a'});
+    });
+    await assertFails(getDoc(doc(db('professional-a'), `${collectionName}/entry-a`)));
+    await assertFails(setDoc(doc(db('professional-a'), `${collectionName}/entry-b`), {uid: 'professional-a'}));
+  }
+});
+
+test('notification preferences are owner-only and strictly validated', async () => {
+  await seed();
+  const preferences = {
+    uid: 'professional-a',
+    compatibleMissions: false,
+    engagementUpdates: true,
+    operationalAlerts: true,
+    quietHoursStart: 22,
+    quietHoursEnd: 7,
+    updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(setDoc(
+    doc(db('professional-a'), 'notificationPreferences/professional-a'),
+    preferences,
+  ));
+  await assertSucceeds(getDoc(
+    doc(db('professional-a'), 'notificationPreferences/professional-a'),
+  ));
+  await assertFails(getDoc(
+    doc(db('professional-b'), 'notificationPreferences/professional-a'),
+  ));
+  await assertFails(setDoc(
+    doc(db('professional-a'), 'notificationPreferences/professional-a'),
+    {...preferences, quietHoursStart: 24},
+  ));
+  await assertFails(setDoc(
+    doc(db('professional-a'), 'notificationPreferences/professional-a'),
+    {...preferences, unexpected: true},
+  ));
+});
+
+test('push subscriptions support multiple owner devices without exposing tokens', async () => {
+  await seed();
+  const registration = (installationId, token) => ({
+    uid: 'professional-a', installationId, token, platform: 'web',
+    active: true, lastUsedAt: serverTimestamp(),
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  await assertSucceeds(setDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
+    registration('device-a', 'token-a'),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-b'),
+    registration('device-b', 'token-b'),
+  ));
+  await assertFails(getDoc(
+    doc(db('professional-b'), 'pushSubscriptions/professional-a_device-a'),
+  ));
+  await assertSucceeds(updateDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
+    {
+      token: 'token-a-refreshed', active: true,
+      lastUsedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    },
+  ));
+  await assertFails(updateDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
+    {uid: 'professional-b', lastUsedAt: serverTimestamp(), updatedAt: serverTimestamp()},
+  ));
+  await assertFails(deleteDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
+  ));
+});
+
 test('missions: coordinator and authorized manager create', async () => {
   await seed({mission: false});
   await assertSucceeds(setDoc(doc(db('coord'), 'missions/c1'), mission({id: 'c1'})));

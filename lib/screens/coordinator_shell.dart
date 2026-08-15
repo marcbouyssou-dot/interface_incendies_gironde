@@ -18,6 +18,7 @@ import 'create_need_screen.dart';
 import 'development_settings_screen.dart';
 import 'location_administration_screen.dart';
 import 'location_detail_screen.dart';
+import 'notification_center_screen.dart';
 
 class CoordinatorShell extends StatefulWidget {
   const CoordinatorShell({super.key, this.initialIndex = 0})
@@ -59,6 +60,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
       onOpenStatistics: _openStatistics,
       onOpenSettings: _openSettings,
       onOpenProfile: _openProfile,
+      onOpenNotifications: _openNotifications,
       onSignOut: _signOut,
     ),
     _ => throw RangeError.index(index, _screens),
@@ -171,6 +173,12 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
           child: const CoordinatorProfileScreen(),
         ),
       ),
+    );
+  }
+
+  void _openNotifications() {
+    Navigator.of(context).push(
+      AppPageRoute<void>(builder: (_) => const NotificationCenterScreen()),
     );
   }
 
