@@ -23,7 +23,7 @@ class CoordinatorBottomNavigation extends StatelessWidget {
       V5BottomBarDestination(
         icon: Icons.radar_outlined,
         selectedIcon: Icons.radar_rounded,
-        label: 'Vue d’ensemble',
+        label: 'Cockpit',
       ),
       V5BottomBarDestination(
         icon: Icons.map_outlined,

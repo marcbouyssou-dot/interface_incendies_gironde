@@ -56,7 +56,7 @@ class _CoordinatorTerritoryScreenState
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<CoordinationNeed>>(
       valueListenable: widget.publishedNeeds,
-      builder: (context, _, __) => StreamBuilder<List<CoordinationNeed>>(
+      builder: (context, _, _) => StreamBuilder<List<CoordinationNeed>>(
         stream: _missions,
         builder: (context, missionsSnapshot) =>
             StreamBuilder<List<ResponsePlace>>(

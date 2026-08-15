@@ -166,7 +166,7 @@ void main() {
     await _pumpCreateNeedRoute(
       tester,
       repository: MockCoordinationRepository(),
-      opener: const Key('administration-create-need'),
+      opener: const Key('cockpit-create-need'),
     );
   });
 
@@ -210,6 +210,17 @@ Future<void> _pumpCreateNeedRoute(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(FireCoordinationApp(repository: repository));
   await tester.pumpAndSettle();
+  if (opener == const Key('cockpit-create-need')) {
+    final cockpit = find.byKey(const PageStorageKey('coordinator-cockpit'));
+    for (
+      var attempt = 0;
+      attempt < 8 && find.byKey(opener).evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.drag(cockpit, const Offset(0, -360));
+      await tester.pumpAndSettle();
+    }
+  }
   await tester.ensureVisible(find.byKey(opener));
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(opener));

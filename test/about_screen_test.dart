@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/config/app_identity.dart';
 import 'package:interface_incendies_gironde/screens/about_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
+import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 
 void main() {
   test('PWA metadata uses MobSanté consistently', () {
@@ -83,7 +84,7 @@ void main() {
     expect(find.text(AboutScreen.provisionalLegalNotice), findsOneWidget);
 
     final credit = tester.widget<Text>(find.byKey(const Key('design-credit')));
-    expect(credit.style?.fontSize, 11);
+    expect(credit.style?.fontSize, 12);
     expect(credit.style?.fontWeight, FontWeight.w400);
     expect(tester.takeException(), isNull);
   });
@@ -135,7 +136,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('about-screen')), findsOneWidget);
 
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(find.byType(V5BackButton));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('about-entry')), findsOneWidget);
     expect(tester.takeException(), isNull);

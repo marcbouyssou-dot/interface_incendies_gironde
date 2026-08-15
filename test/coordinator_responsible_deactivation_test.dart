@@ -67,7 +67,9 @@ void main() {
     final repository = _coordinatorRepository(accessRepository);
 
     await _pumpCoordinator(tester, repository);
-    await _openAdministrationFromOverview(tester);
+    await tester.tap(find.text('Acteurs'));
+    await tester.pumpAndSettle();
+    await _openAdministrationFromActors(tester);
     await _openManagerAccessForm(tester);
     await _setAccountActive(tester, active: false, expectSuccess: false);
 
@@ -99,7 +101,9 @@ void main() {
     final repository = _coordinatorRepository(accessRepository);
 
     await _pumpCoordinator(tester, repository);
-    await _openAdministrationFromOverview(tester);
+    await tester.tap(find.text('Acteurs'));
+    await tester.pumpAndSettle();
+    await _openAdministrationFromActors(tester);
     await _openManagerAccessForm(tester);
     expect(find.text('Accès désactivé'), findsOneWidget);
     await _setAccountActive(tester, active: true);
@@ -145,15 +149,6 @@ Future<void> _pumpCoordinator(
 Future<void> _openAdministrationFromActors(WidgetTester tester) async {
   final manage = find.widgetWithText(TextButton, 'Gérer').first;
   await tester.ensureVisible(manage);
-  await tester.tap(manage);
-  await tester.pumpAndSettle();
-  await _expandAccounts(tester);
-}
-
-Future<void> _openAdministrationFromOverview(WidgetTester tester) async {
-  final manage = find.byKey(const Key('admin-invitations-entry'));
-  await tester.ensureVisible(manage);
-  await tester.pumpAndSettle();
   await tester.tap(manage);
   await tester.pumpAndSettle();
   await _expandAccounts(tester);

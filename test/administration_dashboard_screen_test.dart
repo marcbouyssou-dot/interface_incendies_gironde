@@ -50,6 +50,11 @@ void main() {
     if (access == null && accessError == null) {
       await tester.tap(find.text('Profil'));
       await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const PageStorageKey('professional-profile')),
+        const Offset(0, -900),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('open-responsible-access')));
     } else if (!siteManagerJourney) {
       await tester.tap(find.text('Déclarer').last);
@@ -221,7 +226,10 @@ void main() {
       locations: [firstLocation, secondLocation],
     );
 
-    await tester.tap(find.byKey(const Key('administration-statistics')));
+    final statistics = find.byKey(const Key('administration-statistics'));
+    await tester.ensureVisible(statistics);
+    await tester.pumpAndSettle();
+    await tester.tap(statistics);
     await tester.pumpAndSettle();
 
     expect(find.text('SITUATION'), findsOneWidget);

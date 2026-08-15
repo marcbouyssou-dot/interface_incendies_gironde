@@ -8,9 +8,7 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      const FireCoordinationApp(useLegacyCoordinatorShellForTesting: true),
-    );
+    await tester.pumpWidget(const FireCoordinationApp());
     await tester.pumpAndSettle();
     if (tab != null) {
       await tester.tap(
@@ -21,10 +19,10 @@ void main() {
   }
 
   final screens = <String, String?>{
-    'accueil': null,
-    'declarer_besoin': 'Déclarer',
-    'coordination': 'Statistiques',
-    'lieux': 'Plus',
+    'cockpit': null,
+    'territoire': 'Territoire',
+    'acteurs': 'Acteurs',
+    'plus_coordinateur': 'Plus',
   };
 
   for (final entry in screens.entries) {

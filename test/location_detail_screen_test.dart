@@ -5,6 +5,7 @@ import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/profession_quotas.dart';
 import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/location_detail_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
@@ -226,7 +227,7 @@ void main() {
     expect(find.byKey(const Key('location-detail-screen')), findsOneWidget);
     expect(repository.missionFactories, 1);
 
-    await tester.tap(find.byType(BackButton));
+    await tester.tap(find.byType(V5BackButton));
     await tester.pumpAndSettle();
     expect(find.text('10 rue du Test, 33000 Bordeaux, France'), findsOneWidget);
     expect(tester.takeException(), isNull);

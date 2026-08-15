@@ -43,26 +43,21 @@ void main() {
         findsWidgets,
       );
 
-      await tester.tap(find.text('Vue d’ensemble'));
+      await tester.tap(find.text('Cockpit'));
       await tester.pumpAndSettle();
-      final summary = find.byKey(const Key('coordinator-operational-summary'));
-      expect(
-        find.descendant(of: summary, matching: find.text('1')),
-        findsWidgets,
+      await tester.drag(
+        find.byKey(const PageStorageKey('coordinator-cockpit')),
+        const Offset(0, 2000),
       );
+      await tester.pumpAndSettle();
+      expect(find.text('1 tension prioritaire'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
       await tester.pumpWidget(FireCoordinationApp(repository: repository));
       await tester.pumpAndSettle();
 
-      final reloadedSummary = find.byKey(
-        const Key('coordinator-operational-summary'),
-      );
-      expect(
-        find.descendant(of: reloadedSummary, matching: find.text('1')),
-        findsWidgets,
-      );
+      expect(find.text('1 tension prioritaire'), findsOneWidget);
     },
   );
 
@@ -107,7 +102,16 @@ Future<void> _openAndCompleteForm(
   WidgetTester tester,
   ResponsePlace location,
 ) async {
-  final createButton = find.byKey(const Key('administration-create-need'));
+  final createButton = find.byKey(const Key('cockpit-create-need'));
+  final cockpit = find.byKey(const PageStorageKey('coordinator-cockpit'));
+  for (
+    var attempt = 0;
+    attempt < 8 && createButton.evaluate().isEmpty;
+    attempt++
+  ) {
+    await tester.drag(cockpit, const Offset(0, -360));
+    await tester.pumpAndSettle();
+  }
   await tester.ensureVisible(createButton);
   await tester.pumpAndSettle();
   await tester.tap(createButton);

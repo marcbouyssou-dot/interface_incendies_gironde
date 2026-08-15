@@ -261,7 +261,7 @@ void main() {
     );
     final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
     expect(navigation.destinations, hasLength(4));
-    expect(find.text('Vue d’ensemble'), findsOneWidget);
+    expect(find.text('Cockpit'), findsOneWidget);
     expect(find.text('Territoire'), findsOneWidget);
     expect(find.text('Acteurs'), findsOneWidget);
     expect(find.text('Déclarer'), findsNothing);

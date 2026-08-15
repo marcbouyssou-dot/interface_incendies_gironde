@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
@@ -8,8 +9,8 @@ import '../widgets/coordinator_bottom_navigation.dart';
 import '../widgets/native_interactions.dart';
 import 'admin_invitations_screen.dart';
 import 'coordinator_actors_screen.dart';
+import 'coordinator_cockpit_screen.dart';
 import 'coordinator_more_screen.dart';
-import 'coordinator_overview_screen.dart';
 import 'coordinator_published_needs.dart';
 import 'coordinator_territory_screen.dart';
 import 'coordination_screen.dart';
@@ -41,12 +42,10 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
   }
 
   Widget _createScreen(int index) => switch (index) {
-    0 => CoordinatorOverviewScreen(
+    0 => CoordinatorCockpitScreen(
       publishedNeeds: _publishedNeeds,
-      onOpenTerritory: () => _selectTab(1),
+      onViewMission: _openMission,
       onCreateNeed: _openCreateNeed,
-      onManageResponsibles: _openResponsibles,
-      onManageLocations: _openLocations,
     ),
     1 => CoordinatorTerritoryScreen(publishedNeeds: _publishedNeeds),
     2 => CoordinatorActorsScreen(
@@ -91,6 +90,10 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
         ),
       ),
     );
+  }
+
+  void _openMission(CoordinationNeed mission) {
+    openMissionEditor(context, mission);
   }
 
   Future<void> _openResponsibles() async {

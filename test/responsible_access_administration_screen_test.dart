@@ -10,6 +10,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/repositories/responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/responsible_access_form_screen.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
 void main() {
   const coordinatorAccess = ResponsibleAccess(
@@ -198,9 +199,7 @@ void main() {
     expect(find.byKey(const Key('responsible-access-form')), findsOneWidget);
     expect(
       tester
-          .widget<FilledButton>(
-            find.byKey(const Key('save-responsible-access')),
-          )
+          .widget<V5Button>(find.byKey(const Key('save-responsible-access')))
           .onPressed,
       isNotNull,
     );

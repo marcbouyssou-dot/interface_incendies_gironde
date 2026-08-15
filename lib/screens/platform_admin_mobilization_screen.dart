@@ -1006,22 +1006,15 @@ class _AdminSectionCard extends StatelessWidget {
 }
 
 class _MetadataChip extends StatelessWidget {
-  const _MetadataChip({
-    required this.icon,
-    required this.label,
-    this.accent = false,
-  });
+  const _MetadataChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
-  final bool accent;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final foreground = accent
-        ? PlatformAdminIdentity.accent(context)
-        : colors.textSecondary;
+    final foreground = colors.textSecondary;
     return Container(
       constraints: const BoxConstraints(minHeight: 36),
       padding: const EdgeInsets.symmetric(
@@ -1029,9 +1022,7 @@ class _MetadataChip extends StatelessWidget {
         vertical: V5Spacing.xs,
       ),
       decoration: BoxDecoration(
-        color: accent
-            ? PlatformAdminIdentity.container(context)
-            : colors.surfaceMuted,
+        color: colors.surfaceMuted,
         borderRadius: BorderRadius.circular(V5Radius.pill),
       ),
       child: Row(

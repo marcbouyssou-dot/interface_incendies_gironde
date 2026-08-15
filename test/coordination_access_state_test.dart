@@ -72,7 +72,9 @@ void main() {
         useLegacyCoordinatorShellForTesting: true,
       ),
     );
-    await tester.pumpAndSettle();
+    for (var index = 0; index < 20; index++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     for (
       var attempt = 0;
       attempt < 5 && repository.accessFactories == 0;
@@ -92,8 +94,6 @@ void main() {
           initialAccess?.uid == createdBy) {
         await revealSituationContent(tester, cancellationAction());
       }
-    } else {
-      await selectNavigationTab(tester, 2);
     }
     return repository;
   }
@@ -108,7 +108,7 @@ void main() {
   }
 
   Future<void> pumpAccessUpdate(WidgetTester tester) async {
-    for (var index = 0; index < 6; index++) {
+    for (var index = 0; index < 20; index++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
   }
@@ -120,6 +120,7 @@ void main() {
 
     repository.emitError(StateError('firestore unavailable'));
     await pumpAccessUpdate(tester);
+    await selectNavigationTab(tester, 2);
 
     expect(find.text('Accès temporairement indisponible'), findsOneWidget);
     expect(find.text('Configuration d’accès invalide'), findsNothing);
@@ -187,11 +188,9 @@ void main() {
 
     repository.emitError(StateError('network unavailable'));
     await pumpAccessUpdate(tester);
+    await selectNavigationTab(tester, 2);
 
-    expect(
-      find.text('Les besoins sont temporairement indisponibles.'),
-      findsOneWidget,
-    );
+    expect(find.text('Accès temporairement indisponible'), findsOneWidget);
     expect(find.text('Site A'), findsNothing);
     expectNoPrivilegedSituationContent();
   });
@@ -208,6 +207,7 @@ void main() {
       ),
     );
     await pumpAccessUpdate(tester);
+    await selectNavigationTab(tester, 2);
 
     expect(find.text('Configuration d’accès invalide'), findsOneWidget);
     expect(find.text('Accès temporairement indisponible'), findsNothing);

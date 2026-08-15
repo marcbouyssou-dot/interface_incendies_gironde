@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_actors_screen.dart';
+import 'package:interface_incendies_gironde/screens/coordinator_cockpit_screen.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_more_screen.dart';
-import 'package:interface_incendies_gironde/screens/coordinator_overview_screen.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_territory_screen.dart';
 import 'package:interface_incendies_gironde/theme/coordinator_identity.dart';
@@ -23,50 +23,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorShell), findsOneWidget);
-    expect(find.byType(CoordinatorOverviewScreen), findsOneWidget);
+    expect(find.byType(CoordinatorCockpitScreen), findsOneWidget);
     expect(find.byType(CoordinatorBottomNavigation), findsOneWidget);
-    expect(find.text('Coordinateur départemental'), findsOneWidget);
-    expect(
-      find.text('Supervisez la couverture du territoire.'),
-      findsOneWidget,
-    );
-    expect(find.text('Pilotage territorial'), findsOneWidget);
-    expect(find.byKey(const Key('territory-verdict')), findsOneWidget);
-    expect(find.text('À surveiller'), findsWidgets);
-    expect(find.text('Sous contrôle'), findsOneWidget);
-    expect(find.text('Actions rapides'), findsOneWidget);
-    expect(
-      find.byKey(const Key('coordinator-critical-centers')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('coordinator-critical-profession')),
-      findsOneWidget,
-    );
-    final criticalTerritory = find.byKey(const Key('territory-verdict'));
-    final criticalCenters = find.byKey(
-      const Key('coordinator-critical-centers'),
-    );
-    final criticalProfession = find.byKey(
-      const Key('coordinator-critical-profession'),
-    );
-    final primaryActions = find.byKey(const Key('coordinator-primary-actions'));
-    expect(
-      tester.getTopLeft(criticalTerritory).dy,
-      lessThan(tester.getTopLeft(criticalCenters).dy),
-    );
-    expect(
-      tester.getTopLeft(criticalCenters).dy,
-      lessThan(tester.getTopLeft(criticalProfession).dy),
-    );
-    expect(
-      tester.getTopLeft(criticalProfession).dy,
-      lessThan(tester.getTopLeft(primaryActions).dy),
-    );
-    expect(
-      find.byKey(const Key('coordinator-operational-summary')),
-      findsOneWidget,
-    );
+    expect(find.text('Gironde'), findsOneWidget);
+    expect(find.byKey(const Key('cockpit-global-state')), findsOneWidget);
+    expect(find.byKey(const Key('cockpit-operational-map')), findsOneWidget);
+    expect(find.text('Tensions prioritaires'), findsOneWidget);
     expect(find.byKey(const Key('coordinator-global-dashboard')), findsNothing);
     expect(find.text('Déclarer'), findsNothing);
 
@@ -159,7 +121,7 @@ void main() {
 
     await tester.pumpWidget(const FireCoordinationApp());
     await tester.pumpAndSettle();
-    expect(find.text('Gironde  •  Aujourd’hui et à venir'), findsOneWidget);
+    expect(find.text('Gironde'), findsOneWidget);
     expect(find.text('Besoins actifs'), findsNothing);
 
     await tester.tap(find.text('Plus'));

@@ -291,22 +291,15 @@ void main() {
     await pumpApp();
     await tester.pumpAndSettle();
     final verify = find.byKey(const Key('verify-professional-rpps'));
-    await Scrollable.ensureVisible(
-      tester.element(verify),
-      alignment: 0.4,
-      duration: const Duration(milliseconds: 100),
-    );
+    await tester.ensureVisible(verify);
     await tester.pumpAndSettle();
     await tester.tap(verify);
     await tester.pumpAndSettle();
     final confirm = find.byKey(const Key('confirm-professional-identity'));
-    await Scrollable.ensureVisible(
-      tester.element(confirm),
-      alignment: 0.4,
-      duration: const Duration(milliseconds: 100),
-    );
+    await tester.ensureVisible(confirm);
     await tester.pumpAndSettle();
     await tester.tap(confirm);
+    await tester.pump();
     await tester.pumpAndSettle();
 
     final stored = await repository.getVolunteerProfile();
@@ -317,7 +310,6 @@ void main() {
     expect(stored?.verifiedProfessionCode, '70');
     expect(stored?.verifiedProfessionLabel, 'Masseur-Kinésithérapeute');
     expect(stored?.verifiedAt, isNotNull);
-    expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

@@ -36,7 +36,7 @@ const _blankLocationIdVectors = <String>[
 ];
 
 void main() {
-  final now = DateTime.utc(2026, 7, 30, 10);
+  final now = DateTime.now().toUtc();
 
   AdminInvitationDraft draft() => AdminInvitationDraft(
     email: ' RESPONSABLE@EXEMPLE.FR ',
