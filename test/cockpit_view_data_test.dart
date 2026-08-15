@@ -119,6 +119,29 @@ void main() {
               (point) => point.primaryMission?.id,
               'primary mission',
               'critical-mk',
+            )
+            .having((point) => point.missionCount, 'mission count', 2)
+            .having((point) => point.coveragePercent, 'coverage', 25)
+            .having((point) => point.tensionCount, 'tensions', 1)
+            .having(
+              (point) => point.criticalMissionCount,
+              'critical missions',
+              1,
+            )
+            .having(
+              (point) => point.nextDeadlineLabel,
+              'next deadline',
+              'Début dans 2 h',
+            )
+            .having(
+              (point) => point.mostNeededProfession,
+              'profession in tension',
+              'MK',
+            )
+            .having(
+              (point) => point.accessibilityLabel,
+              'accessibility label',
+              'Centre de Mérignac, 2 missions actives, 1 tension critique.',
             ),
       );
       expect(
@@ -143,6 +166,14 @@ void main() {
     expect(view.missionCount, 0);
     expect(view.tensionCount, 0);
     expect(view.priorities, isEmpty);
+    expect(view.mapPoints.single.hasMission, isFalse);
+    expect(view.mapPoints.single.coveragePercent, 100);
+    expect(view.mapPoints.single.nextDeadlineLabel, isNull);
+    expect(view.mapPoints.single.mostNeededProfession, isNull);
+    expect(
+      view.mapPoints.single.accessibilityLabel,
+      'Centre de Mérignac, aucune mission active.',
+    );
   });
 
   test('partially covered territory is under surveillance', () {

@@ -17,6 +17,7 @@ import 'coordination_screen.dart';
 import 'create_need_screen.dart';
 import 'development_settings_screen.dart';
 import 'location_administration_screen.dart';
+import 'location_detail_screen.dart';
 
 class CoordinatorShell extends StatefulWidget {
   const CoordinatorShell({super.key, this.initialIndex = 0})
@@ -45,6 +46,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
     0 => CoordinatorCockpitScreen(
       publishedNeeds: _publishedNeeds,
       onViewMission: _openMission,
+      onViewLocation: _openLocation,
       onCreateNeed: _openCreateNeed,
     ),
     1 => CoordinatorTerritoryScreen(publishedNeeds: _publishedNeeds),
@@ -94,6 +96,23 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
 
   void _openMission(CoordinationNeed mission) {
     openMissionEditor(context, mission);
+  }
+
+  void _openLocation(ResponsePlace location) {
+    final liveData = LiveCoordinationDataScope.of(context);
+    Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) => LiveCoordinationDataScope(
+          data: liveData,
+          child: LocationDetailScreen(
+            location: location,
+            missions: liveData.watchMissions(),
+            locations: liveData.watchLocations(),
+            responsibleAccess: liveData.watchResponsibleAccess(),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openResponsibles() async {

@@ -11,6 +11,11 @@ class CockpitMapPoint {
     required this.status,
     required this.missionCount,
     required this.primaryMission,
+    required this.coveragePercent,
+    required this.tensionCount,
+    required this.criticalMissionCount,
+    required this.nextDeadlineLabel,
+    required this.mostNeededProfession,
   });
 
   final ResponsePlace location;
@@ -19,8 +24,33 @@ class CockpitMapPoint {
   final TerritoryOperationalStatus status;
   final int missionCount;
   final CoordinationNeed? primaryMission;
+  final int coveragePercent;
+  final int tensionCount;
+  final int criticalMissionCount;
+  final String? nextDeadlineLabel;
+  final String? mostNeededProfession;
 
   bool get hasMission => missionCount > 0;
+
+  String get accessibilityLabel {
+    final centerName = location.name.toLowerCase().startsWith('centre ')
+        ? location.name
+        : 'Centre de ${location.name}';
+    if (!hasMission) return '$centerName, aucune mission active.';
+    final missionsLabel = missionCount == 1
+        ? '1 mission active'
+        : '$missionCount missions actives';
+    final tensionLabel = criticalMissionCount > 0
+        ? criticalMissionCount == 1
+              ? '1 tension critique'
+              : '$criticalMissionCount tensions critiques'
+        : tensionCount > 0
+        ? tensionCount == 1
+              ? '1 tension à surveiller'
+              : '$tensionCount tensions à surveiller'
+        : 'couvert';
+    return '$centerName, $missionsLabel, $tensionLabel.';
+  }
 }
 
 class CockpitPriority {
@@ -116,6 +146,7 @@ class CoordinatorCockpitViewData {
             location: location,
             missions: activeMissions,
             locations: enabledLocations,
+            now: reference,
           ),
     ];
 
@@ -237,6 +268,7 @@ CockpitMapPoint _mapPointFor({
   required ResponsePlace location,
   required List<CoordinationNeed> missions,
   required List<ResponsePlace> locations,
+  required DateTime now,
 }) {
   final locationMissions = missions
       .where(
@@ -245,6 +277,32 @@ CockpitMapPoint _mapPointFor({
       )
       .toList(growable: false);
   final orderedMissions = [...locationMissions]..sort(_compareTensions);
+  final chronologicalMissions = [...locationMissions]
+    ..sort((left, right) {
+      final leftStart = left.startAt;
+      final rightStart = right.startAt;
+      if (leftStart == null) return rightStart == null ? 0 : 1;
+      if (rightStart == null) return -1;
+      return leftStart.compareTo(rightStart);
+    });
+  final tensionMissions = locationMissions
+      .where((mission) => mission.status != NeedStatus.complete)
+      .toList(growable: false);
+  final criticalMissionCount = locationMissions
+      .where((mission) => mission.status == NeedStatus.critical)
+      .length;
+  final quotas = ProfessionQuotas.aggregate(
+    locationMissions.map((mission) => mission.professionQuotas),
+  );
+  final missingQuotas =
+      ProfessionQuotas.aggregate(
+          tensionMissions.map((mission) => mission.professionQuotas),
+        ).values.where((quota) => quota.missing > 0).toList(growable: false)
+        ..sort((left, right) {
+          final missing = right.missing.compareTo(left.missing);
+          if (missing != 0) return missing;
+          return left.professionId.compareTo(right.professionId);
+        });
   final status =
       locationMissions.any((mission) => mission.status == NeedStatus.critical)
       ? TerritoryOperationalStatus.critical
@@ -258,5 +316,17 @@ CockpitMapPoint _mapPointFor({
     status: status,
     missionCount: locationMissions.length,
     primaryMission: orderedMissions.firstOrNull,
+    coveragePercent: (quotas.coverage * 100).round(),
+    tensionCount: tensionMissions.length,
+    criticalMissionCount: criticalMissionCount,
+    nextDeadlineLabel: chronologicalMissions.firstOrNull == null
+        ? null
+        : _timingLabel(chronologicalMissions.first, now),
+    mostNeededProfession: missingQuotas.firstOrNull == null
+        ? null
+        : HealthProfessionRegistry.byId(
+                missingQuotas.first.professionId,
+              )?.shortLabel ??
+              missingQuotas.first.professionId,
   );
 }

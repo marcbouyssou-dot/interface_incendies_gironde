@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
+import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_cockpit_screen.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
+import 'package:interface_incendies_gironde/screens/location_detail_screen.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
@@ -44,7 +46,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping a map establishment opens its priority mission', (
+  testWidgets('tapping a mission center opens its card then its situation', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -58,8 +60,113 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(CreateNeedScreen), findsOneWidget);
-    expect(find.text('Modifier la mission'), findsOneWidget);
+    expect(find.byKey(const Key('cockpit-map-selection-card')), findsOneWidget);
+    expect(
+      find.byKey(const Key('cockpit-map-selected-location-name')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('mission active'), findsOneWidget);
+    expect(find.textContaining('de couverture'), findsOneWidget);
+    expect(find.textContaining('Prochaine échéance'), findsOneWidget);
+    expect(find.textContaining('Profession en tension'), findsOneWidget);
+    expect(find.text('Voir la situation'), findsOneWidget);
+    expect(find.byType(CreateNeedScreen), findsNothing);
+
+    await tester.tap(find.byKey(const Key('cockpit-map-view-location')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LocationDetailScreen), findsOneWidget);
+    expect(find.byKey(const Key('location-detail-screen')), findsOneWidget);
+  });
+
+  testWidgets('a center without a mission exposes only its existing detail', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final location = places.firstWhere(
+      (candidate) => candidate.name == 'Mérignac',
+    );
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: MockCoordinationRepository(
+          initialMissions: const [],
+          initialLocations: [location],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsLabel(
+        RegExp(r'Centre de Mérignac, aucune mission active'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('cockpit-map-selected-location-name')),
+          )
+          .data,
+      'Mérignac',
+    );
+    expect(find.text('Aucune mission active'), findsOneWidget);
+    expect(find.text('Voir le centre'), findsOneWidget);
+    expect(find.text('Voir la situation'), findsNothing);
+    expect(find.textContaining('de couverture'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('cockpit-map-view-location')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LocationDetailScreen), findsOneWidget);
+    expect(find.text('Aucun besoin en cours pour ce lieu.'), findsOneWidget);
+  });
+
+  testWidgets('map supports bounded pinch, pan and animated recentering', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpAndSettle();
+
+    final viewerFinder = find.byKey(
+      const Key('cockpit-map-interactive-viewer'),
+    );
+    final viewer = tester.widget<InteractiveViewer>(viewerFinder);
+    expect(viewer.minScale, 1);
+    expect(viewer.maxScale, 3);
+    expect(viewer.boundaryMargin, EdgeInsets.zero);
+    expect(viewer.constrained, isTrue);
+    expect(viewer.panEnabled, isTrue);
+    expect(viewer.scaleEnabled, isTrue);
+    expect(viewer.trackpadScrollCausesScale, isTrue);
+
+    await _pinchMap(tester, viewerFinder);
+    await tester.pumpAndSettle();
+    final zoomed = tester.widget<InteractiveViewer>(viewerFinder);
+    final zoomedScale = zoomed.transformationController!.value
+        .getMaxScaleOnAxis();
+    expect(zoomedScale, greaterThan(1));
+    expect(zoomedScale, lessThanOrEqualTo(3));
+
+    final beforePan = zoomed.transformationController!.value.getTranslation();
+    await tester.drag(viewerFinder, const Offset(64, 30));
+    await tester.pumpAndSettle();
+    final afterPan = zoomed.transformationController!.value.getTranslation();
+    expect(afterPan.x != beforePan.x || afterPan.y != beforePan.y, isTrue);
+
+    await tester.tap(find.byKey(const Key('cockpit-map-recenter')));
+    await tester.pumpAndSettle();
+    final recentered = zoomed.transformationController!.value;
+    expect(recentered.getMaxScaleOnAxis(), closeTo(1, 0.001));
+    expect(recentered.getTranslation().x, closeTo(0, 0.001));
+    expect(recentered.getTranslation().y, closeTo(0, 0.001));
   });
 
   testWidgets('covered territory states that no action is urgent', (
@@ -161,6 +268,13 @@ void main() {
         tester.element(find.byType(CoordinatorCockpitScreen)).v5Colors,
         V5Colors.dark,
       );
+      expect(
+        find.bySemanticsLabel(
+          RegExp(r'Centre de Mérignac, 1 mission active, 1 tension critique'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Recentrer la carte'), findsOneWidget);
       expect(tester.takeException(), isNull);
       semantics.dispose();
     },
@@ -182,8 +296,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorCockpitScreen), findsOneWidget);
+    final viewerFinder = find.byKey(
+      const Key('cockpit-map-interactive-viewer'),
+    );
+    await _pinchMap(tester, viewerFinder);
+    final viewer = tester.widget<InteractiveViewer>(viewerFinder);
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      greaterThan(1),
+    );
+    await tester.tap(find.byKey(const Key('cockpit-map-recenter')));
+    await tester.pump();
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      closeTo(1, 0.001),
+    );
     expect(tester.takeException(), isNull);
   });
+}
+
+Future<void> _pinchMap(WidgetTester tester, Finder viewer) async {
+  final center = tester.getCenter(viewer);
+  final first = await tester.startGesture(
+    center + const Offset(-24, 0),
+    pointer: 1,
+  );
+  final second = await tester.startGesture(
+    center + const Offset(24, 0),
+    pointer: 2,
+  );
+  await first.moveTo(center + const Offset(-74, 0));
+  await second.moveTo(center + const Offset(74, 0));
+  await tester.pump();
+  await first.up();
+  await second.up();
+  await tester.pump();
 }
 
 Future<void> _scrollCockpitUntil(WidgetTester tester, Finder target) async {

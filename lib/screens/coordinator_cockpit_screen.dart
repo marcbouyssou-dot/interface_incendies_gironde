@@ -18,11 +18,13 @@ class CoordinatorCockpitScreen extends StatefulWidget {
     super.key,
     required this.publishedNeeds,
     required this.onViewMission,
+    required this.onViewLocation,
     required this.onCreateNeed,
   });
 
   final CoordinatorPublishedNeeds publishedNeeds;
   final ValueChanged<CoordinationNeed> onViewMission;
+  final ValueChanged<ResponsePlace> onViewLocation;
   final VoidCallback onCreateNeed;
 
   @override
@@ -98,6 +100,7 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
                     return _CockpitContent(
                       cockpit: cockpit,
                       onViewMission: widget.onViewMission,
+                      onViewLocation: widget.onViewLocation,
                       onCreateNeed: widget.onCreateNeed,
                     );
                   },
@@ -113,11 +116,13 @@ class _CockpitContent extends StatelessWidget {
   const _CockpitContent({
     required this.cockpit,
     required this.onViewMission,
+    required this.onViewLocation,
     required this.onCreateNeed,
   });
 
   final CoordinatorCockpitViewData cockpit;
   final ValueChanged<CoordinationNeed> onViewMission;
+  final ValueChanged<ResponsePlace> onViewLocation;
   final VoidCallback onCreateNeed;
 
   @override
@@ -151,7 +156,7 @@ class _CockpitContent extends StatelessWidget {
                       locationCount: cockpit.locationCount,
                       missionCount: cockpit.missionCount,
                       tensionCount: cockpit.tensionCount,
-                      onViewMission: onViewMission,
+                      onViewLocation: onViewLocation,
                       height: mapHeight,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
