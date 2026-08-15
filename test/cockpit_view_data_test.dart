@@ -92,7 +92,7 @@ void main() {
       );
 
       expect(view.globalStatus, TerritoryOperationalStatus.critical);
-      expect(view.globalStateLabel, '2 tensions prioritaires');
+      expect(view.globalStateLabel, 'Situation critique');
       expect(view.priorities.map((priority) => priority.mission.id), [
         'critical-mk',
         'watch-ide',
@@ -103,11 +103,23 @@ void main() {
       expect(view.criticalMissions, 1);
       expect(view.mostNeededProfession, 'MK');
       expect(view.mapPoints, hasLength(2));
+      expect(view.locationCount, 2);
+      expect(view.missionCount, 3);
+      expect(view.tensionCount, 2);
+      expect(view.refreshedAtLabel, '10 h 00');
       expect(
-        view.mapPoints
-            .singleWhere((point) => point.location == merignac)
-            .status,
-        TerritoryOperationalStatus.critical,
+        view.mapPoints.singleWhere((point) => point.location == merignac),
+        isA<CockpitMapPoint>()
+            .having(
+              (point) => point.status,
+              'status',
+              TerritoryOperationalStatus.critical,
+            )
+            .having(
+              (point) => point.primaryMission?.id,
+              'primary mission',
+              'critical-mk',
+            ),
       );
       expect(
         view.mapPoints.singleWhere((point) => point.location == langon).status,
@@ -123,10 +135,33 @@ void main() {
     );
 
     expect(view.globalStatus, TerritoryOperationalStatus.stable);
-    expect(view.globalStateLabel, 'Couverture satisfaisante');
+    expect(view.globalStateLabel, 'Situation maîtrisée');
     expect(view.coveragePercent, 100);
     expect(view.criticalMissions, 0);
-    expect(view.mostNeededProfession, 'Aucune');
+    expect(view.mostNeededProfession, 'Aucune tension');
+    expect(view.locationCount, 1);
+    expect(view.missionCount, 0);
+    expect(view.tensionCount, 0);
     expect(view.priorities, isEmpty);
+  });
+
+  test('partially covered territory is under surveillance', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final view = CoordinatorCockpitViewData.from(
+      now: now,
+      locations: const [langon],
+      missions: [
+        mission(
+          id: 'watch-ide',
+          location: langon,
+          required: const {HealthProfessionId.nurse: 2},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(hours: 4)),
+        ),
+      ],
+    );
+
+    expect(view.globalStatus, TerritoryOperationalStatus.watch);
+    expect(view.globalStateLabel, 'Situation sous surveillance');
   });
 }

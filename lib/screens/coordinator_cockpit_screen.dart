@@ -148,6 +148,10 @@ class _CockpitContent extends StatelessWidget {
                     const SizedBox(height: V5Spacing.xl),
                     OperationalTerritoryMap(
                       points: cockpit.mapPoints,
+                      locationCount: cockpit.locationCount,
+                      missionCount: cockpit.missionCount,
+                      tensionCount: cockpit.tensionCount,
+                      onViewMission: onViewMission,
                       height: mapHeight,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
@@ -191,17 +195,12 @@ class _CockpitHeader extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: true,
-      label: '${cockpit.territoryName}. ${cockpit.globalStateLabel}.',
+      label:
+          '${cockpit.globalStateLabel}. ${cockpit.territoryName}. Situation actualisée à ${cockpit.refreshedAtLabel}.',
       child: ExcludeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              cockpit.territoryName,
-              key: const Key('cockpit-territory-name'),
-              style: Theme.of(context).textTheme.displaySmall,
-            ),
-            const SizedBox(height: V5Spacing.sm),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -220,6 +219,20 @@ class _CockpitHeader extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: V5Spacing.xs),
+            Text(
+              cockpit.territoryName,
+              key: const Key('cockpit-territory-name'),
+              style: Theme.of(context).textTheme.displaySmall,
+            ),
+            const SizedBox(height: V5Spacing.sm),
+            Text(
+              'Situation actualisée · ${cockpit.refreshedAtLabel}',
+              key: const Key('cockpit-refreshed-at'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
             ),
           ],
         ),
@@ -243,10 +256,30 @@ class _PrioritySection extends StatelessWidget {
       key: const Key('cockpit-priorities'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Tensions prioritaires',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
+        if (priorities.isNotEmpty)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(
+                  Icons.warning_rounded,
+                  color: context.v5Colors.danger,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: V5Spacing.xs),
+              Expanded(
+                child: Text(
+                  '${priorities.length} action${priorities.length > 1 ? 's' : ''} prioritaire${priorities.length > 1 ? 's' : ''}',
+                  key: const Key('cockpit-priority-title'),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: context.v5Colors.danger,
+                  ),
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: V5Spacing.sm),
         if (priorities.isEmpty)
           const _NoPriority()
@@ -373,7 +406,7 @@ class _NoPriority extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     return Semantics(
-      label: 'Aucune tension prioritaire.',
+      label: 'Aucune action urgente. Le territoire est actuellement couvert.',
       child: ExcludeSemantics(
         child: Container(
           width: double.infinity,
@@ -383,16 +416,29 @@ class _NoPriority extends StatelessWidget {
             borderRadius: BorderRadius.circular(V5Radius.card),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(Icons.check_circle_rounded, color: colors.success),
               const SizedBox(width: V5Spacing.sm),
               Expanded(
-                child: Text(
-                  'Aucune tension prioritaire',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Aucune action urgente',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: V5Spacing.xxs),
+                    Text(
+                      'Le territoire est actuellement couvert.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -411,9 +457,14 @@ class _OperationalSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final metrics = [
-      ('Couverture globale', '${cockpit.coveragePercent} %'),
-      ('Missions critiques', '${cockpit.criticalMissions}'),
-      ('Profession en tension', cockpit.mostNeededProfession),
+      ('missions couvertes', '${cockpit.coveragePercent} %'),
+      (
+        cockpit.criticalMissions == 1
+            ? 'mission critique'
+            : 'missions critiques',
+        '${cockpit.criticalMissions}',
+      ),
+      ('profession la plus tendue', cockpit.mostNeededProfession),
     ];
     final stack = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
     return Column(
@@ -507,8 +558,8 @@ class _QuickActions extends StatelessWidget {
     final view = V5Button(
       key: const Key('cockpit-view-mission'),
       expanded: true,
-      icon: Icons.visibility_outlined,
-      label: 'Voir mission',
+      icon: Icons.play_arrow_rounded,
+      label: 'Traiter la priorité',
       backgroundColor: CoordinatorIdentity.of(context).accent,
       foregroundColor: CoordinatorIdentity.of(context).onAccent,
       onPressed: primaryMission == null

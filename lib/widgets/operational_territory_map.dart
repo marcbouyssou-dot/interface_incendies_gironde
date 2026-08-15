@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../coordinator/cockpit_view_data.dart';
 import '../coordinator/territory_view_data.dart';
+import '../models/need.dart';
 import '../theme/v5_foundation.dart';
 import 'territory_components.dart';
 
@@ -9,10 +10,18 @@ class OperationalTerritoryMap extends StatelessWidget {
   const OperationalTerritoryMap({
     super.key,
     required this.points,
+    required this.locationCount,
+    required this.missionCount,
+    required this.tensionCount,
+    required this.onViewMission,
     this.height = 280,
   });
 
   final List<CockpitMapPoint> points;
+  final int locationCount;
+  final int missionCount;
+  final int tensionCount;
+  final ValueChanged<CoordinationNeed> onViewMission;
   final double height;
 
   @override
@@ -25,11 +34,15 @@ class OperationalTerritoryMap extends StatelessWidget {
     final watch = missionPoints
         .where((point) => point.status == TerritoryOperationalStatus.watch)
         .length;
+    final renderedPoints = [
+      ...points,
+    ]..sort((left, right) => _markerLayer(left).compareTo(_markerLayer(right)));
     final summary =
         'Carte opérationnelle de Gironde. '
-        '${points.length} établissements géolocalisés, '
-        '${missionPoints.length} avec une mission, '
-        '$critical critiques et $watch à surveiller.';
+        '$locationCount établissements, '
+        '$missionCount missions, '
+        '$tensionCount tensions. '
+        '$critical établissements critiques et $watch à surveiller.';
 
     return Semantics(
       key: const Key('cockpit-map-semantics'),
@@ -54,12 +67,22 @@ class OperationalTerritoryMap extends StatelessWidget {
                   painter: _TerritoryMapPainter(colors: colors),
                 ),
               ),
-              for (final point in points)
+              for (final point in renderedPoints)
                 _MapMarker(
                   point: point,
                   mapSize: constraints.biggest,
                   colors: colors,
+                  onViewMission: onViewMission,
                 ),
+              Positioned(
+                top: V5Spacing.sm,
+                right: V5Spacing.sm,
+                child: _MapCounters(
+                  locationCount: locationCount,
+                  missionCount: missionCount,
+                  tensionCount: tensionCount,
+                ),
+              ),
               const Positioned(
                 left: V5Spacing.sm,
                 right: V5Spacing.sm,
@@ -74,11 +97,21 @@ class OperationalTerritoryMap extends StatelessWidget {
   }
 }
 
+int _markerLayer(CockpitMapPoint point) {
+  if (!point.hasMission) return 0;
+  return switch (point.status) {
+    TerritoryOperationalStatus.stable => 1,
+    TerritoryOperationalStatus.watch => 2,
+    TerritoryOperationalStatus.critical => 3,
+  };
+}
+
 class _MapMarker extends StatelessWidget {
   const _MapMarker({
     required this.point,
     required this.mapSize,
     required this.colors,
+    required this.onViewMission,
   });
 
   static const _minimumLongitude = -1.35;
@@ -89,10 +122,11 @@ class _MapMarker extends StatelessWidget {
   final CockpitMapPoint point;
   final Size mapSize;
   final V5Colors colors;
+  final ValueChanged<CoordinationNeed> onViewMission;
 
   @override
   Widget build(BuildContext context) {
-    final markerSize = point.hasMission ? 30.0 : 7.0;
+    final markerSize = point.hasMission ? 44.0 : 7.0;
     final horizontal =
         ((point.longitude - _minimumLongitude) /
                 (_maximumLongitude - _minimumLongitude))
@@ -114,7 +148,12 @@ class _MapMarker extends StatelessWidget {
         .clamp(0.0, double.infinity)
         .toDouble();
     final marker = point.hasMission
-        ? _MissionMarker(point: point)
+        ? Center(
+            child: SizedBox.square(
+              dimension: 30,
+              child: _MissionMarker(point: point),
+            ),
+          )
         : DecoratedBox(
             decoration: BoxDecoration(
               color: colors.textSecondary.withValues(alpha: 0.55),
@@ -130,12 +169,84 @@ class _MapMarker extends StatelessWidget {
       height: markerSize,
       child: point.hasMission
           ? Semantics(
+              key: Key('cockpit-map-location-${point.location.id}'),
+              button: true,
               label:
                   '${point.location.name}, ${point.missionCount} mission${point.missionCount > 1 ? 's' : ''}, '
-                  '${point.status.label.toLowerCase()}.',
-              child: ExcludeSemantics(child: marker),
+                  '${point.status.label.toLowerCase()}. Ouvrir la mission.',
+              child: ExcludeSemantics(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: point.primaryMission == null
+                      ? null
+                      : () => onViewMission(point.primaryMission!),
+                  child: marker,
+                ),
+              ),
             )
           : ExcludeSemantics(child: marker),
+    );
+  }
+}
+
+class _MapCounters extends StatelessWidget {
+  const _MapCounters({
+    required this.locationCount,
+    required this.missionCount,
+    required this.tensionCount,
+  });
+
+  final int locationCount;
+  final int missionCount;
+  final int tensionCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final rows = [
+      (
+        '$locationCount',
+        locationCount == 1 ? 'établissement' : 'établissements',
+      ),
+      ('$missionCount', missionCount == 1 ? 'mission' : 'missions'),
+      ('$tensionCount', tensionCount == 1 ? 'tension' : 'tensions'),
+    ];
+    return Semantics(
+      key: const Key('cockpit-map-counters'),
+      label: rows.map((row) => '${row.$1} ${row.$2}').join(', '),
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: V5Spacing.sm,
+            vertical: V5Spacing.xs,
+          ),
+          decoration: BoxDecoration(
+            color: colors.surfaceElevated.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(V5Radius.control),
+            border: Border.all(color: colors.outline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final row in rows)
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${row.$1} ',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      TextSpan(text: row.$2),
+                    ],
+                  ),
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

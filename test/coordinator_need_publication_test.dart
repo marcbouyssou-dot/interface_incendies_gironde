@@ -50,14 +50,14 @@ void main() {
         const Offset(0, 2000),
       );
       await tester.pumpAndSettle();
-      expect(find.text('1 tension prioritaire'), findsOneWidget);
+      expect(find.text('1 action prioritaire'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
       await tester.pumpWidget(FireCoordinationApp(repository: repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('1 tension prioritaire'), findsOneWidget);
+      expect(find.text('1 action prioritaire'), findsOneWidget);
     },
   );
 

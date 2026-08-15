@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_cockpit_screen.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
+import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
+import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
 void main() {
   testWidgets('cockpit is the coordinator home and keeps its V1 scope', (
@@ -17,23 +19,79 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorCockpitScreen), findsOneWidget);
+    expect(find.text('Situation critique'), findsOneWidget);
     expect(find.text('Gironde'), findsOneWidget);
-    expect(find.text('4 tensions prioritaires'), findsOneWidget);
+    expect(find.byKey(const Key('cockpit-refreshed-at')), findsOneWidget);
     expect(find.byKey(const Key('cockpit-operational-map')), findsOneWidget);
-    expect(find.text('Tensions prioritaires'), findsOneWidget);
+    expect(find.byKey(const Key('cockpit-map-counters')), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(const Key('cockpit-map-counters'))).label,
+      matches(RegExp(r'\d+ établissements, 6 missions, 4 tensions')),
+    );
+    expect(find.text('3 actions prioritaires'), findsOneWidget);
     expect(find.text('Voir la mission'), findsNWidgets(3));
     await _scrollCockpitUntil(tester, find.text('Résumé opérationnel'));
     expect(find.text('Résumé opérationnel'), findsOneWidget);
-    expect(find.text('Couverture globale'), findsOneWidget);
-    expect(find.text('Missions critiques'), findsOneWidget);
-    expect(find.text('Profession en tension'), findsOneWidget);
+    expect(find.text('missions couvertes'), findsOneWidget);
+    expect(find.text('mission critique'), findsOneWidget);
+    expect(find.text('profession la plus tendue'), findsOneWidget);
     await _scrollCockpitUntil(tester, find.text('Actions rapides'));
     expect(find.text('Actions rapides'), findsOneWidget);
-    expect(find.text('Voir mission'), findsOneWidget);
+    expect(find.text('Traiter la priorité'), findsOneWidget);
     expect(find.text('Créer un besoin'), findsOneWidget);
     expect(find.text('Historique'), findsNothing);
     expect(find.text('Recommandations'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tapping a map establishment opens its priority mission', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('cockpit-map-location-bordeauxMetropole-mérignac')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CreateNeedScreen), findsOneWidget);
+    expect(find.text('Modifier la mission'), findsOneWidget);
+  });
+
+  testWidgets('covered territory states that no action is urgent', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: MockCoordinationRepository(
+          initialMissions: const [],
+          initialLocations: const [],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Situation maîtrisée'), findsOneWidget);
+    expect(find.text('Aucune action urgente'), findsOneWidget);
+    expect(
+      find.text('Le territoire est actuellement couvert.'),
+      findsOneWidget,
+    );
+    await _scrollCockpitUntil(tester, find.text('Traiter la priorité'));
+    expect(find.text('Aucune tension'), findsOneWidget);
+    expect(find.text('Traiter la priorité'), findsOneWidget);
+    final action = tester.widget<V5Button>(
+      find.byKey(const Key('cockpit-view-mission')),
+    );
+    expect(action.onPressed, isNull);
   });
 
   testWidgets('priority action opens the selected existing mission', (
@@ -92,7 +150,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.bySemanticsLabel(RegExp(r'Gironde.*tensions prioritaires')),
+        find.bySemanticsLabel(RegExp(r'Situation critique.*Gironde')),
         findsOneWidget,
       );
       expect(

@@ -28,7 +28,7 @@ void main() {
     expect(find.text('Gironde'), findsOneWidget);
     expect(find.byKey(const Key('cockpit-global-state')), findsOneWidget);
     expect(find.byKey(const Key('cockpit-operational-map')), findsOneWidget);
-    expect(find.text('Tensions prioritaires'), findsOneWidget);
+    expect(find.text('3 actions prioritaires'), findsOneWidget);
     expect(find.byKey(const Key('coordinator-global-dashboard')), findsNothing);
     expect(find.text('Déclarer'), findsNothing);
 

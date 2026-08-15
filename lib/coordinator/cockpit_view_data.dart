@@ -10,6 +10,7 @@ class CockpitMapPoint {
     required this.longitude,
     required this.status,
     required this.missionCount,
+    required this.primaryMission,
   });
 
   final ResponsePlace location;
@@ -17,6 +18,7 @@ class CockpitMapPoint {
   final double longitude;
   final TerritoryOperationalStatus status;
   final int missionCount;
+  final CoordinationNeed? primaryMission;
 
   bool get hasMission => missionCount > 0;
 }
@@ -50,9 +52,13 @@ class CoordinatorCockpitViewData {
     required this.globalStateLabel,
     required this.mapPoints,
     required this.priorities,
+    required this.locationCount,
+    required this.missionCount,
+    required this.tensionCount,
     required this.globalCoverage,
     required this.criticalMissions,
     required this.mostNeededProfession,
+    required this.refreshedAt,
   });
 
   factory CoordinatorCockpitViewData.from({
@@ -117,22 +123,24 @@ class CoordinatorCockpitViewData {
       territoryName: territoryName,
       globalStatus: status,
       globalStateLabel: switch (status) {
-        TerritoryOperationalStatus.stable => 'Couverture satisfaisante',
-        TerritoryOperationalStatus.watch =>
-          '${tensions.length} mission${tensions.length > 1 ? 's' : ''} à surveiller',
-        TerritoryOperationalStatus.critical =>
-          '${tensions.length} tension${tensions.length > 1 ? 's' : ''} prioritaire${tensions.length > 1 ? 's' : ''}',
+        TerritoryOperationalStatus.stable => 'Situation maîtrisée',
+        TerritoryOperationalStatus.watch => 'Situation sous surveillance',
+        TerritoryOperationalStatus.critical => 'Situation critique',
       },
       mapPoints: mapPoints,
       priorities: priorities,
+      locationCount: enabledLocations.length,
+      missionCount: activeMissions.length,
+      tensionCount: tensions.length,
       globalCoverage: totalQuotas.coverage,
       criticalMissions: criticalCount,
       mostNeededProfession: missingQuotas.isEmpty
-          ? 'Aucune'
+          ? 'Aucune tension'
           : HealthProfessionRegistry.byId(
                   missingQuotas.first.professionId,
                 )?.shortLabel ??
                 missingQuotas.first.professionId,
+      refreshedAt: reference,
     );
   }
 
@@ -141,11 +149,21 @@ class CoordinatorCockpitViewData {
   final String globalStateLabel;
   final List<CockpitMapPoint> mapPoints;
   final List<CockpitPriority> priorities;
+  final int locationCount;
+  final int missionCount;
+  final int tensionCount;
   final double globalCoverage;
   final int criticalMissions;
   final String mostNeededProfession;
+  final DateTime refreshedAt;
 
   int get coveragePercent => (globalCoverage * 100).round();
+
+  String get refreshedAtLabel {
+    final hour = refreshedAt.hour.toString().padLeft(2, '0');
+    final minute = refreshedAt.minute.toString().padLeft(2, '0');
+    return '$hour h $minute';
+  }
 }
 
 bool _isOperationallyActive(CoordinationNeed mission, DateTime now) {
@@ -226,6 +244,7 @@ CockpitMapPoint _mapPointFor({
             responsePlaceForNeed(mission, locations)?.id == location.id,
       )
       .toList(growable: false);
+  final orderedMissions = [...locationMissions]..sort(_compareTensions);
   final status =
       locationMissions.any((mission) => mission.status == NeedStatus.critical)
       ? TerritoryOperationalStatus.critical
@@ -238,5 +257,6 @@ CockpitMapPoint _mapPointFor({
     longitude: location.structuredAddress!.longitude!,
     status: status,
     missionCount: locationMissions.length,
+    primaryMission: orderedMissions.firstOrNull,
   );
 }
