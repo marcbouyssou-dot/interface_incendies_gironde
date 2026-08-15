@@ -109,6 +109,8 @@ abstract final class FirestoreMissionMapper {
       cancelledBy: data['cancelledBy'] as String?,
       cancellationReason: data['cancellationReason'] as String?,
       createdBy: data['createdBy'] as String?,
+      createdAt: _dateTime(data['createdAt']),
+      updatedAt: _dateTime(data['updatedAt']),
     );
   }
 

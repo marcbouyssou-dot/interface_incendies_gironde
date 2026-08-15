@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
+import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_cockpit_screen.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/screens/location_detail_screen.dart';
@@ -32,11 +33,17 @@ void main() {
     );
     expect(find.text('3 actions prioritaires'), findsOneWidget);
     expect(find.text('Voir la mission'), findsNWidgets(3));
+    await _scrollCockpitUntil(tester, find.text('Alertes'));
+    expect(find.text('Alertes'), findsOneWidget);
+    expect(find.byKey(const Key('cockpit-alert-0')), findsOneWidget);
     await _scrollCockpitUntil(tester, find.text('Résumé opérationnel'));
     expect(find.text('Résumé opérationnel'), findsOneWidget);
     expect(find.text('missions couvertes'), findsOneWidget);
     expect(find.text('mission critique'), findsOneWidget);
     expect(find.text('profession la plus tendue'), findsOneWidget);
+    await _scrollCockpitUntil(tester, find.text('Activité récente'));
+    expect(find.text('Activité récente'), findsOneWidget);
+    expect(find.text('Aucune activité récente'), findsOneWidget);
     await _scrollCockpitUntil(tester, find.text('Actions rapides'));
     expect(find.text('Actions rapides'), findsOneWidget);
     expect(find.text('Traiter la priorité'), findsOneWidget);
@@ -192,6 +199,10 @@ void main() {
       find.text('Le territoire est actuellement couvert.'),
       findsOneWidget,
     );
+    await _scrollCockpitUntil(tester, find.text('Aucune alerte active'));
+    expect(find.byKey(const Key('cockpit-alerts-empty')), findsOneWidget);
+    await _scrollCockpitUntil(tester, find.text('Aucune activité récente'));
+    expect(find.byKey(const Key('cockpit-activity-empty')), findsOneWidget);
     await _scrollCockpitUntil(tester, find.text('Traiter la priorité'));
     expect(find.text('Aucune tension'), findsOneWidget);
     expect(find.text('Traiter la priorité'), findsOneWidget);
@@ -215,6 +226,70 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('cockpit-priority-0-view')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CreateNeedScreen), findsOneWidget);
+    expect(find.text('Modifier la mission'), findsOneWidget);
+  });
+
+  testWidgets('tapping an alert opens its existing mission', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpAndSettle();
+    await _scrollCockpitUntil(tester, find.byKey(const Key('cockpit-alert-0')));
+    await tester.tap(find.byKey(const Key('cockpit-alert-0')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CreateNeedScreen), findsOneWidget);
+    expect(find.text('Modifier la mission'), findsOneWidget);
+  });
+
+  testWidgets('tapping recent activity opens its existing mission', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final now = DateTime.now();
+    final location = places.firstWhere(
+      (candidate) => candidate.name == 'Mérignac',
+    );
+    final recentMission = CoordinationNeed(
+      id: 'recent-mission',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: 'demain',
+      time: '12:00 — 16:00',
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+      startAt: now.add(const Duration(hours: 2)),
+      endAt: now.add(const Duration(hours: 6)),
+      createdAt: now.subtract(const Duration(minutes: 8)),
+    );
+
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: MockCoordinationRepository(
+          initialMissions: [recentMission],
+          initialLocations: [location],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollCockpitUntil(
+      tester,
+      find.byKey(const Key('cockpit-activity-0')),
+    );
+    expect(find.text('Mission publiée'), findsOneWidget);
+    expect(find.textContaining('Il y a 8 min'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('cockpit-activity-0')));
     await tester.pumpAndSettle();
 
     expect(find.byType(CreateNeedScreen), findsOneWidget);
@@ -275,6 +350,11 @@ void main() {
         findsOneWidget,
       );
       expect(find.bySemanticsLabel('Recentrer la carte'), findsOneWidget);
+      await _scrollCockpitUntil(tester, find.text('Alertes'));
+      expect(
+        find.bySemanticsLabel(RegExp(r'Mission critique.*Ouvrir la mission')),
+        findsWidgets,
+      );
       expect(tester.takeException(), isNull);
       semantics.dispose();
     },

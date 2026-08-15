@@ -30,6 +30,11 @@ void main() {
     required Map<String, int> registered,
     required DateTime startAt,
     bool isCancelled = false,
+    bool isActive = true,
+    DateTime? cancelledAt,
+    String? cancellationReason,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) => CoordinationNeed(
     id: id,
     locationId: location.id,
@@ -44,7 +49,12 @@ void main() {
     equipment: const [],
     startAt: startAt,
     endAt: startAt.add(const Duration(hours: 4)),
+    isActive: isActive,
     isCancelled: isCancelled,
+    cancelledAt: cancelledAt,
+    cancellationReason: cancellationReason,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
     professionQuotas: ProfessionQuotas.fromMaps(
       requiredByProfession: required,
       registeredByProfession: registered,
@@ -107,6 +117,14 @@ void main() {
       expect(view.missionCount, 3);
       expect(view.tensionCount, 2);
       expect(view.refreshedAtLabel, '10 h 00');
+      expect(view.alerts.map((alert) => alert.mission.id), [
+        'critical-mk',
+        'watch-ide',
+      ]);
+      expect(view.alerts.first.level, CockpitAlertLevel.urgent);
+      expect(view.alerts.first.kind, CockpitAlertKind.critical);
+      expect(view.alerts.last.level, CockpitAlertLevel.watch);
+      expect(view.alerts.last.kind, CockpitAlertKind.incompleteSoon);
       expect(
         view.mapPoints.singleWhere((point) => point.location == merignac),
         isA<CockpitMapPoint>()
@@ -166,6 +184,8 @@ void main() {
     expect(view.missionCount, 0);
     expect(view.tensionCount, 0);
     expect(view.priorities, isEmpty);
+    expect(view.alerts, isEmpty);
+    expect(view.recentActivity, isEmpty);
     expect(view.mapPoints.single.hasMission, isFalse);
     expect(view.mapPoints.single.coveragePercent, 100);
     expect(view.mapPoints.single.nextDeadlineLabel, isNull);
@@ -194,5 +214,157 @@ void main() {
 
     expect(view.globalStatus, TerritoryOperationalStatus.watch);
     expect(view.globalStateLabel, 'Situation sous surveillance');
+  });
+
+  test('alerts are deduplicated, ordered and limited to three', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final view = CoordinatorCockpitViewData.from(
+      now: now,
+      locations: const [merignac, langon],
+      missions: [
+        mission(
+          id: 'watch',
+          location: langon,
+          required: const {HealthProfessionId.nurse: 2},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(minutes: 30)),
+        ),
+        mission(
+          id: 'critical-later',
+          location: merignac,
+          required: const {HealthProfessionId.physiotherapist: 3},
+          registered: const {HealthProfessionId.physiotherapist: 0},
+          startAt: now.add(const Duration(hours: 3)),
+        ),
+        mission(
+          id: 'critical-soon',
+          location: langon,
+          required: const {HealthProfessionId.physician: 2},
+          registered: const {HealthProfessionId.physician: 0},
+          startAt: now.add(const Duration(hours: 1)),
+        ),
+        mission(
+          id: 'cancelled',
+          location: merignac,
+          required: const {HealthProfessionId.nurse: 1},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(hours: 2)),
+          isActive: false,
+          isCancelled: true,
+          cancelledAt: now.subtract(const Duration(minutes: 8)),
+        ),
+      ],
+    );
+
+    expect(view.alerts, hasLength(3));
+    expect(view.alerts.map((alert) => alert.mission.id), [
+      'cancelled',
+      'critical-soon',
+      'critical-later',
+    ]);
+    expect(
+      view.alerts.map((alert) => alert.mission.id).toSet(),
+      hasLength(view.alerts.length),
+    );
+    expect(
+      view.alerts.where((alert) => alert.mission.id == 'critical-soon'),
+      hasLength(1),
+    );
+  });
+
+  test('an incomplete mission outside the six-hour window is not an alert', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final view = CoordinatorCockpitViewData.from(
+      now: now,
+      locations: const [langon],
+      missions: [
+        mission(
+          id: 'later',
+          location: langon,
+          required: const {HealthProfessionId.nurse: 2},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(hours: 7)),
+        ),
+      ],
+    );
+
+    expect(view.alerts, isEmpty);
+  });
+
+  test(
+    'recent activity uses only available timestamps and keeps five items',
+    () {
+      final now = DateTime(2026, 8, 15, 10);
+      final view = CoordinatorCockpitViewData.from(
+        now: now,
+        locations: const [merignac],
+        missions: [
+          for (var index = 0; index < 6; index++)
+            mission(
+              id: 'published-$index',
+              location: merignac,
+              required: const {HealthProfessionId.physiotherapist: 1},
+              registered: const {HealthProfessionId.physiotherapist: 1},
+              startAt: now.add(const Duration(days: 1)),
+              createdAt: now.subtract(Duration(minutes: index + 1)),
+            ),
+        ],
+      );
+
+      expect(view.recentActivity, hasLength(5));
+      expect(view.recentActivity.map((event) => event.mission.id), [
+        'published-0',
+        'published-1',
+        'published-2',
+        'published-3',
+        'published-4',
+      ]);
+      expect(
+        view.recentActivity.every(
+          (event) => event.kind == CockpitActivityKind.published,
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test('activity distinguishes publication, update and cancellation', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final view = CoordinatorCockpitViewData.from(
+      now: now,
+      locations: const [merignac, langon],
+      missions: [
+        mission(
+          id: 'updated',
+          location: merignac,
+          required: const {HealthProfessionId.physiotherapist: 1},
+          registered: const {HealthProfessionId.physiotherapist: 1},
+          startAt: now.add(const Duration(days: 1)),
+          createdAt: now.subtract(const Duration(minutes: 30)),
+          updatedAt: now.subtract(const Duration(minutes: 10)),
+        ),
+        mission(
+          id: 'cancelled',
+          location: langon,
+          required: const {HealthProfessionId.nurse: 1},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(days: 1)),
+          isActive: false,
+          isCancelled: true,
+          cancelledAt: now.subtract(const Duration(minutes: 5)),
+          createdAt: now.subtract(const Duration(hours: 2)),
+          updatedAt: now.subtract(const Duration(minutes: 5)),
+        ),
+      ],
+    );
+
+    expect(view.recentActivity.map((event) => event.kind), [
+      CockpitActivityKind.cancelled,
+      CockpitActivityKind.updated,
+      CockpitActivityKind.published,
+    ]);
+    expect(view.recentActivity.first.timeLabel, 'Il y a 5 min');
+    expect(view.recentActivity.first.title, 'Mission annulée');
+    expect(view.recentActivity[1].title, 'Mission actualisée');
   });
 }

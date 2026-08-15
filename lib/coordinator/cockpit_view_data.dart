@@ -75,6 +75,62 @@ class CockpitPriority {
       : '$professionLabel · $missingProfessionals manquants';
 }
 
+enum CockpitAlertLevel { urgent, watch, information }
+
+enum CockpitAlertKind { cancelled, critical, incompleteSoon }
+
+class CockpitAlert {
+  const CockpitAlert({
+    required this.kind,
+    required this.level,
+    required this.mission,
+    required this.location,
+    required this.title,
+    required this.detail,
+    required this.sortAt,
+  });
+
+  final CockpitAlertKind kind;
+  final CockpitAlertLevel level;
+  final CoordinationNeed mission;
+  final ResponsePlace? location;
+  final String title;
+  final String detail;
+  final DateTime sortAt;
+
+  String get locationLabel => location?.name ?? mission.place;
+
+  String get accessibilityLabel => '$title. $locationLabel. $detail.';
+}
+
+enum CockpitActivityKind { published, updated, cancelled }
+
+class CockpitActivity {
+  const CockpitActivity({
+    required this.kind,
+    required this.mission,
+    required this.location,
+    required this.occurredAt,
+    required this.timeLabel,
+  });
+
+  final CockpitActivityKind kind;
+  final CoordinationNeed mission;
+  final ResponsePlace? location;
+  final DateTime occurredAt;
+  final String timeLabel;
+
+  String get title => switch (kind) {
+    CockpitActivityKind.published => 'Mission publiée',
+    CockpitActivityKind.updated => 'Mission actualisée',
+    CockpitActivityKind.cancelled => 'Mission annulée',
+  };
+
+  String get locationLabel => location?.name ?? mission.place;
+
+  String get accessibilityLabel => '$title. $locationLabel. $timeLabel.';
+}
+
 class CoordinatorCockpitViewData {
   const CoordinatorCockpitViewData({
     required this.territoryName,
@@ -82,6 +138,8 @@ class CoordinatorCockpitViewData {
     required this.globalStateLabel,
     required this.mapPoints,
     required this.priorities,
+    required this.alerts,
+    required this.recentActivity,
     required this.locationCount,
     required this.missionCount,
     required this.tensionCount,
@@ -149,6 +207,17 @@ class CoordinatorCockpitViewData {
             now: reference,
           ),
     ];
+    final alerts = _alertsFor(
+      missions: missions,
+      activeMissions: activeMissions,
+      locations: enabledLocations,
+      now: reference,
+    );
+    final recentActivity = _recentActivityFor(
+      missions: missions,
+      locations: enabledLocations,
+      now: reference,
+    );
 
     return CoordinatorCockpitViewData(
       territoryName: territoryName,
@@ -160,6 +229,8 @@ class CoordinatorCockpitViewData {
       },
       mapPoints: mapPoints,
       priorities: priorities,
+      alerts: alerts,
+      recentActivity: recentActivity,
       locationCount: enabledLocations.length,
       missionCount: activeMissions.length,
       tensionCount: tensions.length,
@@ -180,6 +251,8 @@ class CoordinatorCockpitViewData {
   final String globalStateLabel;
   final List<CockpitMapPoint> mapPoints;
   final List<CockpitPriority> priorities;
+  final List<CockpitAlert> alerts;
+  final List<CockpitActivity> recentActivity;
   final int locationCount;
   final int missionCount;
   final int tensionCount;
@@ -195,6 +268,160 @@ class CoordinatorCockpitViewData {
     final minute = refreshedAt.minute.toString().padLeft(2, '0');
     return '$hour h $minute';
   }
+}
+
+const _nearStartWindow = Duration(hours: 6);
+const _recentCancellationWindow = Duration(hours: 24);
+const _recentActivityWindow = Duration(days: 7);
+
+List<CockpitAlert> _alertsFor({
+  required List<CoordinationNeed> missions,
+  required List<CoordinationNeed> activeMissions,
+  required List<ResponsePlace> locations,
+  required DateTime now,
+}) {
+  final byMission = <String, CockpitAlert>{};
+  for (final mission in missions) {
+    final cancelledAt = mission.cancelledAt;
+    if (mission.isCancelled &&
+        cancelledAt != null &&
+        _isRecent(cancelledAt, now, _recentCancellationWindow)) {
+      byMission[mission.id] = CockpitAlert(
+        kind: CockpitAlertKind.cancelled,
+        level: CockpitAlertLevel.urgent,
+        mission: mission,
+        location: responsePlaceForNeed(mission, locations),
+        title: 'Mission annulée',
+        detail: mission.cancellationReason?.trim().isNotEmpty == true
+            ? mission.cancellationReason!.trim()
+            : 'Organisation à réévaluer',
+        sortAt: cancelledAt,
+      );
+    }
+  }
+  for (final mission in activeMissions) {
+    if (byMission.containsKey(mission.id)) continue;
+    final location = responsePlaceForNeed(mission, locations);
+    if (mission.status == NeedStatus.critical) {
+      byMission[mission.id] = CockpitAlert(
+        kind: CockpitAlertKind.critical,
+        level: CockpitAlertLevel.urgent,
+        mission: mission,
+        location: location,
+        title: 'Mission critique',
+        detail: _timingLabel(mission, now),
+        sortAt: mission.startAt ?? now,
+      );
+      continue;
+    }
+    final startAt = mission.startAt;
+    if (mission.status == NeedStatus.toComplete &&
+        startAt != null &&
+        !startAt.difference(now).isNegative &&
+        startAt.difference(now) <= _nearStartWindow) {
+      byMission[mission.id] = CockpitAlert(
+        kind: CockpitAlertKind.incompleteSoon,
+        level: CockpitAlertLevel.watch,
+        mission: mission,
+        location: location,
+        title: 'Mission incomplète proche du début',
+        detail: _timingLabel(mission, now),
+        sortAt: startAt,
+      );
+    }
+  }
+  final alerts = byMission.values.toList(growable: false)
+    ..sort((left, right) {
+      final level = left.level.index.compareTo(right.level.index);
+      if (level != 0) return level;
+      final kind = left.kind.index.compareTo(right.kind.index);
+      if (kind != 0) return kind;
+      final timing = left.sortAt.compareTo(right.sortAt);
+      if (timing != 0) return timing;
+      return left.mission.id.compareTo(right.mission.id);
+    });
+  return List.unmodifiable(alerts.take(3));
+}
+
+List<CockpitActivity> _recentActivityFor({
+  required List<CoordinationNeed> missions,
+  required List<ResponsePlace> locations,
+  required DateTime now,
+}) {
+  final activity = <CockpitActivity>[];
+  for (final mission in missions) {
+    final location = responsePlaceForNeed(mission, locations);
+    final cancelledAt = mission.cancelledAt;
+    if (mission.isCancelled &&
+        cancelledAt != null &&
+        _isRecent(cancelledAt, now, _recentActivityWindow)) {
+      activity.add(
+        CockpitActivity(
+          kind: CockpitActivityKind.cancelled,
+          mission: mission,
+          location: location,
+          occurredAt: cancelledAt,
+          timeLabel: _activityTimeLabel(cancelledAt, now),
+        ),
+      );
+      continue;
+    }
+    final createdAt = mission.createdAt;
+    if (createdAt != null && _isRecent(createdAt, now, _recentActivityWindow)) {
+      activity.add(
+        CockpitActivity(
+          kind: CockpitActivityKind.published,
+          mission: mission,
+          location: location,
+          occurredAt: createdAt,
+          timeLabel: _activityTimeLabel(createdAt, now),
+        ),
+      );
+    }
+    final updatedAt = mission.updatedAt;
+    final isDistinctUpdate =
+        updatedAt != null &&
+        (createdAt == null ||
+            updatedAt.isAfter(createdAt.add(const Duration(seconds: 1))));
+    if (updatedAt != null &&
+        isDistinctUpdate &&
+        _isRecent(updatedAt, now, _recentActivityWindow)) {
+      activity.add(
+        CockpitActivity(
+          kind: CockpitActivityKind.updated,
+          mission: mission,
+          location: location,
+          occurredAt: updatedAt,
+          timeLabel: _activityTimeLabel(updatedAt, now),
+        ),
+      );
+    }
+  }
+  activity.sort((left, right) {
+    final timing = right.occurredAt.compareTo(left.occurredAt);
+    if (timing != 0) return timing;
+    final mission = left.mission.id.compareTo(right.mission.id);
+    if (mission != 0) return mission;
+    return left.kind.index.compareTo(right.kind.index);
+  });
+  return List.unmodifiable(activity.take(5));
+}
+
+bool _isRecent(DateTime eventAt, DateTime now, Duration window) {
+  if (eventAt.isAfter(now.add(const Duration(minutes: 5)))) return false;
+  return now.difference(eventAt) <= window;
+}
+
+String _activityTimeLabel(DateTime eventAt, DateTime now) {
+  final elapsed = now.difference(eventAt);
+  if (elapsed.isNegative || elapsed.inMinutes < 1) return 'À l’instant';
+  if (elapsed.inMinutes < 60) return 'Il y a ${elapsed.inMinutes} min';
+  if (elapsed.inHours < 24) return 'Il y a ${elapsed.inHours} h';
+  final day = eventAt.day.toString().padLeft(2, '0');
+  final month = eventAt.month.toString().padLeft(2, '0');
+  final hour = eventAt.hour.toString().padLeft(2, '0');
+  final minute = eventAt.minute.toString().padLeft(2, '0');
+  return '$day/$month · $hour h $minute';
 }
 
 bool _isOperationallyActive(CoordinationNeed mission, DateTime now) {

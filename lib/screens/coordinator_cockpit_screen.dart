@@ -165,7 +165,17 @@ class _CockpitContent extends StatelessWidget {
                       onViewMission: onViewMission,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
+                    _AlertsSection(
+                      alerts: cockpit.alerts,
+                      onViewMission: onViewMission,
+                    ),
+                    const SizedBox(height: V5Spacing.xxl),
                     _OperationalSummary(cockpit: cockpit),
+                    const SizedBox(height: V5Spacing.xxl),
+                    _RecentActivitySection(
+                      activity: cockpit.recentActivity,
+                      onViewMission: onViewMission,
+                    ),
                     const SizedBox(height: V5Spacing.xxl),
                     _QuickActions(
                       primaryMission: cockpit.priorities.firstOrNull?.mission,
@@ -454,6 +464,150 @@ class _NoPriority extends StatelessWidget {
   }
 }
 
+class _AlertsSection extends StatelessWidget {
+  const _AlertsSection({required this.alerts, required this.onViewMission});
+
+  final List<CockpitAlert> alerts;
+  final ValueChanged<CoordinationNeed> onViewMission;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const Key('cockpit-alerts'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Alertes', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: V5Spacing.sm),
+        if (alerts.isEmpty)
+          Semantics(
+            label: 'Aucune alerte active.',
+            child: ExcludeSemantics(
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_outline_rounded,
+                    color: context.v5Colors.success,
+                    size: 20,
+                  ),
+                  const SizedBox(width: V5Spacing.sm),
+                  Text(
+                    'Aucune alerte active',
+                    key: const Key('cockpit-alerts-empty'),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: context.v5Colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          for (var index = 0; index < alerts.length; index++) ...[
+            _AlertTile(
+              index: index,
+              alert: alerts[index],
+              onTap: () => onViewMission(alerts[index].mission),
+            ),
+            if (index < alerts.length - 1) const SizedBox(height: V5Spacing.sm),
+          ],
+      ],
+    );
+  }
+}
+
+class _AlertTile extends StatelessWidget {
+  const _AlertTile({
+    required this.index,
+    required this.alert,
+    required this.onTap,
+  });
+
+  final int index;
+  final CockpitAlert alert;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final (color, container, icon) = switch (alert.level) {
+      CockpitAlertLevel.urgent => (
+        colors.danger,
+        colors.dangerContainer,
+        Icons.warning_rounded,
+      ),
+      CockpitAlertLevel.watch => (
+        colors.warning,
+        colors.warningContainer,
+        Icons.error_outline_rounded,
+      ),
+      CockpitAlertLevel.information => (
+        colors.info,
+        colors.infoContainer,
+        Icons.info_outline_rounded,
+      ),
+    };
+    return Semantics(
+      button: true,
+      label: '${alert.accessibilityLabel} Ouvrir la mission.',
+      child: ExcludeSemantics(
+        child: Material(
+          color: container,
+          borderRadius: BorderRadius.circular(V5Radius.card),
+          child: InkWell(
+            key: Key('cockpit-alert-$index'),
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(V5Radius.card),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: V5Spacing.md,
+                  vertical: V5Spacing.sm,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: color, size: 21),
+                    const SizedBox(width: V5Spacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            alert.title,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  color: colors.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                          const SizedBox(height: V5Spacing.xxs),
+                          Text(
+                            '${alert.locationLabel} · ${alert.detail}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: V5Spacing.xs),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: colors.textSecondary,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _OperationalSummary extends StatelessWidget {
   const _OperationalSummary({required this.cockpit});
 
@@ -503,6 +657,140 @@ class _OperationalSummary extends StatelessWidget {
             ],
           ),
       ],
+    );
+  }
+}
+
+class _RecentActivitySection extends StatelessWidget {
+  const _RecentActivitySection({
+    required this.activity,
+    required this.onViewMission,
+  });
+
+  final List<CockpitActivity> activity;
+  final ValueChanged<CoordinationNeed> onViewMission;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Column(
+      key: const Key('cockpit-recent-activity'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Activité récente',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: V5Spacing.sm),
+        if (activity.isEmpty)
+          Text(
+            'Aucune activité récente',
+            key: const Key('cockpit-activity-empty'),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
+          )
+        else
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.surfaceElevated,
+              borderRadius: BorderRadius.circular(V5Radius.card),
+              border: Border.all(color: colors.outline),
+            ),
+            child: Column(
+              children: [
+                for (var index = 0; index < activity.length; index++) ...[
+                  _ActivityTile(
+                    index: index,
+                    activity: activity[index],
+                    onTap: () => onViewMission(activity[index].mission),
+                  ),
+                  if (index < activity.length - 1)
+                    Divider(height: 1, color: colors.outline),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ActivityTile extends StatelessWidget {
+  const _ActivityTile({
+    required this.index,
+    required this.activity,
+    required this.onTap,
+  });
+
+  final int index;
+  final CockpitActivity activity;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final (color, icon) = switch (activity.kind) {
+      CockpitActivityKind.published => (
+        colors.info,
+        Icons.add_circle_outline_rounded,
+      ),
+      CockpitActivityKind.updated => (colors.info, Icons.sync_rounded),
+      CockpitActivityKind.cancelled => (colors.danger, Icons.cancel_outlined),
+    };
+    return Semantics(
+      button: true,
+      label: '${activity.accessibilityLabel} Ouvrir la mission.',
+      child: ExcludeSemantics(
+        child: InkWell(
+          key: Key('cockpit-activity-$index'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(V5Radius.card),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 60),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: V5Spacing.md,
+                vertical: V5Spacing.sm,
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, color: color, size: 20),
+                  const SizedBox(width: V5Spacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${activity.timeLabel} · ${activity.locationLabel}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colors.textSecondary),
+                        ),
+                        const SizedBox(height: V5Spacing.xxs),
+                        Text(
+                          activity.title,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: colors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: V5Spacing.xs),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: colors.textSecondary,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

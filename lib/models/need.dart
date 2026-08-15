@@ -119,6 +119,8 @@ class CoordinationNeed {
     this.cancelledBy,
     this.cancellationReason,
     this.createdBy,
+    this.createdAt,
+    this.updatedAt,
     ProfessionQuotas? professionQuotas,
   }) : _professionQuotas = professionQuotas;
 
@@ -142,6 +144,8 @@ class CoordinationNeed {
   final String? cancelledBy;
   final String? cancellationReason;
   final String? createdBy;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   final ProfessionQuotas? _professionQuotas;
 
   String get area => group.label;
@@ -198,6 +202,8 @@ class CoordinationNeed {
       cancelledBy: cancelledBy,
       cancellationReason: cancellationReason,
       createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
       professionQuotas: quotas,
     );
   }

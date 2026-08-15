@@ -62,6 +62,8 @@ void main() {
     expect(mission.time, '22:00 — 02:00');
     expect(mission.requiredPhysiotherapists, 2);
     expect(mission.requiredPodiatrists, 1);
+    expect(mission.createdAt, DateTime(2026, 7, 29));
+    expect(mission.updatedAt, DateTime(2026, 7, 29));
   });
 
   test('mission update callable payload contains only editable inputs', () {
