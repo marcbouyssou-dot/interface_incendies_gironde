@@ -377,6 +377,7 @@ class _AppShellState extends State<AppShell> {
         administrationService:
             widget.platformRuntime!.platformAdministrationService,
         operationRepository: multiRuntime?.operationReadRepository,
+        missionRepository: multiReadRepository,
         onSignOut: _signOutPlatformAdministrator,
       ),
     };

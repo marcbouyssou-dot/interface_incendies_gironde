@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../repositories/platform_administration_read_repository.dart';
+import '../repositories/coordination_repository.dart';
 import '../repositories/platform_read_repository.dart';
 import '../repositories/operation_read_repository.dart';
 import '../services/current_mobilization_provider.dart';
@@ -22,6 +23,7 @@ class PlatformAdminShell extends StatefulWidget {
     required this.administrationService,
     required this.onSignOut,
     this.operationRepository,
+    this.missionRepository,
     this.initialIndex = 0,
   }) : assert(initialIndex >= 0 && initialIndex < 2);
 
@@ -31,6 +33,7 @@ class PlatformAdminShell extends StatefulWidget {
   final PlatformAdministrationService administrationService;
   final Future<void> Function() onSignOut;
   final OperationReadRepository? operationRepository;
+  final MultiMobilizationCoordinationReadRepository? missionRepository;
   final int initialIndex;
 
   @override
@@ -63,6 +66,7 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
               mobilizationProvider: widget.mobilizationProvider,
               administrationRepository: widget.administrationRepository,
               administrationService: widget.administrationService,
+              missionRepository: widget.missionRepository,
             ),
     1 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
     _ => throw RangeError.index(index, _screens),

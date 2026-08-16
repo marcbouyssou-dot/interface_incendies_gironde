@@ -57,13 +57,24 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Opérations'), findsOneWidget);
+    expect(find.text('Centre opérationnel'), findsOneWidget);
     expect(find.text('En cours'), findsOneWidget);
     expect(find.text('À venir'), findsOneWidget);
     expect(find.text('Terminées'), findsOneWidget);
     expect(find.text('Archivées'), findsOneWidget);
+    final scrollable = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('legacy-mobilizations')),
+      500,
+      scrollable: scrollable,
+    );
     expect(find.text('Mobilisations historiques'), findsOneWidget);
-    expect(find.textContaining('Aucune migration requise'), findsOneWidget);
+    expect(find.text('1 mobilisation sans opération'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('platform-operation-op-active')),
+      -500,
+      scrollable: scrollable,
+    );
     expect(
       find.byKey(const Key('platform-operation-op-active')),
       findsOneWidget,
@@ -203,14 +214,14 @@ void main() {
         greaterThanOrEqualTo(44),
       );
       expect(
-        Theme.of(tester.element(find.text('Opérations'))).brightness,
+        Theme.of(tester.element(find.text('Centre opérationnel'))).brightness,
         Brightness.dark,
       );
-      await tester.drag(
-        find.byKey(const PageStorageKey('platform-admin-operations')),
-        const Offset(0, -420),
+      await tester.scrollUntilVisible(
+        find.textContaining('Aucune opération'),
+        300,
+        scrollable: find.byType(Scrollable).first,
       );
-      await tester.pumpAndSettle();
       expect(find.textContaining('Aucune opération'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
