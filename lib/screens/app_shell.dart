@@ -12,6 +12,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../repositories/platform_runtime.dart';
 import '../services/professional_verification_service.dart';
+import '../services/operational_context_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/system_theme.dart';
@@ -304,6 +305,17 @@ class _AppShellState extends State<AppShell> {
     crossRolePreview =
         isPlatformAdministrator &&
         perspectiveController.perspective != CrossRolePerspective.actual;
+    final multiRuntime = widget.platformRuntime is MultiOperationPlatformRuntime
+        ? widget.platformRuntime! as MultiOperationPlatformRuntime
+        : null;
+    final multiReadRepository =
+        _repository is MultiMobilizationCoordinationReadRepository
+        ? _repository! as MultiMobilizationCoordinationReadRepository
+        : null;
+    final multiMutationRepository =
+        _repository is MultiMobilizationCoordinationMutationRepository
+        ? _repository! as MultiMobilizationCoordinationMutationRepository
+        : null;
     if (!_platformAdministratorResolved || !_accessResolved) {
       return LiveCoordinationDataScope(
         data: _liveData!,
@@ -342,7 +354,19 @@ class _AppShellState extends State<AppShell> {
       _AppJourney.coordinator =>
         widget.useLegacyCoordinatorShellForTesting
             ? _buildLegacyShell()
-            : CoordinatorShell(initialIndex: widget.initialIndex.clamp(0, 3)),
+            : CoordinatorShell(
+                initialIndex: widget.initialIndex.clamp(0, 3),
+                accessibleMobilizationsProvider: crossRolePreview
+                    ? null
+                    : multiRuntime?.accessibleMobilizationsProvider,
+                multiMobilizationRepository: crossRolePreview
+                    ? null
+                    : multiReadRepository,
+                multiMobilizationMutationRepository: crossRolePreview
+                    ? null
+                    : multiMutationRepository,
+                operationRepository: multiRuntime?.operationReadRepository,
+              ),
       _AppJourney.platformAdmin => PlatformAdminShell(
         initialIndex: widget.initialIndex == 3 ? 1 : 0,
         platformRepository: widget.platformRuntime!.platformReadRepository,
@@ -352,6 +376,7 @@ class _AppShellState extends State<AppShell> {
             widget.platformRuntime!.platformAdministrationReadRepository,
         administrationService:
             widget.platformRuntime!.platformAdministrationService,
+        operationRepository: multiRuntime?.operationReadRepository,
         onSignOut: _signOutPlatformAdministrator,
       ),
     };
@@ -361,17 +386,24 @@ class _AppShellState extends State<AppShell> {
       CrossRolePerspective.coordinator => 'Coordinateur départemental',
       CrossRolePerspective.actual => 'Administrateur plateforme',
     };
+    final framedShell = crossRolePreview
+        ? _PlatformAdminPreviewFrame(
+            journey: previewedJourney,
+            onExit: perspectiveController.showActualRole,
+            child: displayedShell,
+          )
+        : displayedShell;
+    final contextAwareShell = multiRuntime == null
+        ? framedShell
+        : OperationalContextScope(
+            provider: multiRuntime.operationalContextProvider,
+            child: framedShell,
+          );
     return LiveCoordinationDataScope(
       data: crossRolePreview && displayedJourney != _AppJourney.professional
           ? _adminPreviewData()
           : _liveData!,
-      child: crossRolePreview
-          ? _PlatformAdminPreviewFrame(
-              journey: previewedJourney,
-              onExit: perspectiveController.showActualRole,
-              child: displayedShell,
-            )
-          : displayedShell,
+      child: contextAwareShell,
     );
   }
 

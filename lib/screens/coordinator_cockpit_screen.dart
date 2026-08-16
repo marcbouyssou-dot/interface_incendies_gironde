@@ -3,13 +3,19 @@ import 'package:flutter/material.dart';
 import '../coordinator/cockpit_view_data.dart';
 import '../coordinator/territory_view_data.dart';
 import '../models/need.dart';
-import '../models/responsible_access.dart';
+import '../models/mobilization.dart';
+import '../models/operation.dart';
+import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
+import '../repositories/operation_read_repository.dart';
+import '../services/accessible_mobilizations_provider.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
+import '../utils/operation_presentation.dart';
 import '../widgets/operational_territory_map.dart';
 import '../widgets/territory_components.dart';
 import '../widgets/v5_controls.dart';
+import '../widgets/v5_form_system.dart';
 import 'coordination_screen.dart' show missionsVisibleToResponsible;
 import 'coordinator_published_needs.dart';
 
@@ -20,12 +26,21 @@ class CoordinatorCockpitScreen extends StatefulWidget {
     required this.onViewMission,
     required this.onViewLocation,
     required this.onCreateNeed,
+    this.accessibleMobilizationsProvider,
+    this.multiMobilizationRepository,
+    this.operationRepository,
+    this.onMobilizationSelected,
   });
 
   final CoordinatorPublishedNeeds publishedNeeds;
   final ValueChanged<CoordinationNeed> onViewMission;
   final ValueChanged<ResponsePlace> onViewLocation;
   final VoidCallback onCreateNeed;
+  final AccessibleMobilizationsProvider? accessibleMobilizationsProvider;
+  final MultiMobilizationCoordinationReadRepository?
+  multiMobilizationRepository;
+  final OperationReadRepository? operationRepository;
+  final ValueChanged<String>? onMobilizationSelected;
 
   @override
   State<CoordinatorCockpitScreen> createState() =>
@@ -37,6 +52,7 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
   Stream<ResponsibleAccess?>? _access;
+  String? _selectedMobilizationId;
 
   @override
   void didChangeDependencies() {
@@ -51,10 +67,51 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = widget.accessibleMobilizationsProvider;
+    final repository = widget.multiMobilizationRepository;
+    if (provider != null && repository != null) {
+      return StreamBuilder<List<Mobilization>>(
+        stream: provider.watchAccessibleMobilizations(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) return const _CockpitUnavailable();
+          if (!snapshot.hasData) return const _CockpitLoading();
+          final mobilizations = snapshot.data!;
+          if (mobilizations.isEmpty) {
+            return const _NoAccessibleMobilization();
+          }
+          final selected =
+              mobilizations.any((item) => item.id == _selectedMobilizationId)
+              ? mobilizations.firstWhere(
+                  (item) => item.id == _selectedMobilizationId,
+                )
+              : mobilizations.first;
+          if (_selectedMobilizationId != selected.id) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted || _selectedMobilizationId == selected.id) return;
+              _selectedMobilizationId = selected.id;
+              widget.onMobilizationSelected?.call(selected.id);
+            });
+          }
+          return _buildCockpit(
+            repository.watchMissionsForMobilizations({selected.id}),
+            mobilizations: mobilizations,
+            selectedMobilization: selected,
+          );
+        },
+      );
+    }
+    return _buildCockpit(_missions);
+  }
+
+  Widget _buildCockpit(
+    Stream<List<CoordinationNeed>>? missions, {
+    List<Mobilization> mobilizations = const [],
+    Mobilization? selectedMobilization,
+  }) {
     return ValueListenableBuilder<List<CoordinationNeed>>(
       valueListenable: widget.publishedNeeds,
       builder: (context, _, _) => StreamBuilder<List<CoordinationNeed>>(
-        stream: _missions,
+        stream: missions,
         builder: (context, missionsSnapshot) =>
             StreamBuilder<List<ResponsePlace>>(
               stream: _locations,
@@ -97,11 +154,26 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
                       missions: visibleMissions,
                       locations: visibleLocations,
                     );
-                    return _CockpitContent(
+                    Widget content(Operation? operation) => _CockpitContent(
                       cockpit: cockpit,
                       onViewMission: widget.onViewMission,
                       onViewLocation: widget.onViewLocation,
                       onCreateNeed: widget.onCreateNeed,
+                      mobilizations: mobilizations,
+                      selectedMobilization: selectedMobilization,
+                      operation: operation,
+                      onMobilizationSelected: _selectMobilization,
+                    );
+                    final operationId = selectedMobilization?.operationId;
+                    if (operationId == null ||
+                        widget.operationRepository == null) {
+                      return content(null);
+                    }
+                    return StreamBuilder<Operation?>(
+                      stream: widget.operationRepository!.watchOperation(
+                        operationId,
+                      ),
+                      builder: (context, snapshot) => content(snapshot.data),
                     );
                   },
                 );
@@ -109,6 +181,11 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
             ),
       ),
     );
+  }
+
+  void _selectMobilization(String mobilizationId) {
+    setState(() => _selectedMobilizationId = mobilizationId);
+    widget.onMobilizationSelected?.call(mobilizationId);
   }
 }
 
@@ -118,12 +195,20 @@ class _CockpitContent extends StatefulWidget {
     required this.onViewMission,
     required this.onViewLocation,
     required this.onCreateNeed,
+    required this.mobilizations,
+    required this.selectedMobilization,
+    required this.operation,
+    required this.onMobilizationSelected,
   });
 
   final CoordinatorCockpitViewData cockpit;
   final ValueChanged<CoordinationNeed> onViewMission;
   final ValueChanged<ResponsePlace> onViewLocation;
   final VoidCallback onCreateNeed;
+  final List<Mobilization> mobilizations;
+  final Mobilization? selectedMobilization;
+  final Operation? operation;
+  final ValueChanged<String> onMobilizationSelected;
 
   @override
   State<_CockpitContent> createState() => _CockpitContentState();
@@ -157,6 +242,34 @@ class _CockpitContentState extends State<_CockpitContent> {
                 ),
                 sliver: SliverList.list(
                   children: [
+                    if (widget.mobilizations.length > 1) ...[
+                      V5SelectField<String>(
+                        key: const Key('coordinator-mobilization-selector'),
+                        label: 'Mobilisation',
+                        value: widget.selectedMobilization?.id,
+                        options: widget.mobilizations
+                            .map(
+                              (item) => V5SelectOption(
+                                value: item.id,
+                                label: item.name,
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) {
+                          if (value != null) {
+                            widget.onMobilizationSelected(value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: V5Spacing.md),
+                    ],
+                    if (widget.operation case final operation?) ...[
+                      _CockpitOperationContext(
+                        operation: operation,
+                        mobilization: widget.selectedMobilization!,
+                      ),
+                      const SizedBox(height: V5Spacing.md),
+                    ],
                     _CockpitHeader(cockpit: widget.cockpit),
                     const SizedBox(height: V5Spacing.lg),
                     _CockpitFilters(
@@ -206,6 +319,74 @@ class _CockpitContentState extends State<_CockpitContent> {
       ),
     );
   }
+}
+
+class _CockpitOperationContext extends StatelessWidget {
+  const _CockpitOperationContext({
+    required this.operation,
+    required this.mobilization,
+  });
+
+  final Operation operation;
+  final Mobilization mobilization;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Contexte opérationnel, ${operation.name}, ${mobilization.name}',
+    child: Container(
+      key: const Key('coordinator-operation-context'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: V5Spacing.md,
+        vertical: V5Spacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: context.v5Colors.infoContainer,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.account_tree_outlined, size: 20),
+          const SizedBox(width: V5Spacing.sm),
+          Expanded(
+            child: Text(
+              '${operation.name} · ${operationTypeLabel(operation.type)}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _NoAccessibleMobilization extends StatelessWidget {
+  const _NoAccessibleMobilization();
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(V5Spacing.xl),
+      child: Semantics(
+        label: 'Aucune mobilisation active ne vous est affectée',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.assignment_ind_outlined,
+              color: context.v5Colors.textSecondary,
+            ),
+            const SizedBox(height: V5Spacing.sm),
+            Text(
+              'Aucune mobilisation active ne vous est affectée.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _CockpitFilters extends StatelessWidget {

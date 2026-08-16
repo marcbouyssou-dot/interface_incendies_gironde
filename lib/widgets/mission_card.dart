@@ -32,6 +32,7 @@ class MissionCard extends StatelessWidget {
     this.secondaryDetailsExpanded = true,
     this.secondaryDetailsToggleKey,
     this.professionalPalette = false,
+    this.contextHeader,
   });
 
   const MissionCard.loading({super.key})
@@ -50,7 +51,8 @@ class MissionCard extends StatelessWidget {
       secondaryAction = null,
       secondaryDetailsExpanded = true,
       secondaryDetailsToggleKey = null,
-      professionalPalette = false;
+      professionalPalette = false,
+      contextHeader = null;
 
   final MissionCardState state;
   final String locationType;
@@ -68,6 +70,7 @@ class MissionCard extends StatelessWidget {
   final bool secondaryDetailsExpanded;
   final Key? secondaryDetailsToggleKey;
   final bool professionalPalette;
+  final Widget? contextHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -121,6 +124,10 @@ class MissionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (contextHeader != null) ...[
+                contextHeader!,
+                const SizedBox(height: V5Spacing.sm),
+              ],
               Text(
                 locationType.toUpperCase(),
                 key: locationTypeKey,

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
+import '../repositories/coordination_repository.dart';
+import '../repositories/operation_read_repository.dart';
+import '../services/accessible_mobilizations_provider.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/coordinator_bottom_navigation.dart';
@@ -21,10 +24,22 @@ import 'location_detail_screen.dart';
 import 'notification_center_screen.dart';
 
 class CoordinatorShell extends StatefulWidget {
-  const CoordinatorShell({super.key, this.initialIndex = 0})
-    : assert(initialIndex >= 0 && initialIndex < 4);
+  const CoordinatorShell({
+    super.key,
+    this.initialIndex = 0,
+    this.accessibleMobilizationsProvider,
+    this.multiMobilizationRepository,
+    this.multiMobilizationMutationRepository,
+    this.operationRepository,
+  }) : assert(initialIndex >= 0 && initialIndex < 4);
 
   final int initialIndex;
+  final AccessibleMobilizationsProvider? accessibleMobilizationsProvider;
+  final MultiMobilizationCoordinationReadRepository?
+  multiMobilizationRepository;
+  final MultiMobilizationCoordinationMutationRepository?
+  multiMobilizationMutationRepository;
+  final OperationReadRepository? operationRepository;
 
   @override
   State<CoordinatorShell> createState() => _CoordinatorShellState();
@@ -35,6 +50,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
   final List<Widget?> _screens = List<Widget?>.filled(4, null);
   final _publishedNeeds = CoordinatorPublishedNeeds();
   int _actorsRevision = 0;
+  String? _selectedMobilizationId;
 
   @override
   void initState() {
@@ -49,6 +65,10 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
       onViewMission: _openMission,
       onViewLocation: _openLocation,
       onCreateNeed: _openCreateNeed,
+      accessibleMobilizationsProvider: widget.accessibleMobilizationsProvider,
+      multiMobilizationRepository: widget.multiMobilizationRepository,
+      operationRepository: widget.operationRepository,
+      onMobilizationSelected: (id) => _selectedMobilizationId = id,
     ),
     1 => CoordinatorTerritoryScreen(publishedNeeds: _publishedNeeds),
     2 => CoordinatorActorsScreen(
@@ -83,6 +103,16 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
             resizeToAvoidBottomInset: true,
             body: SafeArea(
               child: CreateNeedScreen(
+                mobilizationId: _selectedMobilizationId,
+                createMission:
+                    _selectedMobilizationId != null &&
+                        widget.multiMobilizationMutationRepository != null
+                    ? (draft) => widget.multiMobilizationMutationRepository!
+                          .createMissionForMobilization(
+                            _selectedMobilizationId!,
+                            draft,
+                          )
+                    : null,
                 onMissionPublished: _publishedNeeds.publish,
                 onViewMission: () {
                   Navigator.of(context).pop();

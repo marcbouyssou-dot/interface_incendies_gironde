@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../repositories/platform_administration_read_repository.dart';
 import '../repositories/platform_read_repository.dart';
+import '../repositories/operation_read_repository.dart';
 import '../services/current_mobilization_provider.dart';
 import '../services/platform_administration_service.dart';
 import '../theme/platform_admin_identity.dart';
@@ -9,6 +10,7 @@ import '../theme/v5_foundation.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/platform_admin_bottom_navigation.dart';
 import 'platform_admin_mobilization_screen.dart';
+import 'platform_admin_operations_screen.dart';
 import 'platform_admin_more_screen.dart';
 
 class PlatformAdminShell extends StatefulWidget {
@@ -19,6 +21,7 @@ class PlatformAdminShell extends StatefulWidget {
     required this.administrationRepository,
     required this.administrationService,
     required this.onSignOut,
+    this.operationRepository,
     this.initialIndex = 0,
   }) : assert(initialIndex >= 0 && initialIndex < 2);
 
@@ -27,6 +30,7 @@ class PlatformAdminShell extends StatefulWidget {
   final PlatformAdministrationReadRepository administrationRepository;
   final PlatformAdministrationService administrationService;
   final Future<void> Function() onSignOut;
+  final OperationReadRepository? operationRepository;
   final int initialIndex;
 
   @override
@@ -45,12 +49,21 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
   }
 
   Widget _createScreen(int index) => switch (index) {
-    0 => PlatformAdminMobilizationScreen(
-      platformRepository: widget.platformRepository,
-      mobilizationProvider: widget.mobilizationProvider,
-      administrationRepository: widget.administrationRepository,
-      administrationService: widget.administrationService,
-    ),
+    0 =>
+      widget.operationRepository == null
+          ? PlatformAdminMobilizationScreen(
+              platformRepository: widget.platformRepository,
+              mobilizationProvider: widget.mobilizationProvider,
+              administrationRepository: widget.administrationRepository,
+              administrationService: widget.administrationService,
+            )
+          : PlatformAdminOperationsScreen(
+              operationRepository: widget.operationRepository!,
+              platformRepository: widget.platformRepository,
+              mobilizationProvider: widget.mobilizationProvider,
+              administrationRepository: widget.administrationRepository,
+              administrationService: widget.administrationService,
+            ),
     1 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
     _ => throw RangeError.index(index, _screens),
   };

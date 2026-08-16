@@ -125,6 +125,38 @@ void main() {
     );
   });
 
+  test('multi-operation engagement derives its scope from the mission', () {
+    expect(
+      requireMatchingMobilizationId(
+        mission: const {
+          'id': 'mission-2',
+          'mobilizationId': 'mobilization-selected',
+        },
+        engagement: const {
+          'missionId': 'mission-2',
+          'mobilizationId': 'mobilization-selected',
+        },
+      ),
+      'mobilization-selected',
+    );
+  });
+
+  test('multi-operation engagement refuses a cross-mobilization document', () {
+    expect(
+      () => requireMatchingMobilizationId(
+        mission: const {
+          'id': 'mission-2',
+          'mobilizationId': 'mobilization-selected',
+        },
+        engagement: const {
+          'missionId': 'mission-2',
+          'mobilizationId': 'mobilization-other',
+        },
+      ),
+      throwsA(isA<RepositoryException>()),
+    );
+  });
+
   test('engagement from another mobilization is excluded', () {
     final engagements = scopedEngagementsFromDocuments(
       context: context,

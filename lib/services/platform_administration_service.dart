@@ -165,6 +165,14 @@ class PlatformAdministrationException implements Exception {
 }
 
 String createMobilizationId(String name, {DateTime? now}) {
+  return _createPlatformId(name, now: now);
+}
+
+String createOperationId(String name, {DateTime? now}) {
+  return _createPlatformId(name, now: now);
+}
+
+String _createPlatformId(String name, {DateTime? now}) {
   var slug = name.trim().toLowerCase();
   const replacements = {
     'à': 'a',

@@ -74,6 +74,7 @@ abstract final class FirestoreMissionMapper {
     final pp = quotas.quotaFor('podiatrist');
     return CoordinationNeed(
       id: id,
+      mobilizationId: data['mobilizationId'] as String?,
       locationId: data['locationId'] as String?,
       place:
           data['locationName'] as String? ??

@@ -105,6 +105,16 @@ abstract interface class MultiMobilizationCoordinationReadRepository {
   Stream<List<CoordinationNeed>> watchAllActiveMissions();
 }
 
+/// Mutation explicite dans une mobilisation sélectionnée. Le contrat legacy
+/// [CoordinationRepository.createMission] reste disponible pendant la
+/// transition.
+abstract interface class MultiMobilizationCoordinationMutationRepository {
+  Future<String> createMissionForMobilization(
+    String mobilizationId,
+    MissionDraft draft,
+  );
+}
+
 class EngagementInfo {
   const EngagementInfo({
     required this.missionId,

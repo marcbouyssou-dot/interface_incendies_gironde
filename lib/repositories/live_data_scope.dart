@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../models/need.dart';
+import '../utils/switch_latest.dart';
 import 'coordination_repository.dart';
 
 class LiveCoordinationData {
@@ -10,14 +11,29 @@ class LiveCoordinationData {
     CoordinationRepository repository, {
     Stream<ResponsibleAccess?> Function()? responsibleAccessOverride,
   }) : _repository = repository {
-    _missions = _SharedLatestStream(
-      repository.watchMissions,
-      onValue: _pruneMissionStreams,
-    );
+    final accessSource =
+        responsibleAccessOverride ?? repository.watchResponsibleAccess;
+    _missions = _SharedLatestStream(() {
+      if (repository is! MultiMobilizationCoordinationReadRepository) {
+        return repository.watchMissions();
+      }
+      final multiRepository =
+          repository as MultiMobilizationCoordinationReadRepository;
+      return switchLatest(accessSource(), (access) {
+        if (access == null) {
+          return multiRepository.watchAllActiveMissions();
+        }
+        if (access.isSiteManager && !access.isCoordinator) {
+          return multiRepository.watchMissionsForLocations(access.locationIds);
+        }
+        // Le Coordinateur sélectionne sa mobilisation dans le Cockpit.
+        // Les autres écrans conservent leur flux historique tant qu'ils ne
+        // portent pas encore de sélecteur explicite.
+        return repository.watchMissions();
+      });
+    }, onValue: _pruneMissionStreams);
     _locations = _SharedLatestStream(repository.watchLocations);
-    _responsibleAccess = _SharedLatestStream(
-      responsibleAccessOverride ?? repository.watchResponsibleAccess,
-    );
+    _responsibleAccess = _SharedLatestStream(accessSource);
   }
 
   final CoordinationRepository _repository;

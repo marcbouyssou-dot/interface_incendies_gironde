@@ -109,6 +109,7 @@ class CoordinationNeed {
     required this.requiredPodiatrists,
     required this.registeredPodiatrists,
     required this.equipment,
+    this.mobilizationId,
     this.locationId,
     this.startAt,
     this.endAt,
@@ -134,6 +135,7 @@ class CoordinationNeed {
   final int requiredPodiatrists;
   final int registeredPodiatrists;
   final List<String> equipment;
+  final String? mobilizationId;
   final String? locationId;
   final DateTime? startAt;
   final DateTime? endAt;
@@ -192,6 +194,7 @@ class CoordinationNeed {
       registeredPodiatrists:
           registeredPodiatrists ?? this.registeredPodiatrists,
       equipment: equipment,
+      mobilizationId: mobilizationId,
       locationId: locationId,
       startAt: startAt,
       endAt: endAt,

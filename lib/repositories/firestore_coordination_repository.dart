@@ -16,8 +16,10 @@ import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../models/user_display_identity.dart';
 import '../services/professional_verification_service.dart';
+import '../services/accessible_mobilizations_provider.dart';
 import '../services/current_mobilization_provider.dart';
 import '../services/firebase_platform_administration_service.dart';
+import '../services/operational_context_provider.dart';
 import '../services/platform_administration_service.dart';
 import '../utils/switch_latest.dart';
 import 'admin_invitation_repository.dart';
@@ -26,11 +28,13 @@ import 'firestore_admin_invitation_repository.dart';
 import 'firestore_location_mapper.dart';
 import 'firestore_location_administration_repository.dart';
 import 'firestore_mission_mapper.dart';
+import 'firestore_operation_read_repository.dart';
 import 'firestore_platform_administration_read_repository.dart';
 import 'firestore_platform_read_repository.dart';
 import 'firestore_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 import 'location_administration_repository.dart';
+import 'operation_read_repository.dart';
 import 'platform_administration_read_repository.dart';
 import 'platform_read_repository.dart';
 import 'platform_runtime.dart';
@@ -202,11 +206,31 @@ void requireDocumentsInActiveMobilization({
   }
 }
 
+@visibleForTesting
+String requireMatchingMobilizationId({
+  required Map<String, dynamic> mission,
+  Map<String, dynamic>? engagement,
+}) {
+  final mobilizationId = mission['mobilizationId'];
+  if (mobilizationId is! String ||
+      mobilizationId.trim().isEmpty ||
+      mobilizationId.contains('/') ||
+      (engagement != null && engagement['mobilizationId'] != mobilizationId) ||
+      (engagement != null && engagement['missionId'] != mission['id'])) {
+    throw const RepositoryException(
+      'Cette opération n’appartient pas à la mission.',
+    );
+  }
+  return mobilizationId;
+}
+
 class FirestoreCoordinationRepository
     implements
         CoordinationRepository,
         MultiMobilizationCoordinationReadRepository,
+        MultiMobilizationCoordinationMutationRepository,
         PlatformRuntime,
+        MultiOperationPlatformRuntime,
         PlatformAccountAuthenticator {
   FirestoreCoordinationRepository(
     this._firestore,
@@ -285,6 +309,25 @@ class FirestoreCoordinationRepository
   @override
   late final PlatformAdministrationService platformAdministrationService =
       FirebasePlatformAdministrationService(functions: _responsibleFunctions);
+
+  @override
+  late final OperationReadRepository operationReadRepository =
+      FirestoreOperationReadRepository(_responsibleFirestore);
+
+  @override
+  late final AccessibleMobilizationsProvider accessibleMobilizationsProvider =
+      DefaultAccessibleMobilizationsProvider(
+        dataSource: FirestoreAccessibleMobilizationsDataSource(
+          auth: _responsibleAuth,
+          firestore: _responsibleFirestore,
+        ),
+      );
+
+  @override
+  late final OperationalContextProvider operationalContextProvider =
+      DefaultOperationalContextProvider(
+        FirestoreOperationalContextDataSource(_firestore),
+      );
 
   Future<MobilizationContext> _requireActiveMobilization() async {
     try {
@@ -741,123 +784,137 @@ class FirestoreCoordinationRepository
 
   @override
   Stream<EngagementInfo?> watchMyEngagement(String missionId) {
-    return switchLatest(_mobilizationProvider.watchContext(), (context) {
-      if (context == null || !context.isActive) {
+    return switchLatest(_auth.authStateChanges(), (user) {
+      if (user == null || !user.isAnonymous) {
         return Stream<EngagementInfo?>.value(null);
       }
-      return switchLatest(_auth.authStateChanges(), (user) {
-        if (user == null || !user.isAnonymous) {
-          return Stream<EngagementInfo?>.value(null);
-        }
-        return _firestore
-            .collection('engagements')
-            .doc('${missionId}_${user.uid}')
-            .snapshots()
-            .map((snapshot) {
-              final data = snapshot.data();
-              if (!snapshot.exists ||
-                  data == null ||
-                  data['mobilizationId'] != context.mobilizationId ||
-                  data['missionId'] != missionId) {
-                return null;
-              }
-              final profession = data['profession'] as String?;
-              if (profession == null) {
-                throw const RepositoryException(
-                  'La profession de cet engagement est invalide.',
-                );
-              }
-              late final VolunteerProfession parsedProfession;
-              try {
-                parsedProfession = volunteerProfessionFromId(profession);
-              } on FormatException {
-                throw const RepositoryException(
-                  'La profession de cet engagement est invalide.',
-                );
-              }
-              return EngagementInfo(
-                missionId: missionId,
-                volunteerId: user.uid,
-                profession: parsedProfession,
-                status: _engagementStatus(data['status']),
-                createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-                updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      return _firestore
+          .collection('engagements')
+          .doc('${missionId}_${user.uid}')
+          .snapshots()
+          .map((snapshot) {
+            final data = snapshot.data();
+            if (!snapshot.exists ||
+                data == null ||
+                data['missionId'] != missionId) {
+              return null;
+            }
+            final profession = data['profession'] as String?;
+            if (profession == null) {
+              throw const RepositoryException(
+                'La profession de cet engagement est invalide.',
               );
-            });
-      });
+            }
+            late final VolunteerProfession parsedProfession;
+            try {
+              parsedProfession = volunteerProfessionFromId(profession);
+            } on FormatException {
+              throw const RepositoryException(
+                'La profession de cet engagement est invalide.',
+              );
+            }
+            return EngagementInfo(
+              missionId: missionId,
+              volunteerId: user.uid,
+              profession: parsedProfession,
+              status: _engagementStatus(data['status']),
+              createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+              updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+            );
+          });
     });
   }
 
   @override
   Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
-    return switchLatest(_mobilizationProvider.watchContext(), (context) {
-      if (context == null || !context.isActive) {
+    return switchLatest(watchResponsibleAccess(), (access) {
+      if (access == null || !access.active) {
         return Stream<List<EngagementInfo>>.value(const []);
       }
-      return switchLatest(watchResponsibleAccess(), (access) {
-        if (access == null || !access.active) {
-          return Stream<List<EngagementInfo>>.value(const []);
-        }
-        if (!access.isCoordinator) {
-          return _responsibleFirestore
-              .collection('missions')
-              .doc(missionId)
-              .snapshots()
-              .asyncMap(
-                (snapshot) => !snapshot.exists
-                    ? const <EngagementInfo>[]
-                    : _identityResolver.listMissionTeam(missionId),
-              );
-        }
+      if (!access.isCoordinator) {
         return _responsibleFirestore
-            .collection('engagements')
-            .where('missionId', isEqualTo: missionId)
-            .where('mobilizationId', isEqualTo: context.mobilizationId)
+            .collection('missions')
+            .doc(missionId)
             .snapshots()
-            .asyncMap((snapshot) async {
-              final engagements = scopedEngagementsFromDocuments(
-                documents: snapshot.docs.map(
-                  (document) => (id: document.id, data: document.data()),
-                ),
-                missionId: missionId,
-                context: context,
-              );
-              try {
-                final resolved = await _identityResolver.listMissionTeam(
-                  missionId,
-                );
-                final identities = {
-                  for (final engagement in resolved)
-                    engagement.volunteerId: engagement.identity,
-                };
-                return engagements
-                    .map(
-                      (engagement) => engagement.copyWith(
-                        identity:
-                            identities[engagement.volunteerId] ??
-                            UserDisplayIdentity(
-                              uid: engagement.volunteerId,
-                              displayName: 'Professionnel',
-                              professionLabel: engagement.profession.label,
-                            ),
-                      ),
-                    )
+            .asyncMap(
+              (snapshot) => !snapshot.exists
+                  ? const <EngagementInfo>[]
+                  : _identityResolver.listMissionTeam(missionId),
+            );
+      }
+      return switchLatest(
+        _responsibleFirestore.collection('missions').doc(missionId).snapshots(),
+        (missionSnapshot) {
+          final mission = missionSnapshot.data();
+          if (!missionSnapshot.exists || mission == null) {
+            return Stream<List<EngagementInfo>>.value(const []);
+          }
+          final mobilizationId = requireMatchingMobilizationId(
+            mission: mission,
+          );
+          return _responsibleFirestore
+              .collection('engagements')
+              .where('missionId', isEqualTo: missionId)
+              .where('mobilizationId', isEqualTo: mobilizationId)
+              .snapshots()
+              .asyncMap((snapshot) async {
+                final engagements = snapshot.docs
+                    .map((document) {
+                      final data = document.data();
+                      if (data['missionId'] != missionId) return null;
+                      final profession = data['profession'];
+                      final volunteerId = data['volunteerId'];
+                      if (profession is! String || volunteerId is! String) {
+                        throw const RepositoryException('Engagement invalide.');
+                      }
+                      return EngagementInfo(
+                        missionId: missionId,
+                        volunteerId: volunteerId,
+                        profession: volunteerProfessionFromId(profession),
+                        status: _engagementStatus(data['status']),
+                        createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+                        updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+                      );
+                    })
+                    .whereType<EngagementInfo>()
                     .toList(growable: false);
-              } catch (_) {
-                return engagements
-                    .map(
-                      (engagement) => engagement.copyWith(
-                        identity: UserDisplayIdentity(
-                          uid: engagement.volunteerId,
-                          displayName: 'Professionnel',
-                          professionLabel: engagement.profession.label,
+                try {
+                  final resolved = await _identityResolver.listMissionTeam(
+                    missionId,
+                  );
+                  final identities = {
+                    for (final engagement in resolved)
+                      engagement.volunteerId: engagement.identity,
+                  };
+                  return engagements
+                      .map(
+                        (engagement) => engagement.copyWith(
+                          identity:
+                              identities[engagement.volunteerId] ??
+                              UserDisplayIdentity(
+                                uid: engagement.volunteerId,
+                                displayName: 'Professionnel',
+                                professionLabel: engagement.profession.label,
+                              ),
                         ),
-                      ),
-                    )
-                    .toList(growable: false);
-              }
-            });
-      });
+                      )
+                      .toList(growable: false);
+                } catch (_) {
+                  return engagements
+                      .map(
+                        (engagement) => engagement.copyWith(
+                          identity: UserDisplayIdentity(
+                            uid: engagement.volunteerId,
+                            displayName: 'Professionnel',
+                            professionLabel: engagement.profession.label,
+                          ),
+                        ),
+                      )
+                      .toList(growable: false);
+                }
+              });
+        },
+      );
     });
   }
 
@@ -886,7 +943,6 @@ class FirestoreCoordinationRepository
         'Seul un coordinateur peut modifier ce statut.',
       );
     }
-    final mobilization = await _requireActiveMobilization();
     final reference = _responsibleFirestore
         .collection('engagements')
         .doc('${missionId}_$volunteerId');
@@ -904,8 +960,7 @@ class FirestoreCoordinationRepository
               }
               final mission = missionSnapshot.data()!;
               final engagement = engagementSnapshot.data()!;
-              requireDocumentsInActiveMobilization(
-                context: mobilization,
+              requireMatchingMobilizationId(
                 mission: mission,
                 engagement: engagement,
               );
@@ -981,8 +1036,7 @@ class FirestoreCoordinationRepository
               }
               final mission = missionSnapshot.data()!;
               final engagement = engagementSnapshot.data()!;
-              requireDocumentsInActiveMobilization(
-                context: mobilization,
+              requireMatchingMobilizationId(
                 mission: mission,
                 engagement: engagement,
               );
@@ -1066,8 +1120,7 @@ class FirestoreCoordinationRepository
             if (!missionSnapshot.exists || !engagementSnapshot.exists) {
               throw const RepositoryException('Engagement introuvable.');
             }
-            requireDocumentsInActiveMobilization(
-              context: mobilization,
+            requireMatchingMobilizationId(
               mission: missionSnapshot.data()!,
               engagement: engagementSnapshot.data()!,
             );
@@ -1088,6 +1141,25 @@ class FirestoreCoordinationRepository
 
   @override
   Future<String> createMission(MissionDraft draft) async {
+    final mobilization = await _requireActiveMobilization();
+    return _createMissionInMobilization(mobilization.mobilizationId, draft);
+  }
+
+  @override
+  Future<String> createMissionForMobilization(
+    String mobilizationId,
+    MissionDraft draft,
+  ) {
+    if (mobilizationId.trim().isEmpty || mobilizationId.contains('/')) {
+      throw const RepositoryException('Mobilisation invalide.');
+    }
+    return _createMissionInMobilization(mobilizationId, draft);
+  }
+
+  Future<String> _createMissionInMobilization(
+    String mobilizationId,
+    MissionDraft draft,
+  ) async {
     final user = _responsibleAuth.currentUser;
     if (user == null || user.isAnonymous) {
       throw const RepositoryException(
@@ -1114,7 +1186,6 @@ class FirestoreCoordinationRepository
         'Votre compte n’est pas autorisé à publier pour ce lieu.',
       );
     }
-    final mobilization = await _requireActiveMobilization();
     final reference = _responsibleFirestore.collection('missions').doc();
     debugPrint('Publication Firestore mission : début');
     debugPrint('Identifiant mission généré : ${reference.id}');
@@ -1122,7 +1193,7 @@ class FirestoreCoordinationRepository
       await reference.set(
         FirestoreMissionMapper.toFirestore(
           id: reference.id,
-          mobilizationId: mobilization.mobilizationId,
+          mobilizationId: mobilizationId,
           draft: draft,
           serverTimestamp: FieldValue.serverTimestamp(),
           createdBy: user.uid,
@@ -1155,7 +1226,6 @@ class FirestoreCoordinationRepository
         'Vous devez vous connecter pour modifier une mission.',
       );
     }
-    await _requireActiveMobilization();
     try {
       await _responsibleFunctions
           .httpsCallable('updateMission')
@@ -1221,7 +1291,6 @@ class FirestoreCoordinationRepository
       equipment: equipment,
       otherEquipmentDetails: otherEquipmentDetails,
     );
-    final mobilization = await _requireActiveMobilization();
     var user = _auth.currentUser;
     if (!canStartVolunteerEngagement(
       hasUser: user != null,
@@ -1268,8 +1337,7 @@ class FirestoreCoordinationRepository
             final isReengagement = existing != null;
             final existingVolunteer = await transaction.get(volunteerRef);
             final data = snapshot.data()!;
-            requireDocumentsInActiveMobilization(
-              context: mobilization,
+            final mobilizationId = requireMatchingMobilizationId(
               mission: data,
               engagement: existingEngagementData,
             );
@@ -1350,7 +1418,7 @@ class FirestoreCoordinationRepository
             } else {
               transaction.set(engagementRef, {
                 'missionId': missionId,
-                'mobilizationId': mobilization.mobilizationId,
+                'mobilizationId': mobilizationId,
                 'volunteerId': uid,
                 'profession': profession.canonicalId,
                 'createdAt': now,
@@ -1399,7 +1467,6 @@ class FirestoreCoordinationRepository
         'Vous n’êtes plus engagé sur cette mission.',
       );
     }
-    final mobilization = await _requireActiveMobilization();
     final missionRef = _firestore.collection('missions').doc(missionId);
     final engagementRef = _firestore
         .collection('engagements')
@@ -1431,8 +1498,7 @@ class FirestoreCoordinationRepository
               );
             }
             final engagement = engagementSnapshot.data()!;
-            requireDocumentsInActiveMobilization(
-              context: mobilization,
+            requireMatchingMobilizationId(
               mission: mission,
               engagement: engagement,
             );
@@ -1502,7 +1568,6 @@ class FirestoreCoordinationRepository
         'Vous devez vous connecter pour déclarer un besoin.',
       );
     }
-    final mobilization = await _requireActiveMobilization();
     final missionRef = _responsibleFirestore
         .collection('missions')
         .doc(missionId);
@@ -1516,10 +1581,7 @@ class FirestoreCoordinationRepository
               throw const RepositoryException('Mission introuvable.');
             }
             final mission = missionSnapshot.data()!;
-            requireDocumentsInActiveMobilization(
-              context: mobilization,
-              mission: mission,
-            );
+            requireMatchingMobilizationId(mission: mission);
             if (mission['status'] == 'cancelled' ||
                 mission['isActive'] == false) {
               throw const RepositoryException(

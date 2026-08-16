@@ -230,7 +230,7 @@ void main() {
     );
     expect(navigation.destinations, hasLength(2));
     expect(navigation.destinations.map((destination) => destination.label), [
-      'Mobilisation',
+      'Opérations',
       'Plus',
     ]);
     expect(find.text('Territoires'), findsNothing);
@@ -373,7 +373,7 @@ void main() {
 
     await _pumpPlatformAdmin(tester);
 
-    final mobilizationTab = find.bySemanticsLabel('Mobilisation');
+    final mobilizationTab = find.bySemanticsLabel('Opérations');
     expect(mobilizationTab, findsWidgets);
     expect(
       tester.getSize(mobilizationTab.first).height,

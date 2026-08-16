@@ -4,6 +4,7 @@ import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import '../theme/v5_foundation.dart';
+import 'operation_context_badge.dart';
 
 enum ResponsibleMissionTone { urgent, attention, controlled, covered, past }
 
@@ -67,6 +68,9 @@ class ResponsibleMissionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            MissionOperationContextBadge(mobilizationId: need.mobilizationId),
+            if (need.mobilizationId != null)
+              const SizedBox(height: V5Spacing.xs),
             if (useStackedLayout) ...[
               Text(need.place, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: V5Spacing.xs),

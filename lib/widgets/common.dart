@@ -19,6 +19,7 @@ import 'brand_mark.dart';
 import 'mission_card.dart';
 import 'mission_location_details.dart';
 import 'native_interactions.dart';
+import 'operation_context_badge.dart';
 import 'mobilization_design_system.dart';
 import 'v5_controls.dart';
 import 'v5_form_system.dart';
@@ -1048,6 +1049,9 @@ class NeedCard extends StatelessWidget {
     return MissionCard(
       state: missionCardState,
       professionalPalette: professionalJourney,
+      contextHeader: MissionOperationContextBadge(
+        mobilizationId: need.mobilizationId,
+      ),
       locationType: location?.type.label ?? 'Lieu d’intervention',
       locationTypeKey: const Key('mission-location-type'),
       locationName: need.place,

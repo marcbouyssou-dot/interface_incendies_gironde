@@ -10,11 +10,13 @@ class PlatformMobilizationFormDialog extends StatefulWidget {
     super.key,
     required this.territories,
     this.mobilization,
+    this.operationId,
     this.now,
   });
 
   final List<Territory> territories;
   final Mobilization? mobilization;
+  final String? operationId;
   final DateTime? now;
 
   @override
@@ -59,6 +61,8 @@ class _PlatformMobilizationFormDialogState
         name: name,
         subtitle: _subtitle.text.trim(),
         contextType: _contextType!,
+        operationId: widget.mobilization?.operationId ?? widget.operationId,
+        scopeRefs: widget.mobilization?.scopeRefs,
       ),
     );
   }

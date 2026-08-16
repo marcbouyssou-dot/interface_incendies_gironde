@@ -38,11 +38,15 @@ class CreateNeedScreen extends StatefulWidget {
     this.onViewMission,
     this.onMissionPublished,
     this.mission,
+    this.mobilizationId,
+    this.createMission,
   });
 
   final VoidCallback? onViewMission;
   final ValueChanged<CoordinationNeed>? onMissionPublished;
   final CoordinationNeed? mission;
+  final String? mobilizationId;
+  final Future<String> Function(MissionDraft draft)? createMission;
 
   @override
   State<CreateNeedScreen> createState() => _CreateNeedScreenState();
@@ -674,12 +678,15 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         if (Navigator.of(context).canPop()) Navigator.pop(context);
         return;
       }
-      final id = await RepositoryScope.of(context).createMission(draft);
+      final id =
+          await (widget.createMission?.call(draft) ??
+              RepositoryScope.of(context).createMission(draft));
       if (!mounted) return;
       debugPrint('Publication mission confirmée : $id');
       widget.onMissionPublished?.call(
         CoordinationNeed(
           id: id,
+          mobilizationId: widget.mobilizationId,
           locationId: draft.location.id,
           place: draft.location.name,
           group: draft.location.group,

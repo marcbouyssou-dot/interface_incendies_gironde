@@ -23,7 +23,7 @@ class PlatformAdminBottomNavigation extends StatelessWidget {
       V5BottomBarDestination(
         icon: Icons.campaign_outlined,
         selectedIcon: Icons.campaign_rounded,
-        label: 'Mobilisation',
+        label: 'Opérations',
       ),
       V5BottomBarDestination(
         icon: Icons.more_horiz_rounded,
