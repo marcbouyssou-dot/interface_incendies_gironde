@@ -7,6 +7,9 @@ abstract interface class MobilizationContextProvider {
   Stream<MobilizationContext?> watchContext();
 }
 
+/// Adaptateur legacy conservé jusqu’à la migration des écrans RC3.5B vers
+/// [AccessibleMobilizationsProvider]. Il ne doit plus être injecté dans un
+/// nouveau flux multi-mobilisations.
 class CurrentMobilizationProvider implements MobilizationContextProvider {
   const CurrentMobilizationProvider({
     required PlatformReadRepository repository,

@@ -80,11 +80,10 @@ function mutation(overrides = {}) {
     mission: Object.hasOwn(overrides, 'mission')
       ? overrides.mission
       : mission(),
-    activeMobilizationId: overrides.activeMobilizationId
-      ?? 'mobilization-active',
-    activeMobilization: Object.hasOwn(overrides, 'activeMobilization')
-      ? overrides.activeMobilization
+    mobilization: Object.hasOwn(overrides, 'mobilization')
+      ? overrides.mobilization
       : {id: 'mobilization-active', status: 'active'},
+    coordinatorAssigned: overrides.coordinatorAssigned ?? true,
     destination: Object.hasOwn(overrides, 'destination')
       ? overrides.destination
       : destination(),
@@ -225,7 +224,7 @@ test('mission update is restricted to the active mobilization', () => {
     'failed-precondition',
   );
   assertCode(
-    () => mutation({activeMobilization: {id: 'mobilization-active', status: 'inactive'}}),
+    () => mutation({mobilization: {id: 'mobilization-active', status: 'inactive'}}),
     'failed-precondition',
   );
   assertCode(
@@ -279,7 +278,7 @@ test('quota cannot fall below counters or confirmed engagements', () => {
   );
 });
 
-test('cumulative coordinator remains global and legacy counters are preserved', () => {
+test('assigned cumulative coordinator preserves legacy counters', () => {
   const value = mutation({
     callerRole: role({
       roles: ['coordinator', 'site_manager'],
@@ -293,6 +292,13 @@ test('cumulative coordinator remains global and legacy counters are preserved', 
   });
   assert.equal(value.fields.registeredMk, 1);
   assert.equal(value.fields.registeredPp, 1);
+});
+
+test('coordinator outside the mission mobilization assignment is refused', () => {
+  assertCode(
+    () => mutation({coordinatorAssigned: false}),
+    'permission-denied',
+  );
 });
 
 test('public operation validates before delegating and preserves service result', async () => {

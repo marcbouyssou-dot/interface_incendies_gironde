@@ -96,6 +96,9 @@ test('RPPS confirmation keeps callable, App Check, region and ANS secret', () =>
 });
 
 for (const exportName of [
+  'createOperation',
+  'updateOperation',
+  'transitionOperation',
   'createMobilization',
   'updateMobilization',
   'activateMobilization',

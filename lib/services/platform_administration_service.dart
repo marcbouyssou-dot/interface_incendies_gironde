@@ -1,4 +1,6 @@
 import '../models/mobilization.dart';
+import '../models/operation.dart';
+import '../models/operational_scope.dart';
 
 class MobilizationAdministrationDraft {
   const MobilizationAdministrationDraft({
@@ -7,6 +9,8 @@ class MobilizationAdministrationDraft {
     required this.name,
     required this.subtitle,
     required this.contextType,
+    this.operationId,
+    this.scopeRefs,
   });
 
   final String mobilizationId;
@@ -14,6 +18,8 @@ class MobilizationAdministrationDraft {
   final String name;
   final String subtitle;
   final MobilizationContextType contextType;
+  final String? operationId;
+  final List<OperationalScopeRef>? scopeRefs;
 
   Map<String, Object?> toCallableData() => {
     'mobilizationId': mobilizationId,
@@ -21,6 +27,39 @@ class MobilizationAdministrationDraft {
     'name': name.trim(),
     'subtitle': subtitle.trim(),
     'contextType': contextType.serializedValue,
+    if (operationId != null) 'operationId': operationId,
+    if (scopeRefs != null)
+      'scopeRefs': scopeRefs!.map((ref) => ref.serializedValue).toList(),
+  };
+}
+
+class OperationAdministrationDraft {
+  const OperationAdministrationDraft({
+    required this.operationId,
+    required this.name,
+    required this.type,
+    required this.startAt,
+    required this.scopeRefs,
+    this.context,
+    this.endAt,
+  });
+
+  final String operationId;
+  final String name;
+  final OperationType type;
+  final String? context;
+  final DateTime startAt;
+  final DateTime? endAt;
+  final List<OperationalScopeRef> scopeRefs;
+
+  Map<String, Object?> toCallableData() => {
+    'operationId': operationId,
+    'name': name.trim(),
+    'type': type.serializedValue,
+    'context': context?.trim(),
+    'startAtMillis': startAt.millisecondsSinceEpoch,
+    'endAtMillis': endAt?.millisecondsSinceEpoch,
+    'scopeRefs': scopeRefs.map((ref) => ref.serializedValue).toList(),
   };
 }
 
@@ -28,6 +67,15 @@ abstract interface class PlatformAdministrationService {
   bool get isAvailable;
 
   Future<void> createMobilization(MobilizationAdministrationDraft draft);
+
+  Future<void> createOperation(OperationAdministrationDraft draft);
+
+  Future<void> updateOperation(OperationAdministrationDraft draft);
+
+  Future<void> transitionOperation(
+    String operationId,
+    OperationStatus targetStatus,
+  );
 
   Future<void> updateMobilization(MobilizationAdministrationDraft draft);
 
@@ -78,6 +126,10 @@ class NoPlatformAdministrationService implements PlatformAdministrationService {
   ) async => _unavailable();
 
   @override
+  Future<void> createOperation(OperationAdministrationDraft draft) async =>
+      _unavailable();
+
+  @override
   Future<void> deactivateMobilization(String mobilizationId) async =>
       _unavailable();
 
@@ -90,6 +142,16 @@ class NoPlatformAdministrationService implements PlatformAdministrationService {
   @override
   Future<void> updateMobilization(
     MobilizationAdministrationDraft draft,
+  ) async => _unavailable();
+
+  @override
+  Future<void> updateOperation(OperationAdministrationDraft draft) async =>
+      _unavailable();
+
+  @override
+  Future<void> transitionOperation(
+    String operationId,
+    OperationStatus targetStatus,
   ) async => _unavailable();
 }
 

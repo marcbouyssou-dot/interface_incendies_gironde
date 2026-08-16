@@ -536,10 +536,6 @@ service cloud.firestore {
         && validOptionalEquipmentDetails(request.resource.data);
     }
 
-    function platformConfigPath() {
-      return /databases/$(database)/documents/platform/config;
-    }
-
     function platformAdministratorPath(uid) {
       return /databases/$(database)/documents/platformAdministrators/$(uid);
     }
@@ -554,13 +550,36 @@ service cloud.firestore {
       return /databases/$(database)/documents/mobilizations/$(mobilizationId);
     }
 
-    function isCurrentActiveMobilization(mobilizationId) {
+    function isActiveMobilization(mobilizationId) {
       return mobilizationId is string
-        && exists(platformConfigPath())
-        && get(platformConfigPath()).data.activeMobilizationId
-          == mobilizationId
         && exists(mobilizationPath(mobilizationId))
         && get(mobilizationPath(mobilizationId)).data.status == 'active';
+    }
+
+    function mobilizationAssignmentPath(mobilizationId, uid) {
+      return /databases/$(database)/documents/mobilizationAssignments/$(mobilizationId + '_' + uid);
+    }
+
+    function isAssignedCoordinator(mobilizationId) {
+      let path = mobilizationAssignmentPath(mobilizationId, request.auth.uid);
+      return isCoordinator()
+        && exists(path)
+        && get(path).data.uid == request.auth.uid
+        && get(path).data.mobilizationId == mobilizationId
+        && get(path).data.role == 'coordinator'
+        && get(path).data.active == true;
+    }
+
+    function canManageMobilizationLocation(mobilizationId, locationId) {
+      return (isAssignedCoordinator(mobilizationId)
+          || (isActiveSiteManager()
+            && locationId in currentRole().locationIds));
+    }
+
+    function canReadMissionScope(mobilizationId, locationId) {
+      return (!isPlatformAdministrator() && !hasActiveRole())
+        || isAssignedCoordinator(mobilizationId)
+        || (isActiveSiteManager() && locationId in currentRole().locationIds);
     }
 
     function validMissionCreate(missionId) {
@@ -580,7 +599,7 @@ service cloud.firestore {
           'isActive', 'createdBy'
         ])
         && request.resource.data.id == missionId
-        && isCurrentActiveMobilization(
+        && isActiveMobilization(
           request.resource.data.mobilizationId
         )
         && request.resource.data.createdBy == request.auth.uid
@@ -601,7 +620,10 @@ service cloud.firestore {
         && request.resource.data.isActive == true
         && request.resource.data.status == 'critical'
         && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
-        && canManageLocation(request.resource.data.locationId);
+        && canManageMobilizationLocation(
+          request.resource.data.mobilizationId,
+          request.resource.data.locationId
+        );
     }
 
     function engagementPath(missionId, uid) {
@@ -658,7 +680,7 @@ service cloud.firestore {
           'requiredByProfession', 'status', 'updatedAt'
         ])
         && resource.data.isActive == true
-        && isCurrentActiveMobilization(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId)
         && resource.data.status != 'cancelled'
         && request.time < resource.data.endAt
         && validEngagementCounterData(
@@ -678,13 +700,13 @@ service cloud.firestore {
 
     function validManagedMissionCounterUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return isCoordinator()
+      return isAssignedCoordinator(resource.data.mobilizationId)
         && changed.hasOnly([
           'registeredMk', 'registeredPp', 'registeredByProfession',
           'requiredByProfession', 'status', 'updatedAt'
         ])
         && resource.data.isActive == true
-        && isCurrentActiveMobilization(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId)
         && resource.data.status != 'cancelled'
         && request.time < resource.data.endAt
         && validCounterQuotaData(resource.data, request.resource.data)
@@ -697,7 +719,11 @@ service cloud.firestore {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isSignedIn()
         && resource.data.isActive == true
-        && isCurrentActiveMobilization(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId)
+        && canManageMobilizationLocation(
+          resource.data.mobilizationId,
+          resource.data.locationId
+        )
         && resource.data.status != 'cancelled'
         && changed.hasOnly([
           'status', 'isActive', 'cancelledAt', 'cancelledBy',
@@ -735,7 +761,7 @@ service cloud.firestore {
         && request.resource.data.volunteerId == request.auth.uid
         && request.resource.data.mobilizationId
           == missionBefore.mobilizationId
-        && isCurrentActiveMobilization(
+        && isActiveMobilization(
           request.resource.data.mobilizationId
         )
         && validProfession(profession)
@@ -791,7 +817,7 @@ service cloud.firestore {
         && existsAfter(missionPath)
         && resource.data.mobilizationId == before.mobilizationId
         && request.resource.data.mobilizationId == before.mobilizationId
-        && isCurrentActiveMobilization(before.mobilizationId)
+        && isActiveMobilization(before.mobilizationId)
         && before.isActive == true
         && before.status != 'cancelled'
         && request.time < before.endAt
@@ -810,10 +836,10 @@ service cloud.firestore {
       let mission = get(
         /databases/$(database)/documents/missions/$(resource.data.missionId)
       ).data;
-      return isCoordinator()
+      return isAssignedCoordinator(resource.data.mobilizationId)
         && changed.hasOnly(['status', 'updatedAt'])
         && resource.data.mobilizationId == mission.mobilizationId
-        && isCurrentActiveMobilization(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId)
         && validEngagementStatus(to)
         && request.resource.data.updatedAt == request.time
         && validCoordinatorTransition(from, to)
@@ -829,7 +855,7 @@ service cloud.firestore {
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
         && resource.data.mobilizationId == missionAfter.mobilizationId
-        && isCurrentActiveMobilization(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId)
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'updatedAt'])
         && request.resource.data.status == 'cancelled'
@@ -849,7 +875,7 @@ service cloud.firestore {
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
         && resource.data.mobilizationId == mission.mobilizationId
-        && isCurrentActiveMobilization(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId)
         && (resource.data.status == 'cancelled'
           || resource.data.status == 'pending')
         && changed.hasOnly(['status', 'updatedAt', 'profession'])
@@ -875,13 +901,21 @@ service cloud.firestore {
     }
 
     match /missions/{missionId} {
-      allow get: if isCurrentActiveMobilization(resource.data.mobilizationId)
+      allow get: if isActiveMobilization(resource.data.mobilizationId)
+        && canReadMissionScope(
+          resource.data.mobilizationId,
+          resource.data.locationId
+        )
         && (resource.data.isActive == true
           || (isSignedIn()
             && exists(engagementPath(missionId, request.auth.uid)))
           || canManageLocation(resource.data.locationId));
       allow list: if resource.data.isActive == true
-        && isCurrentActiveMobilization(resource.data.mobilizationId);
+        && isActiveMobilization(resource.data.mobilizationId)
+        && canReadMissionScope(
+          resource.data.mobilizationId,
+          resource.data.locationId
+        );
       allow create: if isSignedIn() && validMissionCreate(missionId);
       allow update: if existsAfter(
           engagementPath(missionId, request.auth.uid)
@@ -912,11 +946,11 @@ service cloud.firestore {
       allow get: if canGetOwnEngagement(engagementId)
         && (!exists(
             /databases/$(database)/documents/engagements/$(engagementId)
-          ) || isCurrentActiveMobilization(resource.data.mobilizationId));
-      allow get: if isCoordinator()
-        && isCurrentActiveMobilization(resource.data.mobilizationId);
-      allow list: if isCoordinator()
-        && isCurrentActiveMobilization(resource.data.mobilizationId);
+          ) || isActiveMobilization(resource.data.mobilizationId));
+      allow get: if isAssignedCoordinator(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId);
+      allow list: if isAssignedCoordinator(resource.data.mobilizationId)
+        && isActiveMobilization(resource.data.mobilizationId);
       allow update: if resource.data.volunteerId == request.auth.uid
         && (validOwnerCancellation(engagementId)
           || validOwnerReengagement(engagementId));
@@ -1057,14 +1091,29 @@ service cloud.firestore {
 
     match /mobilizations/{mobilizationId} {
       allow get: if isSignedIn()
-        && (isCurrentActiveMobilization(mobilizationId)
+        && (isActiveMobilization(mobilizationId)
           || isPlatformAdministrator());
-      allow list: if isPlatformAdministrator();
+      allow list: if isPlatformAdministrator()
+        || (isSignedIn()
+          && !isPlatformAdministrator()
+          && (!hasActiveRole() || isActiveSiteManager())
+          && resource.data.status == 'active');
       allow write: if false;
     }
 
     match /mobilizationAssignments/{assignmentId} {
-      allow read: if isPlatformAdministrator();
+      allow get, list: if isPlatformAdministrator()
+        || (isCoordinator()
+          && resource.data.uid == request.auth.uid
+          && resource.data.role == 'coordinator');
+      allow write: if false;
+    }
+
+    match /operations/{operationId} {
+      allow get: if isPlatformAdministrator()
+        || (isSignedIn()
+          && resource.data.status in ['planned', 'active', 'suspended', 'completed']);
+      allow list: if isPlatformAdministrator();
       allow write: if false;
     }
 

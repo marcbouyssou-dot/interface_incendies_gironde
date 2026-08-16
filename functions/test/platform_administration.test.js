@@ -5,11 +5,14 @@ import {
   activateMobilization,
   archiveMobilization,
   assignMobilizationCoordinator,
+  createOperation,
   createMobilization,
   deactivateMobilization,
   isPlatformAdministrator,
   PlatformAdministrationError,
   removeMobilizationCoordinator,
+  transitionOperation,
+  updateOperation,
   updateMobilization,
 } from '../src/platform_administration.js';
 import {
@@ -39,6 +42,38 @@ function mobilizationDocument(id, status = 'draft', overrides = {}) {
     subtitle: 'Contexte de test',
     contextType: 'fire',
     status,
+    createdBy: ADMIN_UID,
+    createdAt: new Date('2026-08-01T08:00:00.000Z'),
+    updatedBy: ADMIN_UID,
+    updatedAt: new Date('2026-08-01T08:00:00.000Z'),
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
+function operationPayload(overrides = {}) {
+  return {
+    operationId: 'operation-a',
+    name: 'Opération A',
+    type: 'natural_disaster',
+    context: null,
+    startAtMillis: Date.UTC(2026, 7, 20, 8),
+    endAtMillis: null,
+    scopeRefs: ['territories/gironde'],
+    ...overrides,
+  };
+}
+
+function operationDocument(id, status = 'draft', overrides = {}) {
+  return {
+    id,
+    name: `Opération ${id}`,
+    type: 'natural_disaster',
+    status,
+    context: null,
+    startAt: new Date(Date.UTC(2026, 7, 20, 8)),
+    endAt: null,
+    scopeRefs: ['territories/gironde'],
     createdBy: ADMIN_UID,
     createdAt: new Date('2026-08-01T08:00:00.000Z'),
     updatedBy: ADMIN_UID,
@@ -164,6 +199,8 @@ test('valid creation stores a strict draft with server audit fields', async () =
       subtitle: 'Incendies Gironde',
       createdAt: NOW,
       updatedAt: NOW,
+      scopeRefs: ['territories/gironde'],
+      schemaVersion: 2,
     }),
   );
 });
@@ -258,7 +295,7 @@ test('valid activation writes mobilization and active pointer', async () => {
   });
 });
 
-test('activation deactivates the previous global mobilization', async () => {
+test('activation preserves other active mobilizations and the legacy pointer', async () => {
   const {firestore, services} = harness();
   firestore.seed(
     'mobilizations/previous',
@@ -278,13 +315,158 @@ test('activation deactivates the previous global mobilization', async () => {
   });
 
   const previous = firestore.read('mobilizations/previous');
-  assert.equal(previous.status, 'inactive');
-  assert.equal(previous.deactivatedBy, ADMIN_UID);
-  assert.equal(previous.deactivatedAt.toISOString(), NOW.toISOString());
+  assert.equal(previous.status, 'active');
+  assert.equal(
+    firestore.read('mobilizations/incendies-gironde-2026').status,
+    'active',
+  );
+  assert.equal(
+    firestore.read('platform/config').activeMobilizationId,
+    'previous',
+  );
+});
+
+test('a stale legacy pointer never blocks target activation', async () => {
+  const {firestore, services} = harness();
+  firestore.seed(
+    'mobilizations/incendies-gironde-2026',
+    mobilizationDocument('incendies-gironde-2026', 'inactive'),
+  );
+  firestore.seed('platform/config', {
+    activeMobilizationId: 'incendies-gironde-2026',
+  });
+  seedAssignment(firestore, 'incendies-gironde-2026');
+
+  await activateMobilization({
+    callerUid: ADMIN_UID,
+    data: {mobilizationId: 'incendies-gironde-2026'},
+    services,
+  });
+
+  assert.equal(
+    firestore.read('mobilizations/incendies-gironde-2026').status,
+    'active',
+  );
   assert.equal(
     firestore.read('platform/config').activeMobilizationId,
     'incendies-gironde-2026',
   );
+});
+
+test('deactivating a non-legacy active mobilization keeps the fallback', async () => {
+  const {firestore, services} = harness();
+  firestore.seed(
+    'mobilizations/previous',
+    mobilizationDocument('previous', 'active'),
+  );
+  firestore.seed(
+    'mobilizations/incendies-gironde-2026',
+    mobilizationDocument('incendies-gironde-2026', 'active'),
+  );
+  firestore.seed('platform/config', {activeMobilizationId: 'previous'});
+
+  await deactivateMobilization({
+    callerUid: ADMIN_UID,
+    data: {mobilizationId: 'incendies-gironde-2026'},
+    services,
+  });
+
+  assert.equal(
+    firestore.read('platform/config').activeMobilizationId,
+    'previous',
+  );
+});
+
+test('operation lifecycle follows the strict transition graph', async () => {
+  const {firestore, services} = harness();
+  const created = await createOperation({
+    callerUid: ADMIN_UID,
+    data: operationPayload(),
+    services,
+  });
+  assert.deepEqual(created, {operationId: 'operation-a', status: 'draft'});
+  assert.deepEqual(
+    firestore.read('operations/operation-a'),
+    operationDocument('operation-a', 'draft', {
+      name: 'Opération A',
+      createdAt: NOW,
+      updatedAt: NOW,
+    }),
+  );
+
+  for (const targetStatus of ['planned', 'active', 'suspended', 'completed', 'archived']) {
+    const result = await transitionOperation({
+      callerUid: ADMIN_UID,
+      data: {operationId: 'operation-a', targetStatus},
+      services,
+    });
+    assert.equal(result.status, targetStatus);
+  }
+  await assertCode(
+    () => transitionOperation({
+      callerUid: ADMIN_UID,
+      data: {operationId: 'operation-a', targetStatus: 'active'},
+      services,
+    }),
+    'failed-precondition',
+  );
+});
+
+test('operation update preserves status and accepts no end date', async () => {
+  const {firestore, services} = harness();
+  firestore.seed('operations/operation-a', operationDocument('operation-a', 'planned'));
+
+  const result = await updateOperation({
+    callerUid: ADMIN_UID,
+    data: operationPayload({name: 'Opération A actualisée'}),
+    services,
+  });
+
+  assert.equal(result.status, 'planned');
+  assert.equal(firestore.read('operations/operation-a').endAt, null);
+  assert.equal(
+    firestore.read('operations/operation-a').name,
+    'Opération A actualisée',
+  );
+});
+
+test('new mobilization refuses a missing operation reference', async () => {
+  const {services} = harness();
+  await assertCode(
+    () => createMobilization({
+      callerUid: ADMIN_UID,
+      data: mobilizationPayload({
+        operationId: 'missing-operation',
+        scopeRefs: ['territories/gironde'],
+      }),
+      services,
+    }),
+    'not-found',
+  );
+});
+
+test('multiple mobilizations can reference one operation and stay active', async () => {
+  const {firestore, services} = harness();
+  firestore.seed('operations/operation-a', operationDocument('operation-a', 'active'));
+  for (const mobilizationId of ['mobilization-a1', 'mobilization-a2']) {
+    await createMobilization({
+      callerUid: ADMIN_UID,
+      data: mobilizationPayload({
+        mobilizationId,
+        operationId: 'operation-a',
+        scopeRefs: ['territories/gironde'],
+      }),
+      services,
+    });
+    seedAssignment(firestore, mobilizationId);
+    await activateMobilization({
+      callerUid: ADMIN_UID,
+      data: {mobilizationId},
+      services,
+    });
+  }
+  assert.equal(firestore.read('mobilizations/mobilization-a1').status, 'active');
+  assert.equal(firestore.read('mobilizations/mobilization-a2').status, 'active');
 });
 
 test('deactivation updates status, audit and clears active pointer', async () => {

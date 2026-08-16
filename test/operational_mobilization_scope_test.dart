@@ -36,6 +36,31 @@ void main() {
     expect(missions, isEmpty);
   });
 
+  test('professional multi-scope list merges three active mobilizations', () {
+    final missions = multiScopedMissionsFromDocuments(
+      documents: [
+        _missionDocument('a1', 'mobilization-a1'),
+        _missionDocument('a2', 'mobilization-a2'),
+        _missionDocument('b1', 'mobilization-b1'),
+      ],
+    );
+
+    expect(missions.map((mission) => mission.id), ['a1', 'a2', 'b1']);
+  });
+
+  test('responsible multi-scope list remains limited to its centers', () {
+    final missions = multiScopedMissionsFromDocuments(
+      locationIds: const {'langon'},
+      documents: [
+        _missionDocument('a1', 'mobilization-a1', locationId: 'langon'),
+        _missionDocument('b1', 'mobilization-b1', locationId: 'langon'),
+        _missionDocument('other', 'mobilization-a2', locationId: 'merignac'),
+      ],
+    );
+
+    expect(missions.map((mission) => mission.id), ['a1', 'b1']);
+  });
+
   test('mission creation is refused without an active mobilization', () {
     expect(
       () => requireActiveMobilizationContext(null),
@@ -111,12 +136,17 @@ void main() {
   });
 }
 
-MobilizationScopedDocument _missionDocument(String id, String mobilizationId) {
+MobilizationScopedDocument _missionDocument(
+  String id,
+  String mobilizationId, {
+  String locationId = 'langon',
+}) {
   return (
     id: id,
     data: {
       'id': id,
       'mobilizationId': mobilizationId,
+      'locationId': locationId,
       'locationName': 'Lieu',
       'isActive': true,
       'requiredMk': 1,

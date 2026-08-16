@@ -28,14 +28,22 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
   const missionDocument = await firestore.collection('missions').doc(event.missionId).get();
   if (!missionDocument.exists) return {notifications: 0, pushes: 0};
   const mission = {id: missionDocument.id, ...missionDocument.data()};
-  const [rolesSnapshot, volunteersSnapshot, engagementsSnapshot, preferencesSnapshot, recentSnapshot] = await Promise.all([
+  const [rolesSnapshot, assignmentsSnapshot, volunteersSnapshot, engagementsSnapshot, preferencesSnapshot, recentSnapshot] = await Promise.all([
     firestore.collection('roles').get(),
+    firestore.collection('mobilizationAssignments')
+      .where('mobilizationId', '==', event.mobilizationId)
+      .where('role', '==', 'coordinator')
+      .where('active', '==', true).get(),
     firestore.collection('volunteers').get(),
     firestore.collection('engagements').where('missionId', '==', event.missionId).get(),
     firestore.collection('notificationPreferences').get(),
     firestore.collection('notifications').get(),
   ]);
   const roles = rolesSnapshot.docs.map((doc) => ({uid: doc.id, ...doc.data()}));
+  const assignments = assignmentsSnapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
   const volunteers = volunteersSnapshot.docs.map((doc) => ({uid: doc.id, ...doc.data()}));
   const engagements = engagementsSnapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
   const preferences = new Map(preferencesSnapshot.docs.map((doc) => [doc.id, doc.data()]));
@@ -50,7 +58,7 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
     recentNotifications.set(value.recipientUid, list);
   }
   const recipients = recipientsForEvent({
-    event, mission, roles, volunteers, engagements, preferences,
+    event, mission, roles, assignments, volunteers, engagements, preferences,
     recentNotifications, now: now.getTime(),
   });
   const content = notificationContent(event);

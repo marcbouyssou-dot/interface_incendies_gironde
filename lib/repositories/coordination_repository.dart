@@ -91,6 +91,20 @@ abstract interface class CoordinationRepository {
   Future<void> disablePushSubscription(String installationId);
 }
 
+/// Contrat additif utilisé par RC3.5B. Le contrat historique reste inchangé
+/// tant que les écrans utilisent encore la mobilisation legacy courante.
+abstract interface class MultiMobilizationCoordinationReadRepository {
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizations(
+    Set<String> mobilizationIds,
+  );
+
+  Stream<List<CoordinationNeed>> watchMissionsForLocations(
+    Set<String> locationIds,
+  );
+
+  Stream<List<CoordinationNeed>> watchAllActiveMissions();
+}
+
 class EngagementInfo {
   const EngagementInfo({
     required this.missionId,

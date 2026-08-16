@@ -77,8 +77,8 @@ export function validateMissionUpdateRequest(data) {
 export function missionUpdateMutation({
   request,
   mission,
-  activeMobilizationId,
-  activeMobilization,
+  mobilization,
+  coordinatorAssigned,
   destination,
   callerRole,
   engagements,
@@ -89,24 +89,24 @@ export function missionUpdateMutation({
     throw new MissionUpdateError('not-found', 'Mission introuvable.');
   }
   if (
-    !isPlainObject(activeMobilization)
-    || activeMobilization.id !== activeMobilizationId
-    || activeMobilization.status !== 'active'
-    || mission.mobilizationId !== activeMobilizationId
+    typeof mission.mobilizationId !== 'string'
+    || !isPlainObject(mobilization)
+    || mobilization.id !== mission.mobilizationId
+    || mobilization.status !== 'active'
     || engagements.some(
       (engagement) =>
         !isPlainObject(engagement)
-        || engagement.mobilizationId !== activeMobilizationId,
+        || engagement.mobilizationId !== mission.mobilizationId,
     )
   ) {
     throw new MissionUpdateError(
       'failed-precondition',
-      'Cette mission n’appartient pas à la mobilisation active.',
+      'Cette mission n’appartient pas à une mobilisation active.',
     );
   }
   const access = parseAccess(callerRole);
-  if (!canManage(access, mission.locationId)
-      || !canManage(access, request.locationId)) {
+  if (!canManage(access, mission.locationId, coordinatorAssigned)
+      || !canManage(access, request.locationId, coordinatorAssigned)) {
     throw outsideScope();
   }
   if (mission.isActive === false || mission.status === 'cancelled') {
@@ -177,8 +177,10 @@ function parseAccess(document) {
   }
 }
 
-function canManage(access, locationId) {
-  if (access.roles.includes('coordinator')) return true;
+function canManage(access, locationId, coordinatorAssigned) {
+  if (access.roles.includes('coordinator') && coordinatorAssigned === true) {
+    return true;
+  }
   if (typeof locationId !== 'string' || locationId === '') return false;
   return access.roles.includes('site_manager')
     && access.locationIds.includes(locationId);

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/mobilization_context.dart';
+import 'package:interface_incendies_gironde/models/operation.dart';
 import 'package:interface_incendies_gironde/models/platform_administrator_access.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/models/user_display_identity.dart';
@@ -507,6 +508,10 @@ class _RecordingPlatformService implements PlatformAdministrationService {
   }
 
   @override
+  Future<void> createOperation(OperationAdministrationDraft draft) async =>
+      _complete();
+
+  @override
   Future<void> deactivateMobilization(String mobilizationId) async {
     deactivationCalls.add(mobilizationId);
     await _complete();
@@ -526,6 +531,16 @@ class _RecordingPlatformService implements PlatformAdministrationService {
     updateCalls.add(draft);
     await _complete();
   }
+
+  @override
+  Future<void> updateOperation(OperationAdministrationDraft draft) async =>
+      _complete();
+
+  @override
+  Future<void> transitionOperation(
+    String operationId,
+    OperationStatus targetStatus,
+  ) async => _complete();
 }
 
 MobilizationCoordinatorAssignment _assignment(String mobilizationId) =>

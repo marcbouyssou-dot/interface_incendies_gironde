@@ -10,12 +10,41 @@ const MOBILIZATION_STATUSES = new Set([
   'inactive',
   'archived',
 ]);
+const OPERATION_STATUSES = new Set([
+  'draft', 'planned', 'active', 'suspended', 'completed', 'archived',
+]);
+const OPERATION_TRANSITIONS = new Set([
+  'draft:planned',
+  'draft:archived',
+  'planned:active',
+  'planned:archived',
+  'active:suspended',
+  'active:completed',
+  'suspended:active',
+  'suspended:completed',
+  'completed:archived',
+]);
 
 export function platformAdministrationServices({
   firestore,
   serverTimestamp,
 }) {
   return {
+    createOperation: (request) => runCreateOperation({
+      firestore,
+      serverTimestamp,
+      request,
+    }),
+    updateOperation: (request) => runUpdateOperation({
+      firestore,
+      serverTimestamp,
+      request,
+    }),
+    transitionOperation: (request) => runTransitionOperation({
+      firestore,
+      serverTimestamp,
+      request,
+    }),
     createMobilization: (request) => runCreateMobilization({
       firestore,
       serverTimestamp,
@@ -56,6 +85,96 @@ export function platformAdministrationServices({
   };
 }
 
+async function runCreateOperation({firestore, serverTimestamp, request}) {
+  return firestore.runTransaction(async (transaction) => {
+    await requirePlatformAdministrator({firestore, transaction, request});
+    const operationRef = operationReference(firestore, request.operationId);
+    const [operation, scopeSnapshots] = await Promise.all([
+      transaction.get(operationRef),
+      readScopeReferences({firestore, transaction, refs: request.scopeRefs}),
+    ]);
+    if (operation.exists) {
+      throw new PlatformAdministrationError(
+        'already-exists',
+        'Cette opération existe déjà.',
+      );
+    }
+    requireValidScopes(request.scopeRefs, scopeSnapshots);
+    const timestamp = serverTimestamp();
+    transaction.create(operationRef, {
+      id: request.operationId,
+      name: request.name,
+      type: request.type,
+      status: 'draft',
+      context: request.context,
+      startAt: new Date(request.startAtMillis),
+      endAt: request.endAtMillis === null
+        ? null
+        : new Date(request.endAtMillis),
+      scopeRefs: [...request.scopeRefs],
+      createdBy: request.callerUid,
+      createdAt: timestamp,
+      updatedBy: request.callerUid,
+      updatedAt: timestamp,
+      schemaVersion: 1,
+    });
+    return {operationId: request.operationId, status: 'draft'};
+  });
+}
+
+async function runUpdateOperation({firestore, serverTimestamp, request}) {
+  return firestore.runTransaction(async (transaction) => {
+    await requirePlatformAdministrator({firestore, transaction, request});
+    const operationRef = operationReference(firestore, request.operationId);
+    const [operation, scopeSnapshots] = await Promise.all([
+      transaction.get(operationRef),
+      readScopeReferences({firestore, transaction, refs: request.scopeRefs}),
+    ]);
+    const current = requireOperation(operation);
+    if (current.status === 'completed' || current.status === 'archived') {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Une opération terminée ou archivée ne peut plus être modifiée.',
+      );
+    }
+    requireValidScopes(request.scopeRefs, scopeSnapshots);
+    transaction.update(operationRef, {
+      name: request.name,
+      type: request.type,
+      context: request.context,
+      startAt: new Date(request.startAtMillis),
+      endAt: request.endAtMillis === null
+        ? null
+        : new Date(request.endAtMillis),
+      scopeRefs: [...request.scopeRefs],
+      updatedBy: request.callerUid,
+      updatedAt: serverTimestamp(),
+    });
+    return {operationId: request.operationId, status: current.status};
+  });
+}
+
+async function runTransitionOperation({firestore, serverTimestamp, request}) {
+  return firestore.runTransaction(async (transaction) => {
+    await requirePlatformAdministrator({firestore, transaction, request});
+    const operationRef = operationReference(firestore, request.operationId);
+    const operation = await transaction.get(operationRef);
+    const current = requireOperation(operation);
+    if (!OPERATION_TRANSITIONS.has(`${current.status}:${request.targetStatus}`)) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Cette transition d’opération n’est pas autorisée.',
+      );
+    }
+    transaction.update(operationRef, {
+      status: request.targetStatus,
+      updatedBy: request.callerUid,
+      updatedAt: serverTimestamp(),
+    });
+    return {operationId: request.operationId, status: request.targetStatus};
+  });
+}
+
 async function runCreateMobilization({firestore, serverTimestamp, request}) {
   return firestore.runTransaction(async (transaction) => {
     await requirePlatformAdministrator({firestore, transaction, request});
@@ -66,9 +185,15 @@ async function runCreateMobilization({firestore, serverTimestamp, request}) {
     const territoryRef = firestore
       .collection('territories')
       .doc(request.territoryId);
-    const [mobilization, territory] = await Promise.all([
+    const scopeRefs = request.scopeRefs
+      ?? [`territories/${request.territoryId}`];
+    const [mobilization, territory, operation, scopeSnapshots] = await Promise.all([
       transaction.get(mobilizationRef),
       transaction.get(territoryRef),
+      request.operationId === undefined
+        ? Promise.resolve(null)
+        : transaction.get(operationReference(firestore, request.operationId)),
+      readScopeReferences({firestore, transaction, refs: scopeRefs}),
     ]);
     if (mobilization.exists) {
       throw new PlatformAdministrationError(
@@ -77,8 +202,10 @@ async function runCreateMobilization({firestore, serverTimestamp, request}) {
       );
     }
     requireActiveTerritory(territory);
+    if (operation !== null) requireAttachableOperation(operation);
+    requireValidScopes(scopeRefs, scopeSnapshots);
     const timestamp = serverTimestamp();
-    transaction.create(mobilizationRef, {
+    const fields = {
       id: request.mobilizationId,
       territoryId: request.territoryId,
       name: request.name,
@@ -89,8 +216,13 @@ async function runCreateMobilization({firestore, serverTimestamp, request}) {
       createdAt: timestamp,
       updatedBy: request.callerUid,
       updatedAt: timestamp,
-      schemaVersion: 1,
-    });
+      scopeRefs,
+      schemaVersion: 2,
+    };
+    if (request.operationId !== undefined) {
+      fields.operationId = request.operationId;
+    }
+    transaction.create(mobilizationRef, fields);
     return {mobilizationId: request.mobilizationId, status: 'draft'};
   });
 }
@@ -105,12 +237,26 @@ async function runUpdateMobilization({firestore, serverTimestamp, request}) {
     const territoryRef = firestore
       .collection('territories')
       .doc(request.territoryId);
-    const [mobilization, territory] = await Promise.all([
+    const [mobilization, territory, operation, scopeSnapshots] = await Promise.all([
       transaction.get(mobilizationRef),
       transaction.get(territoryRef),
+      request.operationId === undefined
+        ? Promise.resolve(null)
+        : transaction.get(operationReference(firestore, request.operationId)),
+      request.scopeRefs === undefined
+        ? Promise.resolve([])
+        : readScopeReferences({
+          firestore,
+          transaction,
+          refs: request.scopeRefs,
+        }),
     ]);
     const current = requireMobilization(mobilization);
     requireActiveTerritory(territory);
+    if (operation !== null) requireAttachableOperation(operation);
+    if (request.scopeRefs !== undefined) {
+      requireValidScopes(request.scopeRefs, scopeSnapshots);
+    }
     if (current.status === 'archived') {
       throw new PlatformAdministrationError(
         'failed-precondition',
@@ -126,14 +272,27 @@ async function runUpdateMobilization({firestore, serverTimestamp, request}) {
         'Le territoire d’une mobilisation active ne peut pas changer.',
       );
     }
-    transaction.update(mobilizationRef, {
+    if (
+      current.status === 'active'
+      && request.operationId !== undefined
+      && current.operationId !== request.operationId
+    ) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'L’opération d’une mobilisation active ne peut pas changer.',
+      );
+    }
+    const fields = {
       territoryId: request.territoryId,
       name: request.name,
       subtitle: request.subtitle,
       contextType: request.contextType,
       updatedBy: request.callerUid,
       updatedAt: serverTimestamp(),
-    });
+    };
+    if (request.operationId !== undefined) fields.operationId = request.operationId;
+    if (request.scopeRefs !== undefined) fields.scopeRefs = request.scopeRefs;
+    transaction.update(mobilizationRef, fields);
     return {
       mobilizationId: request.mobilizationId,
       status: current.status,
@@ -154,15 +313,11 @@ async function runActivateMobilization({firestore, serverTimestamp, request}) {
       .where('mobilizationId', '==', request.mobilizationId)
       .where('role', '==', 'coordinator')
       .where('active', '==', true);
-    const activeMobilizationsQuery = firestore
-      .collection('mobilizations')
-      .where('status', '==', 'active');
-    const [mobilization, config, assignments, activeMobilizations] =
+    const [mobilization, config, assignments] =
       await Promise.all([
         transaction.get(mobilizationRef),
         transaction.get(configRef),
         transaction.get(assignmentsQuery),
-        transaction.get(activeMobilizationsQuery),
       ]);
     const current = requireMobilization(mobilization);
     if (current.status !== 'draft' && current.status !== 'inactive') {
@@ -186,43 +341,10 @@ async function runActivateMobilization({firestore, serverTimestamp, request}) {
       );
     }
 
-    if (activeMobilizations.docs.length > 1) throw inconsistentActiveState();
-    const previousActive = activeMobilizations.docs[0] ?? null;
     const configuredActiveId = config.exists
       ? config.data().activeMobilizationId
       : null;
-    if (
-      configuredActiveId !== null
-      && typeof configuredActiveId !== 'string'
-    ) {
-      throw inconsistentActiveState();
-    }
-    if (
-      (previousActive === null && configuredActiveId !== null)
-      || (previousActive !== null && configuredActiveId !== previousActive.id)
-    ) {
-      throw inconsistentActiveState();
-    }
-    if (configuredActiveId === request.mobilizationId) {
-      throw new PlatformAdministrationError(
-        'failed-precondition',
-        'Cette mobilisation est déjà déclarée active.',
-      );
-    }
-
     const timestamp = serverTimestamp();
-    if (previousActive !== null) {
-      transaction.update(
-        mobilizationReference(firestore, previousActive.id),
-        {
-          status: 'inactive',
-          deactivatedBy: request.callerUid,
-          deactivatedAt: timestamp,
-          updatedBy: request.callerUid,
-          updatedAt: timestamp,
-        },
-      );
-    }
     transaction.update(mobilizationRef, {
       status: 'active',
       activatedBy: request.callerUid,
@@ -230,11 +352,15 @@ async function runActivateMobilization({firestore, serverTimestamp, request}) {
       updatedBy: request.callerUid,
       updatedAt: timestamp,
     });
-    transaction.set(configRef, {
-      activeMobilizationId: request.mobilizationId,
-      updatedBy: request.callerUid,
-      updatedAt: timestamp,
-    }, {merge: true});
+    // Fallback RC3.5A : le premier pointeur reste disponible pour les écrans
+    // legacy, sans devenir une autorité pour les nouveaux flux.
+    if (configuredActiveId === null || configuredActiveId === undefined) {
+      transaction.set(configRef, {
+        activeMobilizationId: request.mobilizationId,
+        updatedBy: request.callerUid,
+        updatedAt: timestamp,
+      }, {merge: true});
+    }
     return {mobilizationId: request.mobilizationId, status: 'active'};
   });
 }
@@ -256,14 +382,10 @@ async function runDeactivateMobilization({
       transaction.get(configRef),
     ]);
     const current = requireMobilization(mobilization);
-    if (
-      current.status !== 'active'
-      || !config.exists
-      || config.data().activeMobilizationId !== request.mobilizationId
-    ) {
+    if (current.status !== 'active') {
       throw new PlatformAdministrationError(
         'failed-precondition',
-        'Cette mobilisation n’est pas la mobilisation active.',
+        'Cette mobilisation n’est pas active.',
       );
     }
     const timestamp = serverTimestamp();
@@ -274,11 +396,14 @@ async function runDeactivateMobilization({
       updatedBy: request.callerUid,
       updatedAt: timestamp,
     });
-    transaction.set(configRef, {
-      activeMobilizationId: null,
-      updatedBy: request.callerUid,
-      updatedAt: timestamp,
-    }, {merge: true});
+    if (config.exists
+      && config.data().activeMobilizationId === request.mobilizationId) {
+      transaction.set(configRef, {
+        activeMobilizationId: null,
+        updatedBy: request.callerUid,
+        updatedAt: timestamp,
+      }, {merge: true});
+    }
     return {mobilizationId: request.mobilizationId, status: 'inactive'};
   });
 }
@@ -468,6 +593,40 @@ function requireMobilization(snapshot) {
   return current;
 }
 
+function requireOperation(snapshot) {
+  if (!snapshot.exists) {
+    throw new PlatformAdministrationError(
+      'not-found',
+      'Opération introuvable.',
+    );
+  }
+  const current = snapshot.data();
+  if (
+    current === null
+    || typeof current !== 'object'
+    || Array.isArray(current)
+    || current.id !== snapshot.id
+    || !OPERATION_STATUSES.has(current.status)
+  ) {
+    throw new PlatformAdministrationError(
+      'failed-precondition',
+      'Le document d’opération existant est invalide.',
+    );
+  }
+  return current;
+}
+
+function requireAttachableOperation(snapshot) {
+  const operation = requireOperation(snapshot);
+  if (operation.status === 'completed' || operation.status === 'archived') {
+    throw new PlatformAdministrationError(
+      'failed-precondition',
+      'Cette opération ne peut plus recevoir de mobilisation.',
+    );
+  }
+  return operation;
+}
+
 function requireActiveTerritory(snapshot) {
   if (!snapshot.exists || snapshot.data().active !== true) {
     throw new PlatformAdministrationError(
@@ -481,9 +640,37 @@ function mobilizationReference(firestore, mobilizationId) {
   return firestore.collection('mobilizations').doc(mobilizationId);
 }
 
-function inconsistentActiveState() {
-  return new PlatformAdministrationError(
-    'failed-precondition',
-    'La configuration de la mobilisation active est incohérente.',
-  );
+function operationReference(firestore, operationId) {
+  return firestore.collection('operations').doc(operationId);
+}
+
+async function readScopeReferences({firestore, transaction, refs}) {
+  return Promise.all(refs.map((ref) => {
+    const [collection, id] = ref.split('/');
+    return transaction.get(firestore.collection(collection).doc(id));
+  }));
+}
+
+function requireValidScopes(refs, snapshots) {
+  if (refs.length !== snapshots.length) {
+    throw new PlatformAdministrationError(
+      'failed-precondition',
+      'Le périmètre opérationnel est invalide.',
+    );
+  }
+  for (let index = 0; index < refs.length; index += 1) {
+    const snapshot = snapshots[index];
+    const collection = refs[index].split('/')[0];
+    const data = snapshot.exists ? snapshot.data() : null;
+    const valid = data !== null
+      && (collection === 'territories'
+        ? data.active === true
+        : (data.isActive === true && data.isOperational !== false));
+    if (!valid) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Un élément du périmètre est introuvable ou inactif.',
+      );
+    }
+  }
 }

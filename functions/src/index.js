@@ -58,10 +58,13 @@ import {
   activateMobilization as activateMobilizationRequest,
   archiveMobilization as archiveMobilizationRequest,
   assignMobilizationCoordinator as assignMobilizationCoordinatorRequest,
+  createOperation as createOperationRequest,
   createMobilization as createMobilizationRequest,
   deactivateMobilization as deactivateMobilizationRequest,
   PlatformAdministrationError,
   removeMobilizationCoordinator as removeMobilizationCoordinatorRequest,
+  transitionOperation as transitionOperationRequest,
+  updateOperation as updateOperationRequest,
   updateMobilization as updateMobilizationRequest,
 } from './platform_administration.js';
 import {
@@ -297,6 +300,36 @@ const platformCallableOptions = Object.freeze({
   region: 'europe-west1',
   enforceAppCheck: true,
 });
+
+export const createOperation = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    createOperationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const updateOperation = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    updateOperationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const transitionOperation = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    transitionOperationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
 
 export const createMobilization = onCall(
   platformCallableOptions,
@@ -970,51 +1003,49 @@ export function missionUpdateServices({firestore}) {
   return {
     async commitMissionUpdate({callerUid, missionId, ...request}) {
       return firestore.runTransaction(async (transaction) => {
-        const configRef = firestore.collection('platform').doc('config');
-        const config = await transaction.get(configRef);
-        const activeMobilizationId = config.exists
-          ? config.data().activeMobilizationId
-          : null;
-        if (
-          typeof activeMobilizationId !== 'string'
-          || activeMobilizationId === ''
-        ) {
-          throw new MissionUpdateError(
-            'failed-precondition',
-            'Aucune mobilisation active n’est disponible.',
-          );
-        }
         const callerRef = firestore.collection('roles').doc(callerUid);
         const missionRef = firestore.collection('missions').doc(missionId);
-        const mobilizationRef = firestore
-          .collection('mobilizations')
-          .doc(activeMobilizationId);
         const destinationRef = firestore
           .collection('locations')
           .doc(request.locationId);
         const engagementsQuery = firestore
           .collection('engagements')
           .where('missionId', '==', missionId);
-        const [
-          caller,
-          mission,
-          activeMobilization,
-          destination,
-          engagements,
-        ] = await Promise.all([
+        const [caller, mission, destination, engagements] = await Promise.all([
           transaction.get(callerRef),
           transaction.get(missionRef),
-          transaction.get(mobilizationRef),
           transaction.get(destinationRef),
           transaction.get(engagementsQuery),
         ]);
+        const missionData = mission.exists ? mission.data() : null;
+        const mobilizationId = missionData?.mobilizationId;
+        const validMobilizationId = typeof mobilizationId === 'string'
+          && mobilizationId !== ''
+          && !mobilizationId.includes('/');
+        const mobilization = validMobilizationId
+          ? await transaction.get(
+            firestore.collection('mobilizations').doc(mobilizationId),
+          )
+          : null;
+        const coordinatorAssignment = validMobilizationId
+          ? await transaction.get(
+            firestore.collection('mobilizationAssignments')
+              .doc(`${mobilizationId}_${callerUid}`),
+          )
+          : null;
+        const assignmentData = coordinatorAssignment?.exists
+          ? coordinatorAssignment.data()
+          : null;
         const mutation = missionUpdateMutation({
           request: {missionId, ...request},
-          mission: mission.exists ? mission.data() : null,
-          activeMobilizationId,
-          activeMobilization: activeMobilization.exists
-            ? activeMobilization.data()
+          mission: missionData,
+          mobilization: mobilization?.exists
+            ? mobilization.data()
             : null,
+          coordinatorAssigned: assignmentData?.active === true
+            && assignmentData?.uid === callerUid
+            && assignmentData?.mobilizationId === mobilizationId
+            && assignmentData?.role === 'coordinator',
           destination: destination.exists ? destination.data() : null,
           callerRole: caller.exists ? caller.data() : null,
           engagements: engagements.docs.map((document) => document.data()),
@@ -1100,12 +1131,10 @@ function platformServices() {
 export function userDisplayIdentityServices({firestore, auth}) {
   return {
     async listMissionTeam({callerUid, missionId}) {
-      const [callerSnapshot, missionSnapshot, configSnapshot] =
-        await Promise.all([
-          firestore.collection('roles').doc(callerUid).get(),
-          firestore.collection('missions').doc(missionId).get(),
-          firestore.collection('platform').doc('config').get(),
-        ]);
+      const [callerSnapshot, missionSnapshot] = await Promise.all([
+        firestore.collection('roles').doc(callerUid).get(),
+        firestore.collection('missions').doc(missionId).get(),
+      ]);
       if (!callerSnapshot.exists || !missionSnapshot.exists) {
         throw new UserDisplayIdentityError(
           'permission-denied',
@@ -1122,16 +1151,33 @@ export function userDisplayIdentityServices({firestore, auth}) {
         );
       }
       const mission = missionSnapshot.data();
-      const activeMobilizationId = configSnapshot.data()?.activeMobilizationId;
+      const mobilizationId = mission.mobilizationId;
+      if (typeof mobilizationId !== 'string' || mobilizationId === '') {
+        throw new UserDisplayIdentityError(
+          'permission-denied',
+          'Accès à cette équipe refusé.',
+        );
+      }
+      const [mobilizationSnapshot, assignmentSnapshot] = await Promise.all([
+        firestore.collection('mobilizations').doc(mobilizationId).get(),
+        firestore.collection('mobilizationAssignments')
+          .doc(`${mobilizationId}_${callerUid}`).get(),
+      ]);
+      const assignment = assignmentSnapshot.data();
       const canReadTerritory = access.active
-        && access.roles.includes('coordinator');
+        && access.roles.includes('coordinator')
+        && assignmentSnapshot.exists
+        && assignment?.active === true
+        && assignment?.uid === callerUid
+        && assignment?.mobilizationId === mobilizationId
+        && assignment?.role === 'coordinator';
       const canReadLocation = access.active
         && access.roles.includes('site_manager')
         && access.locationIds.includes(mission.locationId);
       if (
         (!canReadTerritory && !canReadLocation)
-        || typeof activeMobilizationId !== 'string'
-        || mission.mobilizationId !== activeMobilizationId
+        || !mobilizationSnapshot.exists
+        || mobilizationSnapshot.data()?.status !== 'active'
         || mission.isActive !== true
       ) {
         throw new UserDisplayIdentityError(
@@ -1142,7 +1188,7 @@ export function userDisplayIdentityServices({firestore, auth}) {
       const engagementsSnapshot = await firestore
         .collection('engagements')
         .where('missionId', '==', missionId)
-        .where('mobilizationId', '==', activeMobilizationId)
+        .where('mobilizationId', '==', mobilizationId)
         .get();
       const engagements = engagementsSnapshot.docs.map((snapshot) =>
         snapshot.data());

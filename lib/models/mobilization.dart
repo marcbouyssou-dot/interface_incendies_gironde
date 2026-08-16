@@ -1,3 +1,5 @@
+import 'operational_scope.dart';
+
 enum MobilizationContextType { fire, flood, heatwave, event, whitePlan, other }
 
 extension MobilizationContextTypeValue on MobilizationContextType {
@@ -61,6 +63,8 @@ class Mobilization {
     required this.createdAt,
     required this.updatedAt,
     required this.schemaVersion,
+    this.operationId,
+    this.scopeRefs = const [],
     this.activatedBy,
     this.activatedAt,
     this.deactivatedBy,
@@ -91,6 +95,8 @@ class Mobilization {
       archivedBy: _optionalText(data, 'archivedBy'),
       archivedAt: _optionalDateTime(data, 'archivedAt'),
       schemaVersion: schemaVersion,
+      operationId: _optionalText(data, 'operationId'),
+      scopeRefs: _optionalScopeRefs(data),
     );
   }
 
@@ -110,6 +116,8 @@ class Mobilization {
   final String? archivedBy;
   final DateTime? archivedAt;
   final int schemaVersion;
+  final String? operationId;
+  final List<OperationalScopeRef> scopeRefs;
 
   Map<String, Object?> toMap() => {
     'id': id,
@@ -128,7 +136,21 @@ class Mobilization {
     'archivedBy': archivedBy,
     'archivedAt': archivedAt,
     'schemaVersion': schemaVersion,
+    if (operationId != null) 'operationId': operationId,
+    if (scopeRefs.isNotEmpty)
+      'scopeRefs': scopeRefs.map((ref) => ref.serializedValue).toList(),
   };
+}
+
+List<OperationalScopeRef> _optionalScopeRefs(Map<String, Object?> data) {
+  final value = data['scopeRefs'];
+  if (value == null) return const [];
+  if (value is! List) throw const FormatException('Mobilisation invalide.');
+  final refs = value.map(OperationalScopeRef.fromValue).toList(growable: false);
+  if (refs.map((ref) => ref.serializedValue).toSet().length != refs.length) {
+    throw const FormatException('Mobilisation invalide.');
+  }
+  return refs;
 }
 
 T _requiredValue<T>(Map<String, Object?> data, String key) {

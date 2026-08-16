@@ -6,7 +6,7 @@ const DEFAULT_PREFERENCES = Object.freeze({
   quietHoursEnd: 7,
 });
 
-export function recipientsForEvent({event, mission, roles, volunteers, engagements, preferences, recentNotifications, now}) {
+export function recipientsForEvent({event, mission, roles, assignments = [], volunteers, engagements, preferences, recentNotifications, now}) {
   const recipients = new Map();
   const add = (uid, role, category) => {
     if (!uid || uid === event.actorUid) return;
@@ -52,7 +52,13 @@ export function recipientsForEvent({event, mission, roles, volunteers, engagemen
   if (event.eventType === 'mission.became_critical' ||
       (event.eventType === 'mission.cancelled' && importantCancellation(mission, now))) {
     for (const role of roles) {
-      if (hasRole(role, 'coordinator')) add(role.uid, 'coordinator', 'operational');
+      if (hasRole(role, 'coordinator') && assignments.some((assignment) =>
+        assignment.active === true
+        && assignment.role === 'coordinator'
+        && assignment.uid === role.uid
+        && assignment.mobilizationId === event.mobilizationId)) {
+        add(role.uid, 'coordinator', 'operational');
+      }
     }
   }
   return [...recipients.values()];

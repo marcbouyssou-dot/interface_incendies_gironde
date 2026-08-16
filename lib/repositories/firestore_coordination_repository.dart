@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../models/health_profession.dart';
 import '../models/app_notification.dart';
 import '../models/mobilization_context.dart';
+import '../models/mobilization.dart';
 import '../models/need.dart';
 import '../models/platform_administrator_access.dart';
 import '../models/professional_equipment.dart';
@@ -110,6 +113,42 @@ List<CoordinationNeed> scopedMissionsFromDocuments({
 }
 
 @visibleForTesting
+List<CoordinationNeed> multiScopedMissionsFromDocuments({
+  required Iterable<MobilizationScopedDocument> documents,
+  Set<String>? mobilizationIds,
+  Set<String>? locationIds,
+}) {
+  final missions = documents
+      .where(
+        (document) =>
+            document.data['isActive'] == true &&
+            (mobilizationIds == null ||
+                mobilizationIds.contains(document.data['mobilizationId'])) &&
+            (locationIds == null ||
+                locationIds.contains(document.data['locationId'])),
+      )
+      .map(
+        (document) => FirestoreMissionMapper.fromFirestore(
+          id: document.id,
+          data: document.data,
+        ),
+      )
+      .where((mission) => mission.isActive)
+      .toList(growable: false);
+  missions.sort((left, right) {
+    final leftDate = left.startAt;
+    final rightDate = right.startAt;
+    if (leftDate == null && rightDate == null) {
+      return left.id.compareTo(right.id);
+    }
+    if (leftDate == null) return 1;
+    if (rightDate == null) return -1;
+    return leftDate.compareTo(rightDate);
+  });
+  return missions;
+}
+
+@visibleForTesting
 List<EngagementInfo> scopedEngagementsFromDocuments({
   required Iterable<MobilizationScopedDocument> documents,
   required String missionId,
@@ -166,6 +205,7 @@ void requireDocumentsInActiveMobilization({
 class FirestoreCoordinationRepository
     implements
         CoordinationRepository,
+        MultiMobilizationCoordinationReadRepository,
         PlatformRuntime,
         PlatformAccountAuthenticator {
   FirestoreCoordinationRepository(
@@ -438,6 +478,152 @@ class FirestoreCoordinationRepository
             ),
           );
     });
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizations(
+    Set<String> mobilizationIds,
+  ) {
+    final ids = _validatedQueryIds(mobilizationIds, 'mobilisation');
+    if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
+    return _combineMissionStreams(
+      ids.map((id) => _watchMissionsInMobilization(_firestore, id)),
+    );
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForLocations(
+    Set<String> locationIds,
+  ) {
+    final ids = _validatedQueryIds(locationIds, 'lieu');
+    if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
+    return switchLatest(
+      _watchActiveMobilizationIds(_responsibleFirestore),
+      (mobilizationIds) => _combineMissionStreams(
+        mobilizationIds.map(
+          (mobilizationId) => _watchMissionsInMobilization(
+            _responsibleFirestore,
+            mobilizationId,
+            locationIds: ids,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchAllActiveMissions() {
+    return switchLatest(
+      _watchActiveMobilizationIds(_firestore),
+      (mobilizationIds) => _combineMissionStreams(
+        mobilizationIds.map(
+          (mobilizationId) =>
+              _watchMissionsInMobilization(_firestore, mobilizationId),
+        ),
+      ),
+    );
+  }
+
+  Stream<List<String>> _watchActiveMobilizationIds(
+    FirebaseFirestore firestore,
+  ) {
+    return firestore
+        .collection('mobilizations')
+        .where('status', isEqualTo: MobilizationStatus.active.serializedValue)
+        .snapshots()
+        .map((snapshot) {
+          final ids = snapshot.docs.map((document) => document.id).toList();
+          ids.sort();
+          return ids;
+        });
+  }
+
+  Stream<List<CoordinationNeed>> _watchMissionsInMobilization(
+    FirebaseFirestore firestore,
+    String mobilizationId, {
+    List<String>? locationIds,
+  }) {
+    Query<Map<String, dynamic>> query = firestore
+        .collection('missions')
+        .where('mobilizationId', isEqualTo: mobilizationId)
+        .where('isActive', isEqualTo: true);
+    if (locationIds != null) {
+      query = query.where('locationId', whereIn: locationIds);
+    }
+    return query.snapshots().map(
+      (snapshot) => multiScopedMissionsFromDocuments(
+        documents: snapshot.docs.map(
+          (document) => (id: document.id, data: document.data()),
+        ),
+        mobilizationIds: {mobilizationId},
+        locationIds: locationIds?.toSet(),
+      ),
+    );
+  }
+
+  Stream<List<CoordinationNeed>> _combineMissionStreams(
+    Iterable<Stream<List<CoordinationNeed>>> sourceStreams,
+  ) {
+    final streams = sourceStreams.toList(growable: false);
+    if (streams.isEmpty) {
+      return Stream<List<CoordinationNeed>>.value(const []);
+    }
+    late final StreamController<List<CoordinationNeed>> controller;
+    final subscriptions = <StreamSubscription<List<CoordinationNeed>>>[];
+    final values = <int, List<CoordinationNeed>>{};
+
+    void emit() {
+      if (values.length != streams.length || controller.isClosed) return;
+      final byId = <String, CoordinationNeed>{};
+      for (final missions in values.values) {
+        for (final mission in missions) {
+          byId[mission.id] = mission;
+        }
+      }
+      final missions = byId.values.toList(growable: false)
+        ..sort((left, right) {
+          final leftDate = left.startAt;
+          final rightDate = right.startAt;
+          if (leftDate == null && rightDate == null) {
+            return left.id.compareTo(right.id);
+          }
+          if (leftDate == null) return 1;
+          if (rightDate == null) return -1;
+          return leftDate.compareTo(rightDate);
+        });
+      controller.add(missions);
+    }
+
+    controller = StreamController<List<CoordinationNeed>>(
+      onListen: () {
+        for (var index = 0; index < streams.length; index += 1) {
+          subscriptions.add(
+            streams[index].listen((missions) {
+              values[index] = missions;
+              emit();
+            }, onError: controller.addError),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      },
+    );
+    return controller.stream;
+  }
+
+  List<String> _validatedQueryIds(Set<String> values, String label) {
+    if (values.length > 30 ||
+        values.any(
+          (value) =>
+              value.isEmpty || value.trim() != value || value.contains('/'),
+        )) {
+      throw RepositoryException('Périmètre de $label invalide.');
+    }
+    final result = values.toList(growable: false)..sort();
+    return result;
   }
 
   @override

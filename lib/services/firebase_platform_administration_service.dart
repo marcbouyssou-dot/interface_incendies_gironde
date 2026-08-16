@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../models/operation.dart';
 import 'platform_administration_service.dart';
 
 typedef PlatformCallable =
@@ -25,6 +26,23 @@ class FirebasePlatformAdministrationService
   @override
   Future<void> createMobilization(MobilizationAdministrationDraft draft) =>
       _invokeMobilization('createMobilization', draft);
+
+  @override
+  Future<void> createOperation(OperationAdministrationDraft draft) =>
+      _invokeOperation('createOperation', draft);
+
+  @override
+  Future<void> updateOperation(OperationAdministrationDraft draft) =>
+      _invokeOperation('updateOperation', draft);
+
+  @override
+  Future<void> transitionOperation(
+    String operationId,
+    OperationStatus targetStatus,
+  ) => _invoke('transitionOperation', {
+    'operationId': _validId(operationId),
+    'targetStatus': targetStatus.serializedValue,
+  });
 
   @override
   Future<void> updateMobilization(MobilizationAdministrationDraft draft) =>
@@ -69,7 +87,50 @@ class FirebasePlatformAdministrationService
     _validId(data['territoryId']);
     _validText(data['name'], maximumLength: 160);
     _validText(data['subtitle'], maximumLength: 240);
+    final operationId = data['operationId'];
+    if (operationId != null) _validId(operationId);
+    final scopeRefs = data['scopeRefs'];
+    if (scopeRefs != null) _validScopeRefs(scopeRefs);
     return _invoke(functionName, data);
+  }
+
+  Future<void> _invokeOperation(
+    String functionName,
+    OperationAdministrationDraft draft,
+  ) {
+    final data = draft.toCallableData();
+    _validId(data['operationId']);
+    _validText(data['name'], maximumLength: 160);
+    _validScopeRefs(data['scopeRefs']);
+    final startAt = data['startAtMillis'];
+    final endAt = data['endAtMillis'];
+    if (startAt is! int ||
+        startAt <= 0 ||
+        (endAt != null && (endAt is! int || endAt <= startAt))) {
+      throw const PlatformAdministrationException(
+        'La période de l’opération est invalide.',
+      );
+    }
+    return _invoke(functionName, data);
+  }
+
+  void _validScopeRefs(Object? value) {
+    if (value is! List || value.length > 65) {
+      throw const PlatformAdministrationException(
+        'Le périmètre opérationnel est invalide.',
+      );
+    }
+    final refs = value.whereType<String>().toList(growable: false);
+    if (refs.length != value.length ||
+        refs.toSet().length != refs.length ||
+        refs.any(
+          (ref) =>
+              !RegExp(r'^(territories|locations)/[^/]{1,160}$').hasMatch(ref),
+        )) {
+      throw const PlatformAdministrationException(
+        'Le périmètre opérationnel est invalide.',
+      );
+    }
   }
 
   Future<void> _invokeId(String functionName, String mobilizationId) =>

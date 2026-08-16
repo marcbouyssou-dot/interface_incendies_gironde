@@ -66,6 +66,11 @@ before(async () => {
   await db.collection('platform').doc('config').set({
     activeMobilizationId: 'mobilization-identity-test',
   });
+  await db.collection('mobilizations').doc('mobilization-identity-test').set({
+    id: 'mobilization-identity-test',
+    territoryId: 'gironde',
+    status: 'active',
+  });
   await db.collection('missions').doc('mission-identity-test').set({
     id: 'mission-identity-test',
     mobilizationId: 'mobilization-identity-test',

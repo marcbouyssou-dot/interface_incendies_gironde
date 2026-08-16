@@ -74,6 +74,15 @@ async function seed(extra = {}) {
     await setDoc(doc(admin, 'roles/coord'), {
       role: 'coordinator', locationIds: ['*'], active: true,
     });
+    await setDoc(
+      doc(admin, `mobilizationAssignments/${activeMobilizationId}_coord`),
+      {
+        uid: 'coord',
+        mobilizationId: activeMobilizationId,
+        role: 'coordinator',
+        active: true,
+      },
+    );
     await setDoc(doc(admin, 'roles/manager'), {
       role: 'site_manager', locationIds: ['site-a'], active: true,
     });
@@ -85,7 +94,20 @@ async function seed(extra = {}) {
 
 async function seedRole(uid, data) {
   await env.withSecurityRulesDisabled(async (context) => {
-    await setDoc(doc(context.firestore(), `roles/${uid}`), data);
+    const admin = context.firestore();
+    await setDoc(doc(admin, `roles/${uid}`), data);
+    const roles = Array.isArray(data.roles) ? data.roles : [data.role];
+    if (roles.includes('coordinator')) {
+      await setDoc(
+        doc(admin, `mobilizationAssignments/${activeMobilizationId}_${uid}`),
+        {
+          uid,
+          mobilizationId: activeMobilizationId,
+          role: 'coordinator',
+          active: true,
+        },
+      );
+    }
   });
 }
 
@@ -257,6 +279,39 @@ async function engage(
       ...(registeredByProfession ? {registeredByProfession} : {}),
     }),
     ...missionChanges,
+    updatedAt: serverTimestamp(),
+  });
+  return batch.commit();
+}
+
+async function engageMission(uid, missionId, mobilizationId) {
+  const userDb = db(uid);
+  const missionReference = doc(userDb, `missions/${missionId}`);
+  const missionSnapshot = await getDoc(missionReference);
+  const missionData = missionSnapshot.data();
+  const volunteerReference = doc(userDb, `volunteers/${uid}`);
+  const volunteerSnapshot = await getDoc(volunteerReference);
+  const registeredMk = missionData.registeredMk + 1;
+  const batch = writeBatch(userDb);
+  batch.set(volunteerReference, {
+    ...volunteer(uid),
+    ...(volunteerSnapshot.exists()
+      ? {createdAt: volunteerSnapshot.data().createdAt}
+      : {}),
+    updatedAt: serverTimestamp(),
+  });
+  batch.set(doc(userDb, `engagements/${missionId}_${uid}`), {
+    missionId,
+    mobilizationId,
+    volunteerId: uid,
+    profession: 'mk',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    status: 'confirmed',
+  });
+  batch.update(missionReference, {
+    registeredMk,
+    status: expectedStatus({...missionData, registeredMk}),
     updatedAt: serverTimestamp(),
   });
   return batch.commit();
@@ -2266,11 +2321,16 @@ test('platform V6: platform administrator reads its dashboard without client wri
     'territories/gironde',
     `mobilizationAssignments/${activeMobilizationId}_coord`,
   ];
-  for (const uid of [null, 'alice', 'coord']) {
+  for (const uid of [null, 'alice']) {
     for (const path of administrationPaths) {
       await assertFails(getDoc(doc(db(uid), path)));
     }
   }
+  await assertFails(getDoc(doc(db('coord'), 'territories/gironde')));
+  await assertSucceeds(getDoc(doc(
+    db('coord'),
+    `mobilizationAssignments/${activeMobilizationId}_coord`,
+  )));
   await assertSucceeds(getDoc(
     doc(db('platform-admin'), 'platformAdministrators/platform-admin'),
   ));
@@ -2353,4 +2413,203 @@ test('platform V6: existing V5 permissions remain unchanged', async () => {
   await assertSucceeds(createMissionFor('coord', 'v5-compatible'));
   await assertFails(createMissionFor('manager', 'v5-outside', 'site-b'));
   await assertSucceeds(getDoc(doc(db('manager'), 'roles/manager')));
+});
+
+test('RC3.5: role scopes remain isolated across three active mobilizations', async () => {
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    for (const [operationId, name] of [
+      ['operation-a', 'Opération A'],
+      ['operation-b', 'Opération B'],
+    ]) {
+      await setDoc(doc(admin, `operations/${operationId}`), {
+        id: operationId,
+        name,
+        type: 'emergency',
+        status: 'active',
+      });
+    }
+    for (const [mobilizationId, operationId] of [
+      [activeMobilizationId, 'operation-a'],
+      ['mobilization-a2', 'operation-a'],
+      ['mobilization-b1', 'operation-b'],
+    ]) {
+      await setDoc(doc(admin, `mobilizations/${mobilizationId}`), {
+        id: mobilizationId,
+        territoryId: 'gironde',
+        operationId,
+        status: 'active',
+      });
+    }
+    await setDoc(doc(admin, 'roles/coord-b'), {
+      role: 'coordinator', locationIds: ['*'], active: true,
+    });
+    for (const [mobilizationId, uid] of [
+      [activeMobilizationId, 'coord'],
+      ['mobilization-a2', 'coord'],
+      ['mobilization-b1', 'coord-b'],
+    ]) {
+      await setDoc(
+        doc(admin, `mobilizationAssignments/${mobilizationId}_${uid}`),
+        {uid, mobilizationId, role: 'coordinator', active: true},
+      );
+    }
+    await setDoc(doc(admin, 'missions/mission-a1'), mission({
+      id: 'mission-a1',
+      mobilizationId: activeMobilizationId,
+      locationId: 'site-a',
+    }));
+    await setDoc(doc(admin, 'missions/mission-a2'), mission({
+      id: 'mission-a2',
+      mobilizationId: 'mobilization-a2',
+      locationId: 'site-b',
+    }));
+    await setDoc(doc(admin, 'missions/mission-b1'), mission({
+      id: 'mission-b1',
+      mobilizationId: 'mobilization-b1',
+      locationId: 'site-a',
+    }));
+    await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+  });
+
+  const coordA1 = await assertSucceeds(getDocs(query(
+    collection(db('coord'), 'missions'),
+    where('mobilizationId', '==', activeMobilizationId),
+    where('isActive', '==', true),
+  )));
+  const coordA2 = await assertSucceeds(getDocs(query(
+    collection(db('coord'), 'missions'),
+    where('mobilizationId', '==', 'mobilization-a2'),
+    where('isActive', '==', true),
+  )));
+  assert.equal(coordA1.size, 1);
+  assert.equal(coordA2.size, 1);
+  await assertFails(getDocs(query(
+    collection(db('coord'), 'missions'),
+    where('mobilizationId', '==', 'mobilization-b1'),
+    where('isActive', '==', true),
+  )));
+
+  let managerMissionCount = 0;
+  for (const mobilizationId of [activeMobilizationId, 'mobilization-b1']) {
+    const managerMissions = await assertSucceeds(getDocs(query(
+      collection(db('manager'), 'missions'),
+      where('mobilizationId', '==', mobilizationId),
+      where('locationId', '==', 'site-a'),
+      where('isActive', '==', true),
+    )));
+    managerMissionCount += managerMissions.size;
+  }
+  assert.equal(managerMissionCount, 2);
+  await assertFails(getDocs(query(
+    collection(db('manager'), 'missions'),
+    where('mobilizationId', '==', 'mobilization-a2'),
+    where('locationId', '==', 'site-b'),
+    where('isActive', '==', true),
+  )));
+
+  const activeMobilizations = await assertSucceeds(getDocs(query(
+    collection(db('professional'), 'mobilizations'),
+    where('status', '==', 'active'),
+  )));
+  assert.equal(activeMobilizations.size, 3);
+  await assertFails(getDocs(query(
+    collection(db('coord'), 'mobilizations'),
+    where('status', '==', 'active'),
+  )));
+  let professionalMissionCount = 0;
+  for (const mobilizationId of [
+    activeMobilizationId,
+    'mobilization-a2',
+    'mobilization-b1',
+  ]) {
+    const professionalMissions = await assertSucceeds(getDocs(query(
+      collection(db('professional'), 'missions'),
+      where('mobilizationId', '==', mobilizationId),
+      where('isActive', '==', true),
+    )));
+    professionalMissionCount += professionalMissions.size;
+  }
+  assert.equal(professionalMissionCount, 3);
+  await assertFails(getDocs(query(
+    collection(db('platform-admin'), 'missions'),
+    where('mobilizationId', '==', activeMobilizationId),
+    where('isActive', '==', true),
+  )));
+
+  await assertSucceeds(getDocs(query(
+    collection(db('coord'), 'mobilizationAssignments'),
+    where('uid', '==', 'coord'),
+    where('role', '==', 'coordinator'),
+    where('active', '==', true),
+  )));
+  await assertFails(getDoc(doc(
+    db('coord'),
+    'mobilizationAssignments/mobilization-b1_coord-b',
+  )));
+  await assertSucceeds(getDocs(collection(db('platform-admin'), 'operations')));
+  await assertSucceeds(getDoc(doc(db('professional'), 'operations/operation-a')));
+  await assertFails(setDoc(doc(db('platform-admin'), 'operations/forged'), {
+    id: 'forged', status: 'active',
+  }));
+});
+
+test('RC3.5: one professional engages in two mobilizations without mixing quotas', async () => {
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'mobilizations/mobilization-b1'), {
+      id: 'mobilization-b1',
+      territoryId: 'gironde',
+      status: 'active',
+    });
+    await setDoc(doc(admin, 'missions/mission-a1'), mission({
+      id: 'mission-a1',
+      mobilizationId: activeMobilizationId,
+    }));
+    await setDoc(doc(admin, 'missions/mission-b1'), mission({
+      id: 'mission-b1',
+      mobilizationId: 'mobilization-b1',
+    }));
+  });
+
+  await assertSucceeds(engageMission(
+    'professional',
+    'mission-a1',
+    activeMobilizationId,
+  ));
+  await assertSucceeds(engageMission(
+    'professional',
+    'mission-b1',
+    'mobilization-b1',
+  ));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    assert.equal(
+      (await getDoc(doc(admin, 'missions/mission-a1'))).data().registeredMk,
+      1,
+    );
+    assert.equal(
+      (await getDoc(doc(admin, 'missions/mission-b1'))).data().registeredMk,
+      1,
+    );
+    assert.equal(
+      (await getDoc(doc(
+        admin,
+        'engagements/mission-a1_professional',
+      ))).data().mobilizationId,
+      activeMobilizationId,
+    );
+    assert.equal(
+      (await getDoc(doc(
+        admin,
+        'engagements/mission-b1_professional',
+      ))).data().mobilizationId,
+      'mobilization-b1',
+    );
+  });
 });

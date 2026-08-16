@@ -46,7 +46,20 @@ async function createUser(roleDocument) {
   const email = `${uid}@example.test`;
   const password = 'Test-only-password-42!';
   await adminAuth.createUser({uid, email, password});
-  if (roleDocument) await db.collection('roles').doc(uid).set(roleDocument);
+  if (roleDocument) {
+    await db.collection('roles').doc(uid).set(roleDocument);
+    const roles = roleDocument.roles ?? [roleDocument.role];
+    if (roleDocument.active === true && roles.includes('coordinator')) {
+      await db.collection('mobilizationAssignments')
+        .doc(`${activeMobilizationId}_${uid}`)
+        .set({
+          uid,
+          mobilizationId: activeMobilizationId,
+          role: 'coordinator',
+          active: true,
+        });
+    }
+  }
   return {uid, email, password};
 }
 
