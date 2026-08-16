@@ -242,14 +242,7 @@ class _OperationalTerritoryMapState extends State<OperationalTerritoryMap>
   }
 }
 
-int _markerLayer(CockpitMapPoint point) {
-  if (!point.hasMission) return 0;
-  return switch (point.status) {
-    TerritoryOperationalStatus.stable => 1,
-    TerritoryOperationalStatus.watch => 2,
-    TerritoryOperationalStatus.critical => 3,
-  };
-}
+int _markerLayer(CockpitMapPoint point) => point.visualPriority;
 
 class _MapMarker extends StatelessWidget {
   const _MapMarker({
@@ -344,60 +337,85 @@ class _OperationalMarker extends StatelessWidget {
     final markerColor = point.hasMission
         ? territoryStatusColor(point.status, colors)
         : colors.textSecondary.withValues(alpha: 0.62);
-    final visualSize = (point.hasMission ? 30.0 : 10.0) / mapScale;
-    final selectedSize = 40 / mapScale;
-    return Center(
-      child: AnimatedContainer(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 140),
-        width: isSelected ? selectedSize : visualSize,
-        height: isSelected ? selectedSize : visualSize,
-        padding: EdgeInsets.all(isSelected ? 4 / mapScale : 0),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? markerColor.withValues(alpha: 0.18)
-              : Colors.transparent,
-          shape: BoxShape.circle,
-          border: isSelected
-              ? Border.all(color: markerColor, width: 2 / mapScale)
-              : null,
-        ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: markerColor,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: colors.surfaceElevated,
-              width: 2 / mapScale,
+    final visualSize = point.visualDiameter / mapScale;
+    final selectedSize = (point.visualDiameter + 8).clamp(40, 44) / mapScale;
+    final badgeOffset =
+        ((44 - point.visualDiameter) / 2 - 5).clamp(0, 44) / mapScale;
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 140);
+    return SizedBox.square(
+      dimension: 44 / mapScale,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          AnimatedContainer(
+            duration: duration,
+            width: isSelected ? selectedSize : visualSize,
+            height: isSelected ? selectedSize : visualSize,
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? markerColor.withValues(alpha: 0.18)
+                  : Colors.transparent,
+              shape: BoxShape.circle,
+              border: isSelected
+                  ? Border.all(color: markerColor, width: 2 / mapScale)
+                  : null,
             ),
-            boxShadow: point.hasMission ? V5Elevation.level1(colors) : null,
+            child: Center(
+              child: AnimatedContainer(
+                key: Key('cockpit-map-point-${point.location.id}'),
+                duration: duration,
+                width: visualSize,
+                height: visualSize,
+                decoration: BoxDecoration(
+                  color: markerColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: colors.surfaceElevated,
+                    width: 2 / mapScale,
+                  ),
+                  boxShadow: point.hasMission
+                      ? V5Elevation.level1(colors)
+                      : null,
+                ),
+                child: point.hasMission
+                    ? Icon(
+                        Icons.local_hospital_rounded,
+                        color: Colors.white,
+                        size: 14 / mapScale,
+                      )
+                    : null,
+              ),
+            ),
           ),
-          child: point.hasMission
-              ? Center(
-                  child: point.missionCount > 1
-                      ? Text(
-                          '${point.missionCount}',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                fontSize:
-                                    (Theme.of(
-                                          context,
-                                        ).textTheme.labelSmall?.fontSize ??
-                                        11) /
-                                    mapScale,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        )
-                      : Icon(
-                          Icons.local_hospital_rounded,
-                          color: Colors.white,
-                          size: 15 / mapScale,
-                        ),
-                )
-              : null,
-        ),
+          if (point.showsMissionBadge)
+            Positioned(
+              top: badgeOffset,
+              right: badgeOffset,
+              child: Container(
+                key: Key('cockpit-map-badge-${point.location.id}'),
+                width: 17 / mapScale,
+                height: 17 / mapScale,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: colors.surfaceElevated,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: markerColor, width: 1.5 / mapScale),
+                ),
+                child: Text(
+                  '${point.missionCount}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontSize: 9 / mapScale,
+                    height: 1,
+                    color: markerColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -564,13 +582,22 @@ class _SelectedLocationCard extends StatelessWidget {
               ],
             ),
             if (!point.hasMission)
-              Text(
-                'Aucune mission active',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _LocationStatusLabel(point: point, color: statusColor),
+                  const SizedBox(height: V5Spacing.xxs),
+                  Text(
+                    'Aucune mission active',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
               )
             else ...[
+              _LocationStatusLabel(point: point, color: statusColor),
+              const SizedBox(height: V5Spacing.xxs),
               Text(
                 '$missionLabel · ${point.coveragePercent} % de couverture',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -581,7 +608,9 @@ class _SelectedLocationCard extends StatelessWidget {
               if (point.nextDeadlineLabel != null) ...[
                 const SizedBox(height: V5Spacing.xxs),
                 Text(
-                  'Prochaine échéance · ${point.nextDeadlineLabel}',
+                  'Prochaine échéance · '
+                  '${point.nextDeadlineHorizon?.label ?? 'Plus tard'} · '
+                  '${point.nextDeadlineLabel}',
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
@@ -620,6 +649,25 @@ class _SelectedLocationCard extends StatelessWidget {
   }
 }
 
+class _LocationStatusLabel extends StatelessWidget {
+  const _LocationStatusLabel({required this.point, required this.color});
+
+  final CockpitMapPoint point;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      point.operationalStateLabel,
+      key: const Key('cockpit-map-selected-location-status'),
+      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+        color: color,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
 class _MapLegend extends StatelessWidget {
   const _MapLegend({super.key});
 
@@ -640,7 +688,8 @@ class _MapLegend extends StatelessWidget {
     ];
     return Semantics(
       label:
-          'Légende. Rouge : critique. Orange : à surveiller. Vert : couvert.',
+          'Légende. Rouge : critique. Orange : à surveiller. '
+          'Vert : couvert. Gris : aucune mission active.',
       child: ExcludeSemantics(
         child: Container(
           padding: const EdgeInsets.symmetric(

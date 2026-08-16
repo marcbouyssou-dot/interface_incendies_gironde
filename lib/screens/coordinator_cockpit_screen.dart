@@ -112,7 +112,7 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
   }
 }
 
-class _CockpitContent extends StatelessWidget {
+class _CockpitContent extends StatefulWidget {
   const _CockpitContent({
     required this.cockpit,
     required this.onViewMission,
@@ -126,8 +126,16 @@ class _CockpitContent extends StatelessWidget {
   final VoidCallback onCreateNeed;
 
   @override
+  State<_CockpitContent> createState() => _CockpitContentState();
+}
+
+class _CockpitContentState extends State<_CockpitContent> {
+  CockpitFilter _filter = CockpitFilter.all;
+
+  @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final filteredCockpit = widget.cockpit.filteredBy(_filter);
     return ColoredBox(
       color: colors.canvas,
       child: LayoutBuilder(
@@ -149,42 +157,112 @@ class _CockpitContent extends StatelessWidget {
                 ),
                 sliver: SliverList.list(
                   children: [
-                    _CockpitHeader(cockpit: cockpit),
+                    _CockpitHeader(cockpit: widget.cockpit),
+                    const SizedBox(height: V5Spacing.lg),
+                    _CockpitFilters(
+                      selected: _filter,
+                      onSelected: (filter) => setState(() => _filter = filter),
+                    ),
                     const SizedBox(height: V5Spacing.xl),
                     OperationalTerritoryMap(
-                      points: cockpit.mapPoints,
-                      locationCount: cockpit.locationCount,
-                      missionCount: cockpit.missionCount,
-                      tensionCount: cockpit.tensionCount,
-                      onViewLocation: onViewLocation,
+                      points: filteredCockpit.mapPoints,
+                      locationCount: filteredCockpit.locationCount,
+                      missionCount: filteredCockpit.missionCount,
+                      tensionCount: filteredCockpit.tensionCount,
+                      onViewLocation: widget.onViewLocation,
                       height: mapHeight,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
                     _PrioritySection(
-                      priorities: cockpit.priorities,
-                      onViewMission: onViewMission,
+                      priorities: filteredCockpit.priorities,
+                      filter: _filter,
+                      onViewMission: widget.onViewMission,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
                     _AlertsSection(
-                      alerts: cockpit.alerts,
-                      onViewMission: onViewMission,
+                      alerts: widget.cockpit.alerts,
+                      onViewMission: widget.onViewMission,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
-                    _OperationalSummary(cockpit: cockpit),
+                    _OperationalSummary(cockpit: filteredCockpit),
                     const SizedBox(height: V5Spacing.xxl),
                     _RecentActivitySection(
-                      activity: cockpit.recentActivity,
-                      onViewMission: onViewMission,
+                      activity: widget.cockpit.recentActivity,
+                      onViewMission: widget.onViewMission,
                     ),
                     const SizedBox(height: V5Spacing.xxl),
                     _QuickActions(
-                      primaryMission: cockpit.priorities.firstOrNull?.mission,
-                      onViewMission: onViewMission,
-                      onCreateNeed: onCreateNeed,
+                      primaryMission:
+                          filteredCockpit.priorities.firstOrNull?.mission,
+                      onViewMission: widget.onViewMission,
+                      onCreateNeed: widget.onCreateNeed,
                     ),
                   ],
                 ),
               ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CockpitFilters extends StatelessWidget {
+  const _CockpitFilters({required this.selected, required this.onSelected});
+
+  final CockpitFilter selected;
+  final ValueChanged<CockpitFilter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Semantics(
+      container: true,
+      label: 'Filtres rapides du cockpit',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final textScale = MediaQuery.textScalerOf(context).scale(1);
+          final columns = textScale >= 1.6
+              ? 1
+              : constraints.maxWidth >= 620
+              ? 4
+              : 2;
+          final itemWidth =
+              (constraints.maxWidth - V5Spacing.xs * (columns - 1)) / columns;
+          return Wrap(
+            key: const Key('cockpit-filters'),
+            spacing: V5Spacing.xs,
+            runSpacing: V5Spacing.xs,
+            children: [
+              for (final filter in CockpitFilter.values)
+                SizedBox(
+                  width: itemWidth,
+                  height: textScale >= 1.6 ? null : 44,
+                  child: ChoiceChip(
+                    key: Key('cockpit-filter-${filter.name}'),
+                    label: SizedBox(
+                      width: double.infinity,
+                      child: Text(filter.label, textAlign: TextAlign.center),
+                    ),
+                    selected: selected == filter,
+                    onSelected: (_) => onSelected(filter),
+                    showCheckmark: true,
+                    selectedColor: colors.infoContainer,
+                    side: BorderSide(
+                      color: selected == filter ? colors.info : colors.outline,
+                    ),
+                    labelStyle: Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(
+                          color: colors.textPrimary,
+                          fontWeight: selected == filter
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
             ],
           );
         },
@@ -259,10 +337,12 @@ class _CockpitHeader extends StatelessWidget {
 class _PrioritySection extends StatelessWidget {
   const _PrioritySection({
     required this.priorities,
+    required this.filter,
     required this.onViewMission,
   });
 
   final List<CockpitPriority> priorities;
+  final CockpitFilter filter;
   final ValueChanged<CoordinationNeed> onViewMission;
 
   @override
@@ -297,7 +377,7 @@ class _PrioritySection extends StatelessWidget {
           ),
         const SizedBox(height: V5Spacing.sm),
         if (priorities.isEmpty)
-          const _NoPriority()
+          _NoPriority(filter: filter)
         else
           for (var index = 0; index < priorities.length; index++) ...[
             _PriorityCard(
@@ -334,7 +414,9 @@ class _PriorityCard extends StatelessWidget {
     final stack = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
     final details = Semantics(
       label:
-          '${priority.locationLabel}. ${priority.needLabel}. ${priority.timingLabel}.',
+          '${priority.locationLabel}. ${priority.needLabel}. '
+          '${priority.coverageLabel}. ${priority.timingLabel}. '
+          'Échéance ${priority.timeHorizon.label}.',
       child: ExcludeSemantics(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,17 +433,33 @@ class _PriorityCard extends StatelessWidget {
                   ),
                   const SizedBox(height: V5Spacing.xxs),
                   Text(
-                    priority.needLabel,
+                    priority.operationalDetailLabel,
+                    key: Key('cockpit-priority-$index-detail'),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: colors.textPrimary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    priority.timingLabel,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.textSecondary,
+                  const SizedBox(height: V5Spacing.xs),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      key: Key('cockpit-priority-$index-horizon'),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: V5Spacing.xs,
+                        vertical: V5Spacing.xxs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(V5Radius.pill),
+                      ),
+                      child: Text(
+                        priority.timeHorizon.label,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -415,13 +513,22 @@ class _PriorityCard extends StatelessWidget {
 }
 
 class _NoPriority extends StatelessWidget {
-  const _NoPriority();
+  const _NoPriority({required this.filter});
+
+  final CockpitFilter filter;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final isUnfiltered = filter == CockpitFilter.all;
+    final title = isUnfiltered
+        ? 'Aucune action urgente'
+        : 'Aucune tension pour ce filtre';
+    final detail = isUnfiltered
+        ? 'Le territoire est actuellement couvert.'
+        : 'Aucune mission ne nécessite une action dans cette vue.';
     return Semantics(
-      label: 'Aucune action urgente. Le territoire est actuellement couvert.',
+      label: '$title. $detail',
       child: ExcludeSemantics(
         child: Container(
           width: double.infinity,
@@ -440,7 +547,7 @@ class _NoPriority extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Aucune action urgente',
+                      title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: colors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -448,7 +555,7 @@ class _NoPriority extends StatelessWidget {
                     ),
                     const SizedBox(height: V5Spacing.xxs),
                     Text(
-                      'Le territoire est actuellement couvert.',
+                      detail,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.textSecondary,
                       ),
@@ -616,13 +723,17 @@ class _OperationalSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final metrics = [
-      ('missions couvertes', '${cockpit.coveragePercent} %'),
+      (
+        cockpit.missionCount == 1 ? 'mission active' : 'missions actives',
+        '${cockpit.missionCount}',
+      ),
       (
         cockpit.criticalMissions == 1
             ? 'mission critique'
             : 'missions critiques',
         '${cockpit.criticalMissions}',
       ),
+      ('couverture globale', '${cockpit.coveragePercent} %'),
       ('profession la plus tendue', cockpit.mostNeededProfession),
     ];
     final stack = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
@@ -635,27 +746,31 @@ class _OperationalSummary extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: V5Spacing.sm),
-        if (stack)
-          for (var index = 0; index < metrics.length; index++) ...[
-            _MetricCard(label: metrics[index].$1, value: metrics[index].$2),
-            if (index < metrics.length - 1)
-              const SizedBox(height: V5Spacing.sm),
-          ]
-        else
-          Row(
-            children: [
-              for (var index = 0; index < metrics.length; index++) ...[
-                Expanded(
-                  child: _MetricCard(
-                    label: metrics[index].$1,
-                    value: metrics[index].$2,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = stack
+                ? 1
+                : constraints.maxWidth >= 640
+                ? 4
+                : 2;
+            final cardWidth =
+                (constraints.maxWidth - V5Spacing.sm * (columns - 1)) / columns;
+            return Wrap(
+              spacing: V5Spacing.sm,
+              runSpacing: V5Spacing.sm,
+              children: [
+                for (var index = 0; index < metrics.length; index++)
+                  SizedBox(
+                    width: cardWidth,
+                    child: _MetricCard(
+                      label: metrics[index].$1,
+                      value: metrics[index].$2,
+                    ),
                   ),
-                ),
-                if (index < metrics.length - 1)
-                  const SizedBox(width: V5Spacing.sm),
               ],
-            ],
-          ),
+            );
+          },
+        ),
       ],
     );
   }

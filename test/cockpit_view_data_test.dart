@@ -22,6 +22,22 @@ void main() {
     activeNeeds: 1,
     structuredAddress: LocationAddress(latitude: 44.55, longitude: -0.25),
   );
+  const arcachon = ResponsePlace(
+    id: 'arcachon',
+    name: 'Arcachon',
+    type: ResponsePlaceType.sdisStation,
+    group: TerritorialGroup.southBasin,
+    activeNeeds: 1,
+    structuredAddress: LocationAddress(latitude: 44.65, longitude: -1.15),
+  );
+  const blaye = ResponsePlace(
+    id: 'blaye',
+    name: 'Blaye',
+    type: ResponsePlaceType.sdisStation,
+    group: TerritorialGroup.hauteGironde,
+    activeNeeds: 0,
+    structuredAddress: LocationAddress(latitude: 45.13, longitude: -0.66),
+  );
 
   CoordinationNeed mission({
     required String id,
@@ -61,113 +77,121 @@ void main() {
     ),
   );
 
-  test(
-    'cockpit ranks tensions and derives only the three requested metrics',
-    () {
-      final now = DateTime(2026, 8, 15, 10);
-      final view = CoordinatorCockpitViewData.from(
-        now: now,
-        locations: const [merignac, langon],
-        missions: [
-          mission(
-            id: 'critical-mk',
-            location: merignac,
-            required: const {HealthProfessionId.physiotherapist: 3},
-            registered: const {HealthProfessionId.physiotherapist: 0},
-            startAt: now.add(const Duration(hours: 2)),
-          ),
-          mission(
-            id: 'watch-ide',
-            location: langon,
-            required: const {HealthProfessionId.nurse: 2},
-            registered: const {HealthProfessionId.nurse: 1},
-            startAt: now.add(const Duration(hours: 4)),
-          ),
-          mission(
-            id: 'covered',
-            location: merignac,
-            required: const {HealthProfessionId.physician: 1},
-            registered: const {HealthProfessionId.physician: 1},
-            startAt: now.add(const Duration(hours: 6)),
-          ),
-          mission(
-            id: 'cancelled',
-            location: langon,
-            required: const {HealthProfessionId.physician: 4},
-            registered: const {HealthProfessionId.physician: 0},
-            startAt: now.add(const Duration(hours: 1)),
-            isCancelled: true,
-          ),
-        ],
-      );
+  test('cockpit ranks tensions and derives the operational metrics', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final view = CoordinatorCockpitViewData.from(
+      now: now,
+      locations: const [merignac, langon],
+      missions: [
+        mission(
+          id: 'critical-mk',
+          location: merignac,
+          required: const {HealthProfessionId.physiotherapist: 3},
+          registered: const {HealthProfessionId.physiotherapist: 0},
+          startAt: now.add(const Duration(hours: 2)),
+        ),
+        mission(
+          id: 'watch-ide',
+          location: langon,
+          required: const {HealthProfessionId.nurse: 2},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(hours: 4)),
+        ),
+        mission(
+          id: 'covered',
+          location: merignac,
+          required: const {HealthProfessionId.physician: 1},
+          registered: const {HealthProfessionId.physician: 1},
+          startAt: now.add(const Duration(hours: 6)),
+        ),
+        mission(
+          id: 'cancelled',
+          location: langon,
+          required: const {HealthProfessionId.physician: 4},
+          registered: const {HealthProfessionId.physician: 0},
+          startAt: now.add(const Duration(hours: 1)),
+          isCancelled: true,
+        ),
+      ],
+    );
 
-      expect(view.globalStatus, TerritoryOperationalStatus.critical);
-      expect(view.globalStateLabel, 'Situation critique');
-      expect(view.priorities.map((priority) => priority.mission.id), [
-        'critical-mk',
-        'watch-ide',
-      ]);
-      expect(view.priorities.first.needLabel, 'MK · 3 manquants');
-      expect(view.priorities.first.timingLabel, 'Début dans 2 h');
-      expect(view.coveragePercent, 33);
-      expect(view.criticalMissions, 1);
-      expect(view.mostNeededProfession, 'MK');
-      expect(view.mapPoints, hasLength(2));
-      expect(view.locationCount, 2);
-      expect(view.missionCount, 3);
-      expect(view.tensionCount, 2);
-      expect(view.refreshedAtLabel, '10 h 00');
-      expect(view.alerts.map((alert) => alert.mission.id), [
-        'critical-mk',
-        'watch-ide',
-      ]);
-      expect(view.alerts.first.level, CockpitAlertLevel.urgent);
-      expect(view.alerts.first.kind, CockpitAlertKind.critical);
-      expect(view.alerts.last.level, CockpitAlertLevel.watch);
-      expect(view.alerts.last.kind, CockpitAlertKind.incompleteSoon);
-      expect(
-        view.mapPoints.singleWhere((point) => point.location == merignac),
-        isA<CockpitMapPoint>()
-            .having(
-              (point) => point.status,
-              'status',
-              TerritoryOperationalStatus.critical,
-            )
-            .having(
-              (point) => point.primaryMission?.id,
-              'primary mission',
-              'critical-mk',
-            )
-            .having((point) => point.missionCount, 'mission count', 2)
-            .having((point) => point.coveragePercent, 'coverage', 25)
-            .having((point) => point.tensionCount, 'tensions', 1)
-            .having(
-              (point) => point.criticalMissionCount,
-              'critical missions',
-              1,
-            )
-            .having(
-              (point) => point.nextDeadlineLabel,
-              'next deadline',
-              'Début dans 2 h',
-            )
-            .having(
-              (point) => point.mostNeededProfession,
-              'profession in tension',
-              'MK',
-            )
-            .having(
-              (point) => point.accessibilityLabel,
-              'accessibility label',
-              'Centre de Mérignac, 2 missions actives, 1 tension critique.',
-            ),
-      );
-      expect(
-        view.mapPoints.singleWhere((point) => point.location == langon).status,
-        TerritoryOperationalStatus.watch,
-      );
-    },
-  );
+    expect(view.globalStatus, TerritoryOperationalStatus.critical);
+    expect(view.globalStateLabel, 'Situation critique');
+    expect(view.priorities.map((priority) => priority.mission.id), [
+      'critical-mk',
+      'watch-ide',
+    ]);
+    expect(view.priorities.first.needLabel, 'MK · 3 manquants');
+    expect(view.priorities.first.coverageLabel, '0/3 couverts');
+    expect(
+      view.priorities.first.operationalDetailLabel,
+      'MK · 0/3 couverts · début dans 2 h',
+    );
+    expect(view.priorities.first.timingLabel, 'Début dans 2 h');
+    expect(view.priorities.first.timeHorizon, CockpitTimeHorizon.immediate);
+    expect(view.coveragePercent, 33);
+    expect(view.criticalMissions, 1);
+    expect(view.mostNeededProfession, 'MK');
+    expect(view.mapPoints, hasLength(2));
+    expect(view.locationCount, 2);
+    expect(view.missionCount, 3);
+    expect(view.tensionCount, 2);
+    expect(view.refreshedAtLabel, '10 h 00');
+    expect(view.alerts.map((alert) => alert.mission.id), [
+      'critical-mk',
+      'watch-ide',
+    ]);
+    expect(view.alerts.first.level, CockpitAlertLevel.urgent);
+    expect(view.alerts.first.kind, CockpitAlertKind.critical);
+    expect(view.alerts.last.level, CockpitAlertLevel.watch);
+    expect(view.alerts.last.kind, CockpitAlertKind.incompleteSoon);
+    expect(
+      view.mapPoints.singleWhere((point) => point.location == merignac),
+      isA<CockpitMapPoint>()
+          .having(
+            (point) => point.status,
+            'status',
+            TerritoryOperationalStatus.critical,
+          )
+          .having(
+            (point) => point.primaryMission?.id,
+            'primary mission',
+            'critical-mk',
+          )
+          .having((point) => point.missionCount, 'mission count', 2)
+          .having((point) => point.coveragePercent, 'coverage', 25)
+          .having((point) => point.tensionCount, 'tensions', 1)
+          .having((point) => point.criticalMissionCount, 'critical missions', 1)
+          .having(
+            (point) => point.nextDeadlineLabel,
+            'next deadline',
+            'Début dans 2 h',
+          )
+          .having(
+            (point) => point.nextDeadlineHorizon,
+            'next deadline horizon',
+            CockpitTimeHorizon.immediate,
+          )
+          .having((point) => point.showsMissionBadge, 'mission badge', isTrue)
+          .having((point) => point.visualDiameter, 'visual diameter', 29)
+          .having((point) => point.visualPriority, 'visual priority', 3)
+          .having(
+            (point) => point.mostNeededProfession,
+            'profession in tension',
+            'MK',
+          )
+          .having(
+            (point) => point.accessibilityLabel,
+            'accessibility label',
+            'Centre de Mérignac, état critique, 2 missions actives, '
+                '1 tension critique.',
+          ),
+    );
+    expect(
+      view.mapPoints.singleWhere((point) => point.location == langon).status,
+      TerritoryOperationalStatus.watch,
+    );
+  });
 
   test('empty operational territory is stable and fully covered', () {
     final view = CoordinatorCockpitViewData.from(
@@ -192,7 +216,7 @@ void main() {
     expect(view.mapPoints.single.mostNeededProfession, isNull);
     expect(
       view.mapPoints.single.accessibilityLabel,
-      'Centre de Mérignac, aucune mission active.',
+      'Centre de Mérignac, état sans mission, aucune mission active.',
     );
   });
 
@@ -215,6 +239,217 @@ void main() {
     expect(view.globalStatus, TerritoryOperationalStatus.watch);
     expect(view.globalStateLabel, 'Situation sous surveillance');
   });
+
+  test('centers expose their worst state, load and overlap priority', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final view = CoordinatorCockpitViewData.from(
+      now: now,
+      locations: const [merignac, langon, arcachon, blaye],
+      missions: [
+        mission(
+          id: 'critical',
+          location: merignac,
+          required: const {HealthProfessionId.physiotherapist: 3},
+          registered: const {HealthProfessionId.physiotherapist: 0},
+          startAt: now.add(const Duration(hours: 2)),
+        ),
+        mission(
+          id: 'covered-same-center',
+          location: merignac,
+          required: const {HealthProfessionId.nurse: 1},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(hours: 8)),
+        ),
+        mission(
+          id: 'watch',
+          location: langon,
+          required: const {HealthProfessionId.nurse: 2},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(hours: 7)),
+        ),
+        mission(
+          id: 'covered',
+          location: arcachon,
+          required: const {HealthProfessionId.physician: 1},
+          registered: const {HealthProfessionId.physician: 1},
+          startAt: now.add(const Duration(days: 1)),
+        ),
+      ],
+    );
+
+    final critical = view.mapPoints.singleWhere(
+      (point) => point.location == merignac,
+    );
+    final watch = view.mapPoints.singleWhere(
+      (point) => point.location == langon,
+    );
+    final covered = view.mapPoints.singleWhere(
+      (point) => point.location == arcachon,
+    );
+    final idle = view.mapPoints.singleWhere((point) => point.location == blaye);
+
+    expect(critical.status, TerritoryOperationalStatus.critical);
+    expect(critical.primaryMission?.id, 'critical');
+    expect(critical.operationalStateLabel, 'Critique');
+    expect(critical.missionCount, 2);
+    expect(critical.showsMissionBadge, isTrue);
+    expect(critical.visualDiameter, greaterThan(watch.visualDiameter));
+    expect(watch.status, TerritoryOperationalStatus.watch);
+    expect(watch.operationalStateLabel, 'À surveiller');
+    expect(covered.status, TerritoryOperationalStatus.stable);
+    expect(covered.operationalStateLabel, 'Couvert');
+    expect(idle.hasMission, isFalse);
+    expect(idle.operationalStateLabel, 'Sans mission');
+    final byLayer = [critical, watch, covered, idle]
+      ..sort(
+        (left, right) => left.visualPriority.compareTo(right.visualPriority),
+      );
+    expect(byLayer.map((point) => point.location.id), [
+      'blaye',
+      'arcachon',
+      'langon',
+      'merignac',
+    ]);
+  });
+
+  test('temporal horizons distinguish now, today, tomorrow and later', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final cases = <(Duration, CockpitTimeHorizon)>[
+      (const Duration(hours: 2), CockpitTimeHorizon.immediate),
+      (const Duration(hours: 8), CockpitTimeHorizon.within24Hours),
+      (const Duration(hours: 26), CockpitTimeHorizon.tomorrow),
+      (const Duration(hours: 50), CockpitTimeHorizon.later),
+    ];
+
+    for (final (offset, expected) in cases) {
+      final view = CoordinatorCockpitViewData.from(
+        now: now,
+        locations: const [langon],
+        missions: [
+          mission(
+            id: expected.name,
+            location: langon,
+            required: const {HealthProfessionId.nurse: 2},
+            registered: const {HealthProfessionId.nurse: 1},
+            startAt: now.add(offset),
+          ),
+        ],
+      );
+
+      expect(view.priorities.single.timeHorizon, expected);
+      expect(view.mapPoints.single.nextDeadlineHorizon, expected);
+    }
+    expect(CockpitTimeHorizon.values.map((horizon) => horizon.label), [
+      'Maintenant',
+      '< 24 h',
+      'Demain',
+      'Plus tard',
+    ]);
+  });
+
+  test('filters update map, priorities and summary from the same missions', () {
+    final now = DateTime(2026, 8, 15, 10);
+    final view = CoordinatorCockpitViewData.from(
+      now: now,
+      locations: const [merignac, langon, arcachon, blaye],
+      missions: [
+        mission(
+          id: 'critical',
+          location: merignac,
+          required: const {HealthProfessionId.physiotherapist: 3},
+          registered: const {HealthProfessionId.physiotherapist: 0},
+          startAt: now.add(const Duration(hours: 2)),
+        ),
+        mission(
+          id: 'watch',
+          location: langon,
+          required: const {HealthProfessionId.nurse: 2},
+          registered: const {HealthProfessionId.nurse: 1},
+          startAt: now.add(const Duration(hours: 8)),
+        ),
+        mission(
+          id: 'covered',
+          location: arcachon,
+          required: const {HealthProfessionId.physician: 1},
+          registered: const {HealthProfessionId.physician: 1},
+          startAt: now.add(const Duration(days: 1)),
+        ),
+      ],
+    );
+
+    final critical = view.filteredBy(CockpitFilter.critical);
+    expect(critical.mapPoints.map((point) => point.location.id), ['merignac']);
+    expect(critical.priorities.map((priority) => priority.mission.id), [
+      'critical',
+    ]);
+    expect(critical.missionCount, 1);
+    expect(critical.criticalMissions, 1);
+    expect(critical.coveragePercent, 0);
+
+    final watch = view.filteredBy(CockpitFilter.watch);
+    expect(watch.mapPoints.map((point) => point.location.id), ['langon']);
+    expect(watch.priorities.map((priority) => priority.mission.id), ['watch']);
+    expect(watch.coveragePercent, 50);
+
+    final covered = view.filteredBy(CockpitFilter.covered);
+    expect(covered.mapPoints.map((point) => point.location.id), ['arcachon']);
+    expect(covered.priorities, isEmpty);
+    expect(covered.missionCount, 1);
+    expect(covered.criticalMissions, 0);
+    expect(covered.coveragePercent, 100);
+    expect(covered.mostNeededProfession, 'Aucune tension');
+
+    expect(view.filteredBy(CockpitFilter.all), same(view));
+    expect(view.mapPoints, hasLength(4));
+  });
+
+  test(
+    'priority list is severity-first, chronological and limited to three',
+    () {
+      final now = DateTime(2026, 8, 15, 10);
+      final view = CoordinatorCockpitViewData.from(
+        now: now,
+        locations: const [merignac, langon],
+        missions: [
+          mission(
+            id: 'watch-soon',
+            location: langon,
+            required: const {HealthProfessionId.nurse: 2},
+            registered: const {HealthProfessionId.nurse: 1},
+            startAt: now.add(const Duration(minutes: 30)),
+          ),
+          mission(
+            id: 'critical-later',
+            location: merignac,
+            required: const {HealthProfessionId.physiotherapist: 3},
+            registered: const {HealthProfessionId.physiotherapist: 0},
+            startAt: now.add(const Duration(hours: 3)),
+          ),
+          mission(
+            id: 'critical-soon',
+            location: langon,
+            required: const {HealthProfessionId.physician: 2},
+            registered: const {HealthProfessionId.physician: 0},
+            startAt: now.add(const Duration(hours: 1)),
+          ),
+          mission(
+            id: 'watch-later',
+            location: merignac,
+            required: const {HealthProfessionId.nurse: 4},
+            registered: const {HealthProfessionId.nurse: 2},
+            startAt: now.add(const Duration(hours: 4)),
+          ),
+        ],
+      );
+
+      expect(view.priorities, hasLength(3));
+      expect(view.priorities.map((priority) => priority.mission.id), [
+        'critical-soon',
+        'critical-later',
+        'watch-soon',
+      ]);
+    },
+  );
 
   test('alerts are deduplicated, ordered and limited to three', () {
     final now = DateTime(2026, 8, 15, 10);

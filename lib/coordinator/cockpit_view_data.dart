@@ -3,6 +3,35 @@ import '../models/need.dart';
 import '../models/profession_quotas.dart';
 import 'territory_view_data.dart';
 
+enum CockpitFilter { all, critical, watch, covered }
+
+extension CockpitFilterPresentation on CockpitFilter {
+  String get label => switch (this) {
+    CockpitFilter.all => 'Toutes',
+    CockpitFilter.critical => 'Critiques',
+    CockpitFilter.watch => 'À surveiller',
+    CockpitFilter.covered => 'Couvertes',
+  };
+
+  bool includes(CoordinationNeed mission) => switch (this) {
+    CockpitFilter.all => true,
+    CockpitFilter.critical => mission.status == NeedStatus.critical,
+    CockpitFilter.watch => mission.status == NeedStatus.toComplete,
+    CockpitFilter.covered => mission.status == NeedStatus.complete,
+  };
+}
+
+enum CockpitTimeHorizon { immediate, within24Hours, tomorrow, later }
+
+extension CockpitTimeHorizonPresentation on CockpitTimeHorizon {
+  String get label => switch (this) {
+    CockpitTimeHorizon.immediate => 'Maintenant',
+    CockpitTimeHorizon.within24Hours => '< 24 h',
+    CockpitTimeHorizon.tomorrow => 'Demain',
+    CockpitTimeHorizon.later => 'Plus tard',
+  };
+}
+
 class CockpitMapPoint {
   const CockpitMapPoint({
     required this.location,
@@ -15,6 +44,7 @@ class CockpitMapPoint {
     required this.tensionCount,
     required this.criticalMissionCount,
     required this.nextDeadlineLabel,
+    required this.nextDeadlineHorizon,
     required this.mostNeededProfession,
   });
 
@@ -28,15 +58,47 @@ class CockpitMapPoint {
   final int tensionCount;
   final int criticalMissionCount;
   final String? nextDeadlineLabel;
+  final CockpitTimeHorizon? nextDeadlineHorizon;
   final String? mostNeededProfession;
 
   bool get hasMission => missionCount > 0;
+  bool get showsMissionBadge => missionCount > 1;
+
+  int get visualPriority {
+    if (!hasMission) return 0;
+    return switch (status) {
+      TerritoryOperationalStatus.stable => 1,
+      TerritoryOperationalStatus.watch => 2,
+      TerritoryOperationalStatus.critical => 3,
+    };
+  }
+
+  double get visualDiameter {
+    if (!hasMission) return 10;
+    return switch (missionCount) {
+      1 => 26,
+      2 => 29,
+      3 => 32,
+      _ => 35,
+    };
+  }
+
+  String get operationalStateLabel {
+    if (!hasMission) return 'Sans mission';
+    return switch (status) {
+      TerritoryOperationalStatus.stable => 'Couvert',
+      TerritoryOperationalStatus.watch => 'À surveiller',
+      TerritoryOperationalStatus.critical => 'Critique',
+    };
+  }
 
   String get accessibilityLabel {
     final centerName = location.name.toLowerCase().startsWith('centre ')
         ? location.name
         : 'Centre de ${location.name}';
-    if (!hasMission) return '$centerName, aucune mission active.';
+    if (!hasMission) {
+      return '$centerName, état sans mission, aucune mission active.';
+    }
     final missionsLabel = missionCount == 1
         ? '1 mission active'
         : '$missionCount missions actives';
@@ -49,7 +111,8 @@ class CockpitMapPoint {
               ? '1 tension à surveiller'
               : '$tensionCount tensions à surveiller'
         : 'couvert';
-    return '$centerName, $missionsLabel, $tensionLabel.';
+    return '$centerName, état ${operationalStateLabel.toLowerCase()}, '
+        '$missionsLabel, $tensionLabel.';
   }
 }
 
@@ -59,20 +122,27 @@ class CockpitPriority {
     required this.location,
     required this.professionLabel,
     required this.missingProfessionals,
+    required this.coverageLabel,
     required this.timingLabel,
+    required this.timeHorizon,
   });
 
   final CoordinationNeed mission;
   final ResponsePlace? location;
   final String professionLabel;
   final int missingProfessionals;
+  final String coverageLabel;
   final String timingLabel;
+  final CockpitTimeHorizon timeHorizon;
 
   String get locationLabel => location?.name ?? mission.place;
 
   String get needLabel => missingProfessionals == 1
       ? '$professionLabel manquant'
       : '$professionLabel · $missingProfessionals manquants';
+
+  String get operationalDetailLabel =>
+      '$professionLabel · $coverageLabel · ${_lowercaseInitial(timingLabel)}';
 }
 
 enum CockpitAlertLevel { urgent, watch, information }
@@ -147,17 +217,25 @@ class CoordinatorCockpitViewData {
     required this.criticalMissions,
     required this.mostNeededProfession,
     required this.refreshedAt,
-  });
+    required this.filter,
+    required List<CoordinationNeed> sourceMissions,
+    required List<ResponsePlace> sourceLocations,
+  }) : _sourceMissions = sourceMissions,
+       _sourceLocations = sourceLocations;
 
   factory CoordinatorCockpitViewData.from({
     required List<CoordinationNeed> missions,
     required List<ResponsePlace> locations,
     DateTime? now,
     String territoryName = 'Gironde',
+    CockpitFilter filter = CockpitFilter.all,
   }) {
     final reference = now ?? DateTime.now();
-    final activeMissions = missions
+    final allActiveMissions = missions
         .where((mission) => _isOperationallyActive(mission, reference))
+        .toList(growable: false);
+    final activeMissions = allActiveMissions
+        .where(filter.includes)
         .toList(growable: false);
     final enabledLocations = locations
         .where((location) => location.isEnabled)
@@ -196,7 +274,7 @@ class CoordinatorCockpitViewData {
           now: reference,
         ),
     ];
-    final mapPoints = <CockpitMapPoint>[
+    final allMapPoints = <CockpitMapPoint>[
       for (final location in enabledLocations)
         if (location.structuredAddress?.latitude != null &&
             location.structuredAddress?.longitude != null)
@@ -207,6 +285,9 @@ class CoordinatorCockpitViewData {
             now: reference,
           ),
     ];
+    final mapPoints = filter == CockpitFilter.all
+        ? allMapPoints
+        : allMapPoints.where((point) => point.hasMission).toList();
     final alerts = _alertsFor(
       missions: missions,
       activeMissions: activeMissions,
@@ -231,7 +312,9 @@ class CoordinatorCockpitViewData {
       priorities: priorities,
       alerts: alerts,
       recentActivity: recentActivity,
-      locationCount: enabledLocations.length,
+      locationCount: filter == CockpitFilter.all
+          ? enabledLocations.length
+          : mapPoints.length,
       missionCount: activeMissions.length,
       tensionCount: tensions.length,
       globalCoverage: totalQuotas.coverage,
@@ -243,6 +326,9 @@ class CoordinatorCockpitViewData {
                 )?.shortLabel ??
                 missingQuotas.first.professionId,
       refreshedAt: reference,
+      filter: filter,
+      sourceMissions: missions,
+      sourceLocations: locations,
     );
   }
 
@@ -260,8 +346,22 @@ class CoordinatorCockpitViewData {
   final int criticalMissions;
   final String mostNeededProfession;
   final DateTime refreshedAt;
+  final CockpitFilter filter;
+  final List<CoordinationNeed> _sourceMissions;
+  final List<ResponsePlace> _sourceLocations;
 
   int get coveragePercent => (globalCoverage * 100).round();
+
+  CoordinatorCockpitViewData filteredBy(CockpitFilter nextFilter) {
+    if (filter == nextFilter) return this;
+    return CoordinatorCockpitViewData.from(
+      missions: _sourceMissions,
+      locations: _sourceLocations,
+      now: refreshedAt,
+      territoryName: territoryName,
+      filter: nextFilter,
+    );
+  }
 
   String get refreshedAtLabel {
     final hour = refreshedAt.hour.toString().padLeft(2, '0');
@@ -472,8 +572,34 @@ CockpitPriority _priorityFor({
     location: location,
     professionLabel: profession?.shortLabel ?? primary.professionId,
     missingProfessionals: primary.missing,
+    coverageLabel:
+        '${mission.registeredPeople}/${mission.requiredPeople} couverts',
     timingLabel: _timingLabel(mission, now),
+    timeHorizon: _timeHorizon(mission.startAt, now),
   );
+}
+
+CockpitTimeHorizon _timeHorizon(DateTime? startAt, DateTime now) {
+  if (startAt == null) return CockpitTimeHorizon.later;
+  final remaining = startAt.difference(now);
+  if (remaining.isNegative || remaining < const Duration(hours: 6)) {
+    return CockpitTimeHorizon.immediate;
+  }
+  if (_isSameDay(startAt, now)) return CockpitTimeHorizon.within24Hours;
+  if (_isSameDay(startAt, now.add(const Duration(days: 1)))) {
+    return CockpitTimeHorizon.tomorrow;
+  }
+  return CockpitTimeHorizon.later;
+}
+
+bool _isSameDay(DateTime left, DateTime right) =>
+    left.year == right.year &&
+    left.month == right.month &&
+    left.day == right.day;
+
+String _lowercaseInitial(String value) {
+  if (value.isEmpty) return value;
+  return '${value[0].toLowerCase()}${value.substring(1)}';
 }
 
 String _timingLabel(CoordinationNeed mission, DateTime now) {
@@ -536,6 +662,7 @@ CockpitMapPoint _mapPointFor({
       : locationMissions.any((mission) => mission.status != NeedStatus.complete)
       ? TerritoryOperationalStatus.watch
       : TerritoryOperationalStatus.stable;
+  final nextMission = chronologicalMissions.firstOrNull;
   return CockpitMapPoint(
     location: location,
     latitude: location.structuredAddress!.latitude!,
@@ -546,9 +673,12 @@ CockpitMapPoint _mapPointFor({
     coveragePercent: (quotas.coverage * 100).round(),
     tensionCount: tensionMissions.length,
     criticalMissionCount: criticalMissionCount,
-    nextDeadlineLabel: chronologicalMissions.firstOrNull == null
+    nextDeadlineLabel: nextMission == null
         ? null
-        : _timingLabel(chronologicalMissions.first, now),
+        : _timingLabel(nextMission, now),
+    nextDeadlineHorizon: nextMission == null
+        ? null
+        : _timeHorizon(nextMission.startAt, now),
     mostNeededProfession: missingQuotas.firstOrNull == null
         ? null
         : HealthProfessionRegistry.byId(
