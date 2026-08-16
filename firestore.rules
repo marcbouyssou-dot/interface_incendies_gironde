@@ -969,14 +969,21 @@ service cloud.firestore {
     }
 
     match /pushSubscriptions/{subscriptionId} {
-      allow get, list: if isSignedIn()
-        && resource.data.uid == request.auth.uid;
+      allow get: if isSignedIn()
+        && ((!exists(
+              /databases/$(database)/documents/pushSubscriptions/$(subscriptionId)
+            )
+            && subscriptionId.matches('^' + request.auth.uid + '_.+$'))
+          || resource.data.uid == request.auth.uid);
+      allow list: if false;
       allow create: if isSignedIn()
         && request.resource.data.keys().hasOnly([
           'uid', 'installationId', 'token', 'platform', 'active',
           'lastUsedAt', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.uid == request.auth.uid
+        && subscriptionId == request.auth.uid + '_'
+          + request.resource.data.installationId
         && isNonBlankCanonicalText(request.resource.data.installationId)
         && request.resource.data.installationId.size() <= 160
         && isNonBlankCanonicalText(request.resource.data.token)
@@ -989,6 +996,8 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == request.auth.uid
+        && subscriptionId == request.auth.uid + '_'
+          + resource.data.installationId
         && request.resource.data.installationId == resource.data.installationId
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([

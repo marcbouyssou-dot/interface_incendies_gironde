@@ -81,6 +81,59 @@ void main() {
     expect(find.text('Notifications activées'), findsOneWidget);
   });
 
+  testWidgets(
+    'failed persistence stays incomplete, leaks no token and retry succeeds',
+    (tester) async {
+      const token = 'secret-fcm-token-must-stay-private';
+      final logs = <String>[];
+      final previousDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+      addTearDown(() => debugPrint = previousDebugPrint);
+      final repository = _FlakyPushRepository(failuresBeforeSuccess: 1);
+      final gateway = _FakePushGateway(token: token);
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(repository.registrationCalls, 1);
+      expect(find.text('Activation incomplète'), findsOneWidget);
+      expect(find.text('Notifications activées'), findsNothing);
+      expect(find.text('Réessayer'), findsOneWidget);
+      expect(find.textContaining(token), findsNothing);
+      expect(logs.where((message) => message.contains(token)), isEmpty);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(repository.registrationCalls, 2);
+      expect(repository.pushSubscriptions.keys, contains('device-test'));
+      expect(find.text('Notifications activées'), findsOneWidget);
+      expect(find.text('Activation incomplète'), findsNothing);
+      expect(find.textContaining(token), findsNothing);
+      expect(logs.where((message) => message.contains(token)), isEmpty);
+      debugPrint = previousDebugPrint;
+    },
+  );
+
+  testWidgets('granted permission alone is not a persisted activation', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository();
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: _FakePushGateway(permission: PushPermissionState.granted),
+    );
+
+    expect(repository.pushSubscriptions, isEmpty);
+    expect(find.text('Activation incomplète'), findsOneWidget);
+    expect(find.text('Notifications activées'), findsNothing);
+    expect(find.text('Réessayer'), findsOneWidget);
+  });
+
   testWidgets('Plus tard dismisses the consent explanation without prompting', (
     tester,
   ) async {
@@ -253,10 +306,12 @@ class _FakePushGateway implements PushNotificationGateway {
   _FakePushGateway({
     this.permission = PushPermissionState.prompt,
     this.activationState = PushPermissionState.granted,
+    this.token = 'token-test',
   });
 
   PushPermissionState permission;
   final PushPermissionState activationState;
+  final String token;
   int activationCalls = 0;
   int lastBadge = 0;
 
@@ -271,9 +326,9 @@ class _FakePushGateway implements PushNotificationGateway {
     return PushActivationResult(
       activationState,
       registration: activationState == PushPermissionState.granted
-          ? const PushSubscriptionRegistration(
+          ? PushSubscriptionRegistration(
               installationId: 'device-test',
-              token: 'token-test',
+              token: token,
               platform: 'web',
             )
           : null,
@@ -285,4 +340,23 @@ class _FakePushGateway implements PushNotificationGateway {
 
   @override
   Future<void> updateBadge(int count) async => lastBadge = count;
+}
+
+class _FlakyPushRepository extends MockCoordinationRepository {
+  _FlakyPushRepository({required this.failuresBeforeSuccess});
+
+  int failuresBeforeSuccess;
+  int registrationCalls = 0;
+
+  @override
+  Future<void> registerPushSubscription(
+    PushSubscriptionRegistration registration,
+  ) async {
+    registrationCalls += 1;
+    if (failuresBeforeSuccess > 0) {
+      failuresBeforeSuccess -= 1;
+      throw StateError('Écriture refusée pour ${registration.token}');
+    }
+    await super.registerPushSubscription(registration);
+  }
 }

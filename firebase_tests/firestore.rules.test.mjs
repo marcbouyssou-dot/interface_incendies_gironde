@@ -15,6 +15,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  runTransaction,
   writeBatch,
   Timestamp,
   serverTimestamp,
@@ -39,7 +40,7 @@ before(async () => {
     projectId,
     firestore: {
       host: '127.0.0.1',
-      port: 8080,
+      port: Number(process.env.FIRESTORE_EMULATOR_PORT ?? 8080),
       rules: readFileSync('../firestore.rules', 'utf8'),
     },
   });
@@ -447,24 +448,77 @@ test('notification preferences are owner-only and strictly validated', async () 
   ));
 });
 
-test('push subscriptions support multiple owner devices without exposing tokens', async () => {
-  await seed();
-  const registration = (installationId, token) => ({
-    uid: 'professional-a', installationId, token, platform: 'web',
+const pushRegistration = (
+  uid = 'professional-a',
+  installationId = 'device-a',
+  token = 'token-a',
+) => ({
+    uid, installationId, token, platform: 'web',
     active: true, lastUsedAt: serverTimestamp(),
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
   });
+
+async function seedPushSubscription() {
   await assertSucceeds(setDoc(
     doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
-    registration('device-a', 'token-a'),
+    pushRegistration(),
   ));
-  await assertSucceeds(setDoc(
-    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-b'),
-    registration('device-b', 'token-b'),
+}
+
+test('push subscriptions: owner reads an existing subscription', async () => {
+  await seedPushSubscription();
+  await assertSucceeds(getDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
   ));
+});
+
+test('push subscriptions: another user cannot read an existing subscription', async () => {
+  await seedPushSubscription();
   await assertFails(getDoc(
     doc(db('professional-b'), 'pushSubscriptions/professional-a_device-a'),
   ));
+});
+
+test('push subscriptions: owner transaction gets absent then creates', async () => {
+  const ownerDb = db('professional-a');
+  const reference = doc(
+    ownerDb,
+    'pushSubscriptions/professional-a_device-a',
+  );
+  await assertSucceeds(runTransaction(ownerDb, async (transaction) => {
+    const existing = await transaction.get(reference);
+    assert.equal(existing.exists(), false);
+    transaction.set(reference, pushRegistration(), {merge: true});
+  }));
+});
+
+test('push subscriptions: owner creates a subscription for own uid', async () => {
+  await assertSucceeds(setDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
+    pushRegistration(),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-b'),
+    pushRegistration('professional-a', 'device-b', 'token-b'),
+  ));
+});
+
+test('push subscriptions: user cannot create for another uid', async () => {
+  await assertFails(setDoc(
+    doc(db('professional-a'), 'pushSubscriptions/professional-b_device-a'),
+    pushRegistration('professional-b'),
+  ));
+});
+
+test('push subscriptions: client list remains denied', async () => {
+  await seedPushSubscription();
+  await assertFails(getDocs(
+    collection(db('professional-a'), 'pushSubscriptions'),
+  ));
+});
+
+test('push subscriptions: owner updates an existing subscription', async () => {
+  await seedPushSubscription();
   await assertSucceeds(updateDoc(
     doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
     {
@@ -472,12 +526,19 @@ test('push subscriptions support multiple owner devices without exposing tokens'
       lastUsedAt: serverTimestamp(), updatedAt: serverTimestamp(),
     },
   ));
-  await assertFails(updateDoc(
-    doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
-    {uid: 'professional-b', lastUsedAt: serverTimestamp(), updatedAt: serverTimestamp()},
-  ));
   await assertFails(deleteDoc(
     doc(db('professional-a'), 'pushSubscriptions/professional-a_device-a'),
+  ));
+});
+
+test('push subscriptions: another user cannot update a subscription', async () => {
+  await seedPushSubscription();
+  await assertFails(updateDoc(
+    doc(db('professional-b'), 'pushSubscriptions/professional-a_device-a'),
+    {
+      token: 'forged-token', active: true,
+      lastUsedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    },
   ));
 });
 

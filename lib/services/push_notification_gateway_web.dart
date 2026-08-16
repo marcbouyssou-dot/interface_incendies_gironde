@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import '../models/app_notification.dart';
+import 'push_installation_id.dart';
 import 'push_notification_gateway_stub.dart';
 
 export 'push_notification_gateway_stub.dart'
@@ -98,11 +99,7 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
   String _installationId() {
     final existing = html.window.localStorage[_installationKey];
     if (existing != null && existing.isNotEmpty) return existing;
-    final random = Random.secure();
-    final value = List.generate(
-      4,
-      (_) => random.nextInt(1 << 32).toRadixString(16).padLeft(8, '0'),
-    ).join();
+    final value = generatePushInstallationId(Random.secure());
     html.window.localStorage[_installationKey] = value;
     return value;
   }

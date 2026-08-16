@@ -36,6 +36,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Stream<NotificationPreferences>? _preferences;
   PushPermissionState? _permission;
   bool _activating = false;
+  bool _subscriptionPersisted = false;
+  bool _activationFailed = false;
   bool _consentDeferred = false;
   bool _initialNotificationHandled = false;
   StreamSubscription<PushSubscriptionRegistration>? _registrationSubscription;
@@ -59,10 +61,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     _preferences = repository.watchNotificationPreferences();
     unawaited(_registrationSubscription?.cancel());
     _registrationSubscription = _pushGateway.registrationUpdates.listen(
-      (registration) =>
-          unawaited(repository.registerPushSubscription(registration)),
-      onError: (Object error, StackTrace stackTrace) {
-        debugPrint('Actualisation du token Push ignorée : $error');
+      (registration) => unawaited(_persistRefreshedRegistration(registration)),
+      onError: (Object _, StackTrace _) {
+        if (mounted) {
+          setState(() {
+            _subscriptionPersisted = false;
+            _activationFailed = true;
+          });
+        }
       },
     );
   }
@@ -75,16 +81,56 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
   Future<void> _activate() async {
     if (_activating) return;
-    setState(() => _activating = true);
+    setState(() {
+      _activating = true;
+      _activationFailed = false;
+    });
     try {
       final result = await _pushGateway.activate();
+      var persisted = false;
       if (result.registration case final registration?) {
-        await _repository!.registerPushSubscription(registration);
+        persisted = await _persist(registration);
       }
-      if (mounted) setState(() => _permission = result.state);
+      if (mounted) {
+        setState(() {
+          _permission = result.state;
+          _subscriptionPersisted =
+              result.state == PushPermissionState.granted && persisted;
+          _activationFailed =
+              result.state == PushPermissionState.granted && !persisted;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _subscriptionPersisted = false;
+          _activationFailed = true;
+        });
+      }
     } finally {
       if (mounted) setState(() => _activating = false);
     }
+  }
+
+  Future<bool> _persist(PushSubscriptionRegistration registration) async {
+    try {
+      await _repository!.registerPushSubscription(registration);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _persistRefreshedRegistration(
+    PushSubscriptionRegistration registration,
+  ) async {
+    final persisted = await _persist(registration);
+    if (!mounted) return;
+    setState(() {
+      _permission = PushPermissionState.granted;
+      _subscriptionPersisted = persisted;
+      _activationFailed = !persisted;
+    });
   }
 
   Future<void> _open(AppNotification notification) async {
@@ -150,6 +196,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 _ConsentCard(
                   permission: _permission,
                   activating: _activating,
+                  subscriptionPersisted: _subscriptionPersisted,
+                  activationFailed: _activationFailed,
                   onActivate: _activate,
                   onLater: () => setState(() => _consentDeferred = true),
                 ),
@@ -237,12 +285,16 @@ class _ConsentCard extends StatelessWidget {
   const _ConsentCard({
     required this.permission,
     required this.activating,
+    required this.subscriptionPersisted,
+    required this.activationFailed,
     required this.onActivate,
     required this.onLater,
   });
 
   final PushPermissionState? permission;
   final bool activating;
+  final bool subscriptionPersisted;
+  final bool activationFailed;
   final VoidCallback onActivate;
   final VoidCallback onLater;
 
@@ -252,27 +304,39 @@ class _ConsentCard extends StatelessWidget {
     final unavailable =
         permission == PushPermissionState.unsupported ||
         permission == PushPermissionState.misconfigured;
-    final granted = permission == PushPermissionState.granted;
+    final activated =
+        permission == PushPermissionState.granted && subscriptionPersisted;
+    final incomplete =
+        activationFailed ||
+        (permission == PushPermissionState.granted && !subscriptionPersisted);
     return Container(
       key: const Key('notification-consent-card'),
       padding: const EdgeInsets.all(V5Spacing.md),
       decoration: BoxDecoration(
-        color: granted ? colors.successContainer : colors.infoContainer,
+        color: activated
+            ? colors.successContainer
+            : incomplete
+            ? colors.warningContainer
+            : colors.infoContainer,
         borderRadius: BorderRadius.circular(V5Radius.card),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            granted
+            activated
                 ? 'Notifications activées'
+                : incomplete
+                ? 'Activation incomplète'
                 : 'Être alerté lorsqu’une mission vous concerne',
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          if (!granted) ...[
+          if (!activated) ...[
             const SizedBox(height: V5Spacing.xs),
             Text(
-              unavailable
+              incomplete
+                  ? 'L’abonnement n’a pas pu être enregistré. Réessayez.'
+                  : unavailable
                   ? 'Cet appareil ne permet pas encore les notifications.'
                   : permission == PushPermissionState.denied
                   ? 'La permission est refusée. MobSanté reste utilisable.'
@@ -285,7 +349,7 @@ class _ConsentCard extends StatelessWidget {
               children: [
                 V5Button(
                   key: const Key('activate-notifications'),
-                  label: 'Activer les notifications',
+                  label: incomplete ? 'Réessayer' : 'Activer les notifications',
                   icon: Icons.notifications_active_outlined,
                   onPressed: unavailable || activating ? null : onActivate,
                 ),
