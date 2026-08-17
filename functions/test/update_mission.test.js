@@ -83,7 +83,7 @@ function mutation(overrides = {}) {
     mobilization: Object.hasOwn(overrides, 'mobilization')
       ? overrides.mobilization
       : {id: 'mobilization-active', status: 'active'},
-    coordinatorAssigned: overrides.coordinatorAssigned ?? true,
+    coordinatorAuthorized: overrides.coordinatorAuthorized ?? true,
     destination: Object.hasOwn(overrides, 'destination')
       ? overrides.destination
       : destination(),
@@ -296,7 +296,7 @@ test('assigned cumulative coordinator preserves legacy counters', () => {
 
 test('coordinator outside the mission mobilization assignment is refused', () => {
   assertCode(
-    () => mutation({coordinatorAssigned: false}),
+    () => mutation({coordinatorAuthorized: false}),
     'permission-denied',
   );
 });

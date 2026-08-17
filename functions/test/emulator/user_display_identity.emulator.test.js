@@ -125,6 +125,56 @@ test('only the responsible perimeter receives the minimal team identity', async 
   );
 });
 
+test('legacy coordinator team access stops after an explicit assignment', async () => {
+  const coordinator = await createUser({role: coordinatorRole});
+
+  const legacyTeam = await services.listMissionTeam({
+    callerUid: coordinator.uid,
+    missionId: 'mission-identity-test',
+  });
+  assert.equal(legacyTeam.length, 1);
+
+  const assignedMobilizationId = unique('assigned-mobilization');
+  const assignedMissionId = unique('assigned-mission');
+  await Promise.all([
+    db.collection('mobilizations').doc(assignedMobilizationId).set({
+      id: assignedMobilizationId,
+      territoryId: 'gironde',
+      status: 'active',
+    }),
+    db.collection('missions').doc(assignedMissionId).set({
+      id: assignedMissionId,
+      mobilizationId: assignedMobilizationId,
+      locationId: 'langon',
+      isActive: true,
+    }),
+    db.collection('mobilizationAssignments')
+      .doc(`${assignedMobilizationId}_${coordinator.uid}`)
+      .set({
+        uid: coordinator.uid,
+        mobilizationId: assignedMobilizationId,
+        role: 'coordinator',
+        active: true,
+      }),
+    db.collection('roles').doc(coordinator.uid).update({
+      hasActiveMobilizationAssignments: true,
+    }),
+  ]);
+
+  await assertCode(
+    () => services.listMissionTeam({
+      callerUid: coordinator.uid,
+      missionId: 'mission-identity-test',
+    }),
+    'permission-denied',
+  );
+  const assignedTeam = await services.listMissionTeam({
+    callerUid: coordinator.uid,
+    missionId: assignedMissionId,
+  });
+  assert.deepEqual(assignedTeam, []);
+});
+
 test('only a platform administrator resolves coordinator names', async () => {
   const coordinator = await createUser({role: coordinatorRole});
   const administrator = await createUser({platformAdministrator: true});

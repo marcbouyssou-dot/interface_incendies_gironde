@@ -46,6 +46,9 @@ import {
   missionUpdateMutation,
   updateMission as updateExistingMission,
 } from './update_mission.js';
+import {
+  canCoordinateMobilization,
+} from './coordinator_mobilization_access.js';
 import {verifyRpps} from './ans_rpps_verification.js';
 import {
   ProfessionalRppsVerificationError,
@@ -1022,32 +1025,41 @@ export function missionUpdateServices({firestore}) {
         const validMobilizationId = typeof mobilizationId === 'string'
           && mobilizationId !== ''
           && !mobilizationId.includes('/');
-        const mobilization = validMobilizationId
-          ? await transaction.get(
-            firestore.collection('mobilizations').doc(mobilizationId),
-          )
-          : null;
-        const coordinatorAssignment = validMobilizationId
-          ? await transaction.get(
-            firestore.collection('mobilizationAssignments')
-              .doc(`${mobilizationId}_${callerUid}`),
-          )
-          : null;
+        const [mobilization, coordinatorAssignment, platformConfig] =
+          validMobilizationId
+            ? await Promise.all([
+              transaction.get(
+                firestore.collection('mobilizations').doc(mobilizationId),
+              ),
+              transaction.get(
+                firestore.collection('mobilizationAssignments')
+                  .doc(`${mobilizationId}_${callerUid}`),
+              ),
+              transaction.get(firestore.collection('platform').doc('config')),
+            ])
+            : [null, null, null];
         const assignmentData = coordinatorAssignment?.exists
           ? coordinatorAssignment.data()
           : null;
+        const mobilizationData = mobilization?.exists
+          ? mobilization.data()
+          : null;
+        const callerRole = caller.exists ? caller.data() : null;
         const mutation = missionUpdateMutation({
           request: {missionId, ...request},
           mission: missionData,
-          mobilization: mobilization?.exists
-            ? mobilization.data()
-            : null,
-          coordinatorAssigned: assignmentData?.active === true
-            && assignmentData?.uid === callerUid
-            && assignmentData?.mobilizationId === mobilizationId
-            && assignmentData?.role === 'coordinator',
+          mobilization: mobilizationData,
+          coordinatorAuthorized: canCoordinateMobilization({
+            uid: callerUid,
+            role: callerRole,
+            assignment: assignmentData,
+            mobilization: mobilizationData,
+            platformConfig: platformConfig?.exists
+              ? platformConfig.data()
+              : null,
+          }),
           destination: destination.exists ? destination.data() : null,
-          callerRole: caller.exists ? caller.data() : null,
+          callerRole,
           engagements: engagements.docs.map((document) => document.data()),
           serverTimestamp: FieldValue.serverTimestamp(),
           timestampFromMillis: (value) => new Date(value),
@@ -1158,26 +1170,29 @@ export function userDisplayIdentityServices({firestore, auth}) {
           'Accès à cette équipe refusé.',
         );
       }
-      const [mobilizationSnapshot, assignmentSnapshot] = await Promise.all([
-        firestore.collection('mobilizations').doc(mobilizationId).get(),
-        firestore.collection('mobilizationAssignments')
-          .doc(`${mobilizationId}_${callerUid}`).get(),
-      ]);
+      const [mobilizationSnapshot, assignmentSnapshot, platformConfig] =
+        await Promise.all([
+          firestore.collection('mobilizations').doc(mobilizationId).get(),
+          firestore.collection('mobilizationAssignments')
+            .doc(`${mobilizationId}_${callerUid}`).get(),
+          firestore.collection('platform').doc('config').get(),
+        ]);
       const assignment = assignmentSnapshot.data();
-      const canReadTerritory = access.active
-        && access.roles.includes('coordinator')
-        && assignmentSnapshot.exists
-        && assignment?.active === true
-        && assignment?.uid === callerUid
-        && assignment?.mobilizationId === mobilizationId
-        && assignment?.role === 'coordinator';
+      const mobilization = mobilizationSnapshot.data();
+      const canReadTerritory = canCoordinateMobilization({
+        uid: callerUid,
+        role: callerSnapshot.data(),
+        assignment: assignmentSnapshot.exists ? assignment : null,
+        mobilization: mobilizationSnapshot.exists ? mobilization : null,
+        platformConfig: platformConfig.exists ? platformConfig.data() : null,
+      });
       const canReadLocation = access.active
         && access.roles.includes('site_manager')
         && access.locationIds.includes(mission.locationId);
       if (
         (!canReadTerritory && !canReadLocation)
         || !mobilizationSnapshot.exists
-        || mobilizationSnapshot.data()?.status !== 'active'
+        || mobilization?.status !== 'active'
         || mission.isActive !== true
       ) {
         throw new UserDisplayIdentityError(

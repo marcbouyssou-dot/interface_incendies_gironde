@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/operation.dart';
@@ -81,6 +83,62 @@ void main() {
 
     expect(mobilizations.map((mobilization) => mobilization.id), ['a1', 'a2']);
   });
+
+  test(
+    'legacy coordinator falls back to the configured mobilization',
+    () async {
+      final dataSource = _AccessibleDataSource(
+        ids: const [],
+        legacyId: 'legacy',
+        documents: {'legacy': _legacyMobilizationDocument('legacy')},
+      );
+      final provider = DefaultAccessibleMobilizationsProvider(
+        dataSource: dataSource,
+      );
+
+      final mobilizations = await provider.watchAccessibleMobilizations().first;
+
+      expect(mobilizations.map((mobilization) => mobilization.id), ['legacy']);
+    },
+  );
+
+  test(
+    'an explicit assignment immediately replaces the legacy fallback',
+    () async {
+      final assignments = StreamController<List<String>>();
+      addTearDown(assignments.close);
+      final dataSource = _AccessibleDataSource(
+        ids: const [],
+        legacyId: 'legacy',
+        assignmentStream: assignments.stream,
+        documents: {
+          'legacy': _legacyMobilizationDocument('legacy'),
+          'assigned': _mobilizationDocument(
+            'assigned',
+            operationId: 'operation-a',
+          ),
+        },
+      );
+      final provider = DefaultAccessibleMobilizationsProvider(
+        dataSource: dataSource,
+      );
+      final expectation = expectLater(
+        provider.watchAccessibleMobilizations().map(
+          (items) => items.map((item) => item.id).toList(),
+        ),
+        emitsInOrder([
+          ['legacy'],
+          ['assigned'],
+        ]),
+      );
+
+      assignments.add(const []);
+      await Future<void>.delayed(Duration.zero);
+      assignments.add(const ['assigned']);
+
+      await expectation;
+    },
+  );
 }
 
 Map<String, Object?> _operationData(String id, {String type = 'emergency'}) => {
@@ -128,18 +186,32 @@ PlatformReadDocument _mobilizationDocument(
   data: _mobilizationData(id, operationId: operationId, status: status),
 );
 
+PlatformReadDocument _legacyMobilizationDocument(String id) =>
+    PlatformReadDocument(id: id, data: _mobilizationData(id));
+
 class _AccessibleDataSource implements AccessibleMobilizationsDataSource {
-  const _AccessibleDataSource({required this.ids, required this.documents});
+  const _AccessibleDataSource({
+    required this.ids,
+    required this.documents,
+    this.legacyId,
+    this.assignmentStream,
+  });
 
   final List<String> ids;
   final Map<String, PlatformReadDocument> documents;
+  final String? legacyId;
+  final Stream<List<String>>? assignmentStream;
 
   @override
   Stream<String?> watchCurrentUid() => _openValue('coordinator-a');
 
   @override
   Stream<List<String>> watchAssignedMobilizationIds(String uid) =>
-      _openValue(ids);
+      assignmentStream ?? _openValue(ids);
+
+  @override
+  Stream<String?> watchLegacyActiveMobilizationId(String uid) =>
+      _openValue(legacyId);
 
   @override
   Stream<PlatformReadDocument?> watchMobilization(String mobilizationId) =>

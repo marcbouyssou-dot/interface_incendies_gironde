@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/mobilization.dart';
+import '../models/responsible_access.dart';
 import '../repositories/firestore_platform_read_repository.dart';
 import '../utils/switch_latest.dart';
 
@@ -15,6 +16,8 @@ abstract interface class AccessibleMobilizationsDataSource {
   Stream<String?> watchCurrentUid();
 
   Stream<List<String>> watchAssignedMobilizationIds(String uid);
+
+  Stream<String?> watchLegacyActiveMobilizationId(String uid);
 
   Stream<PlatformReadDocument?> watchMobilization(String mobilizationId);
 }
@@ -63,6 +66,42 @@ class FirestoreAccessibleMobilizationsDataSource
   }
 
   @override
+  Stream<String?> watchLegacyActiveMobilizationId(String uid) {
+    return switchLatest(_firestore.collection('roles').doc(uid).snapshots(), (
+      snapshot,
+    ) {
+      final data = snapshot.data();
+      if (data == null) return Stream<String?>.value(null);
+      const assignmentMarker = 'hasActiveMobilizationAssignments';
+      if (data.containsKey(assignmentMarker) &&
+          data[assignmentMarker] != false) {
+        return Stream<String?>.value(null);
+      }
+      try {
+        final access = ResponsibleAccessParser.parse(uid: uid, data: data);
+        if (!access.isCoordinator) return Stream<String?>.value(null);
+      } on ResponsibleAccessFormatException {
+        return Stream<String?>.value(null);
+      }
+      return _firestore.collection('platform').doc('config').snapshots().map((
+        config,
+      ) {
+        final value = config.data()?['activeMobilizationId'];
+        if (value == null) return null;
+        if (value is! String ||
+            value.trim().isEmpty ||
+            value.trim() != value ||
+            value.contains('/')) {
+          throw const FormatException(
+            'Configuration de mobilisation legacy invalide.',
+          );
+        }
+        return value;
+      });
+    });
+  }
+
+  @override
   Stream<PlatformReadDocument?> watchMobilization(String mobilizationId) {
     return _firestore
         .collection('mobilizations')
@@ -89,10 +128,15 @@ class DefaultAccessibleMobilizationsProvider
       if (uid == null || uid.isEmpty) {
         return Stream<List<Mobilization>>.value(const []);
       }
-      return switchLatest(
-        dataSource.watchAssignedMobilizationIds(uid),
-        _watchMobilizations,
-      );
+      return switchLatest(dataSource.watchAssignedMobilizationIds(uid), (ids) {
+        if (ids.isNotEmpty) return _watchMobilizations(ids);
+        return switchLatest(
+          dataSource.watchLegacyActiveMobilizationId(uid),
+          (legacyId) => legacyId == null
+              ? Stream<List<Mobilization>>.value(const [])
+              : _watchMobilizations([legacyId]),
+        );
+      });
     });
   }
 

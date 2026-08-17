@@ -73,6 +73,7 @@ async function seed(extra = {}) {
     });
     await setDoc(doc(admin, 'roles/coord'), {
       role: 'coordinator', locationIds: ['*'], active: true,
+      hasActiveMobilizationAssignments: true,
     });
     await setDoc(
       doc(admin, `mobilizationAssignments/${activeMobilizationId}_coord`),
@@ -95,8 +96,13 @@ async function seed(extra = {}) {
 async function seedRole(uid, data) {
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
-    await setDoc(doc(admin, `roles/${uid}`), data);
     const roles = Array.isArray(data.roles) ? data.roles : [data.role];
+    await setDoc(doc(admin, `roles/${uid}`), {
+      ...data,
+      ...(roles.includes('coordinator')
+        ? {hasActiveMobilizationAssignments: true}
+        : {}),
+    });
     if (roles.includes('coordinator')) {
       await setDoc(
         doc(admin, `mobilizationAssignments/${activeMobilizationId}_${uid}`),
@@ -2415,6 +2421,144 @@ test('platform V6: existing V5 permissions remain unchanged', async () => {
   await assertSucceeds(getDoc(doc(db('manager'), 'roles/manager')));
 });
 
+test('RC3.5A.1: production-like legacy coordinator keeps one mobilization', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'platform/config'), {activeMobilizationId});
+    await setDoc(doc(admin, 'locations/site-a'), {
+      id: 'site-a', name: 'Site A', group: 'medoc', type: 'sdisStation',
+      isActive: true,
+    });
+    for (const [mobilizationId, status] of [
+      [activeMobilizationId, 'active'],
+      ['other-active', 'active'],
+      ['other-inactive', 'inactive'],
+    ]) {
+      await setDoc(doc(admin, `mobilizations/${mobilizationId}`), {
+        id: mobilizationId,
+        territoryId: 'gironde',
+        status,
+      });
+    }
+    await setDoc(doc(admin, 'roles/legacy-coord'), {
+      role: 'coordinator', locationIds: ['*'], active: true,
+    });
+    await setDoc(doc(admin, 'roles/inactive-coord'), {
+      role: 'coordinator', locationIds: ['*'], active: false,
+    });
+    for (const [id, mobilizationId] of [
+      ['legacy-existing', activeMobilizationId],
+      ['other-existing', 'other-active'],
+      ['inactive-existing', 'other-inactive'],
+    ]) {
+      await setDoc(doc(admin, `missions/${id}`), mission({
+        id,
+        mobilizationId,
+        createdBy: 'legacy-coord',
+      }));
+    }
+  });
+
+  await assertSucceeds(getDoc(doc(
+    db('legacy-coord'),
+    `mobilizations/${activeMobilizationId}`,
+  )));
+  const legacyMissions = await assertSucceeds(getDocs(query(
+    collection(db('legacy-coord'), 'missions'),
+    where('mobilizationId', '==', activeMobilizationId),
+    where('isActive', '==', true),
+  )));
+  assert.equal(legacyMissions.size, 1);
+  await assertSucceeds(createMissionFor('legacy-coord', 'legacy-created'));
+
+  for (const mobilizationId of ['other-active', 'other-inactive']) {
+    await assertFails(getDocs(query(
+      collection(db('legacy-coord'), 'missions'),
+      where('mobilizationId', '==', mobilizationId),
+      where('isActive', '==', true),
+    )));
+    await assertFails(setDoc(
+      doc(db('legacy-coord'), `missions/create-${mobilizationId}`),
+      mission({
+        id: `create-${mobilizationId}`,
+        mobilizationId,
+        createdBy: 'legacy-coord',
+      }),
+    ));
+  }
+  await assertFails(createMissionFor('inactive-coord', 'inactive-denied'));
+  await assertFails(createMissionFor('no-role', 'no-role-denied'));
+});
+
+test('RC3.5A.1: first explicit assignment disables the legacy fallback', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'platform/config'), {activeMobilizationId});
+    await setDoc(doc(admin, 'locations/site-a'), {
+      id: 'site-a', name: 'Site A', group: 'medoc', type: 'sdisStation',
+      isActive: true,
+    });
+    for (const mobilizationId of [activeMobilizationId, 'assigned-active']) {
+      await setDoc(doc(admin, `mobilizations/${mobilizationId}`), {
+        id: mobilizationId,
+        territoryId: 'gironde',
+        status: 'active',
+      });
+      await setDoc(doc(admin, `missions/${mobilizationId}-mission`), mission({
+        id: `${mobilizationId}-mission`,
+        mobilizationId,
+        createdBy: 'legacy-coord',
+      }));
+    }
+    await setDoc(doc(admin, 'roles/legacy-coord'), {
+      role: 'coordinator', locationIds: ['*'], active: true,
+    });
+  });
+
+  await assertSucceeds(getDocs(query(
+    collection(db('legacy-coord'), 'missions'),
+    where('mobilizationId', '==', activeMobilizationId),
+    where('isActive', '==', true),
+  )));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(admin, 'mobilizationAssignments/assigned-active_legacy-coord'),
+      {
+        uid: 'legacy-coord',
+        mobilizationId: 'assigned-active',
+        role: 'coordinator',
+        active: true,
+      },
+    );
+    await updateDoc(doc(admin, 'roles/legacy-coord'), {
+      hasActiveMobilizationAssignments: true,
+    });
+  });
+
+  await assertFails(getDocs(query(
+    collection(db('legacy-coord'), 'missions'),
+    where('mobilizationId', '==', activeMobilizationId),
+    where('isActive', '==', true),
+  )));
+  const assignedMissions = await assertSucceeds(getDocs(query(
+    collection(db('legacy-coord'), 'missions'),
+    where('mobilizationId', '==', 'assigned-active'),
+    where('isActive', '==', true),
+  )));
+  assert.equal(assignedMissions.size, 1);
+  await assertFails(createMissionFor('legacy-coord', 'legacy-now-denied'));
+  await assertSucceeds(setDoc(
+    doc(db('legacy-coord'), 'missions/assigned-created'),
+    mission({
+      id: 'assigned-created',
+      mobilizationId: 'assigned-active',
+      createdBy: 'legacy-coord',
+    }),
+  ));
+});
+
 test('RC3.5: role scopes remain isolated across three active mobilizations', async () => {
   await seed({mission: false});
   await env.withSecurityRulesDisabled(async (context) => {
@@ -2444,6 +2588,7 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
     }
     await setDoc(doc(admin, 'roles/coord-b'), {
       role: 'coordinator', locationIds: ['*'], active: true,
+      hasActiveMobilizationAssignments: true,
     });
     for (const [mobilizationId, uid] of [
       [activeMobilizationId, 'coord'],

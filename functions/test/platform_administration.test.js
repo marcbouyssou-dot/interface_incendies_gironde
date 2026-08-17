@@ -535,7 +535,7 @@ for (const status of ['draft', 'inactive']) {
   });
 }
 
-test('coordinator assignment is deterministic and preserves roles V5', async () => {
+test('coordinator assignment is deterministic and preserves role scope', async () => {
   const {firestore, services} = harness();
   firestore.seed(
     'mobilizations/incendies-gironde-2026',
@@ -571,7 +571,10 @@ test('coordinator assignment is deterministic and preserves roles V5', async () 
       updatedAt: NOW,
     },
   );
-  assert.deepEqual(firestore.read(`roles/${COORDINATOR_UID}`), originalRole);
+  assert.deepEqual(firestore.read(`roles/${COORDINATOR_UID}`), {
+    ...originalRole,
+    hasActiveMobilizationAssignments: true,
+  });
 });
 
 test('removing a coordinator soft-disables the assignment', async () => {
@@ -598,6 +601,37 @@ test('removing a coordinator soft-disables the assignment', async () => {
   assert.equal(stored.active, false);
   assert.equal(stored.createdAt.toISOString(), '2026-08-05T08:00:00.000Z');
   assert.equal(stored.updatedAt.toISOString(), NOW.toISOString());
+  assert.equal(
+    firestore.read(`roles/${COORDINATOR_UID}`)
+      .hasActiveMobilizationAssignments,
+    false,
+  );
+});
+
+test('removing one assignment preserves explicit authority for another', async () => {
+  const {firestore, services} = harness();
+  firestore.seed(
+    'mobilizations/mobilization-a',
+    mobilizationDocument('mobilization-a', 'inactive'),
+  );
+  firestore.seed(
+    'mobilizations/mobilization-b',
+    mobilizationDocument('mobilization-b', 'active'),
+  );
+  seedAssignment(firestore, 'mobilization-a');
+  seedAssignment(firestore, 'mobilization-b');
+
+  await removeMobilizationCoordinator({
+    callerUid: ADMIN_UID,
+    data: {mobilizationId: 'mobilization-a', uid: COORDINATOR_UID},
+    services,
+  });
+
+  assert.equal(
+    firestore.read(`roles/${COORDINATOR_UID}`)
+      .hasActiveMobilizationAssignments,
+    true,
+  );
 });
 
 class MemoryFirestore {

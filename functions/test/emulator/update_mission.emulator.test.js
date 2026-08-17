@@ -41,15 +41,23 @@ const quotas = (physiotherapist = 0, podiatrist = 0) => ({
   other_health_professional: 0,
 });
 
-async function createUser(roleDocument) {
+async function createUser(roleDocument, {assignCoordinator = true} = {}) {
   const uid = unique('mission-user');
   const email = `${uid}@example.test`;
   const password = 'Test-only-password-42!';
   await adminAuth.createUser({uid, email, password});
   if (roleDocument) {
-    await db.collection('roles').doc(uid).set(roleDocument);
     const roles = roleDocument.roles ?? [roleDocument.role];
-    if (roleDocument.active === true && roles.includes('coordinator')) {
+    const receivesAssignment = assignCoordinator
+      && roleDocument.active === true
+      && roles.includes('coordinator');
+    await db.collection('roles').doc(uid).set({
+      ...roleDocument,
+      ...(receivesAssignment
+        ? {hasActiveMobilizationAssignments: true}
+        : {}),
+    });
+    if (receivesAssignment) {
       await db.collection('mobilizationAssignments')
         .doc(`${activeMobilizationId}_${uid}`)
         .set({
@@ -213,6 +221,56 @@ test('coordinator updates editable data and preserves identity and counters', as
   assert.equal(stored.createdAt.toDate().toISOString(),
     '2026-08-01T10:00:00.000Z');
   assert.equal(stored.details, 'Après');
+});
+
+test('legacy coordinator falls back until an explicit assignment exists', async () => {
+  const legacySource = unique('legacy-source');
+  const legacyDestination = unique('legacy-destination');
+  const assignedMobilizationId = unique('assigned-mobilization');
+  const assignedSource = unique('assigned-source');
+  await seedLocation(legacySource);
+  await seedLocation(legacyDestination);
+  await seedLocation(assignedSource);
+  const legacyMissionId = await seedMission(legacySource);
+  await db.collection('mobilizations').doc(assignedMobilizationId).set({
+    id: assignedMobilizationId,
+    territoryId: 'gironde',
+    status: 'active',
+  });
+  const assignedMissionId = await seedMission(assignedSource, {
+    mobilizationId: assignedMobilizationId,
+  });
+  const user = await createUser(
+    coordinatorRole(),
+    {assignCoordinator: false},
+  );
+  const update = await callable(user);
+
+  await update(updateRequest(legacyMissionId, legacyDestination));
+  await assertCode(
+    () => update(updateRequest(assignedMissionId, assignedSource)),
+    'permission-denied',
+  );
+
+  await Promise.all([
+    db.collection('mobilizationAssignments')
+      .doc(`${assignedMobilizationId}_${user.uid}`)
+      .set({
+        uid: user.uid,
+        mobilizationId: assignedMobilizationId,
+        role: 'coordinator',
+        active: true,
+      }),
+    db.collection('roles').doc(user.uid).update({
+      hasActiveMobilizationAssignments: true,
+    }),
+  ]);
+
+  await assertCode(
+    () => update(updateRequest(legacyMissionId, legacyDestination)),
+    'permission-denied',
+  );
+  await update(updateRequest(assignedMissionId, assignedSource));
 });
 
 test('site manager must manage the source and destination', async () => {

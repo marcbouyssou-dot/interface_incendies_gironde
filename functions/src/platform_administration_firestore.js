@@ -487,6 +487,9 @@ async function runAssignMobilizationCoordinator({
       updatedBy: request.callerUid,
       updatedAt: timestamp,
     }, {merge: false});
+    transaction.update(roleRef, {
+      hasActiveMobilizationAssignments: true,
+    });
     return {assignmentId, active: true};
   });
 }
@@ -506,10 +509,19 @@ async function runRemoveMobilizationCoordinator({
     const assignmentRef = firestore
       .collection('mobilizationAssignments')
       .doc(assignmentId);
-    const [mobilization, assignment] = await Promise.all([
-      transaction.get(mobilizationRef),
-      transaction.get(assignmentRef),
-    ]);
+    const roleRef = firestore.collection('roles').doc(request.uid);
+    const activeAssignmentsQuery = firestore
+      .collection('mobilizationAssignments')
+      .where('uid', '==', request.uid)
+      .where('role', '==', 'coordinator')
+      .where('active', '==', true);
+    const [mobilization, assignment, role, activeAssignments] =
+      await Promise.all([
+        transaction.get(mobilizationRef),
+        transaction.get(assignmentRef),
+        transaction.get(roleRef),
+        transaction.get(activeAssignmentsQuery),
+      ]);
     const current = requireMobilization(mobilization);
     if (current.status === 'active') {
       throw new PlatformAdministrationError(
@@ -528,6 +540,13 @@ async function runRemoveMobilizationCoordinator({
       updatedBy: request.callerUid,
       updatedAt: serverTimestamp(),
     });
+    if (role.exists) {
+      transaction.update(roleRef, {
+        hasActiveMobilizationAssignments: activeAssignments.docs.some(
+          (candidate) => candidate.id !== assignmentId,
+        ),
+      });
+    }
     return {assignmentId, active: false};
   });
 }

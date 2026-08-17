@@ -78,7 +78,7 @@ export function missionUpdateMutation({
   request,
   mission,
   mobilization,
-  coordinatorAssigned,
+  coordinatorAuthorized,
   destination,
   callerRole,
   engagements,
@@ -105,8 +105,8 @@ export function missionUpdateMutation({
     );
   }
   const access = parseAccess(callerRole);
-  if (!canManage(access, mission.locationId, coordinatorAssigned)
-      || !canManage(access, request.locationId, coordinatorAssigned)) {
+  if (!canManage(access, mission.locationId, coordinatorAuthorized)
+      || !canManage(access, request.locationId, coordinatorAuthorized)) {
     throw outsideScope();
   }
   if (mission.isActive === false || mission.status === 'cancelled') {
@@ -177,8 +177,8 @@ function parseAccess(document) {
   }
 }
 
-function canManage(access, locationId, coordinatorAssigned) {
-  if (access.roles.includes('coordinator') && coordinatorAssigned === true) {
+function canManage(access, locationId, coordinatorAuthorized) {
+  if (access.roles.includes('coordinator') && coordinatorAuthorized === true) {
     return true;
   }
   if (typeof locationId !== 'string' || locationId === '') return false;
