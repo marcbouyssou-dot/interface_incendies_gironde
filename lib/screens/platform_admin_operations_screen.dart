@@ -15,7 +15,9 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/operation_presentation.dart';
 import '../widgets/executive_kpi.dart';
+import '../widgets/native_interactions.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 import 'platform_admin_mobilization_screen.dart';
 import 'platform_mobilization_form_dialog.dart';
@@ -30,6 +32,7 @@ class PlatformAdminOperationsScreen extends StatefulWidget {
     required this.administrationRepository,
     required this.administrationService,
     this.missionRepository,
+    this.referenceTime,
   });
 
   final OperationReadRepository operationRepository;
@@ -38,6 +41,7 @@ class PlatformAdminOperationsScreen extends StatefulWidget {
   final PlatformAdministrationReadRepository administrationRepository;
   final PlatformAdministrationService administrationService;
   final MultiMobilizationCoordinationReadRepository? missionRepository;
+  final DateTime? referenceTime;
 
   @override
   State<PlatformAdminOperationsScreen> createState() =>
@@ -116,50 +120,37 @@ class _PlatformAdminOperationsScreenState
                           journey: MobSanteJourney.administrator,
                         ),
                         const SizedBox(height: V5Spacing.xl),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Semantics(
-                                header: true,
-                                child: Text(
-                                  'Centre opérationnel',
-                                  key: const Key('executive-dashboard-title'),
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.headlineLarge,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: V5Spacing.sm),
-                            IconButton.filled(
-                              key: const Key('create-platform-operation'),
-                              tooltip: 'Créer une opération',
-                              onPressed:
-                                  _busy ||
-                                      !widget.administrationService.isAvailable
-                                  ? null
-                                  : _createOperation,
-                              icon: const Icon(Icons.add_rounded),
-                            ),
-                          ],
+                        _ExecutiveDashboardHeader(
+                          busy: _busy,
+                          creationEnabled:
+                              widget.administrationService.isAvailable,
+                          onCreate: _createOperation,
                         ),
                         if (_busy) ...[
                           const SizedBox(height: V5Spacing.md),
                           const LinearProgressIndicator(),
                         ],
-                        const SizedBox(height: V5Spacing.lg),
-                        _ExecutiveStatusHeader(dashboard: dashboard),
-                        const SizedBox(height: V5Spacing.lg),
-                        _ExecutiveKpiGrid(dashboard: dashboard),
-                        const SizedBox(height: V5Spacing.xxl),
-                        _ExecutivePriorities(
-                          dashboard: dashboard,
-                          onOpen: _openOperation,
+                        const SizedBox(height: V5Spacing.xl),
+                        _ExecutiveReveal(
+                          child: _ExecutiveStatusHeader(
+                            dashboard: dashboard,
+                            now: widget.referenceTime ?? DateTime.now(),
+                          ),
                         ),
-                        const SizedBox(height: V5Spacing.xxl),
+                        const SizedBox(height: V5Spacing.xl),
+                        _ExecutiveReveal(
+                          child: _ExecutiveKpiGrid(dashboard: dashboard),
+                        ),
+                        const SizedBox(height: V5Spacing.xxxl),
+                        _ExecutiveReveal(
+                          child: _ExecutivePriorities(
+                            dashboard: dashboard,
+                            onOpen: _openOperation,
+                          ),
+                        ),
+                        const SizedBox(height: V5Spacing.xxxl),
                         Text(
-                          'Toutes les opérations',
+                          'Situation opérationnelle',
                           key: const Key('all-platform-operations'),
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
@@ -620,79 +611,183 @@ class _PlatformOperationDetailScreenState
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 }
 
+class _ExecutiveDashboardHeader extends StatelessWidget {
+  const _ExecutiveDashboardHeader({
+    required this.busy,
+    required this.creationEnabled,
+    required this.onCreate,
+  });
+
+  final bool busy;
+  final bool creationEnabled;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final stacked =
+          constraints.maxWidth < 600 ||
+          MediaQuery.textScalerOf(context).scale(1) > 1.3;
+      final title = Semantics(
+        header: true,
+        child: Text(
+          'Centre opérationnel',
+          key: const Key('executive-dashboard-title'),
+          style: Theme.of(context).textTheme.headlineLarge,
+        ),
+      );
+      final action = V5Button(
+        key: const Key('create-platform-operation'),
+        label: 'Nouvelle opération',
+        icon: Icons.add_rounded,
+        compact: true,
+        loading: busy,
+        tone: V5ButtonTone.secondary,
+        onPressed: busy || !creationEnabled ? null : onCreate,
+      );
+      if (stacked) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            title,
+            const SizedBox(height: V5Spacing.md),
+            Align(alignment: Alignment.centerRight, child: action),
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: title),
+          const SizedBox(width: V5Spacing.sm),
+          action,
+        ],
+      );
+    },
+  );
+}
+
+class _ExecutiveReveal extends StatelessWidget {
+  const _ExecutiveReveal({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: reduceMotion ? 1 : 0, end: 1),
+      duration: reduceMotion ? Duration.zero : NativeMotion.detailsExpansion,
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 8 * (1 - value)),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 class _ExecutiveStatusHeader extends StatelessWidget {
-  const _ExecutiveStatusHeader({required this.dashboard});
+  const _ExecutiveStatusHeader({required this.dashboard, required this.now});
 
   final ExecutiveDashboardSnapshot dashboard;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final (icon, label, foreground, background) = switch (dashboard.state) {
+    final (
+      icon,
+      title,
+      subtitle,
+      foreground,
+      background,
+    ) = switch (dashboard.state) {
       ExecutivePlatformState.calm => (
-        Icons.circle_outlined,
-        'Plateforme en attente',
-        colors.info,
-        colors.infoContainer,
+        Icons.check_circle_rounded,
+        'Plateforme stable',
+        'Aucune opération active pour le moment',
+        colors.success,
+        colors.successContainer,
       ),
       ExecutivePlatformState.stable => (
         Icons.check_circle_rounded,
         'Plateforme stable',
+        'Aucune mission critique détectée',
         colors.success,
         colors.successContainer,
       ),
       ExecutivePlatformState.watch => (
-        Icons.error_rounded,
-        'Vigilance opérationnelle',
+        Icons.visibility_rounded,
+        'Sous surveillance',
+        '${dashboard.criticalMissionCount} mission${dashboard.criticalMissionCount > 1 ? 's' : ''} critique${dashboard.criticalMissionCount > 1 ? 's' : ''} à suivre',
         colors.warning,
         colors.warningContainer,
       ),
       ExecutivePlatformState.critical => (
-        Icons.warning_rounded,
-        'Plateforme sous tension',
+        Icons.error_rounded,
+        'Situation critique',
+        '${dashboard.criticalMissionCount} missions critiques nécessitent une action',
         colors.danger,
         colors.dangerContainer,
       ),
     };
     final updatedAt = dashboard.lastUpdated;
-    final time = updatedAt == null
-        ? '—'
-        : MaterialLocalizations.of(context).formatTimeOfDay(
-            TimeOfDay.fromDateTime(updatedAt.toLocal()),
-            alwaysUse24HourFormat: true,
-          );
+    final freshness = _freshnessLabel(context, updatedAt, now);
     return Semantics(
       key: const Key('executive-platform-state'),
       container: true,
-      label: '$label. Dernière actualisation $time.',
+      label: '$title. $subtitle. $freshness.',
       child: ExcludeSemantics(
         child: Container(
           padding: const EdgeInsets.all(V5Spacing.lg),
           decoration: BoxDecoration(
             color: background,
             borderRadius: BorderRadius.circular(V5Radius.large),
+            border: Border.all(color: foreground.withValues(alpha: 0.2)),
+            boxShadow: V5Elevation.level1(colors),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: foreground, size: 32),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: foreground.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: foreground, size: 26),
+              ),
               const SizedBox(width: V5Spacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      label,
+                      title,
                       style: Theme.of(
                         context,
                       ).textTheme.headlineMedium?.copyWith(color: foreground),
                     ),
-                    const SizedBox(height: V5Spacing.xxs),
+                    const SizedBox(height: V5Spacing.xs),
                     Text(
-                      'Actualisé à $time',
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: V5Spacing.xs),
+                    Text(
+                      freshness,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.textSecondary,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -703,6 +798,30 @@ class _ExecutiveStatusHeader extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _freshnessLabel(
+    BuildContext context,
+    DateTime? updatedAt,
+    DateTime now,
+  ) {
+    if (updatedAt == null) return 'Mise à jour indisponible';
+    final localUpdatedAt = updatedAt.toLocal();
+    final difference = now.toLocal().difference(localUpdatedAt);
+    if (difference.isNegative || difference.inMinutes < 1) {
+      return 'Mis à jour à l’instant';
+    }
+    if (difference.inMinutes < 60) {
+      return 'Mis à jour il y a ${difference.inMinutes} min';
+    }
+    if (difference.inHours < 24) {
+      return 'Mis à jour il y a ${difference.inHours} h';
+    }
+    final time = MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(localUpdatedAt),
+      alwaysUse24HourFormat: true,
+    );
+    return 'Mis à jour à $time';
   }
 }
 
@@ -723,27 +842,9 @@ class _ExecutiveKpiGrid extends StatelessWidget {
         ? ExecutiveKpiTone.warning
         : ExecutiveKpiTone.critical;
     final items = <Widget>[
-      OperationKpi(
-        key: const Key('executive-kpi-operations'),
-        count: dashboard.activeOperationCount,
-      ),
-      ExecutiveKpi(
-        key: const Key('executive-kpi-mobilizations'),
-        value: '${dashboard.activeMobilizationCount}',
-        label: 'mobilisations actives',
-      ),
-      ExecutiveKpi(
-        key: const Key('executive-kpi-missions'),
-        value: '${dashboard.activeMissionCount}',
-        label: 'missions actives',
-      ),
       CriticalKpi(
         key: const Key('executive-kpi-critical'),
         count: dashboard.criticalMissionCount,
-      ),
-      ProfessionKpi(
-        key: const Key('executive-kpi-professionals'),
-        count: dashboard.mobilizedProfessionalCount,
       ),
       CoverageKpi(
         key: const Key('executive-kpi-coverage'),
@@ -756,10 +857,30 @@ class _ExecutiveKpiGrid extends StatelessWidget {
             '${dashboard.establishmentCount} établissement${dashboard.establishmentCount > 1 ? 's' : ''} concerné${dashboard.establishmentCount > 1 ? 's' : ''}',
         tone: coverageTone,
       ),
+      ExecutiveKpi(
+        key: const Key('executive-kpi-missions'),
+        value: '${dashboard.activeMissionCount}',
+        label: 'missions actives',
+        icon: Icons.assignment_rounded,
+      ),
+      ProfessionKpi(
+        key: const Key('executive-kpi-professionals'),
+        count: dashboard.mobilizedProfessionalCount,
+      ),
+      ExecutiveKpi(
+        key: const Key('executive-kpi-mobilizations'),
+        value: '${dashboard.activeMobilizationCount}',
+        label: 'mobilisations actives',
+        icon: Icons.hub_rounded,
+      ),
+      OperationKpi(
+        key: const Key('executive-kpi-operations'),
+        count: dashboard.activeOperationCount,
+      ),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 350 ? 3 : 2;
+        final columns = constraints.maxWidth >= 600 ? 3 : 2;
         final itemWidth =
             (constraints.maxWidth - V5Spacing.sm * (columns - 1)) / columns;
         return Wrap(
@@ -818,16 +939,18 @@ class _PriorityCard extends StatelessWidget {
       OperationStatus.planned,
     }.contains(snapshot.operation.status);
     final hasCoverageRisk = snapshot.coverage != null && snapshot.coverage! < 1;
-    final (icon, foreground, background, detail) = critical > 0
+    final (icon, stateLabel, foreground, background, detail) = critical > 0
         ? (
-            Icons.warning_rounded,
+            Icons.error_rounded,
+            'ACTION URGENTE',
             colors.danger,
             colors.dangerContainer,
             '$critical mission${critical > 1 ? 's' : ''} critique${critical > 1 ? 's' : ''}',
           )
         : hasCoverageRisk
         ? (
-            Icons.error_rounded,
+            Icons.visibility_rounded,
+            'À SURVEILLER',
             colors.warning,
             colors.warningContainer,
             '${snapshot.establishmentCount} établissement${snapshot.establishmentCount > 1 ? 's' : ''} à surveiller',
@@ -835,96 +958,104 @@ class _PriorityCard extends StatelessWidget {
         : isPlanned
         ? (
             Icons.event_available_rounded,
+            'À PRÉPARER',
             colors.info,
             colors.infoContainer,
             'Préparation à confirmer',
           )
         : (
             Icons.check_circle_rounded,
+            'SOUS CONTRÔLE',
             colors.success,
             colors.successContainer,
             snapshot.missionCount == 0
                 ? 'Aucune mission active'
                 : 'Situation maîtrisée',
           );
-    final action = isPlanned ? 'Préparer' : 'Traiter';
+    const action = 'Voir l’opération';
     return Padding(
-      padding: const EdgeInsets.only(bottom: V5Spacing.sm),
+      padding: const EdgeInsets.only(bottom: V5Spacing.md),
       child: Semantics(
         button: true,
-        label: '${snapshot.operation.name}. $detail. $action.',
+        label: '$stateLabel. ${snapshot.operation.name}. $detail. $action.',
         child: Material(
-          color: background,
-          borderRadius: BorderRadius.circular(V5Radius.card),
+          color: colors.surfaceElevated,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(V5Radius.card),
+            side: BorderSide(color: foreground.withValues(alpha: 0.24)),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
             key: Key('executive-priority-${snapshot.operation.id}'),
             borderRadius: BorderRadius.circular(V5Radius.card),
             onTap: () => onOpen(snapshot.operation),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final stacked =
-                    constraints.maxWidth < 300 ||
-                    MediaQuery.textScalerOf(context).scale(1) > 1.3;
-                final title = Text(
-                  snapshot.operation.name,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                );
-                final actionLabel = Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      action,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: foreground,
-                        fontWeight: FontWeight.w800,
-                      ),
+            child: Padding(
+              padding: const EdgeInsets.all(V5Spacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: V5Spacing.xs,
+                      vertical: V5Spacing.xxs,
                     ),
-                    const SizedBox(width: V5Spacing.xxs),
-                    Icon(Icons.chevron_right_rounded, color: foreground),
-                  ],
-                );
-                return Padding(
-                  padding: const EdgeInsets.all(V5Spacing.md),
-                  child: stacked
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(icon, color: foreground, size: 26),
-                                const SizedBox(width: V5Spacing.md),
-                                Expanded(child: title),
-                              ],
-                            ),
-                            const SizedBox(height: V5Spacing.sm),
-                            Text(detail),
-                            const SizedBox(height: V5Spacing.sm),
-                            actionLabel,
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Icon(icon, color: foreground, size: 26),
-                            const SizedBox(width: V5Spacing.md),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  title,
-                                  const SizedBox(height: V5Spacing.xxs),
-                                  Text(detail),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: V5Spacing.sm),
-                            actionLabel,
-                          ],
+                    decoration: BoxDecoration(
+                      color: background,
+                      borderRadius: BorderRadius.circular(V5Radius.pill),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, color: foreground, size: 17),
+                        const SizedBox(width: V5Spacing.xs),
+                        Flexible(
+                          child: Text(
+                            stateLabel,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: foreground,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: .45,
+                                ),
+                          ),
                         ),
-                );
-              },
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: V5Spacing.md),
+                  Text(
+                    snapshot.operation.name,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: V5Spacing.xs),
+                  Text(
+                    detail,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: V5Spacing.md),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          action,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: foreground,
+                                fontWeight: FontWeight.w900,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: V5Spacing.xxs),
+                      Icon(Icons.arrow_forward_rounded, color: foreground),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -949,7 +1080,7 @@ class _OperationSection extends StatelessWidget {
   Widget build(BuildContext context) {
     if (operations.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: V5Spacing.xl),
+      padding: const EdgeInsets.only(bottom: V5Spacing.xxl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -984,27 +1115,60 @@ class _OperationCard extends StatelessWidget {
         ? '—'
         : '${(coverage * 100).round()} %';
     return Padding(
-      padding: const EdgeInsets.only(bottom: V5Spacing.sm),
+      padding: const EdgeInsets.only(bottom: V5Spacing.md),
       child: Material(
         color: context.v5Colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(V5Radius.card),
+          side: BorderSide(color: context.v5Colors.outline),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           key: Key('platform-operation-${operation.id}'),
           borderRadius: BorderRadius.circular(V5Radius.card),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(V5Spacing.md),
+            padding: const EdgeInsets.all(V5Spacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: context.v5Colors.surfaceMuted,
+                        borderRadius: BorderRadius.circular(V5Radius.control),
+                      ),
+                      child: Icon(
+                        Icons.domain_rounded,
+                        size: 21,
+                        color: context.v5Colors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: V5Spacing.sm),
                     Expanded(
-                      child: Text(
-                        operation.name,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            operation.name,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: V5Spacing.xxs),
+                          Text(
+                            '${operationTypeLabel(operation.type)} · '
+                            '${operationStatusLabel(operation.status)}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: context.v5Colors.textSecondary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: V5Spacing.sm),
@@ -1014,33 +1178,50 @@ class _OperationCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: V5Spacing.xxs),
+                const SizedBox(height: V5Spacing.sm),
                 Text(
-                  '${operationTypeLabel(operation.type)} · '
-                  '${operationStatusLabel(operation.status)} · $period',
+                  period,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: context.v5Colors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: V5Spacing.md),
-                Wrap(
-                  spacing: V5Spacing.lg,
-                  runSpacing: V5Spacing.xs,
-                  children: [
-                    _OperationInlineMetric(
-                      value: '${snapshot.missionCount}',
-                      label: 'missions',
-                    ),
-                    _OperationInlineMetric(
-                      value: '${snapshot.criticalMissionCount}',
-                      label: 'critiques',
-                      critical: snapshot.criticalMissionCount > 0,
-                    ),
-                    _OperationInlineMetric(
-                      value: coverageLabel,
-                      label: 'couverture',
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns =
+                        MediaQuery.textScalerOf(context).scale(1) > 1.3 ? 1 : 3;
+                    final width =
+                        (constraints.maxWidth - V5Spacing.xs * (columns - 1)) /
+                        columns;
+                    return Wrap(
+                      spacing: V5Spacing.xs,
+                      runSpacing: V5Spacing.xs,
+                      children: [
+                        SizedBox(
+                          width: width,
+                          child: _OperationInlineMetric(
+                            value: '${snapshot.criticalMissionCount}',
+                            label: 'critiques',
+                            critical: snapshot.criticalMissionCount > 0,
+                          ),
+                        ),
+                        SizedBox(
+                          width: width,
+                          child: _OperationInlineMetric(
+                            value: coverageLabel,
+                            label: 'couverture',
+                          ),
+                        ),
+                        SizedBox(
+                          width: width,
+                          child: _OperationInlineMetric(
+                            value: '${snapshot.missionCount}',
+                            label: 'missions',
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -1063,27 +1244,35 @@ class _OperationInlineMetric extends StatelessWidget {
   final bool critical;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: '$value $label',
-    child: ExcludeSemantics(
-      child: Wrap(
-        spacing: V5Spacing.xxs,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: critical ? context.v5Colors.danger : null,
-              fontWeight: FontWeight.w900,
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(V5Spacing.xs),
+    decoration: BoxDecoration(
+      color: context.v5Colors.surfaceMuted,
+      borderRadius: BorderRadius.circular(V5Radius.compact),
+    ),
+    child: Semantics(
+      label: '$value $label',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: critical ? context.v5Colors.danger : null,
+                fontWeight: FontWeight.w900,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-          ),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: context.v5Colors.textSecondary,
+            const SizedBox(height: V5Spacing.xxs),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.v5Colors.textSecondary,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );

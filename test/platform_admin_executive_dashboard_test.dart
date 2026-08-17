@@ -90,8 +90,12 @@ void main() {
   ) async {
     await _pumpDashboard(tester, const _Scenario.empty());
 
-    expect(find.text('Plateforme en attente'), findsOneWidget);
+    expect(find.text('Plateforme stable'), findsOneWidget);
+    expect(find.text('Aucune opération active pour le moment'), findsOneWidget);
+    expect(find.text('Nouvelle opération'), findsOneWidget);
+    await _scrollTo(tester, find.byKey(const Key('executive-kpi-grid')));
     expect(find.byKey(const Key('executive-kpi-grid')), findsOneWidget);
+    await _scrollTo(tester, find.text('Aucune action prioritaire.'));
     expect(find.text('Aucune action prioritaire.'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.textContaining('Aucune opération'),
@@ -109,6 +113,9 @@ void main() {
     await _pumpDashboard(tester, _Scenario.one());
 
     expect(find.text('Plateforme stable'), findsOneWidget);
+    expect(find.text('Aucune mission critique détectée'), findsOneWidget);
+    expect(find.text('Mis à jour il y a 5 min'), findsOneWidget);
+    await _scrollTo(tester, find.byKey(const Key('executive-kpi-critical')));
     expect(find.bySemanticsLabel('1, opérations actives'), findsOneWidget);
     expect(find.bySemanticsLabel('0, missions critiques'), findsOneWidget);
     expect(
@@ -117,10 +124,40 @@ void main() {
       ),
       findsOneWidget,
     );
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('executive-priority-op-incendies')),
+    );
     expect(
       find.byKey(const Key('executive-priority-op-incendies')),
       findsOneWidget,
     );
+    expect(find.text('Voir l’opération'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('executive-priority-op-incendies')));
+    await tester.pumpAndSettle();
+    expect(find.text('Situation de l’opération'), findsOneWidget);
+  });
+
+  testWidgets('les KPI sont ordonnés par décision et ont une hauteur commune', (
+    tester,
+  ) async {
+    await _pumpDashboard(tester, _Scenario.three());
+
+    await _scrollTo(tester, find.byKey(const Key('executive-kpi-critical')));
+    final keys = [
+      const Key('executive-kpi-critical'),
+      const Key('executive-kpi-coverage'),
+      const Key('executive-kpi-missions'),
+      const Key('executive-kpi-professionals'),
+      const Key('executive-kpi-mobilizations'),
+      const Key('executive-kpi-operations'),
+    ];
+    final rects = [for (final key in keys) tester.getRect(find.byKey(key))];
+    expect(rects[0].left, lessThan(rects[1].left));
+    expect(rects[2].top, greaterThan(rects[0].top));
+    expect(rects[2].left, lessThan(rects[3].left));
+    expect(rects[4].top, greaterThan(rects[2].top));
+    expect(rects.map((rect) => rect.height).toSet(), hasLength(1));
   });
 
   testWidgets('trois opérations sont lisibles et enrichies sans surcharge', (
@@ -128,13 +165,17 @@ void main() {
   ) async {
     await _pumpDashboard(tester, _Scenario.three());
 
+    expect(find.text('Sous surveillance'), findsOneWidget);
+    expect(find.text('1 mission critique à suivre'), findsOneWidget);
+    await _scrollTo(tester, find.text('ACTION URGENTE'));
+    expect(find.text('ACTION URGENTE'), findsOneWidget);
     final scrollable = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
       find.byKey(const Key('all-platform-operations')),
       300,
       scrollable: scrollable,
     );
-    expect(find.text('Toutes les opérations'), findsOneWidget);
+    expect(find.text('Situation opérationnelle'), findsOneWidget);
     for (final id in const ['op-incendies', 'op-canicule', 'op-festival']) {
       final card = find.byKey(Key('platform-operation-$id'));
       await tester.scrollUntilVisible(card, 250, scrollable: scrollable);
@@ -159,11 +200,19 @@ void main() {
   ) async {
     await _pumpDashboard(tester, _Scenario.critical());
 
-    expect(find.text('Plateforme sous tension'), findsOneWidget);
+    expect(find.text('Situation critique'), findsOneWidget);
+    expect(
+      find.text('3 missions critiques nécessitent une action'),
+      findsOneWidget,
+    );
+    await _scrollTo(tester, find.byKey(const Key('executive-kpi-critical')));
     expect(find.bySemanticsLabel('3, missions critiques'), findsOneWidget);
-    expect(find.byKey(const Key('executive-priority-op-1')), findsOneWidget);
-    expect(find.byKey(const Key('executive-priority-op-2')), findsOneWidget);
-    expect(find.byKey(const Key('executive-priority-op-3')), findsOneWidget);
+    for (final id in const ['op-1', 'op-2', 'op-3']) {
+      final priority = find.byKey(Key('executive-priority-$id'));
+      await _scrollTo(tester, priority);
+      expect(priority, findsOneWidget);
+      expect(find.text('Voir l’opération'), findsWidgets);
+    }
     expect(find.byKey(const Key('executive-priority-op-4')), findsNothing);
   });
 
@@ -194,7 +243,7 @@ void main() {
         tester
             .getSemantics(find.byKey(const Key('executive-platform-state')))
             .label,
-        startsWith('Plateforme sous tension. Dernière actualisation'),
+        startsWith('Situation critique. 3 missions critiques'),
       );
       expect(
         Theme.of(tester.element(find.text('Centre opérationnel'))).brightness,
@@ -207,6 +256,8 @@ void main() {
         );
         await tester.pump();
       }
+      await tester.pumpAndSettle();
+      expect(tester.binding.hasScheduledFrame, isFalse);
       expect(tester.takeException(), isNull);
     },
   );
@@ -235,6 +286,9 @@ void main() {
     });
   }
 }
+
+Future<void> _scrollTo(WidgetTester tester, Finder target) => tester
+    .scrollUntilVisible(target, 300, scrollable: find.byType(Scrollable).first);
 
 Future<void> _pumpDashboard(
   WidgetTester tester,
@@ -274,6 +328,7 @@ Future<void> _pumpDashboard(
                   const NoPlatformAdministrationReadRepository(),
               administrationService: _AdministrationService(),
               missionRepository: _MissionRepository(scenario.missions),
+              referenceTime: DateTime(2026, 8, 16, 22, 46),
             ),
           ),
         ),

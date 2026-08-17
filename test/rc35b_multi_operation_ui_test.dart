@@ -58,11 +58,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Centre opérationnel'), findsOneWidget);
-    expect(find.text('En cours'), findsOneWidget);
-    expect(find.text('À venir'), findsOneWidget);
-    expect(find.text('Terminées'), findsOneWidget);
-    expect(find.text('Archivées'), findsOneWidget);
     final scrollable = find.byType(Scrollable).first;
+    for (final section in const [
+      'En cours',
+      'À venir',
+      'Terminées',
+      'Archivées',
+    ]) {
+      await tester.scrollUntilVisible(
+        find.text(section),
+        400,
+        scrollable: scrollable,
+      );
+      expect(find.text(section), findsOneWidget);
+    }
     await tester.scrollUntilVisible(
       find.byKey(const Key('legacy-mobilizations')),
       500,
