@@ -648,6 +648,12 @@ service cloud.firestore {
       return /databases/$(database)/documents/volunteers/$(uid);
     }
 
+    function hasProfessionalProfile() {
+      return isSignedIn()
+        && !exists(rolePath())
+        && exists(volunteerPath(request.auth.uid));
+    }
+
     function hasParticipationProfessionalIdentifier(data) {
       return 'professionalIdType' in data
         && 'professionalIdValue' in data
@@ -1112,9 +1118,11 @@ service cloud.firestore {
     }
 
     match /mobilizations/{mobilizationId} {
-      allow get: if isSignedIn()
-        && (isActiveMobilization(mobilizationId)
-          || isPlatformAdministrator());
+      allow get: if isPlatformAdministrator()
+        || (isActiveMobilization(mobilizationId)
+          && (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
+            || isActiveSiteManager()
+            || hasProfessionalProfile()));
       allow list: if isPlatformAdministrator()
         || (isSignedIn()
           && !isPlatformAdministrator()

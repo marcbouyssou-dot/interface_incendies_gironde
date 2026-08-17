@@ -2297,6 +2297,9 @@ test('platform V6: platform administrator reads its dashboard without client wri
     await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
       active: true,
     });
+    await setDoc(doc(admin, 'volunteers/professional'), {
+      uid: 'professional',
+    });
     await setDoc(doc(admin, 'territories/gironde'), {
       id: 'gironde',
       name: 'Gironde',
@@ -2391,7 +2394,7 @@ test('platform V6: platform administrator reads its dashboard without client wri
       await assertFails(deleteDoc(doc(db(uid), path)));
     }
   }
-  for (const uid of ['alice', 'coord', 'platform-admin']) {
+  for (const uid of ['professional', 'coord', 'platform-admin']) {
     await assertSucceeds(getDoc(doc(db(uid), 'platform/config')));
     await assertSucceeds(getDoc(
       doc(db(uid), `mobilizations/${activeMobilizationId}`),
@@ -2557,6 +2560,95 @@ test('RC3.5A.1: first explicit assignment disables the legacy fallback', async (
       createdBy: 'legacy-coord',
     }),
   ));
+});
+
+test('RC3.5A.2: direct mobilization get respects every supported identity', async () => {
+  const assignedMobilizationId = 'assigned-active';
+  const otherMobilizationId = 'other-active';
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'platform/config'), {activeMobilizationId});
+    for (const mobilizationId of [
+      activeMobilizationId,
+      assignedMobilizationId,
+      otherMobilizationId,
+    ]) {
+      await setDoc(doc(admin, `mobilizations/${mobilizationId}`), {
+        id: mobilizationId,
+        territoryId: 'gironde',
+        status: 'active',
+      });
+    }
+    await setDoc(doc(admin, 'roles/legacy-coord'), {
+      role: 'coordinator', locationIds: ['*'], active: true,
+    });
+    await setDoc(doc(admin, 'roles/assigned-coord'), {
+      role: 'coordinator', locationIds: ['*'], active: true,
+      hasActiveMobilizationAssignments: true,
+    });
+    await setDoc(doc(admin, 'roles/inactive-coord'), {
+      role: 'coordinator', locationIds: ['*'], active: false,
+    });
+    await setDoc(doc(admin, 'roles/manager'), {
+      role: 'site_manager', locationIds: ['site-a'], active: true,
+    });
+    await setDoc(
+      doc(
+        admin,
+        `mobilizationAssignments/${assignedMobilizationId}_assigned-coord`,
+      ),
+      {
+        uid: 'assigned-coord',
+        mobilizationId: assignedMobilizationId,
+        role: 'coordinator',
+        active: true,
+      },
+    );
+    await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+    await setDoc(doc(admin, 'volunteers/professional'), {
+      uid: 'professional',
+    });
+  });
+
+  await assertSucceeds(getDoc(doc(
+    db('legacy-coord'),
+    `mobilizations/${activeMobilizationId}`,
+  )));
+  await assertSucceeds(getDoc(doc(
+    db('assigned-coord'),
+    `mobilizations/${assignedMobilizationId}`,
+  )));
+  await assertSucceeds(getDoc(doc(
+    db('platform-admin'),
+    `mobilizations/${otherMobilizationId}`,
+  )));
+  await assertSucceeds(getDoc(doc(
+    db('manager'),
+    `mobilizations/${otherMobilizationId}`,
+  )));
+  await assertSucceeds(getDoc(doc(
+    db('professional'),
+    `mobilizations/${otherMobilizationId}`,
+  )));
+
+  await assertFails(getDoc(doc(
+    db('legacy-coord'),
+    `mobilizations/${otherMobilizationId}`,
+  )));
+  await assertFails(getDoc(doc(
+    db('assigned-coord'),
+    `mobilizations/${otherMobilizationId}`,
+  )));
+  await assertFails(getDoc(doc(
+    db('inactive-coord'),
+    `mobilizations/${activeMobilizationId}`,
+  )));
+  await assertFails(getDoc(doc(
+    db('no-role'),
+    `mobilizations/${activeMobilizationId}`,
+  )));
 });
 
 test('RC3.5: role scopes remain isolated across three active mobilizations', async () => {
