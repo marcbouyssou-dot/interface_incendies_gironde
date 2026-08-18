@@ -212,11 +212,11 @@ class _ResponsibleAccessFormScreenState
                       options: const [
                         V5SelectOption(
                           value: ResponsibleRole.siteManager,
-                          label: 'Responsable de centre',
+                          label: 'Responsable',
                         ),
                         V5SelectOption(
                           value: ResponsibleRole.coordinator,
-                          label: 'Coordinateur départemental',
+                          label: 'Coordinateur',
                         ),
                         V5SelectOption(
                           value: _cumulative,

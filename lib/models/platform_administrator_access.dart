@@ -9,7 +9,7 @@ class PlatformAdministratorAccess {
   }) {
     final active = data['active'];
     if (uid.trim().isEmpty || active is! bool) {
-      throw const FormatException('Administrateur plateforme invalide.');
+      throw const FormatException('Administrateur invalide.');
     }
     return PlatformAdministratorAccess(uid: uid, active: active);
   }

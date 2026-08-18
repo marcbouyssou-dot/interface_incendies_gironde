@@ -92,7 +92,7 @@ void main() {
 
       expect(find.byType(AppShell), findsOneWidget);
       expect(find.byType(V5BottomNavigation), findsOneWidget);
-      expect(find.text('Professionnel de santé'), findsOneWidget);
+      expect(find.text('Professionnel'), findsOneWidget);
       expect(find.text('Missions à venir'), findsOneWidget);
       expect(find.text('Chargement des missions…'), findsOneWidget);
       expect(
@@ -144,7 +144,7 @@ void main() {
     }
 
     expect(find.byType(V5BottomNavigation), findsOneWidget);
-    expect(find.text('Professionnel de santé'), findsOneWidget);
+    expect(find.text('Professionnel'), findsOneWidget);
     expect(find.text('Missions à venir'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -79,7 +79,7 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Administration plateforme',
+                          'Administrateur',
                           style: Theme.of(context).textTheme.labelLarge
                               ?.copyWith(
                                 color: accent,
@@ -93,7 +93,7 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
                         ),
                         const SizedBox(height: V5Spacing.xs),
                         Text(
-                          'Gérez votre session Administrateur plateforme.',
+                          'Gérez votre session et prévisualisez les parcours.',
                           style: Theme.of(context).textTheme.bodyLarge
                               ?.copyWith(color: colors.textSecondary),
                         ),

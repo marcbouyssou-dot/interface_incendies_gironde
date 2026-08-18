@@ -530,7 +530,7 @@ class FirestoreCoordinationRepository
     final ids = _validatedQueryIds(mobilizationIds, 'mobilisation');
     if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
     return _combineMissionStreams(
-      ids.map((id) => _watchMissionsInMobilization(_firestore, id)),
+      ids.map((id) => _watchMissionsInMobilization(_responsibleFirestore, id)),
     );
   }
 

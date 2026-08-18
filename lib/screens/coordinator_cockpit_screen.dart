@@ -12,6 +12,7 @@ import '../services/accessible_mobilizations_provider.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/operation_presentation.dart';
+import '../utils/runtime_stream_diagnostics.dart';
 import '../widgets/operational_territory_map.dart';
 import '../widgets/territory_components.dart';
 import '../widgets/v5_controls.dart';
@@ -73,7 +74,15 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
       return StreamBuilder<List<Mobilization>>(
         stream: provider.watchAccessibleMobilizations(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return const _CockpitUnavailable();
+          if (snapshot.hasError) {
+            debugLogRuntimeStreamError(
+              surface: 'Cockpit Coordinateur indisponible',
+              source: 'mobilisations accessibles',
+              error: snapshot.error,
+              stackTrace: snapshot.stackTrace,
+            );
+            return const _CockpitUnavailable();
+          }
           if (!snapshot.hasData) return const _CockpitLoading();
           final mobilizations = snapshot.data!;
           if (mobilizations.isEmpty) {
@@ -117,6 +126,22 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
               stream: _locations,
               builder: (context, locationsSnapshot) {
                 if (missionsSnapshot.hasError || locationsSnapshot.hasError) {
+                  if (missionsSnapshot.hasError) {
+                    debugLogRuntimeStreamError(
+                      surface: 'Cockpit Coordinateur indisponible',
+                      source: 'missions',
+                      error: missionsSnapshot.error,
+                      stackTrace: missionsSnapshot.stackTrace,
+                    );
+                  }
+                  if (locationsSnapshot.hasError) {
+                    debugLogRuntimeStreamError(
+                      surface: 'Cockpit Coordinateur indisponible',
+                      source: 'établissements',
+                      error: locationsSnapshot.error,
+                      stackTrace: locationsSnapshot.stackTrace,
+                    );
+                  }
                   return const _CockpitUnavailable();
                 }
                 if (!missionsSnapshot.hasData || !locationsSnapshot.hasData) {
@@ -126,6 +151,12 @@ class _CoordinatorCockpitScreenState extends State<CoordinatorCockpitScreen> {
                   stream: _access,
                   builder: (context, accessSnapshot) {
                     if (accessSnapshot.hasError) {
+                      debugLogRuntimeStreamError(
+                        surface: 'Cockpit Coordinateur indisponible',
+                        source: 'contexte de rôle',
+                        error: accessSnapshot.error,
+                        stackTrace: accessSnapshot.stackTrace,
+                      );
                       return const _CockpitUnavailable();
                     }
                     if (accessSnapshot.connectionState ==

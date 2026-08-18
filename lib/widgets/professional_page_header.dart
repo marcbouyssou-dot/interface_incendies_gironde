@@ -9,10 +9,10 @@ enum MobSanteJourney { professional, responsible, coordinator, administrator }
 
 extension MobSanteJourneyIdentity on MobSanteJourney {
   String get title => switch (this) {
-    MobSanteJourney.professional => 'Professionnel de santé',
-    MobSanteJourney.responsible => 'Responsable d’établissement',
-    MobSanteJourney.coordinator => 'Coordinateur départemental',
-    MobSanteJourney.administrator => 'Administrateur plateforme',
+    MobSanteJourney.professional => 'Professionnel',
+    MobSanteJourney.responsible => 'Responsable',
+    MobSanteJourney.coordinator => 'Coordinateur',
+    MobSanteJourney.administrator => 'Administrateur',
   };
 
   String get subtitle => switch (this) {

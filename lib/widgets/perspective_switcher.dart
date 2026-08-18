@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../perspective/cross_role_perspective.dart';
+import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
 import 'native_interactions.dart';
 
@@ -13,39 +14,80 @@ class PlatformAdminPerspectiveSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = CrossRolePerspectiveScope.of(context);
     final accent = context.v5Colors.accent;
-    return PerspectiveSection(
-      title: 'Prévisualiser un parcours',
-      children: [
-        PerspectiveOption(
-          key: const Key('perspective-professional'),
-          label: 'Professionnel de santé',
-          selected: controller.perspective == CrossRolePerspective.professional,
-          onTap: controller.showProfessional,
-          accentColor: accent,
-        ),
-        PerspectiveOption(
-          key: const Key('perspective-responsible'),
-          label: 'Responsable d’établissement',
-          selected: controller.perspective == CrossRolePerspective.responsible,
-          onTap: controller.showResponsible,
-          accentColor: accent,
-        ),
-        PerspectiveOption(
-          key: const Key('perspective-coordinator'),
-          label: 'Coordinateur départemental',
-          selected: controller.perspective == CrossRolePerspective.coordinator,
-          onTap: controller.showCoordinator,
-          accentColor: accent,
-        ),
-        PerspectiveOption(
-          key: const Key('perspective-platform-admin'),
-          label: 'Administrateur plateforme',
-          selected: controller.perspective == CrossRolePerspective.actual,
-          onTap: controller.showActualRole,
-          accentColor: accent,
-        ),
-      ],
+    return StreamBuilder<List<ResponsePlace>>(
+      stream: LiveCoordinationDataScope.of(context).watchLocations(),
+      builder: (context, snapshot) => PerspectiveSection(
+        title: 'Prévisualiser un parcours',
+        children: [
+          PerspectiveOption(
+            key: const Key('perspective-professional'),
+            label: 'Professionnel',
+            selected:
+                controller.perspective == CrossRolePerspective.professional,
+            onTap: controller.showProfessional,
+            accentColor: accent,
+          ),
+          PerspectiveOption(
+            key: const Key('perspective-responsible'),
+            label: 'Responsable',
+            selected:
+                controller.perspective == CrossRolePerspective.responsible,
+            onTap: () => _showResponsiblePreview(
+              context,
+              controller,
+              snapshot.data ?? const [],
+            ),
+            accentColor: accent,
+          ),
+          PerspectiveOption(
+            key: const Key('perspective-coordinator'),
+            label: 'Coordinateur',
+            selected:
+                controller.perspective == CrossRolePerspective.coordinator,
+            onTap: controller.showCoordinator,
+            accentColor: accent,
+          ),
+          PerspectiveOption(
+            key: const Key('perspective-platform-admin'),
+            label: 'Administrateur',
+            selected: controller.perspective == CrossRolePerspective.actual,
+            onTap: controller.showActualRole,
+            accentColor: accent,
+          ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _showResponsiblePreview(
+    BuildContext context,
+    CrossRolePerspectiveController controller,
+    List<ResponsePlace> locations,
+  ) async {
+    final available = locations
+        .where((location) => location.isEnabled)
+        .toList(growable: false);
+    if (available.isEmpty) {
+      controller.showResponsible();
+      return;
+    }
+    if (available.length == 1) {
+      controller.showResponsible(available.single.id);
+      return;
+    }
+    final selected = await showResponsibleCenterPicker(
+      context,
+      access: const ResponsibleAccess(
+        uid: 'platform-administrator-preview',
+        role: ResponsibleRole.coordinator,
+        locationIds: {},
+        active: true,
+      ),
+      locations: available,
+      selectedLocationId: controller.responsibleLocationId,
+      accentColor: context.v5Colors.accent,
+    );
+    if (selected != null) controller.showResponsible(selected.id);
   }
 }
 
@@ -63,7 +105,7 @@ class SiteManagerPerspectiveSection extends StatelessWidget {
       children: [
         PerspectiveOption(
           key: const Key('perspective-site-manager'),
-          label: 'Responsable de centre',
+          label: 'Responsable',
           selected: controller.perspective != CrossRolePerspective.professional,
           onTap: controller.showActualRole,
           accentColor: accent,
@@ -114,7 +156,7 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
         ),
         PerspectiveOption(
           key: const Key('perspective-responsible'),
-          label: 'Responsable de centre',
+          label: 'Responsable',
           selected: controller.perspective == CrossRolePerspective.responsible,
           accentColor: accentColor,
           onTap: () => _selectResponsibleCenter(context, controller),
@@ -272,112 +314,110 @@ class CrossRolePreviewBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     if (compact) {
-      final identity = Row(
-        children: [
-          Icon(
-            Icons.visibility_outlined,
-            size: 17,
-            color: accentColor ?? colors.info,
-          ),
-          const SizedBox(width: V5Spacing.xs),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title ?? 'Perspective Professionnel',
+      final previewTitle = title ?? 'Prévisualisation Professionnel';
+      final identity = Semantics(
+        label: '$previewTitle. Rôle réel : $label.',
+        child: ExcludeSemantics(
+          child: Row(
+            children: [
+              Icon(
+                Icons.visibility_outlined,
+                size: 17,
+                color: accentColor ?? colors.info,
+              ),
+              const SizedBox(width: V5Spacing.xs),
+              Expanded(
+                child: Text(
+                  previewTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: colors.textPrimary,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                Text(
-                  'Votre rôle : $label',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colors.textSecondary,
-                    letterSpacing: 0,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-      final actions = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (onChange != null)
-            TextButton(
-              key: const Key('change-preview-center'),
-              onPressed: onChange,
-              style: TextButton.styleFrom(
-                foregroundColor: accentColor ?? colors.info,
-                minimumSize: const Size(44, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
               ),
-              child: const Text('Changer'),
-            ),
-          TextButton(
-            key: const Key('exit-cross-role-preview'),
-            onPressed: onExit,
-            style: TextButton.styleFrom(
-              foregroundColor: accentColor ?? colors.info,
-              minimumSize: const Size(44, 44),
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-            child: Text(exitLabel),
+            ],
           ),
-        ],
+        ),
       );
-      final stackActions =
-          exitLabel.length > 18 ||
-          MediaQuery.textScalerOf(context).scale(1) > 1.3;
+      Widget buildActions({required bool expanded}) {
+        final changeButton = TextButton(
+          key: const Key('change-preview-center'),
+          onPressed: onChange,
+          style: TextButton.styleFrom(
+            foregroundColor: accentColor ?? colors.info,
+            minimumSize: const Size(44, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: const Text('Changer'),
+        );
+        final exitButton = TextButton(
+          key: const Key('exit-cross-role-preview'),
+          onPressed: onExit,
+          style: TextButton.styleFrom(
+            foregroundColor: accentColor ?? colors.info,
+            minimumSize: const Size(44, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          child: Row(
+            mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              const Icon(Icons.arrow_back_rounded, size: 16),
+              const SizedBox(width: 4),
+              if (expanded)
+                Flexible(
+                  child: Text(
+                    exitLabel,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )
+              else
+                Text(exitLabel),
+            ],
+          ),
+        );
+        return Row(
+          mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            if (onChange != null)
+              expanded ? Expanded(child: changeButton) : changeButton,
+            expanded ? Expanded(child: exitButton) : exitButton,
+          ],
+        );
+      }
+
       return Container(
         key: const Key('cross-role-preview-banner'),
         constraints: const BoxConstraints(minHeight: 44),
-        padding: const EdgeInsets.fromLTRB(12, 5, 4, 5),
+        padding: const EdgeInsets.fromLTRB(12, 1, 4, 1),
         decoration: BoxDecoration(
           color: containerColor ?? colors.surfaceElevated,
           borderRadius: BorderRadius.circular(V5Radius.control),
           border: Border.all(color: colors.outline.withValues(alpha: 0.7)),
         ),
-        child: stackActions
-            ? Column(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stackActions =
+                onChange != null ||
+                MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+                constraints.maxWidth < 340;
+            if (stackActions) {
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  identity,
-                  if (onChange != null)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        key: const Key('change-preview-center'),
-                        onPressed: onChange,
-                        style: TextButton.styleFrom(
-                          foregroundColor: accentColor ?? colors.info,
-                          minimumSize: const Size(44, 44),
-                        ),
-                        child: const Text('Changer'),
-                      ),
-                    ),
-                  TextButton(
-                    key: const Key('exit-cross-role-preview'),
-                    onPressed: onExit,
-                    style: TextButton.styleFrom(
-                      foregroundColor: accentColor ?? colors.info,
-                      minimumSize: const Size.fromHeight(44),
-                    ),
-                    child: Text(exitLabel, textAlign: TextAlign.center),
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(child: identity),
-                  actions,
-                ],
-              ),
+                children: [identity, buildActions(expanded: true)],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(flex: 3, child: identity),
+                Expanded(flex: 2, child: buildActions(expanded: true)),
+              ],
+            );
+          },
+        ),
       );
     }
     return ColoredBox(

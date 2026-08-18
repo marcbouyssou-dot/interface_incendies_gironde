@@ -666,8 +666,8 @@ class _ResponsibleAccountCard extends StatelessWidget {
     final roleLabel = access.isCumulative
         ? 'Coordinateur et responsable'
         : access.roles.contains(ResponsibleRole.coordinator)
-        ? 'Coordinateur départemental'
-        : 'Responsable de centre';
+        ? 'Coordinateur'
+        : 'Responsable';
     final locations =
         access.locationIds
             .map((id) => locationsById[id]?.name ?? 'Lieu indisponible')
@@ -934,8 +934,8 @@ class _InvitationCard extends StatelessWidget {
             _ManagementDetailLine(
               icon: Icons.admin_panel_settings_outlined,
               text: invitation.role == AdminInvitationDraft.coordinatorRole
-                  ? 'Coordinateur départemental'
-                  : 'Responsable de centre',
+                  ? 'Coordinateur'
+                  : 'Responsable',
             ),
             const SizedBox(height: 8),
             _ManagementDetailLine(
@@ -1253,11 +1253,11 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                         options: const [
                           V5SelectOption(
                             value: AdminInvitationDraft.siteManagerRole,
-                            label: 'Responsable de centre',
+                            label: 'Responsable',
                           ),
                           V5SelectOption(
                             value: AdminInvitationDraft.coordinatorRole,
-                            label: 'Coordinateur départemental',
+                            label: 'Coordinateur',
                           ),
                         ],
                         onChanged: (value) => setState(() {

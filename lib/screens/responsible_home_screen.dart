@@ -7,6 +7,7 @@ import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
+import '../utils/runtime_stream_diagnostics.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/responsible_mission_card.dart';
 import '../widgets/v5_controls.dart';
@@ -60,6 +61,12 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
         stream: _responsibleAccess,
         builder: (context, accessSnapshot) {
           if (accessSnapshot.hasError) {
+            debugLogRuntimeStreamError(
+              surface: 'Planning Responsable indisponible',
+              source: 'contexte de rôle',
+              error: accessSnapshot.error,
+              stackTrace: accessSnapshot.stackTrace,
+            );
             return const _ResponsibleHomeUnavailable();
           }
           if (!accessSnapshot.hasData &&
@@ -72,6 +79,12 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
               stream: _missions,
               builder: (context, missionsSnapshot) {
                 if (missionsSnapshot.hasError) {
+                  debugLogRuntimeStreamError(
+                    surface: 'Planning Responsable indisponible',
+                    source: 'missions',
+                    error: missionsSnapshot.error,
+                    stackTrace: missionsSnapshot.stackTrace,
+                  );
                   return const _ResponsibleHomeUnavailable();
                 }
                 if (!missionsSnapshot.hasData) {
@@ -81,6 +94,12 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
                   stream: _locations,
                   builder: (context, locationsSnapshot) {
                     if (locationsSnapshot.hasError) {
+                      debugLogRuntimeStreamError(
+                        surface: 'Planning Responsable indisponible',
+                        source: 'établissements',
+                        error: locationsSnapshot.error,
+                        stackTrace: locationsSnapshot.stackTrace,
+                      );
                       return const _ResponsibleHomeUnavailable();
                     }
                     if (!locationsSnapshot.hasData) {

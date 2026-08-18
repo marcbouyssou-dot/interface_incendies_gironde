@@ -56,8 +56,8 @@ void main() {
     expect(find.text('Coordinateur Test'), findsOneWidget);
     expect(find.text('Responsable Test'), findsOneWidget);
     expect(find.text('Responsable Cumulatif'), findsOneWidget);
-    expect(find.text('Coordinateur départemental'), findsOneWidget);
-    expect(find.text('Responsable de centre'), findsOneWidget);
+    expect(find.text('Coordinateur'), findsOneWidget);
+    expect(find.text('Responsable'), findsOneWidget);
     expect(find.text('Coordinateur et responsable'), findsOneWidget);
     expect(find.text('Actif'), findsNWidgets(2));
     expect(find.text('Inactif'), findsOneWidget);
@@ -103,7 +103,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('responsible-role-choice')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.tap(find.text('Coordinateur').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-responsible-access')));
     await tester.pumpAndSettle();
@@ -148,8 +148,8 @@ void main() {
     final repository = _RecordingRepository();
     await _openForm(tester, repository: repository);
 
-    await _chooseRole(tester, 'Coordinateur départemental');
-    await _chooseRole(tester, 'Responsable de centre');
+    await _chooseRole(tester, 'Coordinateur');
+    await _chooseRole(tester, 'Responsable');
     await tester.tap(find.byKey(const Key('save-responsible-access')));
     await tester.pump();
     expect(find.text('Sélectionnez au moins un centre.'), findsOneWidget);

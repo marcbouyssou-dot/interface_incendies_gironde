@@ -356,7 +356,7 @@ void main() {
       'coord@example.fr',
     );
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.tap(find.text('Coordinateur').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-search')), findsNothing);
 
@@ -522,7 +522,7 @@ void main() {
       'coord-test@mobsante.fr',
     );
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.tap(find.text('Coordinateur').last);
     await tester.pumpAndSettle();
 
     final submitFinder = find.byKey(const Key('create-admin-invitation'));
@@ -569,12 +569,12 @@ void main() {
     expect(find.text('14 jours'), findsOneWidget);
 
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.tap(find.text('Coordinateur').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-search')), findsNothing);
 
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Responsable de centre').last);
+    await tester.tap(find.text('Responsable').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-search')), findsOneWidget);
     expect(find.text('14 jours'), findsOneWidget);
@@ -742,7 +742,7 @@ void main() {
       'Responsable modifié',
     );
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur départemental').last);
+    await tester.tap(find.text('Coordinateur').last);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-admin-invitation')));
     await tester.pumpAndSettle();

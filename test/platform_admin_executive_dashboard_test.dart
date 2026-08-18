@@ -83,6 +83,26 @@ void main() {
       expect(snapshot.priorityOperations, hasLength(3));
       expect(snapshot.priorityOperations.first.operation.id, 'op-1');
     });
+
+    test('une mission critique interdit un état stable sans opération', () {
+      final snapshot = ExecutiveDashboardSnapshot(
+        operations: const [],
+        mobilizations: const [],
+        missions: [
+          _mission(
+            'legacy-critical',
+            'legacy-mobilization',
+            required: 1,
+            registered: 0,
+          ),
+        ],
+      );
+
+      expect(snapshot.criticalMissionCount, 1);
+      expect(snapshot.coverage, 0);
+      expect(snapshot.state, ExecutivePlatformState.watch);
+      expect(snapshot.state, isNot(ExecutivePlatformState.stable));
+    });
   });
 
   testWidgets('zéro opération reste calme, compact et explicite', (
@@ -214,6 +234,30 @@ void main() {
       expect(find.text('Voir l’opération'), findsWidgets);
     }
     expect(find.byKey(const Key('executive-priority-op-4')), findsNothing);
+  });
+
+  testWidgets('une mission legacy critique ne peut jamais afficher stable', (
+    tester,
+  ) async {
+    await _pumpDashboard(
+      tester,
+      _Scenario(
+        operations: const [],
+        mobilizations: const [],
+        missions: [
+          _mission(
+            'legacy-critical',
+            'legacy-mobilization',
+            required: 1,
+            registered: 0,
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('Sous surveillance'), findsOneWidget);
+    expect(find.text('1 mission critique à suivre'), findsOneWidget);
+    expect(find.text('Plateforme stable'), findsNothing);
   });
 
   testWidgets(

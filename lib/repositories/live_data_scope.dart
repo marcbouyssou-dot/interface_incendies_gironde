@@ -10,10 +10,12 @@ class LiveCoordinationData {
   LiveCoordinationData(
     CoordinationRepository repository, {
     Stream<ResponsibleAccess?> Function()? responsibleAccessOverride,
+    Stream<List<CoordinationNeed>> Function()? missionsOverride,
   }) : _repository = repository {
     final accessSource =
         responsibleAccessOverride ?? repository.watchResponsibleAccess;
     _missions = _SharedLatestStream(() {
+      if (missionsOverride != null) return missionsOverride();
       if (repository is! MultiMobilizationCoordinationReadRepository) {
         return repository.watchMissions();
       }

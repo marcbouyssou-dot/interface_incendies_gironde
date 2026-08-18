@@ -1,18 +1,26 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
+import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/mobilization_context.dart';
+import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/operation.dart';
+import 'package:interface_incendies_gironde/models/operational_scope.dart';
 import 'package:interface_incendies_gironde/models/platform_administrator_access.dart';
-import 'package:interface_incendies_gironde/models/responsible_access.dart';
+import 'package:interface_incendies_gironde/models/responsible_account.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/models/user_display_identity.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_runtime.dart';
+import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_shell.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_more_screen.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
@@ -20,6 +28,8 @@ import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/services/current_mobilization_provider.dart';
+import 'package:interface_incendies_gironde/services/accessible_mobilizations_provider.dart';
+import 'package:interface_incendies_gironde/services/operational_context_provider.dart';
 import 'package:interface_incendies_gironde/services/platform_administration_service.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
@@ -100,7 +110,7 @@ void main() {
     expect(find.byType(PlatformAdminShell), findsOneWidget);
     expect(find.byKey(const Key('platform-admin-shell')), findsOneWidget);
     expect(find.byType(ProfessionalShell), findsNothing);
-    expect(find.text('Administrateur plateforme'), findsOneWidget);
+    expect(find.text('Administrateur'), findsOneWidget);
     expect(find.text('Préparez et pilotez les mobilisations.'), findsOneWidget);
   });
 
@@ -249,7 +259,9 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final repository = _RecordingCoordinationRepository();
+    final repository = _RecordingCoordinationRepository(
+      initialLocations: [places.first],
+    );
     await _pumpPlatformAdmin(tester, repository: repository);
 
     Future<void> openMore() async {
@@ -262,17 +274,33 @@ void main() {
       required String title,
       required Type shell,
     }) async {
+      await tester.ensureVisible(find.byKey(option));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(option));
       await tester.pumpAndSettle();
+      if (find
+          .byKey(const Key('responsible-center-picker'))
+          .evaluate()
+          .isNotEmpty) {
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byKey(const Key('responsible-center-picker')),
+                matching: find.byType(ListTile),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+      }
       expect(find.byType(shell), findsOneWidget);
-      expect(find.text('Prévisualisation : $title'), findsOneWidget);
+      expect(find.text('Prévisualisation $title'), findsOneWidget);
+      expect(find.text('Votre rôle : Administrateur'), findsNothing);
+      expect(find.text('Retour Administrateur'), findsOneWidget);
       expect(
-        find.text('Votre rôle : Administrateur plateforme'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Revenir à l’Administrateur plateforme'),
-        findsOneWidget,
+        tester
+            .getSize(find.byKey(const Key('cross-role-preview-banner')))
+            .height,
+        lessThanOrEqualTo(52),
       );
       expect(repository.signOutCalls, 0);
       expect(repository.lastObservedAccess, isNull);
@@ -291,24 +319,272 @@ void main() {
     expect(find.byKey(const Key('perspective-platform-admin')), findsOneWidget);
     await preview(
       option: const Key('perspective-professional'),
-      title: 'Professionnel de santé',
+      title: 'Professionnel',
       shell: ProfessionalShell,
     );
 
     await openMore();
     await preview(
       option: const Key('perspective-responsible'),
-      title: 'Responsable d’établissement',
+      title: 'Responsable',
       shell: ResponsibleShell,
     );
 
     await openMore();
     await preview(
       option: const Key('perspective-coordinator'),
-      title: 'Coordinateur départemental',
+      title: 'Coordinateur',
       shell: CoordinatorShell,
     );
   });
+
+  testWidgets(
+    'admin previews load every coordinator and responsible destination without context leaks',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final location = places.first;
+      final mission = _previewMission(location);
+      final accountsRepository = _RecordingAccountsRepository();
+      final repository = _MultiPreviewRepository(
+        missions: [mission],
+        location: location,
+        accountsRepository: accountsRepository,
+        denyAdministrativeScopedReads: true,
+      );
+      await tester.pumpWidget(
+        FireCoordinationApp(
+          repository: repository,
+          platformRuntime: _MultiPreviewRuntime(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> openAdminPerspective(Key key) async {
+        await tester.tap(find.text('Plus').last);
+        await tester.pumpAndSettle();
+        final option = find.byKey(key);
+        await tester.ensureVisible(option);
+        await tester.pumpAndSettle();
+        await tester.tap(option);
+        await tester.pumpAndSettle();
+      }
+
+      await openAdminPerspective(const Key('perspective-coordinator'));
+      expect(
+        find.byKey(const PageStorageKey('coordinator-cockpit')),
+        findsOneWidget,
+      );
+      expect(find.text('Prévisualisation Coordinateur'), findsOneWidget);
+      expect(repository.allActiveRequests, greaterThan(0));
+      expect(repository.mobilizationRequests, isEmpty);
+      expect(
+        find.text('Le cockpit opérationnel est temporairement indisponible.'),
+        findsNothing,
+      );
+
+      await tester.tap(find.text('Territoire').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      expect(
+        find.byKey(const PageStorageKey('coordinator-territory')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Acteurs').last);
+      await tester.pumpAndSettle();
+      expect(accountsRepository.listCalls, 1);
+      expect(
+        find.byKey(const PageStorageKey('coordinator-actors')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Plus').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      expect(
+        find.byKey(const PageStorageKey('coordinator-more')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('administration-statistics')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('coordinator-global-dashboard')),
+        findsOneWidget,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
+      await tester.pumpAndSettle();
+
+      await openAdminPerspective(const Key('perspective-responsible'));
+      expect(find.byKey(const Key('responsible-home')), findsOneWidget);
+      expect(find.text('Prévisualisation Responsable'), findsOneWidget);
+      await tester.tap(find.text('Besoins').last);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const PageStorageKey('responsible-needs')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(Key('mission-operation-context-${mission.mobilizationId}')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Équipe').last);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const PageStorageKey('responsible-team')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Profil').last);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const PageStorageKey('responsible-profile')),
+        findsOneWidget,
+      );
+      expect(find.text(location.name), findsWidgets);
+      expect(find.text('Tous les centres — accès Coordinateur'), findsNothing);
+      expect(repository.locationRequests, isEmpty);
+      expect(
+        find.text('Le planning est temporairement indisponible.'),
+        findsNothing,
+      );
+      await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
+      await tester.pumpAndSettle();
+
+      await openAdminPerspective(const Key('perspective-professional'));
+      expect(find.byType(ProfessionalShell), findsOneWidget);
+      expect(find.text('Prévisualisation Professionnel'), findsOneWidget);
+      expect(find.text('Votre rôle : Administrateur'), findsNothing);
+      await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
+      await tester.pumpAndSettle();
+
+      await openAdminPerspective(const Key('perspective-coordinator'));
+      expect(
+        find.byKey(const PageStorageKey('coordinator-cockpit')),
+        findsOneWidget,
+      );
+      expect(repository.allActiveRequests, greaterThan(1));
+      expect(repository.mobilizationRequests, isEmpty);
+      expect(find.text('Tous les centres — accès Coordinateur'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'firebase-like preview failures keep simple UI copy and log the exact stream',
+    (tester) async {
+      final messages = <String>[];
+      final previousDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) messages.add(message);
+      };
+      try {
+        final location = places.first;
+        await tester.pumpWidget(
+          FireCoordinationApp(
+            repository: _MultiPreviewRepository(
+              missions: [_previewMission(location)],
+              location: location,
+              failProfessionalMissionRead: true,
+            ),
+            platformRuntime: _MultiPreviewRuntime(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Plus').last);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const Key('perspective-coordinator')),
+        );
+        await tester.tap(find.byKey(const Key('perspective-coordinator')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Le cockpit opérationnel est temporairement indisponible.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('permission-denied'), findsNothing);
+        expect(
+          messages.any(
+            (message) =>
+                message.contains(
+                  'Cockpit Coordinateur indisponible [missions]',
+                ) &&
+                message.contains('permission-denied'),
+          ),
+          isTrue,
+        );
+      } finally {
+        debugPrint = previousDebugPrint;
+      }
+    },
+  );
+
+  testWidgets(
+    'admin perspective stays readable at 390x844 with 200 percent text, dark mode and reduced motion',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+        tester.platformDispatcher.clearPlatformBrightnessTestValue();
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue();
+      });
+      final location = places.first;
+      await tester.pumpWidget(
+        FireCoordinationApp(
+          repository: _MultiPreviewRepository(
+            missions: [_previewMission(location)],
+            location: location,
+          ),
+          platformRuntime: _MultiPreviewRuntime(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Plus').last);
+      await tester.pumpAndSettle();
+      final option = find.byKey(const Key('perspective-coordinator'));
+      await tester.ensureVisible(option);
+      await tester.drag(
+        find.byKey(const PageStorageKey('platform-admin-more')),
+        const Offset(0, -180),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(option);
+      await tester.pumpAndSettle();
+
+      expect(
+        Theme.of(tester.element(find.byType(CoordinatorShell))).brightness,
+        Brightness.dark,
+      );
+      expect(
+        MediaQuery.of(
+          tester.element(find.byType(CoordinatorShell)),
+        ).disableAnimations,
+        isTrue,
+      );
+      expect(
+        find.byKey(const PageStorageKey('coordinator-cockpit')),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSemantics(find.byKey(const Key('cross-role-preview-banner'))),
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    },
+  );
 
   testWidgets('platform sign-out confirmation can be cancelled', (
     tester,
@@ -436,7 +712,8 @@ Future<void> _pumpPlatformAdmin(
 }
 
 class _RecordingCoordinationRepository extends MockCoordinationRepository {
-  _RecordingCoordinationRepository() : super(responsibleAccess: null);
+  _RecordingCoordinationRepository({super.initialLocations})
+    : super(responsibleAccess: null);
 
   int signOutCalls = 0;
   ResponsibleAccess? lastObservedAccess;
@@ -450,6 +727,75 @@ class _RecordingCoordinationRepository extends MockCoordinationRepository {
   @override
   Future<void> signOutResponsible() async {
     signOutCalls++;
+  }
+}
+
+class _MultiPreviewRepository extends MockCoordinationRepository
+    implements MultiMobilizationCoordinationReadRepository {
+  _MultiPreviewRepository({
+    required List<CoordinationNeed> missions,
+    required ResponsePlace location,
+    MockResponsibleAccessAdministrationRepository? accountsRepository,
+    this.denyAdministrativeScopedReads = false,
+    this.failProfessionalMissionRead = false,
+  }) : _missions = List.unmodifiable(missions),
+       super(
+         initialMissions: missions,
+         initialLocations: [location],
+         responsibleAccess: null,
+         responsibleAccessAdministrationRepository: accountsRepository,
+       );
+
+  final List<CoordinationNeed> _missions;
+  final bool denyAdministrativeScopedReads;
+  final bool failProfessionalMissionRead;
+  int allActiveRequests = 0;
+  final List<Set<String>> mobilizationRequests = [];
+  final List<Set<String>> locationRequests = [];
+
+  @override
+  Stream<List<CoordinationNeed>> watchAllActiveMissions() {
+    allActiveRequests++;
+    if (failProfessionalMissionRead) return _permissionDenied();
+    return Stream.value(_missions);
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForLocations(Set<String> ids) {
+    locationRequests.add(Set.of(ids));
+    if (denyAdministrativeScopedReads) return _permissionDenied();
+    return Stream.value(
+      _missions.where((mission) => ids.contains(mission.locationId)).toList(),
+    );
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizations(
+    Set<String> ids,
+  ) {
+    mobilizationRequests.add(Set.of(ids));
+    if (denyAdministrativeScopedReads) return _permissionDenied();
+    return Stream.value(
+      _missions
+          .where((mission) => ids.contains(mission.mobilizationId))
+          .toList(),
+    );
+  }
+
+  Stream<List<CoordinationNeed>> _permissionDenied() => Stream.error(
+    FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'),
+    StackTrace.current,
+  );
+}
+
+class _RecordingAccountsRepository
+    extends MockResponsibleAccessAdministrationRepository {
+  int listCalls = 0;
+
+  @override
+  Future<List<ResponsibleAccount>> listAccounts() async {
+    listCalls++;
+    return super.listAccounts();
   }
 }
 
@@ -503,6 +849,55 @@ final _activeMobilization = Mobilization(
   schemaVersion: 1,
 );
 
+final _previewMobilization = Mobilization(
+  id: 'mobilization-preview',
+  operationId: 'operation-preview',
+  territoryId: 'gironde',
+  name: 'Mobilisation de prévisualisation',
+  subtitle: 'Gironde',
+  contextType: MobilizationContextType.other,
+  status: MobilizationStatus.active,
+  createdBy: 'platform-admin',
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedAt: DateTime.utc(2026, 8, 10),
+  activatedBy: 'platform-admin',
+  activatedAt: DateTime.utc(2026, 8, 10),
+  schemaVersion: 2,
+);
+
+final _previewOperation = Operation(
+  id: 'operation-preview',
+  name: 'Opération de prévisualisation',
+  type: OperationType.exercise,
+  status: OperationStatus.active,
+  startAt: DateTime.utc(2026, 8, 1),
+  scopeRefs: const [
+    OperationalScopeRef(kind: OperationalScopeKind.territory, id: 'gironde'),
+  ],
+  createdBy: 'platform-admin',
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedBy: 'platform-admin',
+  updatedAt: DateTime.utc(2026, 8, 10),
+  schemaVersion: 1,
+);
+
+CoordinationNeed _previewMission(ResponsePlace location) => CoordinationNeed(
+  id: 'mission-preview',
+  mobilizationId: _previewMobilization.id,
+  locationId: location.id,
+  place: location.name,
+  group: location.group,
+  date: 'demain',
+  time: '12:00 — 16:00',
+  requiredPhysiotherapists: 1,
+  registeredPhysiotherapists: 0,
+  requiredPodiatrists: 0,
+  registeredPodiatrists: 0,
+  equipment: const [],
+  startAt: DateTime.utc(2026, 8, 20, 12),
+  updatedAt: DateTime.utc(2026, 8, 18, 12),
+);
+
 final _gironde = Territory(
   id: 'gironde',
   name: 'Gironde',
@@ -538,6 +933,95 @@ class _FakePlatformRuntime implements PlatformRuntime {
       const NoPlatformAdministrationService();
 }
 
+class _MultiPreviewRuntime
+    implements PlatformRuntime, MultiOperationPlatformRuntime {
+  _MultiPreviewRuntime()
+    : _platformRepository = _FakePlatformReadRepository(
+        activeMobilization: _previewMobilization,
+      ),
+      _administrationRepository = const _FakeAdministrationReadRepository(
+        administrator: PlatformAdministratorAccess(
+          uid: 'platform-admin',
+          active: true,
+        ),
+        assignments: [],
+      );
+
+  final _FakePlatformReadRepository _platformRepository;
+  final _FakeAdministrationReadRepository _administrationRepository;
+
+  @override
+  PlatformReadRepository get platformReadRepository => _platformRepository;
+
+  @override
+  MobilizationContextProvider get currentMobilizationProvider =>
+      _FakeMobilizationProvider(
+        Stream.value(
+          MobilizationContext(
+            mobilizationId: _previewMobilization.id,
+            territoryId: _previewMobilization.territoryId,
+            status: _previewMobilization.status,
+          ),
+        ),
+      );
+
+  @override
+  PlatformAdministrationReadRepository
+  get platformAdministrationReadRepository => _administrationRepository;
+
+  @override
+  PlatformAdministrationService get platformAdministrationService =>
+      const NoPlatformAdministrationService();
+
+  @override
+  OperationReadRepository get operationReadRepository =>
+      const _PreviewOperationRepository();
+
+  @override
+  AccessibleMobilizationsProvider get accessibleMobilizationsProvider =>
+      const _UnavailableAccessibleMobilizations();
+
+  @override
+  OperationalContextProvider get operationalContextProvider =>
+      const _UnavailableOperationalContextProvider();
+}
+
+class _PreviewOperationRepository implements OperationReadRepository {
+  const _PreviewOperationRepository();
+
+  @override
+  Stream<Operation?> watchOperation(String operationId) => Stream.value(
+    operationId == _previewOperation.id ? _previewOperation : null,
+  );
+
+  @override
+  Stream<List<Operation>> watchOperations({Set<OperationStatus>? statuses}) =>
+      Stream.value(
+        statuses == null || statuses.contains(_previewOperation.status)
+            ? [_previewOperation]
+            : const [],
+      );
+}
+
+class _UnavailableAccessibleMobilizations
+    implements AccessibleMobilizationsProvider {
+  const _UnavailableAccessibleMobilizations();
+
+  @override
+  Stream<List<Mobilization>> watchAccessibleMobilizations() =>
+      const Stream.empty();
+}
+
+class _UnavailableOperationalContextProvider
+    implements OperationalContextProvider {
+  const _UnavailableOperationalContextProvider();
+
+  @override
+  Stream<OperationalMissionContext?> watchForMobilization(
+    String mobilizationId,
+  ) => const Stream.empty();
+}
+
 class _FakeMobilizationProvider implements MobilizationContextProvider {
   const _FakeMobilizationProvider(this.contextStream);
 
@@ -564,8 +1048,10 @@ class _FakePlatformReadRepository implements PlatformReadRepository {
   Stream<List<Mobilization>> watchMobilizations({
     String? territoryId,
     bool includeInactive = false,
-  }) => Stream<List<Mobilization>>.value(
-    activeMobilization == null ? const [] : [activeMobilization!],
+  }) => Stream<List<Mobilization>>.multi(
+    (controller) => controller.add(
+      activeMobilization == null ? const [] : [activeMobilization!],
+    ),
   );
 
   @override

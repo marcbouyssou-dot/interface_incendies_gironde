@@ -4,6 +4,15 @@ import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/widgets/professional_page_header.dart';
 
 void main() {
+  test('les quatre libellés de navigation restent courts', () {
+    expect(MobSanteJourney.values.map((journey) => journey.title), [
+      'Professionnel',
+      'Responsable',
+      'Coordinateur',
+      'Administrateur',
+    ]);
+  });
+
   testWidgets('the common header exposes every journey identity', (
     tester,
   ) async {

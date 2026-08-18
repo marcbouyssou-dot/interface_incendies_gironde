@@ -10,6 +10,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/coordinator_bottom_navigation.dart';
 import '../widgets/native_interactions.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import 'admin_invitations_screen.dart';
 import 'coordinator_actors_screen.dart';
 import 'coordinator_cockpit_screen.dart';
@@ -174,9 +175,17 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
     final liveData = LiveCoordinationDataScope.of(context);
     Navigator.of(context).push(
       AppPageRoute<void>(
-        builder: (_) => LiveCoordinationDataScope(
+        builder: (routeContext) => LiveCoordinationDataScope(
           data: liveData,
-          child: const Scaffold(body: SafeArea(child: CoordinationScreen())),
+          child: Scaffold(
+            key: const Key('coordinator-statistics-route'),
+            appBar: V5SecondaryNavigationBar(
+              key: const Key('coordinator-statistics-navigation'),
+              title: 'Statistiques',
+              onBack: () => Navigator.of(routeContext).pop(),
+            ),
+            body: const SafeArea(top: false, child: CoordinationScreen()),
+          ),
         ),
       ),
     );

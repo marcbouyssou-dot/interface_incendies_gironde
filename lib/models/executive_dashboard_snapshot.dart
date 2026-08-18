@@ -84,9 +84,9 @@ class ExecutiveDashboardSnapshot {
   }
 
   ExecutivePlatformState get state {
-    if (operations.isEmpty) return ExecutivePlatformState.calm;
     if (criticalMissionCount >= 3) return ExecutivePlatformState.critical;
     if (criticalMissionCount > 0) return ExecutivePlatformState.watch;
+    if (operations.isEmpty) return ExecutivePlatformState.calm;
     return ExecutivePlatformState.stable;
   }
 

@@ -392,6 +392,50 @@ void main() {
     expect(action.onPressed, isNull);
   });
 
+  testWidgets('cockpit excludes an active-flagged mission after its end', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final now = DateTime.now();
+    final location = places.first;
+    final expiredMission = CoordinationNeed(
+      id: 'expired-recipe-mission',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: 'hier',
+      time: '10:00 — 12:00',
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+      startAt: now.subtract(const Duration(hours: 4)),
+      endAt: now.subtract(const Duration(hours: 2)),
+      isActive: true,
+    );
+
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: MockCoordinationRepository(
+          initialMissions: [expiredMission],
+          initialLocations: [location],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Situation maîtrisée'), findsOneWidget);
+    expect(find.text('Aucune action urgente'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byKey(const Key('cockpit-map-counters'))).label,
+      '1 établissement, 0 missions, 0 tensions',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('priority action opens the selected existing mission', (
     tester,
   ) async {

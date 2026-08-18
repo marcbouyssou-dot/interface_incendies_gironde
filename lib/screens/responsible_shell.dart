@@ -19,10 +19,12 @@ class ResponsibleShell extends StatefulWidget {
     super.key,
     this.initialIndex = 0,
     this.previewLocationId,
+    this.showPreviewBanner = true,
   }) : assert(initialIndex >= 0 && initialIndex < 4);
 
   final int initialIndex;
   final String? previewLocationId;
+  final bool showPreviewBanner;
 
   @override
   State<ResponsibleShell> createState() => _ResponsibleShellState();
@@ -82,14 +84,15 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
       backgroundColor: context.v5Colors.canvas,
       body: Column(
         children: [
-          if (widget.previewLocationId case final locationId?)
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                child: _ResponsiblePreviewBanner(locationId: locationId),
+          if (widget.showPreviewBanner)
+            if (widget.previewLocationId case final locationId?)
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                  child: _ResponsiblePreviewBanner(locationId: locationId),
+                ),
               ),
-            ),
           Expanded(
             child: SafeArea(
               top: widget.previewLocationId == null,

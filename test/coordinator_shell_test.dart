@@ -10,6 +10,7 @@ import 'package:interface_incendies_gironde/theme/coordinator_identity.dart';
 import 'package:interface_incendies_gironde/widgets/coordinator_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/territory_components.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
+import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 
 void main() {
   testWidgets('coordinator journey exposes four territorial V5 tabs', (
@@ -134,5 +135,26 @@ void main() {
     expect(find.text('À venir'), findsOneWidget);
     expect(find.text('Passés'), findsOneWidget);
     expect(find.text('En cours'), findsNothing);
+    expect(
+      find.byKey(const Key('coordinator-statistics-navigation')),
+      findsOneWidget,
+    );
+    expect(find.byType(V5BackButton), findsOneWidget);
+
+    await tester.tap(find.byType(V5BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(CoordinatorMoreScreen), findsOneWidget);
+    expect(find.byKey(const Key('coordinator-statistics-route')), findsNothing);
+
+    await tester.tap(find.text('Statistiques globales'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('coordinator-statistics-route')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byType(V5BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(CoordinatorMoreScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

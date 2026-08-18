@@ -194,7 +194,7 @@ class FirebasePlatformAdministrationService
 
   String _messageFor(String code) => switch (code) {
     'unauthenticated' => 'Votre session a expiré. Reconnectez-vous.',
-    'permission-denied' => 'Accès Administrateur plateforme requis.',
+    'permission-denied' => 'Accès Administrateur requis.',
     'invalid-argument' => 'La demande d’administration est invalide.',
     'already-exists' => 'Cette donnée existe déjà.',
     'not-found' => 'Cette donnée n’existe plus. Actualisez la page.',
