@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'operational_map_config.dart';
 import 'operational_map_feature.dart';
 import 'operational_map_geojson.dart';
+import 'operational_map_gesture_boundary.dart';
 import 'operational_map_renderer.dart';
 import 'operational_map_state.dart';
 import 'operational_map_surface.dart';
@@ -434,12 +436,13 @@ class _MapLibreOperationalMapState extends State<MapLibreOperationalMap> {
 
   @override
   Widget build(BuildContext context) {
-    return MapLibreMap(
+    final map = MapLibreMap(
       key: ValueKey((widget.style, widget.renderer)),
       initialCameraPosition: _initialCamera,
       styleString: widget.style,
       onMapCreated: widget.renderer.attach,
       onStyleLoadedCallback: widget.renderer.onStyleLoaded,
+      gestureRecognizers: operationalMapGestureRecognizers(),
       trackCameraPosition: true,
       compassEnabled: false,
       scaleControlEnabled: true,
@@ -458,6 +461,8 @@ class _MapLibreOperationalMapState extends State<MapLibreOperationalMap> {
       ),
       minMaxZoomPreference: const MinMaxZoomPreference(5, 15),
     );
+    if (!kIsWeb) return map;
+    return OperationalMapGestureBoundary(child: map);
   }
 }
 
