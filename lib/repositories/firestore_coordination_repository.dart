@@ -308,7 +308,10 @@ class FirestoreCoordinationRepository
 
   @override
   late final PlatformAdministrationService platformAdministrationService =
-      FirebasePlatformAdministrationService(functions: _responsibleFunctions);
+      FirebasePlatformAdministrationService(
+        functions: _responsibleFunctions,
+        auth: _responsibleAuth,
+      );
 
   @override
   late final OperationReadRepository operationReadRepository =

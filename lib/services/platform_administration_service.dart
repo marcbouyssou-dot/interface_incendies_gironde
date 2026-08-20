@@ -1,6 +1,28 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/mobilization.dart';
 import '../models/operation.dart';
 import '../models/operational_scope.dart';
+
+enum PlatformAdministrationSessionState { valid, expired }
+
+abstract interface class PlatformAdministrationSessionProvider {
+  ValueListenable<PlatformAdministrationSessionState> get sessionState;
+}
+
+class PlatformAdministrationSessionController
+    extends ValueNotifier<PlatformAdministrationSessionState> {
+  PlatformAdministrationSessionController({bool initiallyValid = true})
+    : super(
+        initiallyValid
+            ? PlatformAdministrationSessionState.valid
+            : PlatformAdministrationSessionState.expired,
+      );
+
+  void markValid() => value = PlatformAdministrationSessionState.valid;
+
+  void markExpired() => value = PlatformAdministrationSessionState.expired;
+}
 
 class MobilizationAdministrationDraft {
   const MobilizationAdministrationDraft({

@@ -80,24 +80,134 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    key: const Key('platform-admin-shell'),
-    backgroundColor: context.v5Colors.canvas,
-    body: SafeArea(
-      bottom: false,
-      child: NativeTabView(
-        index: _currentIndex,
-        children: List.generate(
-          _screens.length,
-          (index) => _screens[index] ?? const SizedBox.shrink(),
+  Widget build(BuildContext context) {
+    final shell = Scaffold(
+      key: const Key('platform-admin-shell'),
+      backgroundColor: context.v5Colors.canvas,
+      body: SafeArea(
+        bottom: false,
+        child: NativeTabView(
+          index: _currentIndex,
+          children: List.generate(
+            _screens.length,
+            (index) => _screens[index] ?? const SizedBox.shrink(),
+          ),
         ),
       ),
-    ),
-    bottomNavigationBar: PlatformAdminBottomNavigation(
-      selectedIndex: _currentIndex,
-      onDestinationSelected: _selectTab,
-    ),
-  );
+      bottomNavigationBar: PlatformAdminBottomNavigation(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: _selectTab,
+      ),
+    );
+    final service = widget.administrationService;
+    if (service is! PlatformAdministrationSessionProvider) return shell;
+    final sessionProvider = service as PlatformAdministrationSessionProvider;
+    return ValueListenableBuilder<PlatformAdministrationSessionState>(
+      valueListenable: sessionProvider.sessionState,
+      child: shell,
+      builder: (context, session, child) {
+        final expired = session == PlatformAdministrationSessionState.expired;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            AbsorbPointer(absorbing: expired, child: child),
+            if (expired)
+              _PlatformAdminExpiredSession(onReconnect: widget.onSignOut),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PlatformAdminExpiredSession extends StatefulWidget {
+  const _PlatformAdminExpiredSession({required this.onReconnect});
+
+  final Future<void> Function() onReconnect;
+
+  @override
+  State<_PlatformAdminExpiredSession> createState() =>
+      _PlatformAdminExpiredSessionState();
+}
+
+class _PlatformAdminExpiredSessionState
+    extends State<_PlatformAdminExpiredSession> {
+  bool _reconnecting = false;
+
+  Future<void> _reconnect() async {
+    if (_reconnecting) return;
+    setState(() => _reconnecting = true);
+    try {
+      await widget.onReconnect();
+    } finally {
+      if (mounted) setState(() => _reconnecting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return ColoredBox(
+      key: const Key('platform-admin-session-expired'),
+      color: colors.canvas.withValues(alpha: 0.94),
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(V5Spacing.xl),
+            child: Semantics(
+              container: true,
+              explicitChildNodes: true,
+              label: 'Session administrateur expirée',
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(V5Spacing.xl),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_clock_outlined,
+                          color: colors.danger,
+                          size: 36,
+                        ),
+                        const SizedBox(height: V5Spacing.md),
+                        Text(
+                          'Votre session a expiré',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: V5Spacing.sm),
+                        Text(
+                          'Reconnectez-vous pour reprendre les actions '
+                          'd’administration.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(color: colors.textSecondary),
+                        ),
+                        const SizedBox(height: V5Spacing.xl),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            key: const Key('platform-admin-reconnect'),
+                            onPressed: _reconnecting ? null : _reconnect,
+                            icon: const Icon(Icons.login_outlined),
+                            label: Text(
+                              _reconnecting ? 'Reconnexion…' : 'Se reconnecter',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class PlatformAdminComingSoonScreen extends StatelessWidget {

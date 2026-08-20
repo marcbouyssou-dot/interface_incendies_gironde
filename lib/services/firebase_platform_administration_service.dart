@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/operation.dart';
@@ -7,18 +10,48 @@ typedef PlatformCallable =
     Future<Object?> Function(String functionName, Map<String, Object?> data);
 
 class FirebasePlatformAdministrationService
-    implements PlatformAdministrationService {
+    implements
+        PlatformAdministrationService,
+        PlatformAdministrationSessionProvider {
   FirebasePlatformAdministrationService({
     FirebaseFunctions? functions,
+    FirebaseAuth? auth,
     PlatformCallable? callable,
   }) : assert(functions == null || callable == null),
        _functions = functions,
-       _callable = callable;
+       _callable = callable {
+    if (auth != null) {
+      _setSessionFromUser(auth.currentUser);
+      _authSubscription = auth.idTokenChanges().listen(
+        _setSessionFromUser,
+        onError: (_, _) => _sessionState.markExpired(),
+      );
+    }
+  }
 
   static const region = 'europe-west1';
 
   final FirebaseFunctions? _functions;
   final PlatformCallable? _callable;
+  final PlatformAdministrationSessionController _sessionState =
+      PlatformAdministrationSessionController();
+  StreamSubscription<User?>? _authSubscription;
+
+  @override
+  PlatformAdministrationSessionController get sessionState => _sessionState;
+
+  void _setSessionFromUser(User? user) {
+    if (user == null || user.isAnonymous) {
+      _sessionState.markExpired();
+    } else {
+      _sessionState.markValid();
+    }
+  }
+
+  void dispose() {
+    unawaited(_authSubscription?.cancel());
+    _sessionState.dispose();
+  }
 
   @override
   bool get isAvailable => true;
@@ -137,6 +170,11 @@ class FirebasePlatformAdministrationService
       _invoke(functionName, {'mobilizationId': _validId(mobilizationId)});
 
   Future<void> _invoke(String functionName, Map<String, Object?> data) async {
+    if (_sessionState.value == PlatformAdministrationSessionState.expired) {
+      throw const PlatformAdministrationException(
+        'Votre session a expiré. Reconnectez-vous.',
+      );
+    }
     try {
       final callable = _callable;
       final response = callable != null
@@ -149,6 +187,9 @@ class FirebasePlatformAdministrationService
     } on PlatformAdministrationException {
       rethrow;
     } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'unauthenticated') {
+        _sessionState.markExpired();
+      }
       throw PlatformAdministrationException(_messageFor(error.code));
     } catch (_) {
       throw const PlatformAdministrationException(

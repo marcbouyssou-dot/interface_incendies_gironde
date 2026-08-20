@@ -23,6 +23,7 @@ import 'package:interface_incendies_gironde/repositories/platform_runtime.dart';
 import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_shell.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_more_screen.dart';
+import 'package:interface_incendies_gironde/screens/platform_operation_form_dialog.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
@@ -113,6 +114,54 @@ void main() {
     expect(find.text('Administrateur'), findsOneWidget);
     expect(find.text('Préparez et pilotez les mobilisations.'), findsOneWidget);
   });
+
+  testWidgets(
+    'an expired admin session closes forms, blocks actions and reconnects',
+    (tester) async {
+      final session = PlatformAdministrationSessionController();
+      addTearDown(session.dispose);
+      final service = _SessionAdministrationService(session);
+      final repository = _RecordingCoordinationRepository(
+        initialLocations: [places.first],
+      );
+      await tester.pumpWidget(
+        FireCoordinationApp(
+          repository: repository,
+          platformRuntime: _MultiPreviewRuntime(administrationService: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final create = find.byKey(const Key('create-platform-operation'));
+      expect(create.hitTestable(), findsOneWidget);
+      await tester.tap(create);
+      await tester.pumpAndSettle();
+      expect(find.byType(PlatformOperationFormDialog), findsOneWidget);
+
+      session.markExpired();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlatformOperationFormDialog), findsNothing);
+      expect(
+        find.byKey(const Key('platform-admin-session-expired')),
+        findsOneWidget,
+      );
+      expect(find.text('Votre session a expiré'), findsOneWidget);
+      expect(find.text('Se reconnecter'), findsOneWidget);
+      expect(create.hitTestable(), findsNothing);
+      expect(service.createOperationCalls, 0);
+
+      await tester.tap(find.byKey(const Key('platform-admin-reconnect')));
+      await tester.pumpAndSettle();
+
+      expect(repository.signOutCalls, 1);
+      expect(
+        find.byKey(const Key('platform-admin-authentication')),
+        findsOneWidget,
+      );
+      expect(find.byType(ResponsibleLogin), findsOneWidget);
+    },
+  );
 
   testWidgets('the active mobilization and territory are displayed', (
     tester,
@@ -935,7 +984,7 @@ class _FakePlatformRuntime implements PlatformRuntime {
 
 class _MultiPreviewRuntime
     implements PlatformRuntime, MultiOperationPlatformRuntime {
-  _MultiPreviewRuntime()
+  _MultiPreviewRuntime({PlatformAdministrationService? administrationService})
     : _platformRepository = _FakePlatformReadRepository(
         activeMobilization: _previewMobilization,
       ),
@@ -945,10 +994,13 @@ class _MultiPreviewRuntime
           active: true,
         ),
         assignments: [],
-      );
+      ),
+      _administrationService =
+          administrationService ?? const NoPlatformAdministrationService();
 
   final _FakePlatformReadRepository _platformRepository;
   final _FakeAdministrationReadRepository _administrationRepository;
+  final PlatformAdministrationService _administrationService;
 
   @override
   PlatformReadRepository get platformReadRepository => _platformRepository;
@@ -971,7 +1023,7 @@ class _MultiPreviewRuntime
 
   @override
   PlatformAdministrationService get platformAdministrationService =>
-      const NoPlatformAdministrationService();
+      _administrationService;
 
   @override
   OperationReadRepository get operationReadRepository =>
@@ -984,6 +1036,29 @@ class _MultiPreviewRuntime
   @override
   OperationalContextProvider get operationalContextProvider =>
       const _UnavailableOperationalContextProvider();
+}
+
+class _SessionAdministrationService extends NoPlatformAdministrationService
+    implements PlatformAdministrationSessionProvider {
+  _SessionAdministrationService(this.sessionState);
+
+  @override
+  final PlatformAdministrationSessionController sessionState;
+
+  int createOperationCalls = 0;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<void> createOperation(OperationAdministrationDraft draft) async {
+    if (sessionState.value == PlatformAdministrationSessionState.expired) {
+      throw const PlatformAdministrationException(
+        'Votre session a expiré. Reconnectez-vous.',
+      );
+    }
+    createOperationCalls++;
+  }
 }
 
 class _PreviewOperationRepository implements OperationReadRepository {

@@ -17,6 +17,7 @@ import '../repositories/platform_read_repository.dart';
 import '../services/professional_verification_service.dart';
 import '../services/accessible_mobilizations_provider.dart';
 import '../services/operational_context_provider.dart';
+import '../services/platform_administration_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/system_theme.dart';
@@ -74,11 +75,15 @@ class _AppShellState extends State<AppShell> {
   StreamSubscription<List<ResponsePlace>>? _locationsWarmupSubscription;
   StreamSubscription<PlatformAdministratorAccess?>?
   _platformAdministratorSubscription;
+  ValueListenable<PlatformAdministrationSessionState>?
+  _platformAdministrationSessionState;
   ResponsibleAccess? _access;
   PlatformAdministratorAccess? _platformAdministrator;
   bool _accessResolved = false;
   bool _accessResolutionFailed = false;
   bool _platformAdministratorResolved = false;
+  bool _platformAdministrationSessionExpired = false;
+  bool _protectedRouteClosureScheduled = false;
   bool _showPlatformAdminAuthentication = false;
   bool _applicationRevealScheduled = false;
   bool _initialNotificationScheduled = false;
@@ -105,13 +110,25 @@ class _AppShellState extends State<AppShell> {
 
   void _watchPlatformAdministrator() {
     unawaited(_platformAdministratorSubscription?.cancel());
+    _platformAdministrationSessionState?.removeListener(
+      _handlePlatformAdministrationSessionChanged,
+    );
+    _platformAdministrationSessionState = null;
     _platformAdministrator = null;
+    _platformAdministrationSessionExpired = false;
     final runtime = widget.platformRuntime;
     if (runtime == null) {
       _platformAdministratorResolved = true;
       return;
     }
     _platformAdministratorResolved = false;
+    final administrationService = runtime.platformAdministrationService;
+    if (administrationService is PlatformAdministrationSessionProvider) {
+      final sessionProvider =
+          administrationService as PlatformAdministrationSessionProvider;
+      _platformAdministrationSessionState = sessionProvider.sessionState
+        ..addListener(_handlePlatformAdministrationSessionChanged);
+    }
     markStartupEvent('mobsante-platform-route-start');
     _platformAdministratorSubscription = runtime
         .platformAdministrationReadRepository
@@ -125,9 +142,45 @@ class _AppShellState extends State<AppShell> {
   void _handlePlatformAdministrator(PlatformAdministratorAccess? access) {
     if (!mounted) return;
     markStartupEvent('mobsante-platform-route-ready');
+    final sessionExpired =
+        (access?.active ?? false) &&
+        _platformAdministrationSessionState?.value ==
+            PlatformAdministrationSessionState.expired;
     setState(() {
       _platformAdministrator = access;
       _platformAdministratorResolved = true;
+      if (sessionExpired) _platformAdministrationSessionExpired = true;
+    });
+    if (sessionExpired) _scheduleProtectedRouteClosure();
+  }
+
+  void _handlePlatformAdministrationSessionChanged() {
+    if (!mounted) return;
+    final expired =
+        _platformAdministrationSessionState?.value ==
+        PlatformAdministrationSessionState.expired;
+    if (!expired) {
+      if (_platformAdministrationSessionExpired) {
+        setState(() => _platformAdministrationSessionExpired = false);
+      }
+      return;
+    }
+    if (!(_platformAdministrator?.active ?? false) ||
+        _platformAdministrationSessionExpired) {
+      return;
+    }
+    setState(() => _platformAdministrationSessionExpired = true);
+    _scheduleProtectedRouteClosure();
+  }
+
+  void _scheduleProtectedRouteClosure() {
+    if (_protectedRouteClosureScheduled) return;
+    _protectedRouteClosureScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _protectedRouteClosureScheduled = false;
+      if (!mounted || !_platformAdministrationSessionExpired) return;
+      CrossRolePerspectiveScope.of(context).showActualRole();
+      Navigator.of(context).popUntil((route) => route.isFirst);
     });
   }
 
@@ -181,6 +234,9 @@ class _AppShellState extends State<AppShell> {
     unawaited(_missionsWarmupSubscription?.cancel());
     unawaited(_locationsWarmupSubscription?.cancel());
     unawaited(_platformAdministratorSubscription?.cancel());
+    _platformAdministrationSessionState?.removeListener(
+      _handlePlatformAdministrationSessionChanged,
+    );
     _liveData?.dispose();
     unawaited(_platformAdminProfessionalPreviewData?.dispose());
     unawaited(_platformAdminResponsiblePreviewData?.dispose());
@@ -367,8 +423,9 @@ class _AppShellState extends State<AppShell> {
       RolePreviewMode.automatic => automaticJourney,
     };
     final isPlatformAdministrator =
-        _platformAdministratorResolved &&
-        (_platformAdministrator?.active ?? false);
+        (_platformAdministratorResolved &&
+            (_platformAdministrator?.active ?? false)) ||
+        _platformAdministrationSessionExpired;
     var displayedJourney = isPlatformAdministrator
         ? switch (perspectiveController.perspective) {
             CrossRolePerspective.actual => _AppJourney.platformAdmin,

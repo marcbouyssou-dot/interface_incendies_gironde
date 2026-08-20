@@ -153,6 +153,45 @@ void main() {
     );
   });
 
+  test('unauthenticated expires the session and blocks later calls', () async {
+    var calls = 0;
+    final service = FirebasePlatformAdministrationService(
+      callable: (name, data) {
+        calls++;
+        throw FirebaseFunctionsException(
+          code: 'unauthenticated',
+          message: 'expired',
+        );
+      },
+    );
+    addTearDown(service.sessionState.dispose);
+
+    expect(
+      service.sessionState.value,
+      PlatformAdministrationSessionState.valid,
+    );
+    await expectLater(
+      service.activateMobilization('mobilization-1'),
+      throwsA(
+        isA<PlatformAdministrationException>().having(
+          (error) => error.message,
+          'message',
+          'Votre session a expiré. Reconnectez-vous.',
+        ),
+      ),
+    );
+    expect(
+      service.sessionState.value,
+      PlatformAdministrationSessionState.expired,
+    );
+
+    await expectLater(
+      service.deactivateMobilization('mobilization-1'),
+      throwsA(isA<PlatformAdministrationException>()),
+    );
+    expect(calls, 1);
+  });
+
   test('creation id is stable, normalized and contains no personal data', () {
     expect(
       createMobilizationId('Événement Gironde', now: DateTime.utc(2026, 8, 10)),
