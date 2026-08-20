@@ -26,6 +26,17 @@ bool mustCreateAnonymousVolunteerSession({
   required bool isAnonymous,
 }) => !hasUser || !isAnonymous;
 
+@visibleForTesting
+Future<T> initializeFirebaseAppWithAppCheck<T extends Object>({
+  required T? existingApp,
+  required Future<T> Function() initializeApp,
+  required Future<void> Function(T app) activateAppCheck,
+}) async {
+  final app = existingApp ?? await initializeApp();
+  await activateAppCheck(app);
+  return app;
+}
+
 class FirebaseStartupGate extends StatefulWidget {
   const FirebaseStartupGate({
     super.key,
@@ -133,10 +144,13 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     final existing = Firebase.apps
         .where((app) => app.name == 'responsible')
         .firstOrNull;
-    if (existing != null) return existing;
-    return Firebase.initializeApp(
-      name: 'responsible',
-      options: Firebase.app().options,
+    return initializeFirebaseAppWithAppCheck(
+      existingApp: existing,
+      initializeApp: () => Firebase.initializeApp(
+        name: 'responsible',
+        options: Firebase.app().options,
+      ),
+      activateAppCheck: FirebaseBootstrap.activateAppCheck,
     );
   }
 

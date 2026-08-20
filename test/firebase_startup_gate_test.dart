@@ -10,6 +10,56 @@ import 'package:interface_incendies_gironde/screens/app_shell.dart';
 import 'package:interface_incendies_gironde/screens/splash_screen.dart';
 
 void main() {
+  test(
+    'une app responsible existante active App Check sans être recréée',
+    () async {
+      final responsibleApp = Object();
+      var initializationCount = 0;
+      final activatedApps = <Object>[];
+
+      final result = await initializeFirebaseAppWithAppCheck(
+        existingApp: responsibleApp,
+        initializeApp: () async {
+          initializationCount++;
+          return Object();
+        },
+        activateAppCheck: (app) async => activatedApps.add(app),
+      );
+
+      expect(result, same(responsibleApp));
+      expect(initializationCount, 0);
+      expect(activatedApps, [responsibleApp]);
+    },
+  );
+
+  test(
+    'une nouvelle app responsible active App Check avant son usage',
+    () async {
+      final responsibleApp = Object();
+      final events = <String>[];
+
+      final result = await initializeFirebaseAppWithAppCheck(
+        existingApp: null,
+        initializeApp: () async {
+          events.add('firebase:responsible');
+          return responsibleApp;
+        },
+        activateAppCheck: (app) async {
+          expect(app, same(responsibleApp));
+          events.add('app-check:responsible');
+        },
+      );
+      events.add('services:responsible');
+
+      expect(result, same(responsibleApp));
+      expect(events, [
+        'firebase:responsible',
+        'app-check:responsible',
+        'services:responsible',
+      ]);
+    },
+  );
+
   testWidgets('ready startup keeps the composed splash for 900 ms', (
     tester,
   ) async {

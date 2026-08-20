@@ -85,4 +85,55 @@ void main() {
       throwsStateError,
     );
   });
+
+  test('App Check est activé séparément pour default et responsible', () async {
+    final registry = FirebaseAppCheckActivationRegistry<Object>();
+    final defaultApp = Object();
+    final responsibleApp = Object();
+    final activatedApps = <Object>[];
+
+    Future<void> activate(Object app) async => activatedApps.add(app);
+
+    await registry.activateOnce(defaultApp, activate);
+    await registry.activateOnce(responsibleApp, activate);
+
+    expect(activatedApps, [defaultApp, responsibleApp]);
+  });
+
+  test('le cache App Check évite une double activation par app', () async {
+    final registry = FirebaseAppCheckActivationRegistry<Object>();
+    final defaultApp = Object();
+    final responsibleApp = Object();
+    final activations = <Object, int>{};
+
+    Future<void> activate(Object app) async {
+      activations.update(app, (count) => count + 1, ifAbsent: () => 1);
+    }
+
+    await Future.wait([
+      registry.activateOnce(defaultApp, activate),
+      registry.activateOnce(defaultApp, activate),
+      registry.activateOnce(responsibleApp, activate),
+      registry.activateOnce(responsibleApp, activate),
+    ]);
+
+    expect(activations[defaultApp], 1);
+    expect(activations[responsibleApp], 1);
+  });
+
+  test('une activation App Check échouée peut être retentée', () async {
+    final registry = FirebaseAppCheckActivationRegistry<Object>();
+    final app = Object();
+    var attempts = 0;
+
+    Future<void> activate(Object _) async {
+      attempts++;
+      if (attempts == 1) throw StateError('App Check indisponible');
+    }
+
+    await expectLater(registry.activateOnce(app, activate), throwsStateError);
+    await registry.activateOnce(app, activate);
+
+    expect(attempts, 2);
+  });
 }

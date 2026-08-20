@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -5,6 +7,32 @@ import 'package:flutter/foundation.dart';
 import 'utils/system_theme.dart';
 
 typedef FirebaseBootstrapStep = Future<void> Function();
+typedef FirebaseAppCheckActivation<T extends Object> =
+    Future<void> Function(T app);
+
+@visibleForTesting
+class FirebaseAppCheckActivationRegistry<T extends Object> {
+  final Map<T, Future<void>> _activations = HashMap<T, Future<void>>.identity();
+
+  Future<void> activateOnce(
+    T app,
+    FirebaseAppCheckActivation<T> activate,
+  ) async {
+    final pendingActivation = _activations[app];
+    if (pendingActivation != null) return pendingActivation;
+
+    final activation = activate(app);
+    _activations[app] = activation;
+    try {
+      await activation;
+    } catch (_) {
+      if (identical(_activations[app], activation)) {
+        _activations.remove(app);
+      }
+      rethrow;
+    }
+  }
+}
 
 class FirebaseAppCheckProviders {
   const FirebaseAppCheckProviders({
@@ -23,7 +51,8 @@ abstract final class FirebaseBootstrap {
   static const _webRecaptchaV3SiteKey = String.fromEnvironment(
     'FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY',
   );
-  static Future<void>? _appCheckActivation;
+  static final FirebaseAppCheckActivationRegistry<FirebaseApp>
+  _appCheckActivations = FirebaseAppCheckActivationRegistry<FirebaseApp>();
 
   static Future<FirebaseApp> initialize() async {
     late FirebaseApp app;
@@ -50,7 +79,7 @@ abstract final class FirebaseBootstrap {
       },
       initializeAppCheck: () async {
         markStartupEvent('mobsante-app-check-start');
-        await _ensureAppCheckActivated(app);
+        await activateAppCheck(app);
         markStartupEvent('mobsante-app-check-ready');
       },
     );
@@ -105,19 +134,6 @@ abstract final class FirebaseBootstrap {
     );
   }
 
-  static Future<void> _ensureAppCheckActivated(FirebaseApp app) async {
-    final pendingActivation = _appCheckActivation;
-    if (pendingActivation != null) return pendingActivation;
-
-    final activation = _activateAppCheck(app);
-    _appCheckActivation = activation;
-    try {
-      await activation;
-    } catch (_) {
-      if (identical(_appCheckActivation, activation)) {
-        _appCheckActivation = null;
-      }
-      rethrow;
-    }
-  }
+  static Future<void> activateAppCheck(FirebaseApp app) =>
+      _appCheckActivations.activateOnce(app, _activateAppCheck);
 }
