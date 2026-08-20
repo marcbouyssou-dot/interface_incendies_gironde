@@ -22,6 +22,8 @@ abstract final class OperationalMapGeoJson {
         'severityRank': feature.operationalStatus.severityRank,
         'activeMissionCount': feature.activeMissionCount,
         'criticalMissionCount': feature.criticalMissionCount,
+        'remainingNeedCount': feature.remainingNeedCount,
+        'establishmentCount': 1,
         'coverage': feature.coverage,
         'selected': feature.selected,
       },

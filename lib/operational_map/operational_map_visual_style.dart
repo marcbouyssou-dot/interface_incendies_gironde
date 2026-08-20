@@ -23,6 +23,13 @@ class OperationalMapStatusVisualStyle {
 }
 
 abstract final class OperationalMapVisualStyle {
+  static const _clusterNoMissionBaseRadius = 10.0;
+  static const _clusterCoveredBaseRadius = 13.0;
+  static const _clusterWatchBaseRadius = 20.0;
+  static const _clusterCriticalBaseRadius = 29.0;
+  static const clusterMaximumDensityBoost = 4.0;
+  static const clusterMaximumOperationalVolumeBoost = 4.0;
+
   static const statusStyles =
       <OperationalMapStatus, OperationalMapStatusVisualStyle>{
         OperationalMapStatus.critical: OperationalMapStatusVisualStyle(
@@ -128,6 +135,84 @@ abstract final class OperationalMapVisualStyle {
     3,
     3.0,
   ];
+
+  static List<Object> get clusterRadiusExpression => <Object>[
+    '+',
+    <Object>[
+      'step',
+      <Object>['get', 'maxSeverity'],
+      _clusterNoMissionBaseRadius,
+      1,
+      _clusterCoveredBaseRadius,
+      2,
+      _clusterWatchBaseRadius,
+      3,
+      _clusterCriticalBaseRadius,
+    ],
+    <Object>[
+      'step',
+      <Object>['get', 'establishmentCount'],
+      0.0,
+      4,
+      1.5,
+      12,
+      2.5,
+      30,
+      clusterMaximumDensityBoost,
+    ],
+    <Object>[
+      'step',
+      <Object>[
+        '+',
+        <Object>['get', 'activeMissionCount'],
+        <Object>['get', 'remainingNeedCount'],
+      ],
+      0.0,
+      2,
+      1.5,
+      6,
+      2.5,
+      15,
+      clusterMaximumOperationalVolumeBoost,
+    ],
+  ];
+
+  static List<Object> get tensionHaloRadiusExpression => <Object>[
+    '+',
+    clusterRadiusExpression,
+    <Object>[
+      'step',
+      <Object>['get', 'maxSeverity'],
+      0.0,
+      2,
+      10.0,
+      3,
+      16.0,
+    ],
+  ];
+
+  static List<Object> get tensionHaloOpacityExpression => const <Object>[
+    'step',
+    <Object>['get', 'maxSeverity'],
+    0.0,
+    2,
+    0.14,
+    3,
+    0.28,
+  ];
+
+  static double minimumClusterRadiusFor(OperationalMapStatus status) =>
+      switch (status) {
+        OperationalMapStatus.noMission => _clusterNoMissionBaseRadius,
+        OperationalMapStatus.covered => _clusterCoveredBaseRadius,
+        OperationalMapStatus.watch => _clusterWatchBaseRadius,
+        OperationalMapStatus.critical => _clusterCriticalBaseRadius,
+      };
+
+  static double maximumClusterRadiusFor(OperationalMapStatus status) =>
+      minimumClusterRadiusFor(status) +
+      clusterMaximumDensityBoost +
+      clusterMaximumOperationalVolumeBoost;
 
   static List<Object> _matchStatus(
     Object Function(OperationalMapStatusVisualStyle style) valueFor,

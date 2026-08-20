@@ -24,6 +24,7 @@ class OperationalMapFeature {
     required this.operationalStatus,
     required this.activeMissionCount,
     required this.criticalMissionCount,
+    required this.remainingNeedCount,
     required this.coverage,
     required this.selected,
   });
@@ -34,6 +35,7 @@ class OperationalMapFeature {
   final OperationalMapStatus operationalStatus;
   final int activeMissionCount;
   final int criticalMissionCount;
+  final int remainingNeedCount;
   final int coverage;
   final bool selected;
 
@@ -45,6 +47,7 @@ class OperationalMapFeature {
       operationalStatus: operationalStatus,
       activeMissionCount: activeMissionCount,
       criticalMissionCount: criticalMissionCount,
+      remainingNeedCount: remainingNeedCount,
       coverage: coverage,
       selected: selected ?? this.selected,
     );

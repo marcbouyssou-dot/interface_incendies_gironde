@@ -20,6 +20,7 @@ OperationalMapFeature operationalMapFeatureFromCockpitPoint(
     operationalStatus: status,
     activeMissionCount: point.missionCount,
     criticalMissionCount: point.criticalMissionCount,
+    remainingNeedCount: point.remainingNeedCount,
     coverage: point.coveragePercent,
     selected: selected,
   );

@@ -160,6 +160,7 @@ void main() {
           )
           .having((point) => point.missionCount, 'mission count', 2)
           .having((point) => point.coveragePercent, 'coverage', 25)
+          .having((point) => point.remainingNeedCount, 'remaining needs', 3)
           .having((point) => point.tensionCount, 'tensions', 1)
           .having((point) => point.criticalMissionCount, 'critical missions', 1)
           .having(
@@ -212,6 +213,7 @@ void main() {
     expect(view.recentActivity, isEmpty);
     expect(view.mapPoints.single.hasMission, isFalse);
     expect(view.mapPoints.single.coveragePercent, 100);
+    expect(view.mapPoints.single.remainingNeedCount, 0);
     expect(view.mapPoints.single.nextDeadlineLabel, isNull);
     expect(view.mapPoints.single.mostNeededProfession, isNull);
     expect(

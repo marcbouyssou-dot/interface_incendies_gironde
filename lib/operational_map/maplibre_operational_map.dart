@@ -13,6 +13,7 @@ import 'operational_map_renderer.dart';
 import 'operational_map_state.dart';
 import 'operational_map_surface.dart';
 import 'operational_map_visual_style.dart';
+import 'operational_map_zone_aggregation.dart';
 
 const _centersSourceId = 'mobsante-operational-centers';
 const _selectionSourceId = 'mobsante-operational-selection';
@@ -78,15 +79,10 @@ class MapLibreOperationalMapRenderer implements OperationalMapRenderer {
         GeojsonSourceProperties(
           data: geoJson,
           cluster: true,
-          clusterRadius: 52,
-          clusterMaxZoom: 12,
+          clusterRadius: OperationalMapZoneAggregation.clusterRadius,
+          clusterMaxZoom: OperationalMapZoneAggregation.clusterMaxZoom,
           promoteId: 'id',
-          clusterProperties: const <String, Object>{
-            'maxSeverity': <Object>[
-              'max',
-              <Object>['get', 'severityRank'],
-            ],
-          },
+          clusterProperties: OperationalMapZoneAggregation.clusterProperties,
         ),
       );
       await controller.addSource(
@@ -182,52 +178,33 @@ class MapLibreOperationalMapRenderer implements OperationalMapRenderer {
       _centersSourceId,
       _clusterHaloLayerId,
       CircleLayerProperties(
-        circleRadius: const <Object>[
-          'interpolate',
-          <Object>['linear'],
-          <Object>['get', 'point_count'],
-          2,
-          24,
-          50,
-          31,
-          1000,
-          39,
-        ],
+        circleRadius: OperationalMapVisualStyle.tensionHaloRadiusExpression,
         circleColor: OperationalMapVisualStyle.clusterColorExpression,
-        circleOpacity: const <Object>[
-          'step',
-          <Object>['get', 'maxSeverity'],
-          0.0,
-          2,
-          0.12,
-          3,
-          0.22,
-        ],
-        circleBlur: 0.28,
+        circleOpacity: OperationalMapVisualStyle.tensionHaloOpacityExpression,
+        circleBlur: 0.36,
       ),
-      filter: const <Object>['has', 'point_count'],
+      filter: const <Object>[
+        'all',
+        <Object>['has', 'point_count'],
+        <Object>[
+          '>=',
+          <Object>['get', 'maxSeverity'],
+          2,
+        ],
+      ],
       enableInteraction: false,
     );
     await controller.addCircleLayer(
       _centersSourceId,
       _clustersLayerId,
       CircleLayerProperties(
-        circleRadius: const <Object>[
-          'interpolate',
-          <Object>['linear'],
-          <Object>['get', 'point_count'],
-          2,
-          18,
-          50,
-          24,
-          1000,
-          32,
-        ],
+        circleRadius: OperationalMapVisualStyle.clusterRadiusExpression,
         circleColor: OperationalMapVisualStyle.clusterColorExpression,
         circleOpacity: OperationalMapVisualStyle.clusterOpacityExpression,
         circleStrokeColor: '#FFFFFF',
         circleStrokeWidth:
             OperationalMapVisualStyle.clusterStrokeWidthExpression,
+        circleSortKey: const <Object>['get', 'maxSeverity'],
       ),
       filter: const <Object>['has', 'point_count'],
     );

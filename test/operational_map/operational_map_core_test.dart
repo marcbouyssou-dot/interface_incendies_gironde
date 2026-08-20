@@ -5,6 +5,7 @@ import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/operational_map/operational_map_feature.dart';
 import 'package:interface_incendies_gironde/operational_map/operational_map_geojson.dart';
 import 'package:interface_incendies_gironde/operational_map/operational_map_visual_style.dart';
+import 'package:interface_incendies_gironde/operational_map/operational_map_zone_aggregation.dart';
 import 'package:interface_incendies_gironde/widgets/cockpit_operational_map_adapter.dart';
 
 void main() {
@@ -18,6 +19,7 @@ void main() {
       missionCount: 3,
       primaryMission: null,
       coveragePercent: 42,
+      remainingNeedCount: 5,
       tensionCount: 2,
       criticalMissionCount: 1,
       nextDeadlineLabel: null,
@@ -36,6 +38,7 @@ void main() {
     expect(feature.operationalStatus, OperationalMapStatus.critical);
     expect(feature.activeMissionCount, 3);
     expect(feature.criticalMissionCount, 1);
+    expect(feature.remainingNeedCount, 5);
     expect(feature.coverage, 42);
     expect(feature.selected, isTrue);
   });
@@ -49,6 +52,7 @@ void main() {
       missionCount: 0,
       primaryMission: null,
       coveragePercent: 0,
+      remainingNeedCount: 0,
       tensionCount: 0,
       criticalMissionCount: 0,
       nextDeadlineLabel: null,
@@ -70,6 +74,7 @@ void main() {
       operationalStatus: OperationalMapStatus.watch,
       activeMissionCount: 2,
       criticalMissionCount: 0,
+      remainingNeedCount: 3,
       coverage: 75,
       selected: false,
     );
@@ -86,6 +91,8 @@ void main() {
     expect(properties['status'], 'watch');
     expect(properties['severityRank'], 2);
     expect(properties['activeMissionCount'], 2);
+    expect(properties['remainingNeedCount'], 3);
+    expect(properties['establishmentCount'], 1);
     expect(properties['coverage'], 75);
   });
 
@@ -131,5 +138,86 @@ void main() {
         ).color,
       ),
     );
+  });
+
+  test('zone aggregation keeps worst severity and sums operational load', () {
+    const features = <OperationalMapFeature>[
+      OperationalMapFeature(
+        id: 'critical-center',
+        latitude: 44.8,
+        longitude: -0.6,
+        operationalStatus: OperationalMapStatus.critical,
+        activeMissionCount: 1,
+        criticalMissionCount: 1,
+        remainingNeedCount: 2,
+        coverage: 20,
+        selected: false,
+      ),
+      OperationalMapFeature(
+        id: 'covered-center',
+        latitude: 44.81,
+        longitude: -0.61,
+        operationalStatus: OperationalMapStatus.covered,
+        activeMissionCount: 6,
+        criticalMissionCount: 0,
+        remainingNeedCount: 0,
+        coverage: 100,
+        selected: false,
+      ),
+      OperationalMapFeature(
+        id: 'idle-center',
+        latitude: 44.82,
+        longitude: -0.62,
+        operationalStatus: OperationalMapStatus.noMission,
+        activeMissionCount: 0,
+        criticalMissionCount: 0,
+        remainingNeedCount: 0,
+        coverage: 100,
+        selected: false,
+      ),
+    ];
+
+    final zone = OperationalMapZoneSummary.fromFeatures(features);
+
+    expect(zone.maximumSeverity, OperationalMapStatus.critical.severityRank);
+    expect(zone.activeMissionCount, 7);
+    expect(zone.remainingNeedCount, 2);
+    expect(zone.establishmentCount, 3);
+    expect(zone.isTension, isTrue);
+  });
+
+  test('MapLibre cluster aggregation sums every decision metric', () {
+    final properties = OperationalMapZoneAggregation.clusterProperties;
+
+    expect(properties.keys, {
+      'maxSeverity',
+      'activeMissionCount',
+      'remainingNeedCount',
+      'establishmentCount',
+    });
+    expect(properties['maxSeverity'], <Object>[
+      'max',
+      <Object>['get', 'severityRank'],
+    ]);
+    expect(properties['remainingNeedCount'], <Object>[
+      '+',
+      <Object>['get', 'remainingNeedCount'],
+    ]);
+  });
+
+  test('a dense covered cluster cannot outweigh a critical zone', () {
+    final largestCovered = OperationalMapVisualStyle.maximumClusterRadiusFor(
+      OperationalMapStatus.covered,
+    );
+    final smallestCritical = OperationalMapVisualStyle.minimumClusterRadiusFor(
+      OperationalMapStatus.critical,
+    );
+    final radiusExpression = OperationalMapVisualStyle.clusterRadiusExpression
+        .toString();
+
+    expect(smallestCritical, greaterThan(largestCovered));
+    expect(radiusExpression, contains('establishmentCount'));
+    expect(radiusExpression, contains('activeMissionCount'));
+    expect(radiusExpression, contains('remainingNeedCount'));
   });
 }

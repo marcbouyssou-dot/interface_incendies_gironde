@@ -41,6 +41,7 @@ class CockpitMapPoint {
     required this.missionCount,
     required this.primaryMission,
     required this.coveragePercent,
+    required this.remainingNeedCount,
     required this.tensionCount,
     required this.criticalMissionCount,
     required this.nextDeadlineLabel,
@@ -55,6 +56,7 @@ class CockpitMapPoint {
   final int missionCount;
   final CoordinationNeed? primaryMission;
   final int coveragePercent;
+  final int remainingNeedCount;
   final int tensionCount;
   final int criticalMissionCount;
   final String? nextDeadlineLabel;
@@ -671,6 +673,10 @@ CockpitMapPoint _mapPointFor({
     missionCount: locationMissions.length,
     primaryMission: orderedMissions.firstOrNull,
     coveragePercent: (quotas.coverage * 100).round(),
+    remainingNeedCount: missingQuotas.fold(
+      0,
+      (total, quota) => total + quota.missing,
+    ),
     tensionCount: tensionMissions.length,
     criticalMissionCount: criticalMissionCount,
     nextDeadlineLabel: nextMission == null
