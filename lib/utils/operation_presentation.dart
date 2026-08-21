@@ -24,7 +24,7 @@ String operationTransitionLabel(OperationStatus target) => switch (target) {
   OperationStatus.planned => 'Planifier',
   OperationStatus.active => 'Activer',
   OperationStatus.suspended => 'Suspendre',
-  OperationStatus.completed => 'Terminer',
+  OperationStatus.completed => 'Clôturer',
   OperationStatus.archived => 'Archiver',
   OperationStatus.draft => 'Revenir au brouillon',
 };

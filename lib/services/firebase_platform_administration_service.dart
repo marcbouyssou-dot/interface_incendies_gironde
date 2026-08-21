@@ -78,6 +78,15 @@ class FirebasePlatformAdministrationService
   });
 
   @override
+  Future<void> setOperationCoordinator({
+    required String operationId,
+    required String uid,
+  }) => _invoke('setOperationCoordinator', {
+    'operationId': _validId(operationId),
+    'uid': _validUid(uid),
+  });
+
+  @override
   Future<void> updateMobilization(MobilizationAdministrationDraft draft) =>
       _invokeMobilization('updateMobilization', draft);
 

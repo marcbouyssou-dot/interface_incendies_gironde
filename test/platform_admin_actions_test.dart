@@ -470,6 +470,7 @@ class _RecordingPlatformService implements PlatformAdministrationService {
   final List<String> archiveCalls = [];
   final List<(String, String)> assignmentCalls = [];
   final List<(String, String)> removalCalls = [];
+  final List<(String, String)> operationCoordinatorCalls = [];
 
   @override
   bool get isAvailable => true;
@@ -523,6 +524,15 @@ class _RecordingPlatformService implements PlatformAdministrationService {
     required String uid,
   }) async {
     removalCalls.add((mobilizationId, uid));
+    await _complete();
+  }
+
+  @override
+  Future<void> setOperationCoordinator({
+    required String operationId,
+    required String uid,
+  }) async {
+    operationCoordinatorCalls.add((operationId, uid));
     await _complete();
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 
+import '../perspective/cross_role_perspective.dart';
 import 'location_administration_repository.dart';
+import 'read_only_preview_coordination_repository.dart';
 
 class LocationAdministrationRepositoryScope extends InheritedWidget {
   const LocationAdministrationRepositoryScope({
@@ -17,7 +19,10 @@ class LocationAdministrationRepositoryScope extends InheritedWidget {
           LocationAdministrationRepositoryScope
         >();
     assert(scope != null, 'LocationAdministrationRepositoryScope absent');
-    return scope!.repository;
+    final repository = scope!.repository;
+    return CrossRolePerspectiveScope.maybeOf(context)?.operationContext == null
+        ? repository
+        : ReadOnlyPreviewLocationAdministrationRepository(repository);
   }
 
   @override

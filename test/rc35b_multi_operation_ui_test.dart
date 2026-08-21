@@ -42,6 +42,7 @@ void main() {
           operationRepository: _OperationRepository([
             _operation('op-active', OperationStatus.active),
             _operation('op-planned', OperationStatus.planned),
+            _operation('op-draft', OperationStatus.draft),
             _operation('op-completed', OperationStatus.completed),
             _operation('op-archived', OperationStatus.archived),
           ]),
@@ -62,6 +63,7 @@ void main() {
     for (final section in const [
       'En cours',
       'À venir',
+      'Brouillons',
       'Terminées',
       'Archivées',
     ]) {

@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 
+import '../perspective/cross_role_perspective.dart';
 import 'admin_invitation_repository.dart';
+import 'read_only_preview_coordination_repository.dart';
 
 class AdminInvitationRepositoryScope extends InheritedWidget {
   const AdminInvitationRepositoryScope({
@@ -15,7 +17,10 @@ class AdminInvitationRepositoryScope extends InheritedWidget {
     final scope = context
         .dependOnInheritedWidgetOfExactType<AdminInvitationRepositoryScope>();
     assert(scope != null, 'AdminInvitationRepositoryScope absent de l’arbre');
-    return scope!.repository;
+    final repository = scope!.repository;
+    return CrossRolePerspectiveScope.maybeOf(context)?.operationContext == null
+        ? repository
+        : ReadOnlyPreviewAdminInvitationRepository(repository);
   }
 
   @override

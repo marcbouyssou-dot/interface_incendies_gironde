@@ -3,6 +3,7 @@ import '../services/accessible_mobilizations_provider.dart';
 import '../services/operational_context_provider.dart';
 import '../services/platform_administration_service.dart';
 import 'operation_read_repository.dart';
+import 'platform_actor_read_repository.dart';
 import 'platform_administration_read_repository.dart';
 import 'platform_read_repository.dart';
 
@@ -24,6 +25,10 @@ abstract interface class MultiOperationPlatformRuntime {
   AccessibleMobilizationsProvider get accessibleMobilizationsProvider;
 
   OperationalContextProvider get operationalContextProvider;
+}
+
+abstract interface class PlatformActorRuntime {
+  PlatformActorReadRepository get platformActorReadRepository;
 }
 
 abstract interface class PlatformAccountAuthenticator {

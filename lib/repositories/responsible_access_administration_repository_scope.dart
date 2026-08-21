@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 
+import '../perspective/cross_role_perspective.dart';
+import 'read_only_preview_coordination_repository.dart';
 import 'responsible_access_administration_repository.dart';
 
 class ResponsibleAccessAdministrationRepositoryScope extends InheritedWidget {
@@ -20,7 +22,10 @@ class ResponsibleAccessAdministrationRepositoryScope extends InheritedWidget {
       scope != null,
       'ResponsibleAccessAdministrationRepositoryScope absent',
     );
-    return scope!.repository;
+    final repository = scope!.repository;
+    return CrossRolePerspectiveScope.maybeOf(context)?.operationContext == null
+        ? repository
+        : ReadOnlyPreviewResponsibleAccessAdministrationRepository(repository);
   }
 
   @override

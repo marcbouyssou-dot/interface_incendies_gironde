@@ -5,8 +5,12 @@ import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/operation.dart';
 import 'package:interface_incendies_gironde/models/operational_scope.dart';
+import 'package:interface_incendies_gironde/models/platform_administrator_access.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
+import 'package:interface_incendies_gironde/models/user_display_identity.dart';
+import 'package:interface_incendies_gironde/platform_admin/operation_coordinator_view_data.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/operation_coordinator_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
@@ -156,6 +160,52 @@ void main() {
     await tester.tap(find.byKey(const Key('executive-priority-op-incendies')));
     await tester.pumpAndSettle();
     expect(find.text('Situation de l’opération'), findsOneWidget);
+    expect(find.text('Incendies Gironde'), findsOneWidget);
+    expect(find.text('Gironde · 33'), findsOneWidget);
+
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('operation-detail-situation')),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('operation-detail-mobilizations')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('operation-detail-missions')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('100 %'), findsOneWidget);
+    expect(find.text('Situation couverte'), findsOneWidget);
+
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('operation-coordinator-section')),
+    );
+    expect(find.text('Non nommé'), findsOneWidget);
+
+    await _scrollTo(tester, find.byKey(const Key('operation-future-journeys')));
+    expect(find.byKey(const Key('future-view-as-coordinator')), findsOneWidget);
+    expect(find.byKey(const Key('future-view-as-responsible')), findsOneWidget);
+    expect(
+      find.byKey(const Key('future-view-as-professional')),
+      findsOneWidget,
+    );
+
+    final mobilization = find.byKey(
+      const Key('operation-mobilization-mob-sud'),
+    );
+    await _scrollTo(tester, mobilization);
+    expect(tester.getSize(mobilization).height, greaterThanOrEqualTo(44));
+    await tester.tap(mobilization);
+    await tester.pumpAndSettle();
+    expect(find.text('Gestion · Mobilisation mob-sud'), findsOneWidget);
   });
 
   testWidgets('les KPI sont ordonnés par décision et ont une hauteur commune', (
@@ -236,6 +286,165 @@ void main() {
     expect(find.byKey(const Key('executive-priority-op-4')), findsNothing);
   });
 
+  testWidgets('la fiche affiche un Coordinateur unique consolidé', (
+    tester,
+  ) async {
+    await _pumpDashboard(
+      tester,
+      _Scenario.one(),
+      operationCoordinatorDataSource:
+          RepositoryOperationCoordinatorViewDataSource(
+            repository: _CoordinatorRepository([
+              _coordinatorAssignment('mob-sud', 'coord-1'),
+            ]),
+          ),
+    );
+
+    await _openPriorityOperation(tester, 'op-incendies');
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('operation-coordinator-section')),
+    );
+
+    expect(find.text('Coordinateur unique'), findsOneWidget);
+    expect(find.text('Camille Martin'), findsOneWidget);
+    expect(find.text('Identifiant · coord-1'), findsOneWidget);
+    expect(find.text('1 mobilisation couverte'), findsOneWidget);
+    expect(find.text('Gérer le coordinateur'), findsNothing);
+  });
+
+  testWidgets('la fiche détaille les affectations divergentes', (tester) async {
+    final scenario = _Scenario(
+      operations: [_operation('op-incendies', OperationStatus.active)],
+      mobilizations: [
+        _mobilization('mob-sud', 'op-incendies'),
+        _mobilization('mob-nord', 'op-incendies'),
+        _mobilization('mob-ouest', 'op-incendies'),
+      ],
+      missions: const [],
+    );
+    await _pumpDashboard(
+      tester,
+      scenario,
+      operationCoordinatorDataSource:
+          RepositoryOperationCoordinatorViewDataSource(
+            repository: _CoordinatorRepository([
+              _coordinatorAssignment('mob-sud', 'coord-1'),
+              _coordinatorAssignment('mob-nord', 'coord-2'),
+            ]),
+          ),
+    );
+
+    await _openPriorityOperation(tester, 'op-incendies');
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('operation-coordinator-section')),
+    );
+
+    expect(find.text('Affectations divergentes'), findsOneWidget);
+    expect(find.text('Camille Martin'), findsOneWidget);
+    expect(find.text('Noah Bernard'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('operation-coordinator-coord-1')),
+        matching: find.text('Mobilisation mob-sud'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('operation-coordinator-coord-2')),
+        matching: find.text('Mobilisation mob-nord'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Sans Coordinateur'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('operation-coordinator-unassigned')),
+        matching: find.text('Mobilisation mob-ouest'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('l’Administrateur nomme le Coordinateur principal', (
+    tester,
+  ) async {
+    final service = _RecordingAdministrationService();
+    await _pumpDashboard(
+      tester,
+      _Scenario.one(),
+      administrationRepository: _AdministrationRepository([
+        _activeCoordinator('coord-1', 'Camille Martin'),
+      ]),
+      administrationService: service,
+    );
+
+    await _openPriorityOperation(tester, 'op-incendies');
+    await _selectOperationCoordinator(tester, 'Camille Martin');
+
+    expect(service.operationCoordinatorCalls, [
+      (operationId: 'op-incendies', uid: 'coord-1'),
+    ]);
+    expect(find.text('Coordinateur principal nommé.'), findsOneWidget);
+  });
+
+  testWidgets(
+    'le remplacement avec une mobilisation active exige confirmation',
+    (tester) async {
+      final service = _RecordingAdministrationService();
+      final scenario = _Scenario(
+        operations: [
+          _operation(
+            'op-incendies',
+            OperationStatus.active,
+            coordinatorUid: 'coord-1',
+          ),
+        ],
+        mobilizations: [_mobilization('mob-sud', 'op-incendies')],
+        missions: const [],
+      );
+      await _pumpDashboard(
+        tester,
+        scenario,
+        administrationRepository: _AdministrationRepository([
+          _activeCoordinator('coord-1', 'Camille Martin'),
+          _activeCoordinator('coord-2', 'Noah Bernard'),
+        ]),
+        administrationService: service,
+        operationCoordinatorDataSource:
+            RepositoryOperationCoordinatorViewDataSource(
+              repository: _CoordinatorRepository([
+                _coordinatorAssignment('mob-sud', 'coord-1'),
+              ]),
+            ),
+      );
+
+      await _openPriorityOperation(tester, 'op-incendies');
+      await _selectOperationCoordinator(
+        tester,
+        'Noah Bernard',
+        confirmReplacement: false,
+      );
+
+      expect(
+        find.text('Remplacer le Coordinateur principal ?'),
+        findsOneWidget,
+      );
+      expect(service.operationCoordinatorCalls, isEmpty);
+      await tester.tap(
+        find.byKey(const Key('confirm-operation-coordinator-replacement')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(service.operationCoordinatorCalls, [
+        (operationId: 'op-incendies', uid: 'coord-2'),
+      ]);
+      expect(find.text('Coordinateur principal remplacé.'), findsOneWidget);
+    },
+  );
+
   testWidgets('une mission legacy critique ne peut jamais afficher stable', (
     tester,
   ) async {
@@ -306,6 +515,78 @@ void main() {
     },
   );
 
+  testWidgets('la fiche reste mono-colonne et tactile à 320 px', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final scenario = _Scenario.one();
+    final platform = _PlatformRepository(scenario.mobilizations);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.dark,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: const TextScaler.linear(1.6),
+            disableAnimations: true,
+          ),
+          child: child!,
+        ),
+        home: PlatformOperationDetailScreen(
+          operationId: 'op-incendies',
+          operationRepository: _OperationRepository(scenario.operations),
+          platformRepository: platform,
+          mobilizationProvider: CurrentMobilizationProvider(
+            repository: platform,
+          ),
+          administrationRepository:
+              const NoPlatformAdministrationReadRepository(),
+          administrationService: _AdministrationService(),
+          missionRepository: _MissionRepository(scenario.missions),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _scrollTo(tester, find.byKey(const Key('edit-platform-operation')));
+    expect(
+      tester.getSize(find.byKey(const Key('edit-platform-operation'))).height,
+      greaterThanOrEqualTo(44),
+    );
+
+    final mobilizations = find.byKey(
+      const Key('operation-detail-mobilizations'),
+    );
+    final missions = find.byKey(const Key('operation-detail-missions'));
+    await _scrollTo(tester, missions);
+    expect(tester.getTopLeft(missions).dx, tester.getTopLeft(mobilizations).dx);
+    expect(
+      tester.getTopLeft(missions).dy,
+      greaterThan(tester.getTopLeft(mobilizations).dy),
+    );
+
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('future-view-as-professional')),
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const Key('future-view-as-professional')))
+          .height,
+      greaterThanOrEqualTo(44),
+    );
+    expect(
+      Theme.of(
+        tester.element(find.text('Situation de l’opération')),
+      ).brightness,
+      Brightness.dark,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   final goldenScenarios = <String, _Scenario>{
     'executive_dashboard_zero': const _Scenario.empty(),
     'executive_dashboard_one': _Scenario.one(),
@@ -334,6 +615,47 @@ void main() {
 Future<void> _scrollTo(WidgetTester tester, Finder target) => tester
     .scrollUntilVisible(target, 300, scrollable: find.byType(Scrollable).first);
 
+Future<void> _openPriorityOperation(
+  WidgetTester tester,
+  String operationId,
+) async {
+  final target = find.byKey(Key('executive-priority-$operationId'));
+  await _scrollTo(tester, target);
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _selectOperationCoordinator(
+  WidgetTester tester,
+  String displayName, {
+  bool confirmReplacement = true,
+}) async {
+  final action = find.byKey(const Key('manage-operation-coordinator'));
+  await _scrollTo(tester, action);
+  await tester.tap(action);
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('operation-coordinator-select')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.textContaining(displayName).last);
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const Key('confirm-operation-coordinator-selection')),
+  );
+  await tester.pumpAndSettle();
+  if (confirmReplacement &&
+      find
+          .byKey(const Key('confirm-operation-coordinator-replacement'))
+          .evaluate()
+          .isNotEmpty) {
+    await tester.tap(
+      find.byKey(const Key('confirm-operation-coordinator-replacement')),
+    );
+    await tester.pumpAndSettle();
+  }
+}
+
 Future<void> _pumpDashboard(
   WidgetTester tester,
   _Scenario scenario, {
@@ -341,6 +663,12 @@ Future<void> _pumpDashboard(
   TextScaler textScaler = TextScaler.noScaling,
   ThemeMode themeMode = ThemeMode.light,
   bool disableAnimations = false,
+  PlatformAdministrationReadRepository administrationRepository =
+      const NoPlatformAdministrationReadRepository(),
+  PlatformAdministrationService administrationService =
+      const _AdministrationService(),
+  OperationCoordinatorViewDataSource operationCoordinatorDataSource =
+      const NoOperationCoordinatorViewDataSource(),
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -368,10 +696,10 @@ Future<void> _pumpDashboard(
               mobilizationProvider: CurrentMobilizationProvider(
                 repository: platform,
               ),
-              administrationRepository:
-                  const NoPlatformAdministrationReadRepository(),
-              administrationService: _AdministrationService(),
+              administrationRepository: administrationRepository,
+              administrationService: administrationService,
               missionRepository: _MissionRepository(scenario.missions),
+              operationCoordinatorDataSource: operationCoordinatorDataSource,
               referenceTime: DateTime(2026, 8, 16, 22, 46),
             ),
           ),
@@ -454,7 +782,11 @@ class _Scenario {
   final List<CoordinationNeed> missions;
 }
 
-Operation _operation(String id, OperationStatus status) => Operation(
+Operation _operation(
+  String id,
+  OperationStatus status, {
+  String? coordinatorUid,
+}) => Operation(
   id: id,
   name: switch (id) {
     'op-incendies' => 'Incendies Gironde',
@@ -467,6 +799,7 @@ Operation _operation(String id, OperationStatus status) => Operation(
       : OperationType.emergency,
   status: status,
   startAt: DateTime(2026, 8, 16),
+  coordinatorUid: coordinatorUid,
   scopeRefs: const [
     OperationalScopeRef(kind: OperationalScopeKind.territory, id: 'gironde'),
   ],
@@ -599,6 +932,76 @@ class _MissionRepository
 }
 
 class _AdministrationService extends NoPlatformAdministrationService {
+  const _AdministrationService();
+
   @override
   bool get isAvailable => true;
+}
+
+class _RecordingAdministrationService extends NoPlatformAdministrationService {
+  final operationCoordinatorCalls = <({String operationId, String uid})>[];
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<void> setOperationCoordinator({
+    required String operationId,
+    required String uid,
+  }) async {
+    operationCoordinatorCalls.add((operationId: operationId, uid: uid));
+  }
+}
+
+class _AdministrationRepository extends NoPlatformAdministrationReadRepository {
+  const _AdministrationRepository(this.coordinators);
+
+  final List<ActivePlatformCoordinator> coordinators;
+
+  @override
+  Stream<List<ActivePlatformCoordinator>> watchActiveCoordinators() =>
+      Stream.value(coordinators);
+}
+
+ActivePlatformCoordinator _activeCoordinator(String uid, String displayName) =>
+    ActivePlatformCoordinator(
+      uid: uid,
+      identity: UserDisplayIdentity(
+        uid: uid,
+        displayName: displayName,
+        professionLabel: 'Coordinateur',
+      ),
+    );
+
+MobilizationCoordinatorAssignment _coordinatorAssignment(
+  String mobilizationId,
+  String uid,
+) => MobilizationCoordinatorAssignment(
+  id: '${mobilizationId}_$uid',
+  uid: uid,
+  mobilizationId: mobilizationId,
+  active: true,
+  identity: UserDisplayIdentity(
+    uid: uid,
+    displayName: uid == 'coord-1' ? 'Camille Martin' : 'Noah Bernard',
+    professionLabel: 'Coordinateur',
+  ),
+);
+
+class _CoordinatorRepository implements OperationCoordinatorReadRepository {
+  const _CoordinatorRepository(this.assignments);
+
+  final List<MobilizationCoordinatorAssignment> assignments;
+
+  @override
+  Stream<List<MobilizationCoordinatorAssignment>>
+  watchCoordinatorsForMobilizations(Set<String> mobilizationIds) =>
+      Stream.value(
+        assignments
+            .where(
+              (assignment) =>
+                  mobilizationIds.contains(assignment.mobilizationId),
+            )
+            .toList(growable: false),
+      );
 }

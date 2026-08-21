@@ -99,6 +99,11 @@ abstract interface class PlatformAdministrationService {
     OperationStatus targetStatus,
   );
 
+  Future<void> setOperationCoordinator({
+    required String operationId,
+    required String uid,
+  });
+
   Future<void> updateMobilization(MobilizationAdministrationDraft draft);
 
   Future<void> activateMobilization(String mobilizationId);
@@ -139,6 +144,12 @@ class NoPlatformAdministrationService implements PlatformAdministrationService {
   @override
   Future<void> assignMobilizationCoordinator({
     required String mobilizationId,
+    required String uid,
+  }) async => _unavailable();
+
+  @override
+  Future<void> setOperationCoordinator({
+    required String operationId,
     required String uid,
   }) async => _unavailable();
 

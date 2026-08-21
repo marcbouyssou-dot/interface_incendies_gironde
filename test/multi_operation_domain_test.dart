@@ -11,6 +11,8 @@ void main() {
     final operation = Operation.fromMap(_operationData('operation-a'));
 
     expect(operation.endAt, isNull);
+    expect(operation.coordinatorUid, isNull);
+    expect(operation.toMap(), isNot(contains('coordinatorUid')));
     expect(operation.scopeRefs.single.serializedValue, 'territories/gironde');
     expect(
       OperationStatus.draft.canTransitionTo(OperationStatus.planned),
@@ -27,6 +29,27 @@ void main() {
     expect(
       OperationStatus.archived.canTransitionTo(OperationStatus.active),
       isFalse,
+    );
+  });
+
+  test('operation reads and serializes its authoritative coordinator', () {
+    final operation = Operation.fromMap({
+      ..._operationData('operation-a'),
+      'coordinatorUid': 'coordinateur-principal',
+      'schemaVersion': 2,
+    });
+
+    expect(operation.coordinatorUid, 'coordinateur-principal');
+    expect(operation.toMap()['coordinatorUid'], 'coordinateur-principal');
+  });
+
+  test('operation refuses a malformed coordinator identifier', () {
+    expect(
+      () => Operation.fromMap({
+        ..._operationData('operation-a'),
+        'coordinatorUid': 'coordinateurs/invalide',
+      }),
+      throwsFormatException,
     );
   });
 

@@ -14,12 +14,15 @@ import 'package:interface_incendies_gironde/models/platform_administrator_access
 import 'package:interface_incendies_gironde/models/responsible_account.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/models/user_display_identity.dart';
+import 'package:interface_incendies_gironde/perspective/cross_role_perspective.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_runtime.dart';
+import 'package:interface_incendies_gironde/repositories/read_only_preview_coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_shell.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_more_screen.dart';
@@ -37,6 +40,156 @@ import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 import 'package:interface_incendies_gironde/widgets/perspective_switcher.dart';
 
 void main() {
+  test(
+    'operation preview context is immutable and cleared on admin return',
+    () {
+      final mobilizationIds = {'mob-1'};
+      final locationIds = {'location-1'};
+      final context = CrossRoleOperationContext(
+        operationId: 'operation-1',
+        operationName: 'Opération 1',
+        mobilizationIds: mobilizationIds,
+        locationIds: locationIds,
+      );
+      mobilizationIds.add('mob-outside');
+      locationIds.add('location-outside');
+      final controller = CrossRolePerspectiveController();
+      addTearDown(controller.dispose);
+
+      controller.showCoordinatorForOperation(context);
+      expect(controller.perspective, CrossRolePerspective.coordinator);
+      expect(controller.operationContext, same(context));
+      expect(context.mobilizationIds, {'mob-1'});
+      expect(context.locationIds, {'location-1'});
+      expect(
+        () => context.mobilizationIds.add('blocked'),
+        throwsUnsupportedError,
+      );
+
+      controller.showActualRole();
+      expect(controller.perspective, CrossRolePerspective.actual);
+      expect(controller.operationContext, isNull);
+    },
+  );
+
+  test(
+    'read-only preview repository clamps reads and rejects mutations',
+    () async {
+      final firstLocation = places.first;
+      final secondLocation = places[1];
+      final repository = _MultiPreviewRepository(
+        missions: [
+          _previewMission(firstLocation),
+          _otherPreviewMission(secondLocation),
+        ],
+        location: firstLocation,
+        locations: [firstLocation, secondLocation],
+      );
+      final readOnly = ReadOnlyPreviewCoordinationRepository(
+        repository,
+        operationContext: CrossRoleOperationContext(
+          operationId: _previewOperation.id,
+          operationName: _previewOperation.name,
+          mobilizationIds: {_previewMobilization.id},
+          locationIds: {firstLocation.id},
+        ),
+      );
+
+      expect(
+        await readOnly.watchMissions().first,
+        everyElement(
+          isA<CoordinationNeed>().having(
+            (mission) => mission.mobilizationId,
+            'mobilizationId',
+            _previewMobilization.id,
+          ),
+        ),
+      );
+      expect(await readOnly.watchLocations().first, [same(firstLocation)]);
+      await expectLater(
+        readOnly.cancelMission('mission-preview', null),
+        throwsA(isA<RepositoryException>()),
+      );
+      await expectLater(
+        readOnly.signOutResponsible(),
+        throwsA(isA<RepositoryException>()),
+      );
+      expect(repository.mutationCalls, 0);
+    },
+  );
+
+  testWidgets('read-only guard follows contextual preview onto pushed routes', (
+    tester,
+  ) async {
+    final location = places.first;
+    final repository = _MultiPreviewRepository(
+      missions: [_previewMission(location)],
+      location: location,
+    );
+    final previewContext = CrossRoleOperationContext(
+      operationId: _previewOperation.id,
+      operationName: _previewOperation.name,
+      mobilizationIds: {_previewMobilization.id},
+      locationIds: {location.id},
+    );
+    await tester.pumpWidget(
+      RepositoryScope(
+        repository: repository,
+        child: CrossRolePerspectiveScope(
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Column(
+                  children: [
+                    TextButton(
+                      key: const Key('activate-context-preview'),
+                      onPressed: () => CrossRolePerspectiveScope.of(
+                        context,
+                      ).showProfessionalForOperation(previewContext),
+                      child: const Text('Prévisualiser'),
+                    ),
+                    TextButton(
+                      key: const Key('push-preview-route'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (routeContext) => Scaffold(
+                            body: TextButton(
+                              key: const Key('attempt-preview-mutation'),
+                              onPressed: () async {
+                                try {
+                                  await RepositoryScope.of(
+                                    routeContext,
+                                  ).cancelMission('mission-preview', null);
+                                } on RepositoryException {
+                                  // The route must retain the read-only guard.
+                                }
+                              },
+                              child: const Text('Modifier'),
+                            ),
+                          ),
+                        ),
+                      ),
+                      child: const Text('Ouvrir'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('activate-context-preview')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('push-preview-route')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('attempt-preview-mutation')));
+    await tester.pump();
+
+    expect(repository.mutationCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   test('platform authority and coordinator assignment are parsed strictly', () {
     final administrator = PlatformAdministratorAccess.fromMap(
       uid: 'platform-admin',
@@ -287,9 +440,10 @@ void main() {
     final navigation = tester.widget<V5BottomBar>(
       find.byKey(const Key('platform-admin-bottom-navigation')),
     );
-    expect(navigation.destinations, hasLength(2));
+    expect(navigation.destinations, hasLength(3));
     expect(navigation.destinations.map((destination) => destination.label), [
       'Opérations',
+      'Acteurs',
       'Plus',
     ]);
     expect(find.text('Territoires'), findsNothing);
@@ -433,7 +587,12 @@ void main() {
         findsNothing,
       );
 
-      await tester.tap(find.text('Territoire').last);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('coordinator-bottom-navigation')),
+          matching: find.text('Territoire'),
+        ),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump();
@@ -519,6 +678,110 @@ void main() {
       expect(repository.allActiveRequests, greaterThan(1));
       expect(repository.mobilizationRequests, isEmpty);
       expect(find.text('Tous les centres — accès Coordinateur'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'operation previews clamp all journeys and return to the real admin role',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final firstLocation = places.first;
+      final secondLocation = places[1];
+      final outsideLocation = places[2];
+      final firstMission = _previewMission(firstLocation);
+      final secondMission = _secondPreviewMission(secondLocation);
+      final outsideMission = _otherPreviewMission(outsideLocation);
+      final repository = _MultiPreviewRepository(
+        missions: [firstMission, secondMission, outsideMission],
+        location: firstLocation,
+        locations: [firstLocation, secondLocation, outsideLocation],
+      );
+      await tester.pumpWidget(
+        FireCoordinationApp(
+          repository: repository,
+          platformRuntime: _MultiPreviewRuntime(
+            mobilizations: [_previewMobilization, _otherPreviewMobilization],
+            operations: [_previewOperation, _otherPreviewOperation],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Future<void> openOperation() async {
+        final operation = find.byKey(
+          const Key('platform-operation-operation-preview'),
+        );
+        await tester.scrollUntilVisible(
+          operation,
+          260,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(operation);
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('operation-future-journeys')),
+          260,
+          scrollable: find.byType(Scrollable).first,
+        );
+      }
+
+      Future<void> preview({
+        required Key key,
+        required String role,
+        required Type shell,
+      }) async {
+        await openOperation();
+        await tester.ensureVisible(find.byKey(key));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(key));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump();
+        if (find
+            .byKey(const Key('responsible-center-picker'))
+            .evaluate()
+            .isNotEmpty) {
+          await tester.tap(find.text(firstLocation.name).last);
+          await tester.pumpAndSettle();
+        }
+        expect(find.byType(shell), findsOneWidget);
+        expect(
+          find.text('Prévisualisation $role · ${_previewOperation.name}'),
+          findsOneWidget,
+        );
+        expect(find.text(outsideLocation.name), findsNothing);
+        if (shell == ResponsibleShell) {
+          expect(find.text(secondLocation.name), findsNothing);
+          expect(find.text(firstLocation.name), findsWidgets);
+        }
+        expect(repository.lastObservedAccess, isNull);
+
+        await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
+        await tester.pumpAndSettle();
+        expect(find.byType(PlatformAdminShell), findsOneWidget);
+        expect(find.text('Retour Administrateur'), findsNothing);
+      }
+
+      await preview(
+        key: const Key('future-view-as-responsible'),
+        role: 'Responsable',
+        shell: ResponsibleShell,
+      );
+      await preview(
+        key: const Key('future-view-as-professional'),
+        role: 'Professionnel',
+        shell: ProfessionalShell,
+      );
+      await preview(
+        key: const Key('future-view-as-coordinator'),
+        role: 'Coordinateur',
+        shell: CoordinatorShell,
+      );
+
+      expect(repository.mutationCalls, 0);
       expect(tester.takeException(), isNull);
     },
   );
@@ -784,13 +1047,14 @@ class _MultiPreviewRepository extends MockCoordinationRepository
   _MultiPreviewRepository({
     required List<CoordinationNeed> missions,
     required ResponsePlace location,
+    List<ResponsePlace>? locations,
     MockResponsibleAccessAdministrationRepository? accountsRepository,
     this.denyAdministrativeScopedReads = false,
     this.failProfessionalMissionRead = false,
   }) : _missions = List.unmodifiable(missions),
        super(
          initialMissions: missions,
-         initialLocations: [location],
+         initialLocations: locations ?? [location],
          responsibleAccess: null,
          responsibleAccessAdministrationRepository: accountsRepository,
        );
@@ -801,6 +1065,30 @@ class _MultiPreviewRepository extends MockCoordinationRepository
   int allActiveRequests = 0;
   final List<Set<String>> mobilizationRequests = [];
   final List<Set<String>> locationRequests = [];
+  ResponsibleAccess? lastObservedAccess;
+  int mutationCalls = 0;
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() async* {
+    lastObservedAccess = null;
+    yield lastObservedAccess;
+  }
+
+  @override
+  Future<String> createMission(MissionDraft draft) async {
+    mutationCalls++;
+    return 'unexpected-mission';
+  }
+
+  @override
+  Future<void> updateMission(String missionId, MissionDraft draft) async {
+    mutationCalls++;
+  }
+
+  @override
+  Future<void> cancelMission(String missionId, String? reason) async {
+    mutationCalls++;
+  }
 
   @override
   Stream<List<CoordinationNeed>> watchAllActiveMissions() {
@@ -930,6 +1218,38 @@ final _previewOperation = Operation(
   schemaVersion: 1,
 );
 
+final _otherPreviewMobilization = Mobilization(
+  id: 'mobilization-other-operation',
+  operationId: 'operation-other',
+  territoryId: 'gironde',
+  name: 'Mobilisation hors contexte',
+  subtitle: 'Autre opération',
+  contextType: MobilizationContextType.other,
+  status: MobilizationStatus.active,
+  createdBy: 'platform-admin',
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedAt: DateTime.utc(2026, 8, 10),
+  activatedBy: 'platform-admin',
+  activatedAt: DateTime.utc(2026, 8, 10),
+  schemaVersion: 2,
+);
+
+final _otherPreviewOperation = Operation(
+  id: 'operation-other',
+  name: 'Opération hors contexte',
+  type: OperationType.exercise,
+  status: OperationStatus.active,
+  startAt: DateTime.utc(2026, 8, 2),
+  scopeRefs: const [
+    OperationalScopeRef(kind: OperationalScopeKind.territory, id: 'gironde'),
+  ],
+  createdBy: 'platform-admin',
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedBy: 'platform-admin',
+  updatedAt: DateTime.utc(2026, 8, 10),
+  schemaVersion: 1,
+);
+
 CoordinationNeed _previewMission(ResponsePlace location) => CoordinationNeed(
   id: 'mission-preview',
   mobilizationId: _previewMobilization.id,
@@ -946,6 +1266,42 @@ CoordinationNeed _previewMission(ResponsePlace location) => CoordinationNeed(
   startAt: DateTime.utc(2026, 8, 20, 12),
   updatedAt: DateTime.utc(2026, 8, 18, 12),
 );
+
+CoordinationNeed _secondPreviewMission(ResponsePlace location) =>
+    CoordinationNeed(
+      id: 'mission-preview-second-center',
+      mobilizationId: _previewMobilization.id,
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: 'demain',
+      time: '16:00 — 20:00',
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 1,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+      startAt: DateTime.utc(2026, 8, 20, 16),
+      updatedAt: DateTime.utc(2026, 8, 18, 12),
+    );
+
+CoordinationNeed _otherPreviewMission(ResponsePlace location) =>
+    CoordinationNeed(
+      id: 'mission-other-operation',
+      mobilizationId: _otherPreviewMobilization.id,
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: 'après-demain',
+      time: '09:00 — 12:00',
+      requiredPhysiotherapists: 2,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+      startAt: DateTime.utc(2026, 8, 21, 9),
+      updatedAt: DateTime.utc(2026, 8, 18, 12),
+    );
 
 final _gironde = Territory(
   id: 'gironde',
@@ -984,23 +1340,31 @@ class _FakePlatformRuntime implements PlatformRuntime {
 
 class _MultiPreviewRuntime
     implements PlatformRuntime, MultiOperationPlatformRuntime {
-  _MultiPreviewRuntime({PlatformAdministrationService? administrationService})
-    : _platformRepository = _FakePlatformReadRepository(
-        activeMobilization: _previewMobilization,
-      ),
-      _administrationRepository = const _FakeAdministrationReadRepository(
-        administrator: PlatformAdministratorAccess(
-          uid: 'platform-admin',
-          active: true,
-        ),
-        assignments: [],
-      ),
-      _administrationService =
-          administrationService ?? const NoPlatformAdministrationService();
+  _MultiPreviewRuntime({
+    PlatformAdministrationService? administrationService,
+    List<Mobilization>? mobilizations,
+    List<Operation>? operations,
+  }) : _platformRepository = _FakePlatformReadRepository(
+         activeMobilization: _previewMobilization,
+         mobilizations: mobilizations ?? [_previewMobilization],
+       ),
+       _administrationRepository = const _FakeAdministrationReadRepository(
+         administrator: PlatformAdministratorAccess(
+           uid: 'platform-admin',
+           active: true,
+         ),
+         assignments: [],
+       ),
+       _administrationService =
+           administrationService ?? const NoPlatformAdministrationService(),
+       _operationRepository = _PreviewOperationRepository(
+         operations ?? [_previewOperation],
+       );
 
   final _FakePlatformReadRepository _platformRepository;
   final _FakeAdministrationReadRepository _administrationRepository;
   final PlatformAdministrationService _administrationService;
+  final OperationReadRepository _operationRepository;
 
   @override
   PlatformReadRepository get platformReadRepository => _platformRepository;
@@ -1026,8 +1390,7 @@ class _MultiPreviewRuntime
       _administrationService;
 
   @override
-  OperationReadRepository get operationReadRepository =>
-      const _PreviewOperationRepository();
+  OperationReadRepository get operationReadRepository => _operationRepository;
 
   @override
   AccessibleMobilizationsProvider get accessibleMobilizationsProvider =>
@@ -1062,19 +1425,24 @@ class _SessionAdministrationService extends NoPlatformAdministrationService
 }
 
 class _PreviewOperationRepository implements OperationReadRepository {
-  const _PreviewOperationRepository();
+  const _PreviewOperationRepository(this.operations);
+
+  final List<Operation> operations;
 
   @override
   Stream<Operation?> watchOperation(String operationId) => Stream.value(
-    operationId == _previewOperation.id ? _previewOperation : null,
+    operations.where((operation) => operation.id == operationId).firstOrNull,
   );
 
   @override
   Stream<List<Operation>> watchOperations({Set<OperationStatus>? statuses}) =>
       Stream.value(
-        statuses == null || statuses.contains(_previewOperation.status)
-            ? [_previewOperation]
-            : const [],
+        operations
+            .where(
+              (operation) =>
+                  statuses == null || statuses.contains(operation.status),
+            )
+            .toList(growable: false),
       );
 }
 
@@ -1111,9 +1479,13 @@ class _FakeMobilizationProvider implements MobilizationContextProvider {
 }
 
 class _FakePlatformReadRepository implements PlatformReadRepository {
-  const _FakePlatformReadRepository({required this.activeMobilization});
+  const _FakePlatformReadRepository({
+    required this.activeMobilization,
+    this.mobilizations = const [],
+  });
 
   final Mobilization? activeMobilization;
+  final List<Mobilization> mobilizations;
 
   @override
   Stream<Mobilization?> watchActiveMobilization() =>
@@ -1125,7 +1497,11 @@ class _FakePlatformReadRepository implements PlatformReadRepository {
     bool includeInactive = false,
   }) => Stream<List<Mobilization>>.multi(
     (controller) => controller.add(
-      activeMobilization == null ? const [] : [activeMobilization!],
+      mobilizations.isNotEmpty
+          ? mobilizations
+          : activeMobilization == null
+          ? const []
+          : [activeMobilization!],
     ),
   );
 

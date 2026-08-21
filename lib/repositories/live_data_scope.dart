@@ -11,6 +11,7 @@ class LiveCoordinationData {
     CoordinationRepository repository, {
     Stream<ResponsibleAccess?> Function()? responsibleAccessOverride,
     Stream<List<CoordinationNeed>> Function()? missionsOverride,
+    Stream<List<ResponsePlace>> Function()? locationsOverride,
   }) : _repository = repository {
     final accessSource =
         responsibleAccessOverride ?? repository.watchResponsibleAccess;
@@ -34,7 +35,9 @@ class LiveCoordinationData {
         return repository.watchMissions();
       });
     }, onValue: _pruneMissionStreams);
-    _locations = _SharedLatestStream(repository.watchLocations);
+    _locations = _SharedLatestStream(
+      locationsOverride ?? repository.watchLocations,
+    );
     _responsibleAccess = _SharedLatestStream(accessSource);
   }
 

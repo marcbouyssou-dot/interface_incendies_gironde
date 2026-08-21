@@ -99,6 +99,7 @@ for (const exportName of [
   'createOperation',
   'updateOperation',
   'transitionOperation',
+  'setOperationCoordinator',
   'createMobilization',
   'updateMobilization',
   'activateMobilization',
@@ -122,6 +123,7 @@ for (const exportName of [
 for (const exportName of [
   'listMissionTeam',
   'listPlatformCoordinatorIdentities',
+  'listPlatformActorDirectory',
 ]) {
   test(`${exportName} is an App Check enforced identity read`, () => {
     const endpoint = discoverExport({

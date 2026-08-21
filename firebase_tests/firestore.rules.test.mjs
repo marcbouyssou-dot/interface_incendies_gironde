@@ -773,6 +773,115 @@ test('volunteers: owner create/update/read; other access denied', async () => {
   await assertFails(updateDoc(doc(db('bob'), 'volunteers/alice'), {phone: 'x'}));
 });
 
+test('RC3.8F.3: platform admin cannot use professional owner writes', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+    await setDoc(
+      doc(admin, 'volunteers/platform-admin'),
+      volunteer('platform-admin'),
+    );
+    await setDoc(doc(admin, 'engagements/mission-a_platform-admin'), {
+      missionId: 'mission-a',
+      mobilizationId: activeMobilizationId,
+      volunteerId: 'platform-admin',
+      profession: 'mk',
+      status: 'confirmed',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+    await updateDoc(doc(admin, 'missions/mission-a'), {
+      registeredMk: 1,
+      status: 'critical',
+    });
+  });
+
+  const adminDb = db('platform-admin');
+
+  // Existing owner reads remain unchanged; only professional writes are gated.
+  await assertSucceeds(getDoc(
+    doc(adminDb, 'volunteers/platform-admin'),
+  ));
+  await assertSucceeds(getDoc(
+    doc(adminDb, 'engagements/mission-a_platform-admin'),
+  ));
+
+  await assertFails(updateDoc(
+    doc(adminDb, 'volunteers/platform-admin'),
+    {phone: '0611111111', updatedAt: serverTimestamp()},
+  ));
+  const cancellation = writeBatch(adminDb);
+  cancellation.update(
+    doc(adminDb, 'engagements/mission-a_platform-admin'),
+    {status: 'cancelled', updatedAt: serverTimestamp()},
+  );
+  cancellation.update(doc(adminDb, 'missions/mission-a'), {
+    registeredMk: 0,
+    status: 'critical',
+    updatedAt: serverTimestamp(),
+  });
+  await assertFails(cancellation.commit());
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await deleteDoc(doc(admin, 'engagements/mission-a_platform-admin'));
+    await deleteDoc(doc(admin, 'volunteers/platform-admin'));
+    await updateDoc(doc(admin, 'missions/mission-a'), {
+      registeredMk: 0,
+      status: 'critical',
+    });
+  });
+
+  await assertFails(setDoc(
+    doc(adminDb, 'volunteers/platform-admin'),
+    volunteer('platform-admin'),
+  ));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'volunteers/platform-admin'),
+      volunteer('platform-admin'),
+    );
+  });
+
+  const creation = writeBatch(adminDb);
+  creation.set(doc(adminDb, 'engagements/mission-a_platform-admin'), {
+    missionId: 'mission-a',
+    mobilizationId: activeMobilizationId,
+    volunteerId: 'platform-admin',
+    profession: 'mk',
+    status: 'confirmed',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  creation.update(doc(adminDb, 'missions/mission-a'), {
+    registeredMk: 1,
+    status: 'critical',
+    updatedAt: serverTimestamp(),
+  });
+  await assertFails(creation.commit());
+});
+
+test('RC3.8F.3: professional owner writes remain allowed', async () => {
+  await seed();
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice'),
+  ));
+  await assertSucceeds(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    phone: '0611111111',
+    updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(engage('alice', 'mk', {}, false));
+  await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled', {
+    registeredMk: 0,
+    status: 'critical',
+  }));
+});
+
 test('volunteers: a client cannot forge a verified profile', async () => {
   await seed();
   await assertFails(setDoc(

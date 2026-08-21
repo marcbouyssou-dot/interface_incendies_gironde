@@ -11,6 +11,7 @@ import {
   isPlatformAdministrator,
   PlatformAdministrationError,
   removeMobilizationCoordinator,
+  setOperationCoordinator,
   transitionOperation,
   updateOperation,
   updateMobilization,
@@ -113,10 +114,11 @@ function harness({administrator = true} = {}) {
 }
 
 function seedAssignment(firestore, mobilizationId, overrides = {}) {
+  const uid = overrides.uid ?? COORDINATOR_UID;
   firestore.seed(
-    `mobilizationAssignments/${mobilizationId}_${COORDINATOR_UID}`,
+    `mobilizationAssignments/${mobilizationId}_${uid}`,
     {
-      uid: COORDINATOR_UID,
+      uid,
       mobilizationId,
       role: 'coordinator',
       active: true,
@@ -389,8 +391,10 @@ test('operation lifecycle follows the strict transition graph', async () => {
     firestore.read('operations/operation-a'),
     operationDocument('operation-a', 'draft', {
       name: 'Opération A',
+      coordinatorUid: null,
       createdAt: NOW,
       updatedAt: NOW,
+      schemaVersion: 2,
     }),
   );
 
@@ -427,6 +431,171 @@ test('operation update preserves status and accepts no end date', async () => {
   assert.equal(
     firestore.read('operations/operation-a').name,
     'Opération A actualisée',
+  );
+});
+
+test('operation coordinator can be named before any mobilization exists', async () => {
+  const {firestore, services} = harness();
+  firestore.seed('operations/operation-a', operationDocument('operation-a'));
+
+  const result = await setOperationCoordinator({
+    callerUid: ADMIN_UID,
+    data: {operationId: 'operation-a', uid: COORDINATOR_UID},
+    services,
+  });
+
+  assert.equal(result.mobilizationCount, 0);
+  assert.equal(result.activeMobilizationCount, 0);
+  assert.equal(
+    firestore.read('operations/operation-a').coordinatorUid,
+    COORDINATOR_UID,
+  );
+  assert.equal(
+    firestore.read(`roles/${COORDINATOR_UID}`)
+      .hasActiveMobilizationAssignments,
+    false,
+  );
+});
+
+test('operation coordinator synchronizes active and inactive mobilizations', async () => {
+  const {firestore, services} = harness();
+  firestore.seed(
+    'operations/operation-a',
+    operationDocument('operation-a', 'active'),
+  );
+  firestore.seed(
+    'mobilizations/mobilization-active',
+    mobilizationDocument('mobilization-active', 'active', {
+      operationId: 'operation-a',
+    }),
+  );
+  firestore.seed(
+    'mobilizations/mobilization-inactive',
+    mobilizationDocument('mobilization-inactive', 'inactive', {
+      operationId: 'operation-a',
+    }),
+  );
+
+  const result = await setOperationCoordinator({
+    callerUid: ADMIN_UID,
+    data: {operationId: 'operation-a', uid: COORDINATOR_UID},
+    services,
+  });
+
+  assert.equal(result.mobilizationCount, 2);
+  assert.equal(result.activeMobilizationCount, 1);
+  for (const id of ['mobilization-active', 'mobilization-inactive']) {
+    assert.equal(
+      firestore.read(
+        `mobilizationAssignments/${id}_${COORDINATOR_UID}`,
+      ).active,
+      true,
+    );
+  }
+});
+
+test('replacement atomically harmonizes divergent assignments', async () => {
+  const {firestore, services} = harness();
+  const replacementUid = 'coordinator-2';
+  firestore.seed(`roles/${replacementUid}`, {
+    role: 'coordinator',
+    roles: ['coordinator'],
+    locationIds: [],
+    active: true,
+    schemaVersion: 2,
+    hasActiveMobilizationAssignments: true,
+  });
+  firestore.seed(
+    'operations/operation-a',
+    operationDocument('operation-a', 'active', {
+      coordinatorUid: COORDINATOR_UID,
+    }),
+  );
+  for (const [id, status] of [
+    ['mobilization-a', 'active'],
+    ['mobilization-b', 'inactive'],
+  ]) {
+    firestore.seed(
+      `mobilizations/${id}`,
+      mobilizationDocument(id, status, {operationId: 'operation-a'}),
+    );
+  }
+  seedAssignment(firestore, 'mobilization-a');
+  seedAssignment(firestore, 'mobilization-b', {uid: replacementUid});
+
+  const result = await setOperationCoordinator({
+    callerUid: ADMIN_UID,
+    data: {operationId: 'operation-a', uid: replacementUid},
+    services,
+  });
+
+  assert.equal(result.previousCoordinatorUid, COORDINATOR_UID);
+  assert.equal(
+    firestore.read('operations/operation-a').coordinatorUid,
+    replacementUid,
+  );
+  assert.equal(
+    firestore.read(
+      `mobilizationAssignments/mobilization-a_${COORDINATOR_UID}`,
+    ).active,
+    false,
+  );
+  for (const id of ['mobilization-a', 'mobilization-b']) {
+    assert.equal(
+      firestore.read(
+        `mobilizationAssignments/${id}_${replacementUid}`,
+      ).active,
+      true,
+    );
+  }
+  assert.equal(
+    firestore.read(`roles/${COORDINATOR_UID}`)
+      .hasActiveMobilizationAssignments,
+    false,
+  );
+});
+
+test('failed operation coordinator replacement leaves every record unchanged', async () => {
+  const {firestore, services} = harness();
+  firestore.seed(
+    'operations/operation-a',
+    operationDocument('operation-a', 'active', {
+      coordinatorUid: COORDINATOR_UID,
+    }),
+  );
+  firestore.seed(
+    'mobilizations/mobilization-a',
+    mobilizationDocument('mobilization-a', 'active', {
+      operationId: 'operation-a',
+    }),
+  );
+  seedAssignment(firestore, 'mobilization-a');
+  const operationBefore = firestore.read('operations/operation-a');
+  const assignmentBefore = firestore.read(
+    `mobilizationAssignments/mobilization-a_${COORDINATOR_UID}`,
+  );
+
+  await assertCode(
+    () => setOperationCoordinator({
+      callerUid: ADMIN_UID,
+      data: {operationId: 'operation-a', uid: 'inactive-coordinator'},
+      services,
+    }),
+    'failed-precondition',
+  );
+
+  assert.deepEqual(firestore.read('operations/operation-a'), operationBefore);
+  assert.deepEqual(
+    firestore.read(
+      `mobilizationAssignments/mobilization-a_${COORDINATOR_UID}`,
+    ),
+    assignmentBefore,
+  );
+  assert.equal(
+    firestore.has(
+      'mobilizationAssignments/mobilization-a_inactive-coordinator',
+    ),
+    false,
   );
 });
 
@@ -467,6 +636,85 @@ test('multiple mobilizations can reference one operation and stay active', async
   }
   assert.equal(firestore.read('mobilizations/mobilization-a1').status, 'active');
   assert.equal(firestore.read('mobilizations/mobilization-a2').status, 'active');
+});
+
+test('new mobilization inherits the authoritative operation coordinator', async () => {
+  const {firestore, services} = harness();
+  firestore.seed(
+    'operations/operation-a',
+    operationDocument('operation-a', 'active', {
+      coordinatorUid: COORDINATOR_UID,
+    }),
+  );
+
+  await createMobilization({
+    callerUid: ADMIN_UID,
+    data: mobilizationPayload({
+      mobilizationId: 'mobilization-new',
+      operationId: 'operation-a',
+      scopeRefs: ['territories/gironde'],
+    }),
+    services,
+  });
+
+  assert.equal(
+    firestore.read(
+      `mobilizationAssignments/mobilization-new_${COORDINATOR_UID}`,
+    ).active,
+    true,
+  );
+  assert.equal(
+    firestore.read(`roles/${COORDINATOR_UID}`)
+      .hasActiveMobilizationAssignments,
+    true,
+  );
+});
+
+test('attaching a mobilization harmonizes it with the operation coordinator', async () => {
+  const {firestore, services} = harness();
+  const previousUid = 'coordinator-previous';
+  firestore.seed(`roles/${previousUid}`, {
+    role: 'coordinator',
+    roles: ['coordinator'],
+    locationIds: [],
+    active: true,
+    schemaVersion: 2,
+    hasActiveMobilizationAssignments: true,
+  });
+  firestore.seed(
+    'operations/operation-a',
+    operationDocument('operation-a', 'active', {
+      coordinatorUid: COORDINATOR_UID,
+    }),
+  );
+  firestore.seed(
+    'mobilizations/mobilization-attached',
+    mobilizationDocument('mobilization-attached'),
+  );
+  seedAssignment(firestore, 'mobilization-attached', {uid: previousUid});
+
+  await updateMobilization({
+    callerUid: ADMIN_UID,
+    data: mobilizationPayload({
+      mobilizationId: 'mobilization-attached',
+      operationId: 'operation-a',
+      scopeRefs: ['territories/gironde'],
+    }),
+    services,
+  });
+
+  assert.equal(
+    firestore.read(
+      `mobilizationAssignments/mobilization-attached_${previousUid}`,
+    ).active,
+    false,
+  );
+  assert.equal(
+    firestore.read(
+      `mobilizationAssignments/mobilization-attached_${COORDINATOR_UID}`,
+    ).active,
+    true,
+  );
 });
 
 test('deactivation updates status, audit and clears active pointer', async () => {
@@ -575,6 +823,40 @@ test('coordinator assignment is deterministic and preserves role scope', async (
     ...originalRole,
     hasActiveMobilizationAssignments: true,
   });
+});
+
+test('per-mobilization assignment cannot override an operation coordinator', async () => {
+  const {firestore, services} = harness();
+  firestore.seed(
+    'operations/operation-a',
+    operationDocument('operation-a', 'active', {
+      coordinatorUid: COORDINATOR_UID,
+    }),
+  );
+  firestore.seed(
+    'mobilizations/incendies-gironde-2026',
+    mobilizationDocument('incendies-gironde-2026', 'draft', {
+      operationId: 'operation-a',
+    }),
+  );
+
+  await assertCode(
+    () => assignMobilizationCoordinator({
+      callerUid: ADMIN_UID,
+      data: {
+        mobilizationId: 'incendies-gironde-2026',
+        uid: COORDINATOR_UID,
+      },
+      services,
+    }),
+    'failed-precondition',
+  );
+  assert.equal(
+    firestore.has(
+      `mobilizationAssignments/incendies-gironde-2026_${COORDINATOR_UID}`,
+    ),
+    false,
+  );
 });
 
 test('removing a coordinator soft-disables the assignment', async () => {

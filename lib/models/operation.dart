@@ -72,6 +72,7 @@ class Operation {
     required this.schemaVersion,
     this.context,
     this.endAt,
+    this.coordinatorUid,
   });
 
   factory Operation.fromMap(Map<String, Object?> data) {
@@ -101,6 +102,7 @@ class Operation {
       context: _optionalOperationText(data, 'context'),
       startAt: startAt,
       endAt: endAt,
+      coordinatorUid: _optionalOperationUid(data, 'coordinatorUid'),
       scopeRefs: scopeRefs,
       createdBy: _requiredOperationText(data, 'createdBy'),
       createdAt: _requiredOperationValue<DateTime>(data, 'createdAt'),
@@ -117,6 +119,7 @@ class Operation {
   final String? context;
   final DateTime startAt;
   final DateTime? endAt;
+  final String? coordinatorUid;
   final List<OperationalScopeRef> scopeRefs;
   final String createdBy;
   final DateTime createdAt;
@@ -132,6 +135,7 @@ class Operation {
     'context': context,
     'startAt': startAt,
     'endAt': endAt,
+    if (coordinatorUid != null) 'coordinatorUid': coordinatorUid,
     'scopeRefs': scopeRefs.map((ref) => ref.serializedValue).toList(),
     'createdBy': createdBy,
     'createdAt': createdAt,
@@ -168,5 +172,18 @@ DateTime? _optionalOperationDateTime(Map<String, Object?> data, String key) {
   final value = data[key];
   if (value == null) return null;
   if (value is! DateTime) throw const FormatException('Opération invalide.');
+  return value;
+}
+
+String? _optionalOperationUid(Map<String, Object?> data, String key) {
+  final value = data[key];
+  if (value == null) return null;
+  if (value is! String ||
+      value.isEmpty ||
+      value.length > 128 ||
+      value.trim() != value ||
+      value.contains('/')) {
+    throw const FormatException('Opération invalide.');
+  }
   return value;
 }

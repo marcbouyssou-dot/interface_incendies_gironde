@@ -4,11 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/platform_administrator_access.dart';
 import '../models/user_display_identity.dart';
 import '../utils/switch_latest.dart';
+import 'operation_coordinator_read_repository.dart';
 import 'platform_administration_read_repository.dart';
 import 'user_display_identity_resolver.dart';
 
 class FirestorePlatformAdministrationReadRepository
-    implements PlatformAdministrationReadRepository {
+    implements
+        PlatformAdministrationReadRepository,
+        OperationCoordinatorReadRepository {
   const FirestorePlatformAdministrationReadRepository({
     required FirebaseAuth auth,
     required FirebaseFirestore firestore,
@@ -79,6 +82,57 @@ class FirestorePlatformAdministrationReadRepository
           });
           return assignments;
         });
+  }
+
+  @override
+  Stream<List<MobilizationCoordinatorAssignment>>
+  watchCoordinatorsForMobilizations(Set<String> mobilizationIds) {
+    final ids = mobilizationIds.map((id) => id.trim()).toSet();
+    if (ids.length != mobilizationIds.length || ids.any((id) => id.isEmpty)) {
+      return Stream<List<MobilizationCoordinatorAssignment>>.error(
+        const FormatException('Identifiants de mobilisation invalides.'),
+      );
+    }
+    if (ids.isEmpty) {
+      return Stream<List<MobilizationCoordinatorAssignment>>.value(const []);
+    }
+    return watchBoundedCoordinatorAssignmentBatches(
+      mobilizationIds: ids,
+      watchBatch: (batch) => _firestore
+          .collection('mobilizationAssignments')
+          .where('mobilizationId', whereIn: batch)
+          .snapshots()
+          .map(
+            (snapshot) => snapshot.docs
+                .where((document) => document.data()['role'] == 'coordinator')
+                .map(
+                  (document) => MobilizationCoordinatorAssignment.fromMap(
+                    id: document.id,
+                    data: document.data(),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+    ).asyncMap((assignments) async {
+      final identities = await _loadCoordinatorIdentities();
+      final resolvedAssignments = assignments
+          .map(
+            (assignment) =>
+                assignment.copyWithIdentity(identities[assignment.uid]),
+          )
+          .toList(growable: false);
+      resolvedAssignments.sort((left, right) {
+        final byMobilization = left.mobilizationId.compareTo(
+          right.mobilizationId,
+        );
+        if (byMobilization != 0) return byMobilization;
+        if (left.active != right.active) return left.active ? -1 : 1;
+        return left.displayIdentity.displayName.compareTo(
+          right.displayIdentity.displayName,
+        );
+      });
+      return resolvedAssignments;
+    });
   }
 
   @override

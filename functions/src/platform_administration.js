@@ -40,6 +40,7 @@ const OPERATION_FIELDS = Object.freeze([
 const OPERATION_TRANSITION_FIELDS = Object.freeze([
   'operationId', 'targetStatus',
 ]);
+const OPERATION_COORDINATOR_FIELDS = Object.freeze(['operationId', 'uid']);
 
 export class PlatformAdministrationError extends Error {
   constructor(code, message, options = {}) {
@@ -111,6 +112,22 @@ export async function transitionOperation({callerUid, data, services}) {
     callerUid,
     operationId: validateDocumentId(data.operationId),
     targetStatus: data.targetStatus,
+  });
+}
+
+export async function setOperationCoordinator({callerUid, data, services}) {
+  requireCaller(callerUid);
+  requireServices(services, 'setOperationCoordinator');
+  if (!isPlainObject(data) || !hasExactlyKeys(
+    data,
+    OPERATION_COORDINATOR_FIELDS,
+  )) {
+    throw invalidArgument();
+  }
+  return services.setOperationCoordinator({
+    callerUid,
+    operationId: validateDocumentId(data.operationId),
+    uid: validateUid(data.uid),
   });
 }
 

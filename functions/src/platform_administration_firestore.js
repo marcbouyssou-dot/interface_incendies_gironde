@@ -45,6 +45,11 @@ export function platformAdministrationServices({
       serverTimestamp,
       request,
     }),
+    setOperationCoordinator: (request) => runSetOperationCoordinator({
+      firestore,
+      serverTimestamp,
+      request,
+    }),
     createMobilization: (request) => runCreateMobilization({
       firestore,
       serverTimestamp,
@@ -111,12 +116,13 @@ async function runCreateOperation({firestore, serverTimestamp, request}) {
       endAt: request.endAtMillis === null
         ? null
         : new Date(request.endAtMillis),
+      coordinatorUid: null,
       scopeRefs: [...request.scopeRefs],
       createdBy: request.callerUid,
       createdAt: timestamp,
       updatedBy: request.callerUid,
       updatedAt: timestamp,
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
     return {operationId: request.operationId, status: 'draft'};
   });
@@ -175,6 +181,178 @@ async function runTransitionOperation({firestore, serverTimestamp, request}) {
   });
 }
 
+async function runSetOperationCoordinator({
+  firestore,
+  serverTimestamp,
+  request,
+}) {
+  return firestore.runTransaction(async (transaction) => {
+    await requirePlatformAdministrator({firestore, transaction, request});
+    const operationRef = operationReference(firestore, request.operationId);
+    const targetRoleRef = firestore.collection('roles').doc(request.uid);
+    const mobilizationsQuery = firestore
+      .collection('mobilizations')
+      .where('operationId', '==', request.operationId);
+    const [operation, targetRole, mobilizations] =
+      await Promise.all([
+        transaction.get(operationRef),
+        transaction.get(targetRoleRef),
+        transaction.get(mobilizationsQuery),
+      ]);
+    const currentOperation = requireOperation(operation);
+    const previousCoordinatorUid = operationCoordinatorUid(currentOperation);
+    if (
+      currentOperation.status === 'completed'
+      || currentOperation.status === 'archived'
+    ) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Une opération terminée ou archivée ne peut plus changer de Coordinateur.',
+      );
+    }
+    if (!targetRole.exists || !hasActiveCoordinatorRole(targetRole.data())) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Le compte cible doit être un Coordinateur V5 actif.',
+      );
+    }
+
+    const scopedMobilizations = mobilizations.docs.map((snapshot) => ({
+      snapshot,
+      data: requireMobilization(snapshot),
+    }));
+    const mobilizationIds = new Set(
+      scopedMobilizations.map(({snapshot}) => snapshot.id),
+    );
+    const activeAssignmentSnapshots = await Promise.all(
+      scopedMobilizations.map(({snapshot}) => transaction.get(firestore
+        .collection('mobilizationAssignments')
+        .where('mobilizationId', '==', snapshot.id))),
+    );
+    const scopedActiveAssignments = activeAssignmentSnapshots
+      .flatMap((snapshot) => snapshot.docs)
+      .filter((snapshot) =>
+        snapshot.data().role === 'coordinator'
+          && snapshot.data().active === true);
+    const replacedUids = [...new Set([
+      ...scopedActiveAssignments
+        .map((snapshot) => snapshot.data().uid)
+        .filter((uid) => typeof uid === 'string' && uid !== request.uid),
+      ...(previousCoordinatorUid !== null
+          && previousCoordinatorUid !== request.uid
+        ? [previousCoordinatorUid]
+        : []),
+    ])];
+    const estimatedWriteCount = 2
+      + scopedMobilizations.length
+      + scopedActiveAssignments.filter((snapshot) =>
+        snapshot.id !== `${snapshot.data().mobilizationId}_${request.uid}`
+          || snapshot.data().uid !== request.uid).length
+      + replacedUids.length;
+    if (estimatedWriteCount > 450) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Cette opération contient trop de mobilisations pour cette action atomique.',
+      );
+    }
+
+    const targetAssignmentRefs = scopedMobilizations.map(({snapshot}) =>
+      firestore
+        .collection('mobilizationAssignments')
+        .doc(`${snapshot.id}_${request.uid}`));
+    const targetAssignments = await Promise.all(
+      targetAssignmentRefs.map((reference) => transaction.get(reference)),
+    );
+    const replacedRoleRefs = replacedUids.map((uid) =>
+      firestore.collection('roles').doc(uid));
+    const targetAssignmentsQuery = firestore
+      .collection('mobilizationAssignments')
+      .where('uid', '==', request.uid)
+      .where('role', '==', 'coordinator')
+      .where('active', '==', true);
+    const replacedAssignmentsQueries = replacedUids.map((uid) => firestore
+      .collection('mobilizationAssignments')
+      .where('uid', '==', uid)
+      .where('role', '==', 'coordinator')
+      .where('active', '==', true));
+    const [replacedRoles, targetActiveAssignments, replacedAssignments] =
+      await Promise.all([
+        Promise.all(
+          replacedRoleRefs.map((reference) => transaction.get(reference)),
+        ),
+        transaction.get(targetAssignmentsQuery),
+        Promise.all(
+          replacedAssignmentsQueries.map((query) => transaction.get(query)),
+        ),
+      ]);
+
+    const timestamp = serverTimestamp();
+    transaction.update(operationRef, {
+      coordinatorUid: request.uid,
+      coordinatorUpdatedBy: request.callerUid,
+      coordinatorUpdatedAt: timestamp,
+      updatedBy: request.callerUid,
+      updatedAt: timestamp,
+    });
+    for (const assignment of scopedActiveAssignments) {
+      if (
+        assignment.data().uid === request.uid
+        && assignment.id === `${assignment.data().mobilizationId}_${request.uid}`
+      ) continue;
+      transaction.update(assignment.ref ?? firestore
+        .collection('mobilizationAssignments')
+        .doc(assignment.id), {
+        active: false,
+        updatedBy: request.callerUid,
+        updatedAt: timestamp,
+      });
+    }
+    for (let index = 0; index < scopedMobilizations.length; index += 1) {
+      const mobilizationId = scopedMobilizations[index].snapshot.id;
+      const existing = targetAssignments[index];
+      transaction.set(targetAssignmentRefs[index], {
+        uid: request.uid,
+        mobilizationId,
+        role: 'coordinator',
+        active: true,
+        assignedBy: request.callerUid,
+        createdAt: existing.exists
+          ? existing.data().createdAt ?? timestamp
+          : timestamp,
+        updatedBy: request.callerUid,
+        updatedAt: timestamp,
+      }, {merge: false});
+    }
+
+    const hasTargetAssignmentsOutsideOperation =
+      targetActiveAssignments.docs.some(
+        (snapshot) => !mobilizationIds.has(snapshot.data().mobilizationId),
+      );
+    transaction.update(targetRoleRef, {
+      hasActiveMobilizationAssignments:
+        scopedMobilizations.length > 0 || hasTargetAssignmentsOutsideOperation,
+    });
+    for (let index = 0; index < replacedRoles.length; index += 1) {
+      if (!replacedRoles[index].exists) continue;
+      const remainsAssigned = replacedAssignments[index].docs.some(
+        (snapshot) => !mobilizationIds.has(snapshot.data().mobilizationId),
+      );
+      transaction.update(replacedRoleRefs[index], {
+        hasActiveMobilizationAssignments: remainsAssigned,
+      });
+    }
+    return {
+      operationId: request.operationId,
+      coordinatorUid: request.uid,
+      previousCoordinatorUid,
+      mobilizationCount: scopedMobilizations.length,
+      activeMobilizationCount: scopedMobilizations.filter(
+        ({data}) => data.status === 'active',
+      ).length,
+    };
+  });
+}
+
 async function runCreateMobilization({firestore, serverTimestamp, request}) {
   return firestore.runTransaction(async (transaction) => {
     await requirePlatformAdministrator({firestore, transaction, request});
@@ -202,8 +380,35 @@ async function runCreateMobilization({firestore, serverTimestamp, request}) {
       );
     }
     requireActiveTerritory(territory);
-    if (operation !== null) requireAttachableOperation(operation);
+    const attachedOperation = operation === null
+      ? null
+      : requireAttachableOperation(operation);
     requireValidScopes(scopeRefs, scopeSnapshots);
+    const coordinatorUid = operationCoordinatorUid(attachedOperation);
+    const coordinatorRoleRef = coordinatorUid === null
+      ? null
+      : firestore.collection('roles').doc(coordinatorUid);
+    const assignmentRef = coordinatorUid === null
+      ? null
+      : firestore
+        .collection('mobilizationAssignments')
+        .doc(`${request.mobilizationId}_${coordinatorUid}`);
+    const [coordinatorRole, assignment] = coordinatorUid === null
+      ? [null, null]
+      : await Promise.all([
+        transaction.get(coordinatorRoleRef),
+        transaction.get(assignmentRef),
+      ]);
+    if (
+      coordinatorRole !== null
+      && (!coordinatorRole.exists
+        || !hasActiveCoordinatorRole(coordinatorRole.data()))
+    ) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Le Coordinateur principal de l’opération n’est plus actif.',
+      );
+    }
     const timestamp = serverTimestamp();
     const fields = {
       id: request.mobilizationId,
@@ -223,6 +428,23 @@ async function runCreateMobilization({firestore, serverTimestamp, request}) {
       fields.operationId = request.operationId;
     }
     transaction.create(mobilizationRef, fields);
+    if (coordinatorUid !== null) {
+      transaction.set(assignmentRef, {
+        uid: coordinatorUid,
+        mobilizationId: request.mobilizationId,
+        role: 'coordinator',
+        active: true,
+        assignedBy: request.callerUid,
+        createdAt: assignment.exists
+          ? assignment.data().createdAt ?? timestamp
+          : timestamp,
+        updatedBy: request.callerUid,
+        updatedAt: timestamp,
+      }, {merge: false});
+      transaction.update(coordinatorRoleRef, {
+        hasActiveMobilizationAssignments: true,
+      });
+    }
     return {mobilizationId: request.mobilizationId, status: 'draft'};
   });
 }
@@ -253,7 +475,9 @@ async function runUpdateMobilization({firestore, serverTimestamp, request}) {
     ]);
     const current = requireMobilization(mobilization);
     requireActiveTerritory(territory);
-    if (operation !== null) requireAttachableOperation(operation);
+    const attachedOperation = operation === null
+      ? null
+      : requireAttachableOperation(operation);
     if (request.scopeRefs !== undefined) {
       requireValidScopes(request.scopeRefs, scopeSnapshots);
     }
@@ -282,17 +506,112 @@ async function runUpdateMobilization({firestore, serverTimestamp, request}) {
         'L’opération d’une mobilisation active ne peut pas changer.',
       );
     }
+    const coordinatorUid = operationCoordinatorUid(attachedOperation);
+    let coordinatorSync = null;
+    if (coordinatorUid !== null) {
+      const roleRef = firestore.collection('roles').doc(coordinatorUid);
+      const assignmentRef = firestore
+        .collection('mobilizationAssignments')
+        .doc(`${request.mobilizationId}_${coordinatorUid}`);
+      const activeAssignmentsQuery = firestore
+        .collection('mobilizationAssignments')
+        .where('mobilizationId', '==', request.mobilizationId);
+      const [role, assignment, activeAssignments] = await Promise.all([
+        transaction.get(roleRef),
+        transaction.get(assignmentRef),
+        transaction.get(activeAssignmentsQuery),
+      ]);
+      if (!role.exists || !hasActiveCoordinatorRole(role.data())) {
+        throw new PlatformAdministrationError(
+          'failed-precondition',
+          'Le Coordinateur principal de l’opération n’est plus actif.',
+        );
+      }
+      const activeCoordinatorAssignments = activeAssignments.docs.filter(
+        (snapshot) => snapshot.data().role === 'coordinator'
+          && snapshot.data().active === true,
+      );
+      const oldUids = [...new Set(
+        activeCoordinatorAssignments
+          .map((snapshot) => snapshot.data().uid)
+          .filter((uid) => typeof uid === 'string' && uid !== coordinatorUid),
+      )];
+      const oldRoleRefs = oldUids.map((uid) =>
+        firestore.collection('roles').doc(uid));
+      const oldAssignmentQueries = oldUids.map((uid) => firestore
+        .collection('mobilizationAssignments')
+        .where('uid', '==', uid)
+        .where('role', '==', 'coordinator')
+        .where('active', '==', true));
+      const [oldRoles, oldAssignments] = await Promise.all([
+        Promise.all(oldRoleRefs.map((reference) => transaction.get(reference))),
+        Promise.all(oldAssignmentQueries.map((query) => transaction.get(query))),
+      ]);
+      coordinatorSync = {
+        coordinatorUid,
+        roleRef,
+        assignmentRef,
+        assignment,
+        activeAssignments: activeCoordinatorAssignments,
+        oldUids,
+        oldRoleRefs,
+        oldRoles,
+        oldAssignments,
+      };
+    }
+    const timestamp = serverTimestamp();
     const fields = {
       territoryId: request.territoryId,
       name: request.name,
       subtitle: request.subtitle,
       contextType: request.contextType,
       updatedBy: request.callerUid,
-      updatedAt: serverTimestamp(),
+      updatedAt: timestamp,
     };
     if (request.operationId !== undefined) fields.operationId = request.operationId;
     if (request.scopeRefs !== undefined) fields.scopeRefs = request.scopeRefs;
     transaction.update(mobilizationRef, fields);
+    if (coordinatorSync !== null) {
+      for (const existing of coordinatorSync.activeAssignments) {
+        if (
+          existing.data().uid === coordinatorSync.coordinatorUid
+          && existing.id ===
+            `${request.mobilizationId}_${coordinatorSync.coordinatorUid}`
+        ) continue;
+        transaction.update(existing.ref ?? firestore
+          .collection('mobilizationAssignments')
+          .doc(existing.id), {
+          active: false,
+          updatedBy: request.callerUid,
+          updatedAt: timestamp,
+        });
+      }
+      transaction.set(coordinatorSync.assignmentRef, {
+        uid: coordinatorSync.coordinatorUid,
+        mobilizationId: request.mobilizationId,
+        role: 'coordinator',
+        active: true,
+        assignedBy: request.callerUid,
+        createdAt: coordinatorSync.assignment.exists
+          ? coordinatorSync.assignment.data().createdAt ?? timestamp
+          : timestamp,
+        updatedBy: request.callerUid,
+        updatedAt: timestamp,
+      }, {merge: false});
+      transaction.update(coordinatorSync.roleRef, {
+        hasActiveMobilizationAssignments: true,
+      });
+      for (let index = 0; index < coordinatorSync.oldUids.length; index += 1) {
+        if (!coordinatorSync.oldRoles[index].exists) continue;
+        const remainsAssigned = coordinatorSync.oldAssignments[index].docs.some(
+          (snapshot) =>
+            snapshot.data().mobilizationId !== request.mobilizationId,
+        );
+        transaction.update(coordinatorSync.oldRoleRefs[index], {
+          hasActiveMobilizationAssignments: remainsAssigned,
+        });
+      }
+    }
     return {
       mobilizationId: request.mobilizationId,
       status: current.status,
@@ -457,6 +776,17 @@ async function runAssignMobilizationCoordinator({
       transaction.get(roleRef),
     ]);
     const current = requireMobilization(mobilization);
+    const operation = current.operationId === undefined
+      ? null
+      : await transaction.get(
+        operationReference(firestore, current.operationId),
+      );
+    if (operation !== null && operationCoordinatorUid(requireOperation(operation)) !== null) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Gérez le Coordinateur depuis l’opération.',
+      );
+    }
     if (current.status === 'archived') {
       throw new PlatformAdministrationError(
         'failed-precondition',
@@ -523,6 +853,17 @@ async function runRemoveMobilizationCoordinator({
         transaction.get(activeAssignmentsQuery),
       ]);
     const current = requireMobilization(mobilization);
+    const operation = current.operationId === undefined
+      ? null
+      : await transaction.get(
+        operationReference(firestore, current.operationId),
+      );
+    if (operation !== null && operationCoordinatorUid(requireOperation(operation)) !== null) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Gérez le Coordinateur depuis l’opération.',
+      );
+    }
     if (current.status === 'active') {
       throw new PlatformAdministrationError(
         'failed-precondition',
@@ -644,6 +985,31 @@ function requireAttachableOperation(snapshot) {
     );
   }
   return operation;
+}
+
+function operationCoordinatorUid(operation) {
+  if (
+    operation === null
+    || operation === undefined
+    || operation.coordinatorUid === null
+    || operation.coordinatorUid === undefined
+  ) {
+    return null;
+  }
+  const uid = operation.coordinatorUid;
+  if (
+    typeof uid !== 'string'
+    || uid.length === 0
+    || uid.length > 128
+    || uid.trim() !== uid
+    || uid.includes('/')
+  ) {
+    throw new PlatformAdministrationError(
+      'failed-precondition',
+      'Le Coordinateur principal de l’opération est invalide.',
+    );
+  }
+  return uid;
 }
 
 function requireActiveTerritory(snapshot) {

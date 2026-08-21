@@ -30,12 +30,14 @@ import 'firestore_location_administration_repository.dart';
 import 'firestore_mission_mapper.dart';
 import 'firestore_operation_read_repository.dart';
 import 'firestore_platform_administration_read_repository.dart';
+import 'firebase_platform_actor_read_repository.dart';
 import 'firestore_platform_read_repository.dart';
 import 'firestore_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 import 'location_administration_repository.dart';
 import 'operation_read_repository.dart';
 import 'platform_administration_read_repository.dart';
+import 'platform_actor_read_repository.dart';
 import 'platform_read_repository.dart';
 import 'platform_runtime.dart';
 import 'user_display_identity_resolver.dart';
@@ -231,6 +233,7 @@ class FirestoreCoordinationRepository
         MultiMobilizationCoordinationMutationRepository,
         PlatformRuntime,
         MultiOperationPlatformRuntime,
+        PlatformActorRuntime,
         PlatformAccountAuthenticator {
   FirestoreCoordinationRepository(
     this._firestore,
@@ -316,6 +319,13 @@ class FirestoreCoordinationRepository
   @override
   late final OperationReadRepository operationReadRepository =
       FirestoreOperationReadRepository(_responsibleFirestore);
+
+  @override
+  late final PlatformActorReadRepository platformActorReadRepository =
+      FirebasePlatformActorReadRepository(
+        auth: _responsibleAuth,
+        functions: _responsibleFunctions,
+      );
 
   @override
   late final AccessibleMobilizationsProvider accessibleMobilizationsProvider =

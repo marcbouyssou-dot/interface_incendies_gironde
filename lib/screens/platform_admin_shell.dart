@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../models/need.dart';
+import '../platform_admin/operation_coordinator_view_data.dart';
+import '../repositories/operation_coordinator_read_repository.dart';
+import '../repositories/platform_actor_read_repository.dart';
 import '../repositories/platform_administration_read_repository.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/platform_read_repository.dart';
@@ -11,6 +15,7 @@ import '../theme/v5_foundation.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/platform_admin_bottom_navigation.dart';
 import 'platform_admin_mobilization_screen.dart';
+import 'platform_admin_actors_screen.dart';
 import 'platform_admin_operations_screen.dart';
 import 'platform_admin_more_screen.dart';
 
@@ -24,8 +29,10 @@ class PlatformAdminShell extends StatefulWidget {
     required this.onSignOut,
     this.operationRepository,
     this.missionRepository,
+    this.locationStream,
+    this.actorRepository = const NoPlatformActorReadRepository(),
     this.initialIndex = 0,
-  }) : assert(initialIndex >= 0 && initialIndex < 2);
+  }) : assert(initialIndex >= 0 && initialIndex < 3);
 
   final PlatformReadRepository platformRepository;
   final MobilizationContextProvider mobilizationProvider;
@@ -34,6 +41,8 @@ class PlatformAdminShell extends StatefulWidget {
   final Future<void> Function() onSignOut;
   final OperationReadRepository? operationRepository;
   final MultiMobilizationCoordinationReadRepository? missionRepository;
+  final Stream<List<ResponsePlace>>? locationStream;
+  final PlatformActorReadRepository actorRepository;
   final int initialIndex;
 
   @override
@@ -42,7 +51,7 @@ class PlatformAdminShell extends StatefulWidget {
 
 class _PlatformAdminShellState extends State<PlatformAdminShell> {
   late int _currentIndex;
-  final List<Widget?> _screens = List<Widget?>.filled(2, null);
+  final List<Widget?> _screens = List<Widget?>.filled(3, null);
 
   @override
   void initState() {
@@ -67,8 +76,19 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
               administrationRepository: widget.administrationRepository,
               administrationService: widget.administrationService,
               missionRepository: widget.missionRepository,
+              locationStream: widget.locationStream,
+              operationCoordinatorDataSource:
+                  RepositoryOperationCoordinatorViewDataSource(
+                    repository:
+                        widget.administrationRepository
+                            is OperationCoordinatorReadRepository
+                        ? widget.administrationRepository
+                              as OperationCoordinatorReadRepository
+                        : const NoOperationCoordinatorReadRepository(),
+                  ),
             ),
-    1 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
+    1 => PlatformAdminActorsScreen(repository: widget.actorRepository),
+    2 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
     _ => throw RangeError.index(index, _screens),
   };
 

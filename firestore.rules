@@ -546,6 +546,10 @@ service cloud.firestore {
         && get(platformAdministratorPath(request.auth.uid)).data.active == true;
     }
 
+    function canUseProfessionalOwnerWritePath() {
+      return isSignedIn() && !isPlatformAdministrator();
+    }
+
     function mobilizationPath(mobilizationId) {
       return /databases/$(database)/documents/mobilizations/$(mobilizationId);
     }
@@ -770,7 +774,7 @@ service cloud.firestore {
         /databases/$(database)/documents/missions/$(missionId)
       ).data;
       let profession = request.resource.data.profession;
-      return isSignedIn()
+      return canUseProfessionalOwnerWritePath()
         && request.resource.data.keys().hasOnly([
           'missionId', 'mobilizationId', 'volunteerId', 'profession',
           'createdAt', 'updatedAt', 'status'
@@ -875,7 +879,7 @@ service cloud.firestore {
       let missionAfter = getAfter(
         /databases/$(database)/documents/missions/$(resource.data.missionId)
       ).data;
-      return isSignedIn()
+      return canUseProfessionalOwnerWritePath()
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
         && resource.data.mobilizationId == missionAfter.mobilizationId
@@ -895,7 +899,7 @@ service cloud.firestore {
       let mission = get(
         /databases/$(database)/documents/missions/$(resource.data.missionId)
       ).data;
-      return isSignedIn()
+      return canUseProfessionalOwnerWritePath()
         && engagementId == resource.data.missionId + '_' + request.auth.uid
         && resource.data.volunteerId == request.auth.uid
         && resource.data.mobilizationId == mission.mobilizationId
@@ -952,11 +956,13 @@ service cloud.firestore {
 
     match /volunteers/{uid} {
       allow create: if isVolunteerOwner(uid)
+        && canUseProfessionalOwnerWritePath()
         && validVolunteerData(uid)
         && isUnverifiedProfile(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isVolunteerOwner(uid)
+        && canUseProfessionalOwnerWritePath()
         && validVolunteerData(uid)
         && clientVerificationUpdateIsSafe()
         && request.resource.data.createdAt == resource.data.createdAt

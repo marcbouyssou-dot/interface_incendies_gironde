@@ -60,6 +60,10 @@ void main() {
         mobilizationId: 'mobilization-1',
         uid: 'coordinator-1',
       );
+      await service.setOperationCoordinator(
+        operationId: 'operation-1',
+        uid: 'coordinator-1',
+      );
 
       expect(calls.map((call) => call.name), [
         'activateMobilization',
@@ -67,10 +71,15 @@ void main() {
         'archiveMobilization',
         'assignMobilizationCoordinator',
         'removeMobilizationCoordinator',
+        'setOperationCoordinator',
       ]);
       expect(calls[0].data, {'mobilizationId': 'mobilization-1'});
       expect(calls[3].data, {
         'mobilizationId': 'mobilization-1',
+        'uid': 'coordinator-1',
+      });
+      expect(calls[5].data, {
+        'operationId': 'operation-1',
         'uid': 'coordinator-1',
       });
     },

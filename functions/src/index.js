@@ -66,6 +66,7 @@ import {
   deactivateMobilization as deactivateMobilizationRequest,
   PlatformAdministrationError,
   removeMobilizationCoordinator as removeMobilizationCoordinatorRequest,
+  setOperationCoordinator as setOperationCoordinatorRequest,
   transitionOperation as transitionOperationRequest,
   updateOperation as updateOperationRequest,
   updateMobilization as updateMobilizationRequest,
@@ -73,6 +74,10 @@ import {
 import {
   platformAdministrationServices,
 } from './platform_administration_firestore.js';
+import {
+  listPlatformActorDirectory as listPlatformActorDirectoryRequest,
+  PlatformActorDirectoryError,
+} from './platform_actor_directory.js';
 import {
   listMissionTeam as listMissionTeamRequest,
   listPlatformCoordinatorIdentities as listPlatformCoordinatorIdentitiesRequest,
@@ -261,6 +266,18 @@ export const listPlatformCoordinatorIdentities = onCall(
     })),
 );
 
+export const listPlatformActorDirectory = onCall(
+  {region: 'europe-west1', enforceAppCheck: true},
+  async (request) => platformActorDirectoryCallable(() =>
+    listPlatformActorDirectoryRequest({
+      callerUid: request.auth?.uid,
+      services: platformActorDirectoryServices({
+        firestore: getFirestore(),
+        auth: getAuth(),
+      }),
+    })),
+);
+
 export const manageAdminInvitation = onCall(
   {region: 'europe-west1'},
   async (request) => adminInvitationManagementCallable(() => manageInvitation({
@@ -328,6 +345,16 @@ export const transitionOperation = onCall(
   platformCallableOptions,
   async (request) => platformAdministrationCallable(() =>
     transitionOperationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const setOperationCoordinator = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    setOperationCoordinatorRequest({
       callerUid: request.auth?.uid,
       data: request.data,
       services: platformServices(),
@@ -1263,6 +1290,53 @@ export function userDisplayIdentityServices({firestore, auth}) {
   };
 }
 
+export function platformActorDirectoryServices({firestore, auth}) {
+  return {
+    async isPlatformAdministrator(uid) {
+      const snapshot = await firestore
+        .collection('platformAdministrators')
+        .doc(uid)
+        .get();
+      return snapshot.exists && snapshot.data()?.active === true;
+    },
+
+    async loadDirectoryData() {
+      const collectionNames = [
+        'operations',
+        'mobilizations',
+        'missions',
+        'engagements',
+        'volunteers',
+        'roles',
+        'mobilizationAssignments',
+        'locations',
+        'territories',
+      ];
+      const snapshots = await Promise.all(
+        collectionNames.map((name) => firestore.collection(name).get()),
+      );
+      const result = Object.fromEntries(collectionNames.map((name, index) => [
+        name === 'mobilizationAssignments' ? 'assignments' : name,
+        snapshots[index].docs.map((document) => ({
+          ...document.data(),
+          id: document.id,
+        })),
+      ]));
+      const roleIds = result.roles.map((role) => role.id);
+      const roleIdentities = [];
+      for (let start = 0; start < roleIds.length; start += 100) {
+        const batch = roleIds.slice(start, start + 100);
+        const response = await auth.getUsers(batch.map((uid) => ({uid})));
+        roleIdentities.push(...response.users.map((user) => ({
+          uid: user.uid,
+          displayName: user.displayName ?? null,
+        })));
+      }
+      return {...result, roleIdentities};
+    },
+  };
+}
+
 async function platformAdministrationCallable(action) {
   try {
     return await action();
@@ -1276,6 +1350,23 @@ async function platformAdministrationCallable(action) {
     throw new HttpsError(
       'internal',
       'L’administration de la plateforme a échoué.',
+    );
+  }
+}
+
+async function platformActorDirectoryCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof PlatformActorDirectoryError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('PLATFORM_ACTOR_DIRECTORY_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'Les acteurs de la plateforme ne sont pas disponibles.',
     );
   }
 }
