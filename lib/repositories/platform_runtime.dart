@@ -3,6 +3,7 @@ import '../services/accessible_mobilizations_provider.dart';
 import '../services/operational_context_provider.dart';
 import '../services/platform_administration_service.dart';
 import 'operation_read_repository.dart';
+import 'organization_read_repository.dart';
 import 'platform_actor_read_repository.dart';
 import 'platform_administration_read_repository.dart';
 import 'platform_read_repository.dart';
@@ -29,6 +30,11 @@ abstract interface class MultiOperationPlatformRuntime {
 
 abstract interface class PlatformActorRuntime {
   PlatformActorReadRepository get platformActorReadRepository;
+}
+
+/// Capacité RC4 additive, séparée de [PlatformRuntime] pour préserver RC3.
+abstract interface class OrganizationRuntime {
+  OrganizationReadRepository get organizationReadRepository;
 }
 
 abstract interface class PlatformAccountAuthenticator {

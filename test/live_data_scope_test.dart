@@ -217,6 +217,83 @@ void main() {
     await data.dispose();
     await repository.disposeControllers();
   });
+
+  test(
+    'organization scoping leaves the professional mission flow unchanged',
+    () async {
+      final repository = _RoleAwareMultiRepository(access: null);
+      final administrativeRepository = _AdministrativeMissionRepository();
+      final data = LiveCoordinationData(
+        repository,
+        administrativeMissionRepository: administrativeRepository,
+      );
+
+      final missions = await data.watchMissions().first;
+
+      expect(missions.map((mission) => mission.id), ['professional-mission']);
+      expect(repository.allMissionReads, 1);
+      expect(administrativeRepository.reads, 0);
+      await data.dispose();
+    },
+  );
+
+  test(
+    'responsible mission flow uses the organization-scoped repository',
+    () async {
+      const access = ResponsibleAccess(
+        uid: 'responsible',
+        role: ResponsibleRole.siteManager,
+        locationIds: {'site-a'},
+        active: true,
+      );
+      final repository = _RoleAwareMultiRepository(access: access);
+      final administrativeRepository = _AdministrativeMissionRepository();
+      final data = LiveCoordinationData(
+        repository,
+        administrativeMissionRepository: administrativeRepository,
+      );
+
+      final missions = await data.watchMissions().first;
+
+      expect(missions.map((mission) => mission.id), ['administrative-mission']);
+      expect(administrativeRepository.requestedLocationIds, {'site-a'});
+      expect(repository.allMissionReads, 0);
+      await data.dispose();
+    },
+  );
+
+  test(
+    'administrative engagement scope never replaces UID owner reads',
+    () async {
+      final repository = _ControlledEngagementRepository();
+      final administrativeRepository = _AdministrativeEngagementRepository();
+      final data = LiveCoordinationData(
+        repository,
+        administrativeEngagementRepository: administrativeRepository,
+      );
+      final values = <EngagementInfo?>[];
+      final subscription = data
+          .watchMyEngagement('professional-mission')
+          .listen(values.add);
+
+      repository.emit(
+        'professional-mission',
+        const EngagementInfo(
+          missionId: 'professional-mission',
+          volunteerId: 'professional-owner',
+          profession: VolunteerProfession.mk,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(values.single?.volunteerId, 'professional-owner');
+      expect(repository.factories['professional-mission'], 1);
+      expect(administrativeRepository.reads, 0);
+      await subscription.cancel();
+      await data.dispose();
+      await repository.disposeControllers();
+    },
+  );
 }
 
 CoordinationNeed _mission(String id, String place) => CoordinationNeed(
@@ -321,5 +398,74 @@ class _ControlledDataRepository extends MockCoordinationRepository {
   Future<void> disposeControllers() async {
     await _missions.close();
     await _locations.close();
+  }
+}
+
+class _RoleAwareMultiRepository extends MockCoordinationRepository
+    implements MultiMobilizationCoordinationReadRepository {
+  _RoleAwareMultiRepository({required this.access})
+    : super(responsibleAccess: access);
+
+  final ResponsibleAccess? access;
+  int allMissionReads = 0;
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() =>
+      Stream.multi((controller) => controller.add(access));
+
+  @override
+  Stream<List<CoordinationNeed>> watchAllActiveMissions() {
+    allMissionReads++;
+    return Stream.value([_mission('professional-mission', 'Professionnel')]);
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForLocations(
+    Set<String> locationIds,
+  ) => Stream.value(const []);
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizations(
+    Set<String> mobilizationIds,
+  ) => Stream.value(const []);
+}
+
+class _AdministrativeMissionRepository
+    implements MultiMobilizationCoordinationReadRepository {
+  int reads = 0;
+  Set<String>? requestedLocationIds;
+
+  @override
+  Stream<List<CoordinationNeed>> watchAllActiveMissions() {
+    reads++;
+    return Stream.value([_mission('administrative-mission', 'Administration')]);
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForLocations(
+    Set<String> locationIds,
+  ) {
+    reads++;
+    requestedLocationIds = Set.unmodifiable(locationIds);
+    return Stream.value([_mission('administrative-mission', 'Administration')]);
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizations(
+    Set<String> mobilizationIds,
+  ) {
+    reads++;
+    return Stream.value([_mission('administrative-mission', 'Administration')]);
+  }
+}
+
+class _AdministrativeEngagementRepository
+    implements MissionEngagementReadRepository {
+  int reads = 0;
+
+  @override
+  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
+    reads++;
+    return Stream.error(StateError('Administrative path must not be used.'));
   }
 }

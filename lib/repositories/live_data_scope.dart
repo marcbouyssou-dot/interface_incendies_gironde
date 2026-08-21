@@ -12,7 +12,12 @@ class LiveCoordinationData {
     Stream<ResponsibleAccess?> Function()? responsibleAccessOverride,
     Stream<List<CoordinationNeed>> Function()? missionsOverride,
     Stream<List<ResponsePlace>> Function()? locationsOverride,
-  }) : _repository = repository {
+    MultiMobilizationCoordinationReadRepository?
+    administrativeMissionRepository,
+    MissionEngagementReadRepository? administrativeEngagementRepository,
+  }) : _repository = repository,
+       _administrativeEngagementRepository =
+           administrativeEngagementRepository {
     final accessSource =
         responsibleAccessOverride ?? repository.watchResponsibleAccess;
     _missions = _SharedLatestStream(() {
@@ -26,8 +31,12 @@ class LiveCoordinationData {
         if (access == null) {
           return multiRepository.watchAllActiveMissions();
         }
+        final administrativeRepository =
+            administrativeMissionRepository ?? multiRepository;
         if (access.isSiteManager && !access.isCoordinator) {
-          return multiRepository.watchMissionsForLocations(access.locationIds);
+          return administrativeRepository.watchMissionsForLocations(
+            access.locationIds,
+          );
         }
         // Le Coordinateur sélectionne sa mobilisation dans le Cockpit.
         // Les autres écrans conservent leur flux historique tant qu'ils ne
@@ -42,6 +51,7 @@ class LiveCoordinationData {
   }
 
   final CoordinationRepository _repository;
+  final MissionEngagementReadRepository? _administrativeEngagementRepository;
   late final _SharedLatestStream<List<CoordinationNeed>> _missions;
   late final _SharedLatestStream<List<ResponsePlace>> _locations;
   late final _SharedLatestStream<ResponsibleAccess?> _responsibleAccess;
@@ -72,7 +82,8 @@ class LiveCoordinationData {
           .putIfAbsent(
             missionId,
             () => _SharedLatestStream(
-              () => _repository.watchMissionEngagements(missionId),
+              () => (_administrativeEngagementRepository ?? _repository)
+                  .watchMissionEngagements(missionId),
             ),
           )
           .watch();

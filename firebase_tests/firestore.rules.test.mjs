@@ -198,6 +198,118 @@ async function seedOrganizations() {
   });
 }
 
+async function seedMultiOrganizationCore() {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'platform/config'), {activeMobilizationId});
+    await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+    for (const organizationId of [
+      'legacy-gironde',
+      'organization-a',
+      'organization-b',
+    ]) {
+      await setDoc(
+        doc(admin, `organizations/${organizationId}`),
+        organization(organizationId),
+      );
+    }
+    for (const [organizationId, uid, overrides] of [
+      [
+        'organization-a',
+        'member-a',
+        {roles: ['organization_admin', 'coordinator']},
+      ],
+      ['organization-b', 'member-b', {}],
+      ['organization-a', 'inactive-member', {active: false}],
+    ]) {
+      await setDoc(
+        doc(admin, `organizationMemberships/${organizationId}_${uid}`),
+        organizationMembership(organizationId, uid, overrides),
+      );
+    }
+    await setDoc(doc(admin, 'locations/site-a'), {
+      id: 'site-a', name: 'Site A', group: 'medoc', type: 'sdisStation',
+      isActive: true,
+    });
+    for (const [operationId, ownerOrganizationId] of [
+      ['operation-a', 'organization-a'],
+      ['operation-b', 'organization-b'],
+      ['operation-legacy', null],
+    ]) {
+      await setDoc(doc(admin, `operations/${operationId}`), {
+        id: operationId,
+        name: `Opération ${operationId}`,
+        type: 'emergency',
+        status: 'active',
+        ...(ownerOrganizationId === null ? {} : {ownerOrganizationId}),
+      });
+    }
+    for (const [mobilizationId, operationId] of [
+      ['mobilization-a', 'operation-a'],
+      ['mobilization-b', 'operation-b'],
+      [activeMobilizationId, null],
+    ]) {
+      await setDoc(doc(admin, `mobilizations/${mobilizationId}`), {
+        id: mobilizationId,
+        territoryId: 'gironde',
+        status: 'active',
+        ...(operationId === null ? {} : {operationId}),
+      });
+    }
+    await setDoc(doc(admin, 'roles/member-a'), {
+      role: 'coordinator',
+      locationIds: ['*'],
+      active: true,
+      hasActiveMobilizationAssignments: true,
+    });
+    for (const mobilizationId of ['mobilization-a', 'mobilization-b']) {
+      await setDoc(
+        doc(admin, `mobilizationAssignments/${mobilizationId}_member-a`),
+        {
+          uid: 'member-a',
+          mobilizationId,
+          role: 'coordinator',
+          active: true,
+        },
+      );
+    }
+    await setDoc(doc(admin, 'roles/legacy-coord'), {
+      role: 'coordinator', locationIds: ['*'], active: true,
+    });
+    await setDoc(doc(admin, 'roles/legacy-manager'), {
+      role: 'site_manager', locationIds: ['site-a'], active: true,
+    });
+    await setDoc(
+      doc(admin, 'volunteers/professional'),
+      volunteer('professional'),
+    );
+    for (const [missionId, mobilizationId] of [
+      ['mission-org-a', 'mobilization-a'],
+      ['mission-org-b', 'mobilization-b'],
+      ['mission-legacy', activeMobilizationId],
+    ]) {
+      await setDoc(doc(admin, `missions/${missionId}`), mission({
+        id: missionId,
+        mobilizationId,
+      }));
+      await setDoc(
+        doc(admin, `engagements/${missionId}_professional`),
+        {
+          missionId,
+          mobilizationId,
+          volunteerId: 'professional',
+          profession: 'mk',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          status: 'confirmed',
+        },
+      );
+    }
+  });
+}
+
 async function createMissionFor(uid, id, locationId = 'site-a') {
   return setDoc(
     doc(db(uid), `missions/${id}`),
@@ -2881,6 +2993,9 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
     await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
       active: true,
     });
+    await setDoc(doc(admin, 'volunteers/professional'), {
+      uid: 'professional',
+    });
   });
 
   const coordA1 = await assertSucceeds(getDocs(query(
@@ -3171,6 +3286,151 @@ test('RC4.1F: every client organization write is denied', async () => {
     await assertFails(deleteDoc(doc(
       userDb,
       'organizationMemberships/organization-a_member-a',
+    )));
+  }
+});
+
+test('RC4.2G: organization member is isolated across the complete parent chain', async () => {
+  await seedMultiOrganizationCore();
+  const memberDb = db('member-a');
+
+  await assertSucceeds(getDoc(doc(memberDb, 'operations/operation-a')));
+  await assertFails(getDoc(doc(memberDb, 'operations/operation-b')));
+  await assertSucceeds(getDocs(query(
+    collection(memberDb, 'operations'),
+    where('ownerOrganizationId', '==', 'organization-a'),
+  )));
+  await assertFails(getDocs(query(
+    collection(memberDb, 'operations'),
+    where('ownerOrganizationId', '==', 'organization-b'),
+  )));
+
+  await assertSucceeds(getDoc(doc(memberDb, 'mobilizations/mobilization-a')));
+  await assertFails(getDoc(doc(memberDb, 'mobilizations/mobilization-b')));
+  await assertSucceeds(getDocs(query(
+    collection(memberDb, 'mobilizations'),
+    where('operationId', '==', 'operation-a'),
+    where('status', '==', 'active'),
+  )));
+  await assertFails(getDocs(query(
+    collection(memberDb, 'mobilizations'),
+    where('operationId', '==', 'operation-b'),
+    where('status', '==', 'active'),
+  )));
+
+  await assertSucceeds(getDoc(doc(memberDb, 'missions/mission-org-a')));
+  await assertFails(getDoc(doc(memberDb, 'missions/mission-org-b')));
+  await assertSucceeds(getDocs(query(
+    collection(memberDb, 'missions'),
+    where('mobilizationId', '==', 'mobilization-a'),
+    where('isActive', '==', true),
+  )));
+  await assertFails(getDocs(query(
+    collection(memberDb, 'missions'),
+    where('mobilizationId', '==', 'mobilization-b'),
+    where('isActive', '==', true),
+  )));
+
+  await assertSucceeds(getDoc(doc(
+    memberDb,
+    'engagements/mission-org-a_professional',
+  )));
+  await assertFails(getDoc(doc(
+    memberDb,
+    'engagements/mission-org-b_professional',
+  )));
+  await assertSucceeds(getDocs(query(
+    collection(memberDb, 'engagements'),
+    where('mobilizationId', '==', 'mobilization-a'),
+  )));
+  await assertFails(getDocs(query(
+    collection(memberDb, 'engagements'),
+    where('mobilizationId', '==', 'mobilization-b'),
+  )));
+
+  await assertSucceeds(setDoc(
+    doc(memberDb, 'missions/member-a-create'),
+    mission({
+      id: 'member-a-create',
+      mobilizationId: 'mobilization-a',
+      createdBy: 'member-a',
+    }),
+  ));
+  await assertFails(setDoc(
+    doc(memberDb, 'missions/member-b-forged-create'),
+    mission({
+      id: 'member-b-forged-create',
+      mobilizationId: 'mobilization-b',
+      createdBy: 'member-a',
+    }),
+  ));
+});
+
+test('RC4.2G: inactive membership is denied and platform admin stays global', async () => {
+  await seedMultiOrganizationCore();
+  const inactiveDb = db('inactive-member');
+  const platformAdminDb = db('platform-admin');
+
+  await assertFails(getDoc(doc(inactiveDb, 'operations/operation-a')));
+  await assertFails(getDoc(doc(inactiveDb, 'mobilizations/mobilization-a')));
+  for (const path of [
+    'operations/operation-a',
+    'operations/operation-b',
+    'mobilizations/mobilization-a',
+    'mobilizations/mobilization-b',
+  ]) {
+    await assertSucceeds(getDoc(doc(platformAdminDb, path)));
+  }
+  await assertSucceeds(getDocs(collection(platformAdminDb, 'operations')));
+  await assertSucceeds(getDocs(collection(platformAdminDb, 'mobilizations')));
+
+  // RC3.8F.3 remains stricter than the organization boundary for previews.
+  await assertFails(getDoc(doc(platformAdminDb, 'missions/mission-org-a')));
+  await assertFails(getDoc(doc(
+    platformAdminDb,
+    'engagements/mission-org-a_professional',
+  )));
+});
+
+test('RC4.2G: legacy coordinator and responsible retain their RC3 scope', async () => {
+  await seedMultiOrganizationCore();
+
+  for (const uid of ['legacy-coord', 'legacy-manager']) {
+    await assertSucceeds(getDoc(doc(
+      db(uid),
+      `mobilizations/${activeMobilizationId}`,
+    )));
+    await assertSucceeds(getDoc(doc(db(uid), 'missions/mission-legacy')));
+  }
+  await assertSucceeds(getDoc(doc(
+    db('legacy-coord'),
+    'operations/operation-legacy',
+  )));
+  await assertSucceeds(getDoc(doc(
+    db('legacy-coord'),
+    'engagements/mission-legacy_professional',
+  )));
+  await assertFails(getDoc(doc(
+    db('legacy-coord'),
+    'mobilizations/mobilization-a',
+  )));
+});
+
+test('RC4.2G: public professional reads and owner engagement rights stay unchanged', async () => {
+  await seedMultiOrganizationCore();
+  const professionalDb = db('professional');
+
+  for (const mobilizationId of ['mobilization-a', 'mobilization-b']) {
+    await assertSucceeds(getDoc(doc(
+      professionalDb,
+      `mobilizations/${mobilizationId}`,
+    )));
+  }
+  for (const missionId of ['mission-org-a', 'mission-org-b']) {
+    await assertSucceeds(getDoc(doc(db(), `missions/${missionId}`)));
+    await assertSucceeds(getDoc(doc(
+      professionalDb,
+      `engagements/${missionId}_professional`,
     )));
   }
 });

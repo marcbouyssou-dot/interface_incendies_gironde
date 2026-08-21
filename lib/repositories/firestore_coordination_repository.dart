@@ -29,6 +29,8 @@ import 'firestore_location_mapper.dart';
 import 'firestore_location_administration_repository.dart';
 import 'firestore_mission_mapper.dart';
 import 'firestore_operation_read_repository.dart';
+import 'firestore_organization_read_repository.dart';
+import 'organization_read_repository.dart';
 import 'firestore_platform_administration_read_repository.dart';
 import 'firebase_platform_actor_read_repository.dart';
 import 'firestore_platform_read_repository.dart';
@@ -234,6 +236,7 @@ class FirestoreCoordinationRepository
         PlatformRuntime,
         MultiOperationPlatformRuntime,
         PlatformActorRuntime,
+        OrganizationRuntime,
         PlatformAccountAuthenticator {
   FirestoreCoordinationRepository(
     this._firestore,
@@ -319,6 +322,10 @@ class FirestoreCoordinationRepository
   @override
   late final OperationReadRepository operationReadRepository =
       FirestoreOperationReadRepository(_responsibleFirestore);
+
+  @override
+  late final OrganizationReadRepository organizationReadRepository =
+      FirestoreOrganizationReadRepository.withFirestore(_responsibleFirestore);
 
   @override
   late final PlatformActorReadRepository platformActorReadRepository =
@@ -542,16 +549,14 @@ class FirestoreCoordinationRepository
   ) {
     final ids = _validatedQueryIds(mobilizationIds, 'mobilisation');
     if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
-    return _combineMissionStreams(
-      ids.map((id) => _watchMissionsInMobilization(_responsibleFirestore, id)),
-    );
+    return _watchMissionsInMobilizationBatches(_responsibleFirestore, ids);
   }
 
   @override
   Stream<List<CoordinationNeed>> watchMissionsForLocations(
     Set<String> locationIds,
   ) {
-    final ids = _validatedQueryIds(locationIds, 'lieu');
+    final ids = _validatedQueryIds(locationIds, 'lieu', maxCount: 30);
     if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
     return switchLatest(
       _watchActiveMobilizationIds(_responsibleFirestore),
@@ -571,12 +576,8 @@ class FirestoreCoordinationRepository
   Stream<List<CoordinationNeed>> watchAllActiveMissions() {
     return switchLatest(
       _watchActiveMobilizationIds(_firestore),
-      (mobilizationIds) => _combineMissionStreams(
-        mobilizationIds.map(
-          (mobilizationId) =>
-              _watchMissionsInMobilization(_firestore, mobilizationId),
-        ),
-      ),
+      (mobilizationIds) =>
+          _watchMissionsInMobilizationBatches(_firestore, mobilizationIds),
     );
   }
 
@@ -615,6 +616,36 @@ class FirestoreCoordinationRepository
         locationIds: locationIds?.toSet(),
       ),
     );
+  }
+
+  Stream<List<CoordinationNeed>> _watchMissionsInMobilizationBatches(
+    FirebaseFirestore firestore,
+    List<String> mobilizationIds,
+  ) => _combineMissionStreams(
+    _batchesOf(
+      mobilizationIds,
+      30,
+    ).map((batch) => _watchMissionsInMobilizations(firestore, batch)),
+  );
+
+  Stream<List<CoordinationNeed>> _watchMissionsInMobilizations(
+    FirebaseFirestore firestore,
+    List<String> mobilizationIds,
+  ) {
+    final idSet = mobilizationIds.toSet();
+    return firestore
+        .collection('missions')
+        .where('mobilizationId', whereIn: mobilizationIds)
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map(
+          (snapshot) => multiScopedMissionsFromDocuments(
+            documents: snapshot.docs.map(
+              (document) => (id: document.id, data: document.data()),
+            ),
+            mobilizationIds: idSet,
+          ),
+        );
   }
 
   Stream<List<CoordinationNeed>> _combineMissionStreams(
@@ -670,8 +701,12 @@ class FirestoreCoordinationRepository
     return controller.stream;
   }
 
-  List<String> _validatedQueryIds(Set<String> values, String label) {
-    if (values.length > 30 ||
+  List<String> _validatedQueryIds(
+    Set<String> values,
+    String label, {
+    int? maxCount,
+  }) {
+    if ((maxCount != null && values.length > maxCount) ||
         values.any(
           (value) =>
               value.isEmpty || value.trim() != value || value.contains('/'),
@@ -680,6 +715,13 @@ class FirestoreCoordinationRepository
     }
     final result = values.toList(growable: false)..sort();
     return result;
+  }
+
+  Iterable<List<T>> _batchesOf<T>(List<T> values, int size) sync* {
+    for (var start = 0; start < values.length; start += size) {
+      final end = (start + size).clamp(0, values.length);
+      yield values.sublist(start, end);
+    }
   }
 
   @override

@@ -11,7 +11,21 @@ import 'responsible_access_administration_repository.dart';
 
 export '../models/responsible_access.dart';
 
-abstract interface class CoordinationRepository {
+abstract interface class MissionEngagementReadRepository {
+  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId);
+}
+
+/// Contrat ciblé indiquant si une mission reste lisible dans le contexte
+/// organisationnel courant.
+///
+/// Une valeur nulle signifie que la mission n'existe pas ou qu'elle est hors
+/// périmètre. Le flux doit réévaluer cet accès quand le contexte change.
+abstract interface class MissionAccessReadRepository {
+  Stream<CoordinationNeed?> watchAccessibleMission(String missionId);
+}
+
+abstract interface class CoordinationRepository
+    implements MissionEngagementReadRepository {
   AdminInvitationRepository get adminInvitationRepository;
 
   LocationAdministrationRepository get locationAdministrationRepository;
@@ -32,8 +46,6 @@ abstract interface class CoordinationRepository {
   );
 
   Stream<EngagementInfo?> watchMyEngagement(String missionId);
-
-  Stream<List<EngagementInfo>> watchMissionEngagements(String missionId);
 
   Future<void> updateEngagementStatus({
     required String missionId,

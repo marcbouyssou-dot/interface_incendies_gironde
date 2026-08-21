@@ -1,4 +1,5 @@
 import '../models/operation.dart';
+import '../models/mobilization.dart';
 import '../models/organization.dart';
 import '../models/organization_category.dart';
 import '../models/organization_context.dart';
@@ -32,6 +33,22 @@ class LegacyOrganizationResolver {
   /// Retourne le propriétaire explicite ou l'organisation legacy par défaut.
   String resolveOperationOrganizationId(Operation operation) =>
       _resolveOrganizationId(operation.ownerOrganizationId);
+
+  /// Vérifie le rattachement d'une mobilisation sans dupliquer le fallback RC3.
+  ///
+  /// Une mobilisation liée hérite de l'organisation de son opération, déjà
+  /// bornée par le repository Opération. Une mobilisation sans `operationId`
+  /// reste exclusivement rattachée au périmètre legacy Gironde.
+  bool isMobilizationAccessible({
+    required Mobilization mobilization,
+    required String organizationId,
+    required Set<String> accessibleOperationIds,
+  }) {
+    final operationId = mobilization.operationId;
+    return operationId == null
+        ? organizationId == legacyOrganizationId
+        : accessibleOperationIds.contains(operationId);
+  }
 
   /// Retourne le gestionnaire explicite d'un site ou le fallback legacy.
   ///

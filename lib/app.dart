@@ -8,11 +8,14 @@ import 'repositories/coordination_repository.dart';
 import 'repositories/admin_invitation_repository_scope.dart';
 import 'repositories/mock_coordination_repository.dart';
 import 'repositories/location_administration_repository_scope.dart';
+import 'repositories/organization_read_repository.dart';
+import 'repositories/organization_repository_scope.dart';
 import 'repositories/repository_scope.dart';
 import 'repositories/responsible_access_administration_repository_scope.dart';
 import 'repositories/platform_runtime.dart';
 import 'screens/app_shell.dart';
 import 'services/professional_verification_service.dart';
+import 'services/organization_context_controller.dart';
 import 'theme/app_theme.dart';
 
 class FireCoordinationApp extends StatelessWidget {
@@ -23,6 +26,8 @@ class FireCoordinationApp extends StatelessWidget {
     this.useLegacyCoordinatorShellForTesting = false,
     this.professionalVerificationService,
     this.platformRuntime,
+    this.organizationReadRepository,
+    this.organizationContextController,
     this.initialNotificationId,
   });
 
@@ -30,6 +35,8 @@ class FireCoordinationApp extends StatelessWidget {
   final int initialTab;
   final ProfessionalVerificationService? professionalVerificationService;
   final PlatformRuntime? platformRuntime;
+  final OrganizationReadRepository? organizationReadRepository;
+  final OrganizationContextController? organizationContextController;
   final String? initialNotificationId;
 
   /// Explicit regression harness for screens removed from the live V5 shell.
@@ -44,36 +51,54 @@ class FireCoordinationApp extends StatelessWidget {
         (coordinationRepository is PlatformRuntime
             ? coordinationRepository as PlatformRuntime
             : null);
+    final resolvedOrganizationRepository =
+        organizationReadRepository ??
+        (resolvedPlatformRuntime is OrganizationRuntime
+            ? (resolvedPlatformRuntime as OrganizationRuntime)
+                  .organizationReadRepository
+            : coordinationRepository is OrganizationRuntime
+            ? (coordinationRepository as OrganizationRuntime)
+                  .organizationReadRepository
+            : const NoOrganizationReadRepository());
     return RepositoryScope(
       repository: coordinationRepository,
-      child: AdminInvitationRepositoryScope(
-        repository: coordinationRepository.adminInvitationRepository,
-        child: LocationAdministrationRepositoryScope(
-          repository: coordinationRepository.locationAdministrationRepository,
-          child: ResponsibleAccessAdministrationRepositoryScope(
-            repository: coordinationRepository
-                .responsibleAccessAdministrationRepository,
-            child: CrossRolePerspectiveScope(
-              child: RolePreviewScope(
-                child: MaterialApp(
-                  title: AppIdentity.productName,
-                  debugShowCheckedModeBanner: false,
-                  locale: const Locale('fr', 'FR'),
-                  supportedLocales: const [Locale('fr', 'FR')],
-                  localizationsDelegates: GlobalMaterialLocalizations.delegates,
-                  theme: AppTheme.light,
-                  darkTheme: AppTheme.dark,
-                  themeMode: ThemeMode.system,
-                  builder: AppTheme.systemSurface,
-                  home: AppShell(
-                    initialIndex: initialTab,
-                    platformRuntime: resolvedPlatformRuntime,
-                    professionalVerificationService:
-                        professionalVerificationService ??
-                        const FakeProfessionalVerificationService(),
-                    useLegacyCoordinatorShellForTesting:
-                        useLegacyCoordinatorShellForTesting,
-                    initialNotificationId: initialNotificationId,
+      child: OrganizationRepositoryScope(
+        repository: resolvedOrganizationRepository,
+        child: OrganizationContextBootstrap(
+          repository: resolvedOrganizationRepository,
+          controller: organizationContextController,
+          child: AdminInvitationRepositoryScope(
+            repository: coordinationRepository.adminInvitationRepository,
+            child: LocationAdministrationRepositoryScope(
+              repository:
+                  coordinationRepository.locationAdministrationRepository,
+              child: ResponsibleAccessAdministrationRepositoryScope(
+                repository: coordinationRepository
+                    .responsibleAccessAdministrationRepository,
+                child: CrossRolePerspectiveScope(
+                  child: RolePreviewScope(
+                    child: MaterialApp(
+                      title: AppIdentity.productName,
+                      debugShowCheckedModeBanner: false,
+                      locale: const Locale('fr', 'FR'),
+                      supportedLocales: const [Locale('fr', 'FR')],
+                      localizationsDelegates:
+                          GlobalMaterialLocalizations.delegates,
+                      theme: AppTheme.light,
+                      darkTheme: AppTheme.dark,
+                      themeMode: ThemeMode.system,
+                      builder: AppTheme.systemSurface,
+                      home: AppShell(
+                        initialIndex: initialTab,
+                        platformRuntime: resolvedPlatformRuntime,
+                        professionalVerificationService:
+                            professionalVerificationService ??
+                            const FakeProfessionalVerificationService(),
+                        useLegacyCoordinatorShellForTesting:
+                            useLegacyCoordinatorShellForTesting,
+                        initialNotificationId: initialNotificationId,
+                      ),
+                    ),
                   ),
                 ),
               ),
