@@ -5,6 +5,8 @@ import '../platform_admin/operation_coordinator_view_data.dart';
 import '../repositories/operation_coordinator_read_repository.dart';
 import '../repositories/platform_actor_read_repository.dart';
 import '../repositories/platform_administration_read_repository.dart';
+import '../repositories/platform_admin_statistics_read_repository.dart';
+import '../repositories/platform_admin_history_read_repository.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/platform_read_repository.dart';
 import '../repositories/operation_read_repository.dart';
@@ -18,6 +20,8 @@ import 'platform_admin_mobilization_screen.dart';
 import 'platform_admin_actors_screen.dart';
 import 'platform_admin_operations_screen.dart';
 import 'platform_admin_more_screen.dart';
+import 'platform_admin_statistics_screen.dart';
+import 'platform_admin_history_screen.dart';
 
 class PlatformAdminShell extends StatefulWidget {
   const PlatformAdminShell({
@@ -32,7 +36,7 @@ class PlatformAdminShell extends StatefulWidget {
     this.locationStream,
     this.actorRepository = const NoPlatformActorReadRepository(),
     this.initialIndex = 0,
-  }) : assert(initialIndex >= 0 && initialIndex < 3);
+  }) : assert(initialIndex >= 0 && initialIndex < 5);
 
   final PlatformReadRepository platformRepository;
   final MobilizationContextProvider mobilizationProvider;
@@ -51,7 +55,7 @@ class PlatformAdminShell extends StatefulWidget {
 
 class _PlatformAdminShellState extends State<PlatformAdminShell> {
   late int _currentIndex;
-  final List<Widget?> _screens = List<Widget?>.filled(3, null);
+  final List<Widget?> _screens = List<Widget?>.filled(5, null);
 
   @override
   void initState() {
@@ -86,9 +90,24 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
                               as OperationCoordinatorReadRepository
                         : const NoOperationCoordinatorReadRepository(),
                   ),
+              actorRepository: widget.actorRepository,
             ),
     1 => PlatformAdminActorsScreen(repository: widget.actorRepository),
-    2 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
+    2 => PlatformAdminStatisticsScreen(
+      dataSource: RepositoryPlatformAdminStatisticsDataSource(
+        platformRepository: widget.platformRepository,
+        operationRepository: widget.operationRepository,
+        missionRepository: widget.missionRepository,
+      ),
+    ),
+    3 => PlatformAdminHistoryScreen(
+      dataSource: RepositoryPlatformAdminHistoryDataSource(
+        platformRepository: widget.platformRepository,
+        operationRepository: widget.operationRepository,
+        missionRepository: widget.missionRepository,
+      ),
+    ),
+    4 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
     _ => throw RangeError.index(index, _screens),
   };
 

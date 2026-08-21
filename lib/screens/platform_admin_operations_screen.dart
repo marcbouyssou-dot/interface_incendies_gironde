@@ -9,16 +9,18 @@ import '../models/platform_administrator_access.dart';
 import '../models/territory.dart';
 import '../perspective/cross_role_perspective.dart';
 import '../platform_admin/operation_coordinator_view_data.dart';
+import '../platform_admin/platform_actor_view_data.dart';
+import '../platform_admin/platform_admin_command_actions.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/operation_read_repository.dart';
 import '../repositories/platform_administration_read_repository.dart';
+import '../repositories/platform_actor_read_repository.dart';
 import '../repositories/platform_read_repository.dart';
 import '../services/current_mobilization_provider.dart';
 import '../services/platform_administration_service.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/operation_presentation.dart';
-import '../widgets/executive_kpi.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/perspective_switcher.dart';
@@ -40,6 +42,7 @@ class PlatformAdminOperationsScreen extends StatefulWidget {
     this.locationStream,
     this.operationCoordinatorDataSource =
         const NoOperationCoordinatorViewDataSource(),
+    this.actorRepository,
     this.referenceTime,
   });
 
@@ -51,6 +54,7 @@ class PlatformAdminOperationsScreen extends StatefulWidget {
   final MultiMobilizationCoordinationReadRepository? missionRepository;
   final Stream<List<ResponsePlace>>? locationStream;
   final OperationCoordinatorViewDataSource operationCoordinatorDataSource;
+  final PlatformActorReadRepository? actorRepository;
   final DateTime? referenceTime;
 
   @override
@@ -62,11 +66,13 @@ class _PlatformAdminOperationsScreenState
     extends State<PlatformAdminOperationsScreen> {
   bool _busy = false;
   late Stream<List<CoordinationNeed>> _missionStream;
+  late Future<PlatformActorDirectoryViewData?> _actorDirectory;
 
   @override
   void initState() {
     super.initState();
     _missionStream = _missions();
+    _actorDirectory = _loadActorDirectory();
   }
 
   @override
@@ -75,11 +81,26 @@ class _PlatformAdminOperationsScreenState
     if (!identical(oldWidget.missionRepository, widget.missionRepository)) {
       _missionStream = _missions();
     }
+    if (!identical(oldWidget.actorRepository, widget.actorRepository)) {
+      _actorDirectory = _loadActorDirectory();
+    }
   }
 
   Stream<List<CoordinationNeed>> _missions() =>
       widget.missionRepository?.watchAllActiveMissions() ??
       Stream<List<CoordinationNeed>>.value(const []);
+
+  Future<PlatformActorDirectoryViewData?> _loadActorDirectory() async {
+    final repository = widget.actorRepository;
+    if (repository == null || repository is NoPlatformActorReadRepository) {
+      return null;
+    }
+    try {
+      return await repository.loadDirectory();
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) => StreamBuilder<List<Operation>>(
@@ -109,6 +130,14 @@ class _PlatformAdminOperationsScreenState
               }
               final operations = operationSnapshot.data!;
               final mobilizations = mobilizationSnapshot.data!;
+              final commandOperations = operations
+                  .where(
+                    (operation) => !{
+                      OperationStatus.completed,
+                      OperationStatus.archived,
+                    }.contains(operation.status),
+                  )
+                  .toList(growable: false);
               final dashboard = ExecutiveDashboardSnapshot(
                 operations: operations,
                 mobilizations: mobilizations,
@@ -129,7 +158,7 @@ class _PlatformAdminOperationsScreenState
                         const MobSanteJourneyHeader(
                           journey: MobSanteJourney.administrator,
                         ),
-                        const SizedBox(height: V5Spacing.xl),
+                        const SizedBox(height: V5Spacing.lg),
                         _ExecutiveDashboardHeader(
                           busy: _busy,
                           creationEnabled:
@@ -140,7 +169,7 @@ class _PlatformAdminOperationsScreenState
                           const SizedBox(height: V5Spacing.md),
                           const LinearProgressIndicator(),
                         ],
-                        const SizedBox(height: V5Spacing.xl),
+                        const SizedBox(height: V5Spacing.lg),
                         _ExecutiveReveal(
                           child: _ExecutiveStatusHeader(
                             dashboard: dashboard,
@@ -149,23 +178,21 @@ class _PlatformAdminOperationsScreenState
                         ),
                         const SizedBox(height: V5Spacing.xl),
                         _ExecutiveReveal(
-                          child: _ExecutiveKpiGrid(dashboard: dashboard),
-                        ),
-                        const SizedBox(height: V5Spacing.xxxl),
-                        _ExecutiveReveal(
-                          child: _ExecutivePriorities(
-                            dashboard: dashboard,
-                            onOpen: _openOperation,
+                          child: FutureBuilder<PlatformActorDirectoryViewData?>(
+                            future: _actorDirectory,
+                            builder: (context, actorSnapshot) =>
+                                _ExecutivePriorities(
+                                  actions: const PlatformAdminCommandEngine()
+                                      .evaluate(
+                                        dashboard,
+                                        actorDirectory: actorSnapshot.data,
+                                      ),
+                                  onOpen: _openOperation,
+                                ),
                           ),
                         ),
-                        const SizedBox(height: V5Spacing.xxxl),
-                        Text(
-                          'Situation opérationnelle',
-                          key: const Key('all-platform-operations'),
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: V5Spacing.md),
-                        if (operations.isEmpty)
+                        const SizedBox(height: V5Spacing.xl),
+                        if (commandOperations.isEmpty)
                           const _OperationsEmptyState()
                         else ...[
                           _OperationSection(
@@ -189,22 +216,6 @@ class _PlatformAdminOperationsScreenState
                             title: 'Brouillons',
                             operations: _withStatuses(operations, const {
                               OperationStatus.draft,
-                            }),
-                            dashboard: dashboard,
-                            onOpen: _openOperation,
-                          ),
-                          _OperationSection(
-                            title: 'Terminées',
-                            operations: _withStatuses(operations, const {
-                              OperationStatus.completed,
-                            }),
-                            dashboard: dashboard,
-                            onOpen: _openOperation,
-                          ),
-                          _OperationSection(
-                            title: 'Archivées',
-                            operations: _withStatuses(operations, const {
-                              OperationStatus.archived,
                             }),
                             dashboard: dashboard,
                             onOpen: _openOperation,
@@ -928,19 +939,18 @@ class _ExecutiveStatusHeader extends StatelessWidget {
       label: '$title. $subtitle. $freshness.',
       child: ExcludeSemantics(
         child: Container(
-          padding: const EdgeInsets.all(V5Spacing.lg),
+          padding: const EdgeInsets.all(V5Spacing.md),
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(V5Radius.large),
+            borderRadius: BorderRadius.circular(V5Radius.section),
             border: Border.all(color: foreground.withValues(alpha: 0.2)),
-            boxShadow: V5Elevation.level1(colors),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: foreground.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
@@ -954,9 +964,10 @@ class _ExecutiveStatusHeader extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineMedium?.copyWith(color: foreground),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: foreground,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     const SizedBox(height: V5Spacing.xs),
                     Text(
@@ -1009,86 +1020,14 @@ class _ExecutiveStatusHeader extends StatelessWidget {
   }
 }
 
-class _ExecutiveKpiGrid extends StatelessWidget {
-  const _ExecutiveKpiGrid({required this.dashboard});
-
-  final ExecutiveDashboardSnapshot dashboard;
-
-  @override
-  Widget build(BuildContext context) {
-    final coverage = dashboard.coverage;
-    final coveragePercent = coverage == null ? null : (coverage * 100).round();
-    final coverageTone = coverage == null
-        ? ExecutiveKpiTone.neutral
-        : coverage >= .8
-        ? ExecutiveKpiTone.success
-        : coverage >= .5
-        ? ExecutiveKpiTone.warning
-        : ExecutiveKpiTone.critical;
-    final items = <Widget>[
-      CriticalKpi(
-        key: const Key('executive-kpi-critical'),
-        count: dashboard.criticalMissionCount,
-      ),
-      CoverageKpi(
-        key: const Key('executive-kpi-coverage'),
-        percent: coveragePercent,
-        label: dashboard.establishmentCount == 0
-            ? 'couverture globale'
-            : 'couverture · ${dashboard.establishmentCount} site${dashboard.establishmentCount > 1 ? 's' : ''}',
-        semanticLabel:
-            '${coveragePercent == null ? 'Couverture indisponible' : 'Couverture globale $coveragePercent pour cent'}, '
-            '${dashboard.establishmentCount} établissement${dashboard.establishmentCount > 1 ? 's' : ''} concerné${dashboard.establishmentCount > 1 ? 's' : ''}',
-        tone: coverageTone,
-      ),
-      ExecutiveKpi(
-        key: const Key('executive-kpi-missions'),
-        value: '${dashboard.activeMissionCount}',
-        label: 'missions actives',
-        icon: Icons.assignment_rounded,
-      ),
-      ProfessionKpi(
-        key: const Key('executive-kpi-professionals'),
-        count: dashboard.mobilizedProfessionalCount,
-      ),
-      ExecutiveKpi(
-        key: const Key('executive-kpi-mobilizations'),
-        value: '${dashboard.activeMobilizationCount}',
-        label: 'mobilisations actives',
-        icon: Icons.hub_rounded,
-      ),
-      OperationKpi(
-        key: const Key('executive-kpi-operations'),
-        count: dashboard.activeOperationCount,
-      ),
-    ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 600 ? 3 : 2;
-        final itemWidth =
-            (constraints.maxWidth - V5Spacing.sm * (columns - 1)) / columns;
-        return Wrap(
-          key: const Key('executive-kpi-grid'),
-          spacing: V5Spacing.sm,
-          runSpacing: V5Spacing.sm,
-          children: [
-            for (final item in items) SizedBox(width: itemWidth, child: item),
-          ],
-        );
-      },
-    );
-  }
-}
-
 class _ExecutivePriorities extends StatelessWidget {
-  const _ExecutivePriorities({required this.dashboard, required this.onOpen});
+  const _ExecutivePriorities({required this.actions, required this.onOpen});
 
-  final ExecutiveDashboardSnapshot dashboard;
+  final List<PlatformAdminCommandAction> actions;
   final ValueChanged<Operation> onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final priorities = dashboard.priorityOperations;
     return Column(
       key: const Key('executive-priorities'),
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1098,70 +1037,54 @@ class _ExecutivePriorities extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: V5Spacing.md),
-        if (priorities.isEmpty)
+        if (actions.isEmpty)
           const _CompactEmpty(text: 'Aucune action prioritaire.')
         else
-          for (final priority in priorities)
-            _PriorityCard(snapshot: priority, onOpen: onOpen),
+          for (final action in actions)
+            _PriorityCard(action: action, onOpen: onOpen),
       ],
     );
   }
 }
 
 class _PriorityCard extends StatelessWidget {
-  const _PriorityCard({required this.snapshot, required this.onOpen});
+  const _PriorityCard({required this.action, required this.onOpen});
 
-  final OperationExecutiveSnapshot snapshot;
+  final PlatformAdminCommandAction action;
   final ValueChanged<Operation> onOpen;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final critical = snapshot.criticalMissionCount;
-    final isPlanned = {
-      OperationStatus.draft,
-      OperationStatus.planned,
-    }.contains(snapshot.operation.status);
-    final hasCoverageRisk = snapshot.coverage != null && snapshot.coverage! < 1;
-    final (icon, stateLabel, foreground, background, detail) = critical > 0
-        ? (
-            Icons.error_rounded,
-            'ACTION URGENTE',
-            colors.danger,
-            colors.dangerContainer,
-            '$critical mission${critical > 1 ? 's' : ''} critique${critical > 1 ? 's' : ''}',
-          )
-        : hasCoverageRisk
-        ? (
-            Icons.visibility_rounded,
-            'À SURVEILLER',
-            colors.warning,
-            colors.warningContainer,
-            '${snapshot.establishmentCount} établissement${snapshot.establishmentCount > 1 ? 's' : ''} à surveiller',
-          )
-        : isPlanned
-        ? (
-            Icons.event_available_rounded,
-            'À PRÉPARER',
-            colors.info,
-            colors.infoContainer,
-            'Préparation à confirmer',
-          )
-        : (
-            Icons.check_circle_rounded,
-            'SOUS CONTRÔLE',
-            colors.success,
-            colors.successContainer,
-            snapshot.missionCount == 0
-                ? 'Aucune mission active'
-                : 'Situation maîtrisée',
-          );
-    const action = 'Voir l’opération';
+    final (icon, stateLabel, foreground, background) = switch (action.level) {
+      PlatformAdminCommandActionLevel.critical => (
+        Icons.error_rounded,
+        'ACTION URGENTE',
+        colors.danger,
+        colors.dangerContainer,
+      ),
+      PlatformAdminCommandActionLevel.attention => (
+        Icons.visibility_rounded,
+        'ATTENTION REQUISE',
+        colors.warning,
+        colors.warningContainer,
+      ),
+      PlatformAdminCommandActionLevel.preparation => (
+        Icons.event_available_rounded,
+        'À PRÉPARER',
+        colors.info,
+        colors.infoContainer,
+      ),
+    };
+    const actionLabel = 'Voir l’opération';
     return Padding(
-      padding: const EdgeInsets.only(bottom: V5Spacing.md),
+      padding: const EdgeInsets.only(bottom: V5Spacing.sm),
       child: Semantics(
         button: true,
-        label: '$stateLabel. ${snapshot.operation.name}. $detail. $action.',
+        label:
+            '$stateLabel. ${action.title}. '
+            '${action.operation.name}. ${action.detail}. '
+            '$actionLabel.',
         child: Material(
           color: colors.surfaceElevated,
           shape: RoundedRectangleBorder(
@@ -1170,74 +1093,75 @@ class _PriorityCard extends StatelessWidget {
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            key: Key('executive-priority-${snapshot.operation.id}'),
+            key: Key('command-action-${action.id}'),
             borderRadius: BorderRadius.circular(V5Radius.card),
-            onTap: () => onOpen(snapshot.operation),
+            onTap: () => onOpen(action.operation),
             child: Padding(
-              padding: const EdgeInsets.all(V5Spacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.symmetric(
+                horizontal: V5Spacing.md,
+                vertical: V5Spacing.sm,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: V5Spacing.xs,
-                      vertical: V5Spacing.xxs,
-                    ),
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       color: background,
-                      borderRadius: BorderRadius.circular(V5Radius.pill),
+                      borderRadius: BorderRadius.circular(V5Radius.control),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Icon(icon, color: foreground, size: 20),
+                  ),
+                  const SizedBox(width: V5Spacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(icon, color: foreground, size: 17),
-                        const SizedBox(width: V5Spacing.xs),
-                        Flexible(
-                          child: Text(
-                            stateLabel,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: foreground,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: .45,
-                                ),
-                          ),
+                        Text(
+                          stateLabel,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: foreground,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: .45,
+                              ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: V5Spacing.md),
-                  Text(
-                    snapshot.operation.name,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: V5Spacing.xs),
-                  Text(
-                    detail,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: V5Spacing.md),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          action,
-                          style: Theme.of(context).textTheme.labelLarge
+                        const SizedBox(height: V5Spacing.xxs),
+                        Text(
+                          action.title,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: V5Spacing.xxs),
+                        Text(
+                          action.operation.name,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: colors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: V5Spacing.xxs),
+                        Text(
+                          action.detail,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colors.textSecondary),
+                        ),
+                        const SizedBox(height: V5Spacing.xs),
+                        Text(
+                          actionLabel,
+                          style: Theme.of(context).textTheme.labelMedium
                               ?.copyWith(
                                 color: foreground,
                                 fontWeight: FontWeight.w900,
                               ),
                         ),
-                      ),
-                      const SizedBox(width: V5Spacing.xxs),
-                      Icon(Icons.arrow_forward_rounded, color: foreground),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: V5Spacing.xs),
+                  Icon(Icons.chevron_right_rounded, color: foreground),
                 ],
               ),
             ),
@@ -2373,7 +2297,7 @@ class _LegacyMobilizations extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Mobilisations historiques',
+              'Mobilisations sans opération',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
                 color: context.v5Colors.textSecondary,
                 fontWeight: FontWeight.w800,
@@ -2381,7 +2305,7 @@ class _LegacyMobilizations extends StatelessWidget {
             ),
             const SizedBox(height: V5Spacing.xs),
             Text(
-              '${mobilizations.length} mobilisation${mobilizations.length > 1 ? 's' : ''} sans opération',
+              '${mobilizations.length} mobilisation${mobilizations.length > 1 ? 's' : ''} à rattacher',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: context.v5Colors.textSecondary,
               ),
@@ -2390,7 +2314,7 @@ class _LegacyMobilizations extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: TextButton(
                 onPressed: onManage,
-                child: const Text('Consulter'),
+                child: const Text('Gérer'),
               ),
             ),
           ],
@@ -2404,8 +2328,7 @@ class _OperationsEmptyState extends StatelessWidget {
   const _OperationsEmptyState();
   @override
   Widget build(BuildContext context) => const _CompactEmpty(
-    text:
-        'Aucune opération. Créez un cadre avant d’y rattacher des mobilisations.',
+    text: 'Aucune opération en cours, à venir ou en brouillon.',
   );
 }
 

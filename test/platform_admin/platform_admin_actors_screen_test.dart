@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:interface_incendies_gironde/platform_admin/platform_actor_csv_export.dart';
 import 'package:interface_incendies_gironde/platform_admin/platform_actor_view_data.dart';
 import 'package:interface_incendies_gironde/repositories/platform_actor_read_repository.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_actors_screen.dart';
@@ -58,6 +59,41 @@ void main() {
     );
   });
 
+  testWidgets(
+    'confirme et télécharge exactement la liste filtrée déjà chargée',
+    (tester) async {
+      final repository = _FakeActorRepository(_directory());
+      final downloader = _FakeCsvDownloader();
+      await tester.pumpWidget(_app(repository, csvDownloader: downloader));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('platform-actor-search')),
+        'Alice',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('platform-actor-export')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 ligne sera exportée'), findsOneWidget);
+      expect(
+        find.textContaining('coordonnées personnelles sensibles'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('confirm-platform-actor-export')));
+      await tester.pumpAndSettle();
+
+      expect(downloader.exports, hasLength(1));
+      expect(downloader.exports.single.rowCount, 1);
+      expect(downloader.exports.single.contents, contains('Alice Martin'));
+      expect(
+        downloader.exports.single.contents,
+        isNot(contains('Bruno Durand')),
+      );
+      expect(repository.loadCount, 1);
+    },
+  );
+
   testWidgets('reste utilisable à 320 px avec Dynamic Type et thème sombre', (
     tester,
   ) async {
@@ -83,6 +119,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(PlatformAdminActorsScreen), findsOneWidget);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -280));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSize(find.byKey(const Key('platform-actor-export'))).height,
+      greaterThanOrEqualTo(44),
+    );
     expect(tester.takeException(), isNull);
   });
 }
@@ -90,12 +132,29 @@ void main() {
 Widget _app(
   PlatformActorReadRepository repository, {
   ThemeMode themeMode = ThemeMode.light,
+  PlatformActorCsvDownloader csvDownloader =
+      const BrowserPlatformActorCsvDownloader(),
 }) => MaterialApp(
   theme: AppTheme.light,
   darkTheme: AppTheme.dark,
   themeMode: themeMode,
-  home: Scaffold(body: PlatformAdminActorsScreen(repository: repository)),
+  home: Scaffold(
+    body: PlatformAdminActorsScreen(
+      repository: repository,
+      csvDownloader: csvDownloader,
+    ),
+  ),
 );
+
+class _FakeCsvDownloader implements PlatformActorCsvDownloader {
+  final exports = <PlatformActorCsvExport>[];
+
+  @override
+  Future<bool> download(PlatformActorCsvExport export) async {
+    exports.add(export);
+    return true;
+  }
+}
 
 class _FakeActorRepository implements PlatformActorReadRepository {
   _FakeActorRepository(this.directory);
@@ -131,6 +190,23 @@ PlatformActorDirectoryViewData _directory() =>
               operationLabel: 'Opération A',
               locationId: 'location-a',
               locationLabel: 'Centre A',
+            ),
+          ],
+        ),
+        PlatformProfessionalViewData(
+          uid: 'professional-b',
+          displayName: 'Bruno Durand',
+          professionLabel: 'Médecin',
+          departmentLabel: 'Landes',
+          regionLabel: 'Nouvelle-Aquitaine',
+          participations: [
+            PlatformParticipationViewData(
+              missionId: 'mission-b',
+              missionLabel: 'Mission B',
+              professionLabel: 'Médecin',
+              status: 'cancelled',
+              operationId: 'operation-b',
+              operationLabel: 'Opération B',
             ),
           ],
         ),

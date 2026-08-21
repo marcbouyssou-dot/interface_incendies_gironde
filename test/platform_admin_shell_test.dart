@@ -25,6 +25,8 @@ import 'package:interface_incendies_gironde/repositories/read_only_preview_coord
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_shell.dart';
+import 'package:interface_incendies_gironde/screens/platform_admin_statistics_screen.dart';
+import 'package:interface_incendies_gironde/screens/platform_admin_history_screen.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_more_screen.dart';
 import 'package:interface_incendies_gironde/screens/platform_operation_form_dialog.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
@@ -440,15 +442,27 @@ void main() {
     final navigation = tester.widget<V5BottomBar>(
       find.byKey(const Key('platform-admin-bottom-navigation')),
     );
-    expect(navigation.destinations, hasLength(3));
+    expect(navigation.destinations, hasLength(5));
     expect(navigation.destinations.map((destination) => destination.label), [
       'Opérations',
       'Acteurs',
+      'Statistiques',
+      'Historique',
       'Plus',
     ]);
     expect(find.text('Territoires'), findsNothing);
     expect(find.text('Coordinateurs'), findsNothing);
     expect(find.text('À venir'), findsNothing);
+
+    await tester.tap(find.text('Statistiques').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlatformAdminStatisticsScreen), findsOneWidget);
+    expect(find.text('Statistiques'), findsWidgets);
+
+    await tester.tap(find.text('Historique').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlatformAdminHistoryScreen), findsOneWidget);
+    expect(find.text('Historique'), findsWidgets);
 
     await tester.tap(find.text('Plus').last);
     await tester.pumpAndSettle();
@@ -719,6 +733,12 @@ void main() {
           260,
           scrollable: find.byType(Scrollable).first,
         );
+        await Scrollable.ensureVisible(
+          tester.element(operation),
+          alignment: 0.35,
+        );
+        await tester.pumpAndSettle();
+        expect(operation.hitTestable(), findsOneWidget);
         await tester.tap(operation);
         await tester.pumpAndSettle();
         await tester.scrollUntilVisible(

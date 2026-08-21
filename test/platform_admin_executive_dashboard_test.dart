@@ -9,10 +9,12 @@ import 'package:interface_incendies_gironde/models/platform_administrator_access
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/models/user_display_identity.dart';
 import 'package:interface_incendies_gironde/platform_admin/operation_coordinator_view_data.dart';
+import 'package:interface_incendies_gironde/platform_admin/platform_actor_view_data.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/operation_coordinator_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
+import 'package:interface_incendies_gironde/repositories/platform_actor_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_operations_screen.dart';
 import 'package:interface_incendies_gironde/services/current_mobilization_provider.dart';
@@ -64,30 +66,6 @@ void main() {
       expect(snapshot.state, ExecutivePlatformState.watch);
     });
 
-    test('priorise les critiques et limite les actions à trois', () {
-      final operations = List.generate(
-        4,
-        (index) => _operation('op-$index', OperationStatus.active),
-      );
-      final mobilizations = List.generate(
-        4,
-        (index) => _mobilization('mob-$index', 'op-$index'),
-      );
-      final snapshot = ExecutiveDashboardSnapshot(
-        operations: operations,
-        mobilizations: mobilizations,
-        missions: [
-          _mission('m0', 'mob-0', required: 1, registered: 1),
-          _mission('m1', 'mob-1', required: 1, registered: 0),
-          _mission('m2', 'mob-2', required: 2, registered: 1),
-          _mission('m3', 'mob-3', required: 1, registered: 1),
-        ],
-      );
-
-      expect(snapshot.priorityOperations, hasLength(3));
-      expect(snapshot.priorityOperations.first.operation.id, 'op-1');
-    });
-
     test('une mission critique interdit un état stable sans opération', () {
       final snapshot = ExecutiveDashboardSnapshot(
         operations: const [],
@@ -117,16 +95,21 @@ void main() {
     expect(find.text('Plateforme stable'), findsOneWidget);
     expect(find.text('Aucune opération active pour le moment'), findsOneWidget);
     expect(find.text('Nouvelle opération'), findsOneWidget);
-    await _scrollTo(tester, find.byKey(const Key('executive-kpi-grid')));
-    expect(find.byKey(const Key('executive-kpi-grid')), findsOneWidget);
+    expect(
+      find.byKey(const Key('executive-operational-summary')),
+      findsNothing,
+    );
     await _scrollTo(tester, find.text('Aucune action prioritaire.'));
     expect(find.text('Aucune action prioritaire.'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.textContaining('Aucune opération'),
+      find.text('Aucune opération en cours, à venir ou en brouillon.'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.textContaining('Aucune opération'), findsOneWidget);
+    expect(
+      find.text('Aucune opération en cours, à venir ou en brouillon.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('legacy-mobilizations')), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -139,26 +122,15 @@ void main() {
     expect(find.text('Plateforme stable'), findsOneWidget);
     expect(find.text('Aucune mission critique détectée'), findsOneWidget);
     expect(find.text('Mis à jour il y a 5 min'), findsOneWidget);
-    await _scrollTo(tester, find.byKey(const Key('executive-kpi-critical')));
-    expect(find.bySemanticsLabel('1, opérations actives'), findsOneWidget);
-    expect(find.bySemanticsLabel('0, missions critiques'), findsOneWidget);
     expect(
-      find.bySemanticsLabel(
-        'Couverture globale 100 pour cent, 1 établissement concerné',
-      ),
-      findsOneWidget,
-    );
-    await _scrollTo(
-      tester,
-      find.byKey(const Key('executive-priority-op-incendies')),
+      find.byKey(const Key('executive-operational-summary')),
+      findsNothing,
     );
     expect(
-      find.byKey(const Key('executive-priority-op-incendies')),
+      find.byKey(const Key('command-action-missingCoordinator-op-incendies')),
       findsOneWidget,
     );
-    expect(find.text('Voir l’opération'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('executive-priority-op-incendies')));
-    await tester.pumpAndSettle();
+    await _openPriorityOperation(tester, 'op-incendies');
     expect(find.text('Situation de l’opération'), findsOneWidget);
     expect(find.text('Incendies Gironde'), findsOneWidget);
     expect(find.text('Gironde · 33'), findsOneWidget);
@@ -208,13 +180,12 @@ void main() {
     expect(find.text('Gestion · Mobilisation mob-sud'), findsOneWidget);
   });
 
-  testWidgets('les KPI sont ordonnés par décision et ont une hauteur commune', (
+  testWidgets('les statistiques détaillées quittent le cockpit', (
     tester,
   ) async {
     await _pumpDashboard(tester, _Scenario.three());
 
-    await _scrollTo(tester, find.byKey(const Key('executive-kpi-critical')));
-    final keys = [
+    final legacyKeys = [
       const Key('executive-kpi-critical'),
       const Key('executive-kpi-coverage'),
       const Key('executive-kpi-missions'),
@@ -222,12 +193,78 @@ void main() {
       const Key('executive-kpi-mobilizations'),
       const Key('executive-kpi-operations'),
     ];
-    final rects = [for (final key in keys) tester.getRect(find.byKey(key))];
-    expect(rects[0].left, lessThan(rects[1].left));
-    expect(rects[2].top, greaterThan(rects[0].top));
-    expect(rects[2].left, lessThan(rects[3].left));
-    expect(rects[4].top, greaterThan(rects[2].top));
-    expect(rects.map((rect) => rect.height).toSet(), hasLength(1));
+    for (final key in legacyKeys) {
+      expect(find.byKey(key), findsNothing);
+    }
+    expect(
+      find.byKey(const Key('executive-operational-summary')),
+      findsNothing,
+    );
+    expect(find.text('Actions prioritaires'), findsOneWidget);
+  });
+
+  testWidgets('un établissement sans responsable devient une décision', (
+    tester,
+  ) async {
+    await _pumpDashboard(
+      tester,
+      _Scenario.one(),
+      actorRepository: const _ActorRepository(
+        PlatformActorDirectoryViewData(
+          professionals: [],
+          coordinators: [],
+          managers: [],
+        ),
+      ),
+    );
+
+    final action = find.byKey(
+      const Key('command-action-missingResponsible-op-incendies'),
+    );
+    await _scrollTo(tester, action);
+    expect(action, findsOneWidget);
+    expect(find.text('Nommer un responsable'), findsOneWidget);
+    expect(find.textContaining('1 établissement actif'), findsOneWidget);
+  });
+
+  testWidgets('les opérations historiques restent hors du cockpit', (
+    tester,
+  ) async {
+    await _pumpDashboard(
+      tester,
+      _Scenario(
+        operations: [
+          _operation('op-incendies', OperationStatus.active),
+          _operation('op-completed', OperationStatus.completed),
+          _operation('op-archived', OperationStatus.archived),
+        ],
+        mobilizations: [
+          _mobilization('mob-sud', 'op-incendies'),
+          _mobilization('mob-completed', 'op-completed'),
+          _mobilization('mob-archived', 'op-archived'),
+        ],
+        missions: const [],
+      ),
+    );
+
+    expect(find.text('Terminées'), findsNothing);
+    expect(find.text('Archivées'), findsNothing);
+    expect(
+      find.byKey(const Key('platform-operation-op-completed')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('platform-operation-op-archived')),
+      findsNothing,
+    );
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('platform-operation-op-incendies')),
+    );
+    expect(
+      find.byKey(const Key('platform-operation-op-incendies')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('trois opérations sont lisibles et enrichies sans surcharge', (
@@ -237,15 +274,27 @@ void main() {
 
     expect(find.text('Sous surveillance'), findsOneWidget);
     expect(find.text('1 mission critique à suivre'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('executive-priorities'))).dy,
+      lessThan(844),
+    );
+    expect(
+      tester
+          .getSize(
+            find.byKey(const Key('command-action-criticalNeeds-op-incendies')),
+          )
+          .height,
+      greaterThanOrEqualTo(44),
+    );
     await _scrollTo(tester, find.text('ACTION URGENTE'));
     expect(find.text('ACTION URGENTE'), findsOneWidget);
     final scrollable = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(
-      find.byKey(const Key('all-platform-operations')),
+      find.text('En cours'),
       300,
       scrollable: scrollable,
     );
-    expect(find.text('Situation opérationnelle'), findsOneWidget);
+    expect(find.text('En cours'), findsOneWidget);
     for (final id in const ['op-incendies', 'op-canicule', 'op-festival']) {
       final card = find.byKey(Key('platform-operation-$id'));
       await tester.scrollUntilVisible(card, 250, scrollable: scrollable);
@@ -265,7 +314,7 @@ void main() {
     }
   });
 
-  testWidgets('une plateforme critique expose au plus trois actions', (
+  testWidgets('les actions critiques précèdent les décisions de préparation', (
     tester,
   ) async {
     await _pumpDashboard(tester, _Scenario.critical());
@@ -275,15 +324,17 @@ void main() {
       find.text('3 missions critiques nécessitent une action'),
       findsOneWidget,
     );
-    await _scrollTo(tester, find.byKey(const Key('executive-kpi-critical')));
-    expect(find.bySemanticsLabel('3, missions critiques'), findsOneWidget);
     for (final id in const ['op-1', 'op-2', 'op-3']) {
-      final priority = find.byKey(Key('executive-priority-$id'));
+      final priority = find.byKey(Key('command-action-criticalNeeds-$id'));
       await _scrollTo(tester, priority);
       expect(priority, findsOneWidget);
       expect(find.text('Voir l’opération'), findsWidgets);
     }
-    expect(find.byKey(const Key('executive-priority-op-4')), findsNothing);
+    final preparation = find.byKey(
+      const Key('command-action-missingCoordinator-op-4'),
+    );
+    await _scrollTo(tester, preparation);
+    expect(preparation, findsOneWidget);
   });
 
   testWidgets('la fiche affiche un Coordinateur unique consolidé', (
@@ -502,6 +553,8 @@ void main() {
         Theme.of(tester.element(find.text('Centre opérationnel'))).brightness,
         Brightness.dark,
       );
+      await _scrollTo(tester, find.byKey(const Key('executive-priorities')));
+      expect(find.byKey(const Key('executive-priorities')), findsOneWidget);
       for (var index = 0; index < 5; index++) {
         await tester.drag(
           find.byKey(const PageStorageKey('platform-admin-operations')),
@@ -600,6 +653,7 @@ void main() {
       await _pumpDashboard(
         tester,
         entry.value,
+        disableAnimations: true,
         themeMode: entry.key.endsWith('empty')
             ? ThemeMode.dark
             : ThemeMode.light,
@@ -619,7 +673,7 @@ Future<void> _openPriorityOperation(
   WidgetTester tester,
   String operationId,
 ) async {
-  final target = find.byKey(Key('executive-priority-$operationId'));
+  final target = find.byKey(Key('platform-operation-$operationId'));
   await _scrollTo(tester, target);
   await tester.ensureVisible(target);
   await tester.pumpAndSettle();
@@ -669,6 +723,7 @@ Future<void> _pumpDashboard(
       const _AdministrationService(),
   OperationCoordinatorViewDataSource operationCoordinatorDataSource =
       const NoOperationCoordinatorViewDataSource(),
+  PlatformActorReadRepository? actorRepository,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -700,6 +755,7 @@ Future<void> _pumpDashboard(
               administrationService: administrationService,
               missionRepository: _MissionRepository(scenario.missions),
               operationCoordinatorDataSource: operationCoordinatorDataSource,
+              actorRepository: actorRepository,
               referenceTime: DateTime(2026, 8, 16, 22, 46),
             ),
           ),
@@ -1004,4 +1060,13 @@ class _CoordinatorRepository implements OperationCoordinatorReadRepository {
             )
             .toList(growable: false),
       );
+}
+
+class _ActorRepository implements PlatformActorReadRepository {
+  const _ActorRepository(this.directory);
+
+  final PlatformActorDirectoryViewData directory;
+
+  @override
+  Future<PlatformActorDirectoryViewData> loadDirectory() async => directory;
 }

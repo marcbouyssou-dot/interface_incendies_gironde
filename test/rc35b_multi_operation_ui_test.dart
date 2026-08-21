@@ -60,13 +60,7 @@ void main() {
 
     expect(find.text('Centre opérationnel'), findsOneWidget);
     final scrollable = find.byType(Scrollable).first;
-    for (final section in const [
-      'En cours',
-      'À venir',
-      'Brouillons',
-      'Terminées',
-      'Archivées',
-    ]) {
+    for (final section in const ['En cours', 'À venir', 'Brouillons']) {
       await tester.scrollUntilVisible(
         find.text(section),
         400,
@@ -74,13 +68,15 @@ void main() {
       );
       expect(find.text(section), findsOneWidget);
     }
+    expect(find.text('Terminées'), findsNothing);
+    expect(find.text('Archivées'), findsNothing);
     await tester.scrollUntilVisible(
       find.byKey(const Key('legacy-mobilizations')),
       500,
       scrollable: scrollable,
     );
-    expect(find.text('Mobilisations historiques'), findsOneWidget);
-    expect(find.text('1 mobilisation sans opération'), findsOneWidget);
+    expect(find.text('Mobilisations sans opération'), findsOneWidget);
+    expect(find.text('1 mobilisation à rattacher'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('platform-operation-op-active')),
       -500,

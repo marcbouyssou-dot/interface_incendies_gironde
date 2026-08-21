@@ -1,16 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../platform_admin/platform_actor_csv_export.dart';
 import '../platform_admin/platform_actor_view_data.dart';
 import '../repositories/platform_actor_read_repository.dart';
 import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_form_system.dart';
 
 class PlatformAdminActorsScreen extends StatefulWidget {
-  const PlatformAdminActorsScreen({super.key, required this.repository});
+  const PlatformAdminActorsScreen({
+    super.key,
+    required this.repository,
+    this.csvDownloader = const BrowserPlatformActorCsvDownloader(),
+  });
 
   final PlatformActorReadRepository repository;
+  final PlatformActorCsvDownloader csvDownloader;
 
   @override
   State<PlatformAdminActorsScreen> createState() =>
@@ -22,6 +29,7 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
   final _searchController = TextEditingController();
   PlatformActorKind _kind = PlatformActorKind.professional;
   PlatformActorFilter _filter = const PlatformActorFilter();
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -60,6 +68,51 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
     if (selected != null && mounted) setState(() => _filter = selected);
   }
 
+  Future<void> _export(PlatformActorDirectoryViewData directory) async {
+    final rowCount = _actorCount(directory);
+    if (rowCount == 0) return;
+    final confirmed = await showV5Confirmation(
+      context: context,
+      title: 'Exporter la liste ?',
+      message:
+          '$rowCount ${rowCount == 1 ? 'ligne sera exportée' : 'lignes seront exportées'} au format CSV. '
+          'Le fichier reprend exactement le type d’acteur, la recherche et les filtres affichés. '
+          'Les coordonnées personnelles sensibles sont exclues.',
+      confirmLabel: 'Exporter le CSV',
+      icon: Icons.download_outlined,
+      confirmKey: const Key('confirm-platform-actor-export'),
+      cancelKey: const Key('cancel-platform-actor-export'),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _exporting = true);
+    try {
+      final export = const PlatformActorCsvExportBuilder().build(
+        directory: directory,
+        kind: _kind,
+        filter: _filter,
+        generatedAt: DateTime.now(),
+      );
+      final downloaded = await widget.csvDownloader.download(export);
+      if (!mounted) return;
+      V5Toast.show(
+        context,
+        message: downloaded
+            ? '${export.rowCount} ${export.rowCount == 1 ? 'ligne exportée' : 'lignes exportées'}.'
+            : 'Le téléchargement CSV est disponible sur le Web et la PWA.',
+        tone: downloaded ? V5ToastTone.success : V5ToastTone.info,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      V5Toast.show(
+        context,
+        message: 'Le fichier CSV n’a pas pu être généré.',
+        tone: V5ToastTone.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder(
     future: _directory,
@@ -78,6 +131,7 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
         return const Center(child: CircularProgressIndicator.adaptive());
       }
       final directory = snapshot.data!;
+      final actorCount = _actorCount(directory);
       return RefreshIndicator.adaptive(
         onRefresh: _reload,
         child: CustomScrollView(
@@ -128,18 +182,37 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
                     ),
                   ),
                   const SizedBox(height: V5Spacing.sm),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      key: const Key('platform-actor-filters'),
-                      onPressed: () => _openFilters(directory),
-                      icon: const Icon(Icons.tune_rounded),
-                      label: Text(
-                        _filter.activeCount == 0
-                            ? 'Filtrer'
-                            : 'Filtres (${_filter.activeCount})',
+                  Wrap(
+                    spacing: V5Spacing.sm,
+                    runSpacing: V5Spacing.sm,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 44),
+                        child: OutlinedButton.icon(
+                          key: const Key('platform-actor-filters'),
+                          onPressed: () => _openFilters(directory),
+                          icon: const Icon(Icons.tune_rounded),
+                          label: Text(
+                            _filter.activeCount == 0
+                                ? 'Filtrer'
+                                : 'Filtres (${_filter.activeCount})',
+                          ),
+                        ),
                       ),
-                    ),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 44),
+                        child: OutlinedButton.icon(
+                          key: const Key('platform-actor-export'),
+                          onPressed: actorCount == 0 || _exporting
+                              ? null
+                              : () => _export(directory),
+                          icon: const Icon(Icons.download_outlined),
+                          label: Text(
+                            _exporting ? 'Export en cours…' : 'Exporter',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: V5Spacing.lg),
                   ..._actorCards(directory),
@@ -151,6 +224,14 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
       );
     },
   );
+
+  int _actorCount(PlatformActorDirectoryViewData directory) => switch (_kind) {
+    PlatformActorKind.professional =>
+      directory.filteredProfessionals(_filter).length,
+    PlatformActorKind.coordinator =>
+      directory.filteredCoordinators(_filter).length,
+    PlatformActorKind.manager => directory.filteredManagers(_filter).length,
+  };
 
   List<Widget> _actorCards(PlatformActorDirectoryViewData directory) {
     final widgets = switch (_kind) {

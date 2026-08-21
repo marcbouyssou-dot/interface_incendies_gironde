@@ -574,7 +574,7 @@ class _AppShellState extends State<AppShell> {
                 operationRepository: multiRuntime?.operationReadRepository,
               ),
       _AppJourney.platformAdmin => PlatformAdminShell(
-        initialIndex: widget.initialIndex == 3 ? 2 : 0,
+        initialIndex: widget.initialIndex == 3 ? 4 : 0,
         platformRepository: widget.platformRuntime!.platformReadRepository,
         mobilizationProvider:
             widget.platformRuntime!.currentMobilizationProvider,
