@@ -25,6 +25,7 @@ abstract final class FirestoreLocationMapper {
       structuredAddress: _structuredAddress(data),
       contactName: data['contactName'] as String?,
       contactPhone: data['contactPhone'] as String?,
+      managingOrganizationId: data['managingOrganizationId'] as String?,
       isOperational: data['isOperational'] as bool? ?? true,
       isEnabled: data['active'] as bool? ?? true,
     );

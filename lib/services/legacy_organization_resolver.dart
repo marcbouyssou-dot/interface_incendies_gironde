@@ -4,8 +4,8 @@ import '../models/organization.dart';
 import '../models/organization_category.dart';
 import '../models/organization_context.dart';
 import '../models/organization_membership.dart';
-import '../models/organization_role.dart';
 import '../models/organization_visibility.dart';
+import 'organization_authorization_service.dart';
 
 /// Résout toute la compatibilité organisationnelle transitoire de RC3.
 ///
@@ -13,7 +13,12 @@ import '../models/organization_visibility.dart';
 /// future de la compatibilité se fera en retirant ce service, sans modifier les
 /// écrans ni les repositories métier RC3.
 class LegacyOrganizationResolver {
-  const LegacyOrganizationResolver();
+  const LegacyOrganizationResolver({
+    OrganizationAuthorizationService authorizationService =
+        const OrganizationAuthorizationService(),
+  }) : _authorizationService = authorizationService;
+
+  final OrganizationAuthorizationService _authorizationService;
 
   /// Identifiant stable de l'organisation virtuelle portant les données RC3.
   static const legacyOrganizationId = 'legacy-gironde';
@@ -82,18 +87,19 @@ class LegacyOrganizationResolver {
     }
 
     final isLegacy = selectedOrganization.id == legacyOrganizationId;
-    final roles = membership != null
-        ? membership.active
-              ? membership.roles
-              : const <OrganizationRole>{}
-        : isLegacy
-        ? _legacyRoles(legacyRoleValues)
-        : const <OrganizationRole>{};
+    final authorization = _authorizationService.resolve(
+      organizationId: selectedOrganization.id,
+      uid: uid,
+      membership: membership,
+      legacyRoleValues: legacyRoleValues,
+      isLegacyOrganization: isLegacy,
+      isPlatformAdministrator: isPlatformAdministrator,
+    );
     return OrganizationContext.selected(
       uid: uid,
       organization: isLegacy ? legacyOrganization : selectedOrganization,
       membership: membership,
-      effectiveRoles: roles,
+      effectiveRoles: authorization.roles,
       isLegacy: isLegacy,
       isPlatformAdministrator: isPlatformAdministrator,
     );
@@ -108,18 +114,5 @@ class LegacyOrganizationResolver {
       throw const FormatException("Identifiant d'organisation invalide.");
     }
     return explicitOrganizationId;
-  }
-
-  Set<OrganizationRole> _legacyRoles(Iterable<String> values) {
-    final roles = <OrganizationRole>{};
-    for (final value in values) {
-      switch (value) {
-        case 'coordinator':
-          roles.add(OrganizationRole.coordinator);
-        case 'site_manager':
-          roles.add(OrganizationRole.siteManager);
-      }
-    }
-    return Set<OrganizationRole>.unmodifiable(roles);
   }
 }

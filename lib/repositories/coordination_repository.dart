@@ -7,12 +7,31 @@ import '../models/app_notification.dart';
 import '../services/professional_verification_service.dart';
 import 'admin_invitation_repository.dart';
 import 'location_administration_repository.dart';
+import 'location_read_repository.dart';
 import 'responsible_access_administration_repository.dart';
 
 export '../models/responsible_access.dart';
 
 abstract interface class MissionEngagementReadRepository {
   Stream<List<EngagementInfo>> watchMissionEngagements(String missionId);
+}
+
+/// Identité authentifiée du parcours administratif, indépendante de son rôle.
+///
+/// Ce contrat additif permet de résoudre une membership RC4 même lorsqu'aucun
+/// document `roles/{uid}` legacy n'existe.
+abstract interface class AdministrativeIdentityReadRepository {
+  Stream<String?> watchAdministrativeUid();
+}
+
+/// Lecture bas niveau utilisée après validation du périmètre organisationnel.
+///
+/// Le repository contextualisé reste responsable de l'autorisation de la
+/// mission avant d'appeler cette source.
+abstract interface class OrganizationEngagementReadDataSource {
+  Stream<List<EngagementInfo>> watchAuthorizedMissionEngagements(
+    String missionId,
+  );
 }
 
 /// Contrat ciblé indiquant si une mission reste lisible dans le contexte
@@ -25,7 +44,7 @@ abstract interface class MissionAccessReadRepository {
 }
 
 abstract interface class CoordinationRepository
-    implements MissionEngagementReadRepository {
+    implements MissionEngagementReadRepository, LocationReadRepository {
   AdminInvitationRepository get adminInvitationRepository;
 
   LocationAdministrationRepository get locationAdministrationRepository;
@@ -34,8 +53,6 @@ abstract interface class CoordinationRepository
   get responsibleAccessAdministrationRepository;
 
   Stream<List<CoordinationNeed>> watchMissions();
-
-  Stream<List<ResponsePlace>> watchLocations();
 
   Future<VolunteerProfile?> getVolunteerProfile();
 

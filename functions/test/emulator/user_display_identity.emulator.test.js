@@ -95,6 +95,44 @@ before(async () => {
     profession: 'physiotherapist',
     status: 'confirmed',
   });
+  await Promise.all([
+    db.collection('operations').doc('operation-organization-a').set({
+      id: 'operation-organization-a',
+      ownerOrganizationId: 'organization-a',
+    }),
+    db.collection('operations').doc('operation-organization-b').set({
+      id: 'operation-organization-b',
+      ownerOrganizationId: 'organization-b',
+    }),
+    db.collection('mobilizations').doc('mobilization-organization-a').set({
+      id: 'mobilization-organization-a',
+      operationId: 'operation-organization-a',
+      status: 'active',
+    }),
+    db.collection('mobilizations').doc('mobilization-organization-b').set({
+      id: 'mobilization-organization-b',
+      operationId: 'operation-organization-b',
+      status: 'active',
+    }),
+    db.collection('missions').doc('mission-organization-a').set({
+      id: 'mission-organization-a',
+      mobilizationId: 'mobilization-organization-a',
+      locationId: 'site-a',
+      isActive: true,
+    }),
+    db.collection('missions').doc('mission-organization-b').set({
+      id: 'mission-organization-b',
+      mobilizationId: 'mobilization-organization-b',
+      locationId: 'site-b',
+      isActive: true,
+    }),
+    db.collection('missions').doc('mission-organization-b-outside').set({
+      id: 'mission-organization-b-outside',
+      mobilizationId: 'mobilization-organization-b',
+      locationId: 'site-b-outside',
+      isActive: true,
+    }),
+  ]);
 });
 
 after(async () => {
@@ -173,6 +211,49 @@ test('legacy coordinator team access stops after an explicit assignment', async 
     missionId: assignedMissionId,
   });
   assert.deepEqual(assignedTeam, []);
+});
+
+test('organization memberships resolve coordinator and location-scoped manager', async () => {
+  const uid = 'organization-multi-role-user';
+  await adminAuth.createUser({uid});
+  await Promise.all([
+    db.collection('organizationMemberships')
+      .doc(`organization-a_${uid}`)
+      .set({
+        organizationId: 'organization-a',
+        uid,
+        roles: ['coordinator', 'professional'],
+        locationIds: [],
+        active: true,
+        schemaVersion: 1,
+      }),
+    db.collection('organizationMemberships')
+      .doc(`organization-b_${uid}`)
+      .set({
+        organizationId: 'organization-b',
+        uid,
+        roles: ['site_manager'],
+        locationIds: ['site-b'],
+        active: true,
+        schemaVersion: 1,
+      }),
+  ]);
+
+  assert.deepEqual(await services.listMissionTeam({
+    callerUid: uid,
+    missionId: 'mission-organization-a',
+  }), []);
+  assert.deepEqual(await services.listMissionTeam({
+    callerUid: uid,
+    missionId: 'mission-organization-b',
+  }), []);
+  await assertCode(
+    () => services.listMissionTeam({
+      callerUid: uid,
+      missionId: 'mission-organization-b-outside',
+    }),
+    'permission-denied',
+  );
 });
 
 test('only a platform administrator resolves coordinator names', async () => {

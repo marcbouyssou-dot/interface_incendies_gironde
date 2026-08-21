@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../models/need.dart';
 import '../utils/switch_latest.dart';
 import 'coordination_repository.dart';
+import 'location_read_repository.dart';
 
 class LiveCoordinationData {
   LiveCoordinationData(
@@ -15,11 +16,13 @@ class LiveCoordinationData {
     MultiMobilizationCoordinationReadRepository?
     administrativeMissionRepository,
     MissionEngagementReadRepository? administrativeEngagementRepository,
+    LocationReadRepository? administrativeLocationRepository,
   }) : _repository = repository,
        _administrativeEngagementRepository =
            administrativeEngagementRepository {
     final accessSource =
         responsibleAccessOverride ?? repository.watchResponsibleAccess;
+    _responsibleAccess = _SharedLatestStream(accessSource);
     _missions = _SharedLatestStream(() {
       if (missionsOverride != null) return missionsOverride();
       if (repository is! MultiMobilizationCoordinationReadRepository) {
@@ -27,7 +30,7 @@ class LiveCoordinationData {
       }
       final multiRepository =
           repository as MultiMobilizationCoordinationReadRepository;
-      return switchLatest(accessSource(), (access) {
+      return switchLatest(_responsibleAccess.watch(), (access) {
         if (access == null) {
           return multiRepository.watchAllActiveMissions();
         }
@@ -44,10 +47,29 @@ class LiveCoordinationData {
         return repository.watchMissions();
       });
     }, onValue: _pruneMissionStreams);
-    _locations = _SharedLatestStream(
-      locationsOverride ?? repository.watchLocations,
-    );
-    _responsibleAccess = _SharedLatestStream(accessSource);
+    _locations = _SharedLatestStream(() {
+      if (locationsOverride != null) return locationsOverride();
+      if (administrativeLocationRepository == null) {
+        return repository.watchLocations();
+      }
+      return switchLatest(
+        _retainLastResponsibleAccess(_responsibleAccess.watch()),
+        (access) {
+          // Le parcours Professionnel conserve exactement sa projection publique
+          // RC3. Les identités privilégiées passent par le repository borné.
+          if (access == null) return repository.watchLocations();
+          final locations = administrativeLocationRepository.watchLocations();
+          if (access.isSiteManager && !access.isCoordinator) {
+            return locations.map(
+              (items) => List<ResponsePlace>.unmodifiable(
+                items.where((item) => access.locationIds.contains(item.id)),
+              ),
+            );
+          }
+          return locations;
+        },
+      );
+    });
   }
 
   final CoordinationRepository _repository;
@@ -114,6 +136,28 @@ class LiveCoordinationData {
     }
   }
 }
+
+/// Conserve la dernière projection sélectionnée lorsqu'une source de contexte
+/// finie (notamment les fakes `Stream.value` des tests RC3).
+///
+/// Les flux Firebase réels restent ouverts, mais fermer aussi leur projection
+/// enfant rendrait les données définitivement indisponibles après une source
+/// de contexte ponctuelle.
+Stream<ResponsibleAccess?> _retainLastResponsibleAccess(
+  Stream<ResponsibleAccess?> source,
+) => Stream<ResponsibleAccess?>.multi((controller) {
+  final subscription = source.listen(
+    controller.add,
+    // L'état de routage principal traite l'erreur et ferme les actions
+    // privilégiées. La projection des sites bascule alors sur le chemin
+    // public legacy, sans conserver un ancien périmètre administratif.
+    onError: (_, _) => controller.add(null),
+    // La fermeture est volontairement absorbée : l'annulation du
+    // consommateur libère toujours la souscription et le flux enfant.
+    onDone: () {},
+  );
+  controller.onCancel = subscription.cancel;
+});
 
 class LiveCoordinationDataScope extends InheritedWidget {
   const LiveCoordinationDataScope({

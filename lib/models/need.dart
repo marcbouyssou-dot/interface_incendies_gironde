@@ -233,6 +233,7 @@ class ResponsePlace {
     this.structuredAddress,
     this.contactName,
     this.contactPhone,
+    this.managingOrganizationId,
     this.isOperational = true,
     this.isEnabled = true,
   });
@@ -245,6 +246,12 @@ class ResponsePlace {
   final LocationAddress? structuredAddress;
   final String? contactName;
   final String? contactPhone;
+
+  /// Organisation gestionnaire explicite du site.
+  ///
+  /// Une valeur absente conserve la compatibilité RC3 et est résolue vers
+  /// `legacy-gironde` exclusivement par `LegacyOrganizationResolver`.
+  final String? managingOrganizationId;
   final bool isOperational;
   final bool isEnabled;
   final int activeNeeds;

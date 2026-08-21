@@ -4,6 +4,7 @@ import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/repositories/firestore_location_mapper.dart';
 import 'package:interface_incendies_gironde/services/firestore_seed_service.dart';
+import 'package:interface_incendies_gironde/services/legacy_organization_resolver.dart';
 import 'package:interface_incendies_gironde/widgets/mission_location_details.dart';
 
 void main() {
@@ -19,7 +20,22 @@ void main() {
     expect(place.structuredAddress, isNull);
     expect(place.contactName, isNull);
     expect(place.contactPhone, isNull);
+    expect(place.managingOrganizationId, isNull);
     expect(place.publicAddressLabel, 'Adresse à renseigner');
+  });
+
+  test('an explicit site managing organization is parsed additively', () {
+    final place = FirestoreLocationMapper.fromFirestore(
+      id: 'hospital',
+      data: const {
+        'name': 'Hôpital de test',
+        'group': 'partnerSites',
+        'type': 'otherPartnerSite',
+        'managingOrganizationId': 'hospital-organization',
+      },
+    );
+
+    expect(place.managingOrganizationId, 'hospital-organization');
   });
 
   test('optional intervention contact fields remain Firestore compatible', () {
@@ -85,6 +101,20 @@ void main() {
     expect(ids, hasLength(65));
     expect(ids.toSet(), hasLength(65));
     expect(places.where((place) => place.name == 'Pauillac'), hasLength(1));
+    expect(
+      places.every((place) => place.managingOrganizationId == null),
+      isTrue,
+    );
+    expect(
+      places.every(
+        (place) =>
+            const LegacyOrganizationResolver().resolveSiteOrganizationId(
+              managingOrganizationId: place.managingOrganizationId,
+            ) ==
+            LegacyOrganizationResolver.legacyOrganizationId,
+      ),
+      isTrue,
+    );
   });
 
   test('all verification levels from the audited source are preserved', () {

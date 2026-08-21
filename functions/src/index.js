@@ -49,6 +49,11 @@ import {
 import {
   canCoordinateMobilization,
 } from './coordinator_mobilization_access.js';
+import {
+  canReadOrganizationMissionTeam,
+  LEGACY_ORGANIZATION_ID,
+  readOrganizationAuthorization,
+} from './organization_authorization.js';
 import {verifyRpps} from './ans_rpps_verification.js';
 import {
   ProfessionalRppsVerificationError,
@@ -1174,7 +1179,7 @@ export function userDisplayIdentityServices({firestore, auth}) {
         firestore.collection('roles').doc(callerUid).get(),
         firestore.collection('missions').doc(missionId).get(),
       ]);
-      if (!callerSnapshot.exists || !missionSnapshot.exists) {
+      if (!missionSnapshot.exists) {
         throw new UserDisplayIdentityError(
           'permission-denied',
           'Accès à cette équipe refusé.',
@@ -1182,12 +1187,11 @@ export function userDisplayIdentityServices({firestore, auth}) {
       }
       let access;
       try {
-        access = parseResponsibleAccess(callerSnapshot.data());
+        access = callerSnapshot.exists
+          ? parseResponsibleAccess(callerSnapshot.data())
+          : null;
       } catch {
-        throw new UserDisplayIdentityError(
-          'permission-denied',
-          'Accès à cette équipe refusé.',
-        );
+        access = null;
       }
       const mission = missionSnapshot.data();
       const mobilizationId = mission.mobilizationId;
@@ -1206,18 +1210,55 @@ export function userDisplayIdentityServices({firestore, auth}) {
         ]);
       const assignment = assignmentSnapshot.data();
       const mobilization = mobilizationSnapshot.data();
-      const canReadTerritory = canCoordinateMobilization({
+      let organizationId = LEGACY_ORGANIZATION_ID;
+      if (typeof mobilization?.operationId === 'string'
+        && mobilization.operationId !== '') {
+        const operationSnapshot = await firestore
+          .collection('operations')
+          .doc(mobilization.operationId)
+          .get();
+        const operation = operationSnapshot.data();
+        if (!operationSnapshot.exists
+          || (operation.ownerOrganizationId !== undefined
+            && (typeof operation.ownerOrganizationId !== 'string'
+              || operation.ownerOrganizationId === ''))) {
+          throw new UserDisplayIdentityError(
+            'permission-denied',
+            'Accès à cette équipe refusé.',
+          );
+        }
+        organizationId = operation.ownerOrganizationId
+          ?? LEGACY_ORGANIZATION_ID;
+      }
+      const organizationAuthorization = await readOrganizationAuthorization({
+        firestore,
+        organizationId,
         uid: callerUid,
-        role: callerSnapshot.data(),
-        assignment: assignmentSnapshot.exists ? assignment : null,
-        mobilization: mobilizationSnapshot.exists ? mobilization : null,
-        platformConfig: platformConfig.exists ? platformConfig.data() : null,
       });
-      const canReadLocation = access.active
+      const organizationAccess = !organizationAuthorization.usesLegacyFallback
+        && canReadOrganizationMissionTeam({
+          authorization: organizationAuthorization,
+          locationId: mission.locationId,
+        });
+      const legacyCoordinatorAccess =
+        organizationAuthorization.usesLegacyFallback
+        && access !== null
+        && canCoordinateMobilization({
+          uid: callerUid,
+          role: callerSnapshot.data(),
+          assignment: assignmentSnapshot.exists ? assignment : null,
+          mobilization: mobilizationSnapshot.exists ? mobilization : null,
+          platformConfig: platformConfig.exists ? platformConfig.data() : null,
+        });
+      const legacyLocationAccess =
+        organizationAuthorization.usesLegacyFallback
+        && access?.active === true
         && access.roles.includes('site_manager')
         && access.locationIds.includes(mission.locationId);
       if (
-        (!canReadTerritory && !canReadLocation)
+        (!organizationAccess
+          && !legacyCoordinatorAccess
+          && !legacyLocationAccess)
         || !mobilizationSnapshot.exists
         || mobilization?.status !== 'active'
         || mission.isActive !== true

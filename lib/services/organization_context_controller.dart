@@ -9,11 +9,11 @@ import '../models/organization_membership.dart';
 import '../repositories/organization_read_repository.dart';
 import 'legacy_organization_resolver.dart';
 
-/// Résout et publie le contexte Organisation sans participer aux autorisations.
+/// Résout et publie le contexte Organisation consommé par les politiques RC4.
 ///
-/// Pendant RC4.2A, les rôles RC3 restent la source de vérité des droits. Ce
-/// contrôleur lit les memberships RC4 et rend leur projection disponible aux
-/// futures couches contextualisées, mais ne filtre aucune donnée.
+/// Les memberships actives sont la source des rôles organisationnels. Le
+/// fallback RC3 reste centralisé dans le resolver et limité au périmètre
+/// `legacy-gironde`.
 class OrganizationContextController
     extends ValueNotifier<OrganizationContext?> {
   OrganizationContextController({
@@ -33,9 +33,8 @@ class OrganizationContextController
 
   /// Résout la session privilégiée RC3 dans l'organisation legacy canonique.
   ///
-  /// La valeur legacy est publiée immédiatement afin qu'une indisponibilité des
-  /// collections RC4 ne modifie jamais le routage RC3. Une membership inactive
-  /// reste observable dans le contexte, sans retirer les droits RC3 existants.
+  /// La valeur legacy est publiée immédiatement pendant la lecture RC4. Une
+  /// membership explicite, y compris inactive, devient ensuite prioritaire.
   void resolveLegacyIdentity({
     required String uid,
     Iterable<String> legacyRoleValues = const [],

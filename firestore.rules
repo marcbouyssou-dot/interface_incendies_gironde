@@ -558,6 +558,58 @@ service cloud.firestore {
         && membershipId == organizationId + '_' + uid;
     }
 
+    function hasValidOrganizationRoles(roles) {
+      return roles is list
+        && roles.size() > 0
+        && roles.size() <= 4
+        && roles.toSet().size() == roles.size()
+        && roles.toSet().hasOnly([
+          'organization_admin', 'coordinator', 'site_manager', 'professional'
+        ]);
+    }
+
+    function hasValidOrganizationLocationIds(locationIds) {
+      return locationIds == []
+        || (hasOnlyStringLocationIds(locationIds)
+          && hasNoBlankLocationIds(locationIds)
+          && !('*' in locationIds)
+          && locationIds.toSet().size() == locationIds.size());
+    }
+
+    function hasValidOrganizationRoleScope(roles, locationIds) {
+      return ('site_manager' in roles)
+        ? locationIds.size() > 0
+        : locationIds == [];
+    }
+
+    function isValidOrganizationMembershipFor(
+      organizationId,
+      uid,
+      membership
+    ) {
+      return membership.get('organizationId', '') == organizationId
+        && membership.get('uid', '') == uid
+        && membership.get('active', null) is bool
+        && hasValidOrganizationRoles(membership.get('roles', []))
+        && hasValidOrganizationLocationIds(
+          membership.get('locationIds', [])
+        )
+        && hasValidOrganizationRoleScope(
+          membership.get('roles', []),
+          membership.get('locationIds', [])
+        )
+        && membership.get('schemaVersion', 0) is int
+        && membership.get('schemaVersion', 0) >= 1;
+    }
+
+    function hasOrganizationMembershipDocument(organizationId) {
+      return isSignedIn()
+        && exists(organizationMembershipPath(
+          organizationId,
+          request.auth.uid
+        ));
+    }
+
     function hasActiveOrganizationMembership(organizationId) {
       let membershipPath = organizationMembershipPath(
         organizationId,
@@ -568,17 +620,67 @@ service cloud.firestore {
         : {};
       return isSignedIn()
         && exists(membershipPath)
-        && membership.get('organizationId', '') == organizationId
-        && membership.get('uid', '') == request.auth.uid
+        && isValidOrganizationMembershipFor(
+          organizationId,
+          request.auth.uid,
+          membership
+        )
         && membership.get('active', false) == true;
     }
 
+    function hasOrganizationRole(organizationId, roleName) {
+      let membershipPath = organizationMembershipPath(
+        organizationId,
+        request.auth.uid
+      );
+      return hasActiveOrganizationMembership(organizationId)
+        && roleName in get(membershipPath).data.roles;
+    }
+
+    function organizationMembershipLocationIds(organizationId) {
+      return get(organizationMembershipPath(
+        organizationId,
+        request.auth.uid
+      )).data.locationIds;
+    }
+
+    function hasLegacyOrganizationRole(organizationId, roleName) {
+      return organizationId == legacyOrganizationId()
+        && !hasOrganizationMembershipDocument(organizationId)
+        && hasActiveRole()
+        && hasRole(currentRole(), roleName);
+    }
+
+    function isOrganizationAdmin(organizationId) {
+      return hasOrganizationRole(organizationId, 'organization_admin');
+    }
+
+    function isOrganizationCoordinator(organizationId) {
+      return hasOrganizationRole(organizationId, 'coordinator')
+        || hasLegacyOrganizationRole(organizationId, 'coordinator');
+    }
+
+    function isOrganizationSiteManager(organizationId) {
+      return hasOrganizationRole(organizationId, 'site_manager')
+        || hasLegacyOrganizationRole(organizationId, 'site_manager');
+    }
+
+    function isOrganizationProfessional(organizationId) {
+      return hasOrganizationRole(organizationId, 'professional');
+    }
+
+    function canOrganizationSiteManagerAccessLocation(
+      organizationId,
+      locationId
+    ) {
+      return (hasOrganizationRole(organizationId, 'site_manager')
+          && locationId in organizationMembershipLocationIds(organizationId))
+        || (hasLegacyOrganizationRole(organizationId, 'site_manager')
+          && locationId in currentRole().locationIds);
+    }
+
     function hasActiveCanonicalMembershipDocument(organizationId) {
-      return isSignedIn()
-        && get(organizationMembershipPath(
-          organizationId,
-          request.auth.uid
-        )).data.get('active', false) == true;
+      return hasActiveOrganizationMembership(organizationId);
     }
 
     function legacyOrganizationId() {
@@ -606,7 +708,35 @@ service cloud.firestore {
     function canAccessOrganization(organizationId) {
       return isPlatformAdministrator()
         || hasActiveOrganizationMembership(organizationId)
-        || (organizationId == legacyOrganizationId() && hasActiveRole());
+        || isOrganizationCoordinator(organizationId)
+        || isOrganizationSiteManager(organizationId);
+    }
+
+    function locationManagingOrganizationId(location) {
+      return location.get('managingOrganizationId', legacyOrganizationId());
+    }
+
+    function hasValidLocationOrganization(location) {
+      return isNonBlankCanonicalText(
+        locationManagingOrganizationId(location)
+      );
+    }
+
+    function isLegacyPublicLocation(location) {
+      return hasValidLocationOrganization(location)
+        && locationManagingOrganizationId(location) == legacyOrganizationId();
+    }
+
+    function canReadPrivilegedLocation(locationId, location) {
+      let organizationId = locationManagingOrganizationId(location);
+      return hasValidLocationOrganization(location)
+        && (isPlatformAdministrator()
+          || isOrganizationAdmin(organizationId)
+          || isOrganizationCoordinator(organizationId)
+          || canOrganizationSiteManagerAccessLocation(
+            organizationId,
+            locationId
+          ));
     }
 
     function canReadOperationOrganization(operation) {
@@ -633,6 +763,18 @@ service cloud.firestore {
       return isSignedIn()
         && isCanonicalOrganizationMembership(membershipId, resource.data)
         && resource.data.get('uid', '') == request.auth.uid;
+    }
+
+    function canOrganizationAdminReadMembership(membershipId) {
+      let organizationId = resource.data.get('organizationId', '');
+      return isCanonicalOrganizationMembership(membershipId, resource.data)
+        && isOrganizationAdmin(organizationId);
+    }
+
+    function canOrganizationAdminListMembership() {
+      let organizationId = resource.data.get('organizationId', '');
+      return isNonBlankCanonicalText(organizationId)
+        && isOrganizationAdmin(organizationId);
     }
 
     function canUseProfessionalOwnerWritePath() {
@@ -687,6 +829,63 @@ service cloud.firestore {
         && canReadMobilizationOrganization(get(path).data);
     }
 
+    function canReadOrganizationMissionScope(mobilizationId, locationId) {
+      let currentMobilizationPath = mobilizationPath(mobilizationId);
+      let mobilization = exists(currentMobilizationPath)
+        ? get(currentMobilizationPath).data
+        : {};
+      let operationId = mobilization.get('operationId', '__missing__');
+      let currentOperationPath = operationPath(operationId);
+      let operation = hasValidMobilizationOperation(mobilization)
+          && exists(currentOperationPath)
+        ? get(currentOperationPath).data
+        : {};
+      let organizationId = isLegacyMobilization(mobilization)
+        ? legacyOrganizationId()
+        : operationOwnerOrganizationId(operation);
+      return exists(currentMobilizationPath)
+        && (isLegacyMobilization(mobilization)
+          || (hasValidMobilizationOperation(mobilization)
+            && exists(currentOperationPath)
+            && hasValidOperationOrganization(operation)))
+        && canOrganizationRoleReadMission(organizationId, locationId);
+    }
+
+    // Chemin d'autorisation compact pour rester sous la limite d'expressions
+    // Firestore lors d'une lecture Engagement (mission + mobilisation + rôle).
+    // Les memberships sont écrites exclusivement par backend privilégié.
+    function canOrganizationRoleReadMission(organizationId, locationId) {
+      let membershipPath = organizationMembershipPath(
+        organizationId,
+        request.auth.uid
+      );
+      let membership = isSignedIn() && exists(membershipPath)
+        ? get(membershipPath).data
+        : {};
+      let roles = membership.get('roles', []);
+      let locationIds = membership.get('locationIds', []);
+      return (isSignedIn()
+          && exists(membershipPath)
+          && membership.get('organizationId', '') == organizationId
+          && membership.get('uid', '') == request.auth.uid
+          && membership.get('active', false) == true
+          && roles is list
+          && roles.size() > 0
+          && roles.size() <= 4
+          && roles.toSet().hasOnly([
+            'organization_admin', 'coordinator', 'site_manager', 'professional'
+          ])
+          && locationIds is list
+          && membership.get('schemaVersion', 0) is int
+          && membership.get('schemaVersion', 0) >= 1
+          && (('site_manager' in roles && locationIds.size() > 0)
+            || (!('site_manager' in roles) && locationIds == []))
+          && ('coordinator' in roles
+            || ('site_manager' in roles
+              && locationIds.size() > 0
+              && locationId in locationIds)));
+    }
+
     function isLegacyMobilizationById(mobilizationId) {
       let path = mobilizationPath(mobilizationId);
       return exists(path) && isLegacyMobilization(get(path).data);
@@ -704,7 +903,8 @@ service cloud.firestore {
     }
 
     function canUseMobilizationOrganizationAsRole(mobilizationId) {
-      return isLegacyMobilizationById(mobilizationId)
+      return (isLegacyMobilizationById(mobilizationId)
+          && !hasOrganizationMembershipDocument(legacyOrganizationId()))
         || canUseExplicitMobilizationOrganizationAsRole(mobilizationId);
     }
 
@@ -723,6 +923,19 @@ service cloud.firestore {
           == engagement.get('mobilizationId', '')
         && canUseMobilizationOrganizationAsRole(
           engagement.get('mobilizationId', '')
+        );
+    }
+
+    function canReadOrganizationEngagement(engagement) {
+      let missionId = engagement.get('missionId', '__missing__');
+      let path = missionPath(missionId);
+      let mission = exists(path) ? get(path).data : {};
+      return exists(path)
+        && mission.get('mobilizationId', '')
+          == engagement.get('mobilizationId', '')
+        && canReadOrganizationMissionScope(
+          mission.get('mobilizationId', ''),
+          mission.get('locationId', '')
         );
     }
 
@@ -768,7 +981,8 @@ service cloud.firestore {
     }
 
     function canReadMissionScope(mobilizationId, locationId) {
-      return ((isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
+      return canReadOrganizationMissionScope(mobilizationId, locationId)
+        || ((isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
             || (isActiveSiteManager()
               && locationId in currentRole().locationIds))
           && canUseMobilizationOrganizationAsRole(mobilizationId))
@@ -1100,8 +1314,13 @@ service cloud.firestore {
     }
 
     match /locations/{locationId} {
-      allow read: if true;
-      allow write: if false;
+      // La projection publique RC3 reste limitée aux 65 sites Gironde, qui
+      // portent soit le propriétaire legacy explicite, soit aucun champ
+      // organisationnel. Les sites RC4 explicites exigent une identité
+      // privilégiée appartenant à leur organisation.
+      allow get, list: if isLegacyPublicLocation(resource.data)
+        || canReadPrivilegedLocation(locationId, resource.data);
+      allow create, update, delete: if false;
     }
 
     match /missions/{missionId} {
@@ -1113,7 +1332,11 @@ service cloud.firestore {
         && (resource.data.isActive == true
           || (isSignedIn()
             && exists(engagementPath(missionId, request.auth.uid)))
-          || canManageLocation(resource.data.locationId));
+          || canManageLocation(resource.data.locationId)
+          || canReadOrganizationMissionScope(
+            resource.data.mobilizationId,
+            resource.data.locationId
+          ));
       allow list: if resource.data.isActive == true
         && isActiveMobilization(resource.data.mobilizationId)
         && canReadMissionScope(
@@ -1160,12 +1383,16 @@ service cloud.firestore {
           resource.data.mobilizationId
         )
         && isActiveMobilization(resource.data.mobilizationId);
+      allow get: if canReadOrganizationEngagement(resource.data)
+        && isActiveMobilization(resource.data.mobilizationId);
       allow list: if isAssignedOrLegacyCoordinatorForMobilization(
           resource.data.mobilizationId
         )
         && canUseMobilizationOrganizationAsRole(
           resource.data.mobilizationId
         )
+        && isActiveMobilization(resource.data.mobilizationId);
+      allow list: if canReadOrganizationEngagement(resource.data)
         && isActiveMobilization(resource.data.mobilizationId);
       allow update: if resource.data.volunteerId == request.auth.uid
         && (validOwnerCancellation(engagementId)
@@ -1352,10 +1579,12 @@ service cloud.firestore {
 
     match /organizationMemberships/{membershipId} {
       allow get: if isPlatformAdministrator()
-        || canReadOwnOrganizationMembership(membershipId);
+        || canReadOwnOrganizationMembership(membershipId)
+        || canOrganizationAdminReadMembership(membershipId);
       allow list: if isPlatformAdministrator()
         || (isSignedIn()
-          && resource.data.get('uid', '') == request.auth.uid);
+          && resource.data.get('uid', '') == request.auth.uid)
+        || canOrganizationAdminListMembership();
       allow create, update, delete: if false;
     }
 

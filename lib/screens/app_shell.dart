@@ -11,10 +11,12 @@ import '../models/platform_administrator_access.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/admin_invitation_repository_scope.dart';
 import '../repositories/location_administration_repository_scope.dart';
+import '../repositories/location_read_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/operation_read_repository.dart';
 import '../repositories/organization_scoped_engagement_read_repository.dart';
 import '../repositories/organization_scoped_mission_read_repository.dart';
+import '../repositories/organization_scoped_location_read_repository.dart';
 import '../repositories/organization_scoped_operation_read_repository.dart';
 import '../repositories/organization_scoped_platform_read_repository.dart';
 import '../repositories/platform_actor_read_repository.dart';
@@ -28,6 +30,8 @@ import '../services/accessible_mobilizations_provider.dart';
 import '../services/current_mobilization_provider.dart';
 import '../services/operational_context_provider.dart';
 import '../services/organization_context_controller.dart';
+import '../services/organization_responsible_access_resolver.dart';
+import '../services/organization_scoped_accessible_mobilizations_provider.dart';
 import '../services/platform_administration_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
@@ -87,6 +91,7 @@ class _AppShellState extends State<AppShell> {
   String? _platformAdminResponsibleOperationId;
   String? _platformAdminCoordinatorOperationId;
   StreamSubscription<ResponsibleAccess?>? _accessSubscription;
+  StreamSubscription<String?>? _administrativeIdentitySubscription;
   StreamSubscription<List<CoordinationNeed>>? _missionsWarmupSubscription;
   StreamSubscription<List<ResponsePlace>>? _locationsWarmupSubscription;
   StreamSubscription<PlatformAdministratorAccess?>?
@@ -103,13 +108,24 @@ class _AppShellState extends State<AppShell> {
   PlatformReadRepository? _organizationScopedPlatformRepository;
   PlatformReadRepository? _mobilizationProviderRepository;
   MobilizationContextProvider? _organizationScopedMobilizationProvider;
+  AccessibleMobilizationsProvider? _rawAccessibleMobilizationsProvider;
+  PlatformReadRepository? _accessibleMobilizationsPlatformRepository;
+  OrganizationContextController? _accessibleMobilizationsContext;
+  AccessibleMobilizationsProvider?
+  _organizationScopedAccessibleMobilizationsProvider;
   MultiMobilizationCoordinationReadRepository? _rawMissionReadRepository;
   PlatformReadRepository? _missionPlatformRepository;
   MultiMobilizationCoordinationReadRepository?
   _organizationScopedMissionReadRepository;
   MissionAccessReadRepository? _engagementMissionRepository;
   MissionEngagementReadRepository? _organizationScopedEngagementReadRepository;
+  LocationReadRepository? _rawLocationReadRepository;
+  OrganizationContextController? _locationRepositoryContext;
+  LocationReadRepository? _organizationScopedLocationReadRepository;
+  LocationReadRepository? _platformLocationStreamRepository;
+  Stream<List<ResponsePlace>>? _platformLocationStream;
   ResponsibleAccess? _access;
+  String? _administrativeUid;
   PlatformAdministratorAccess? _platformAdministrator;
   bool _accessResolved = false;
   bool _accessResolutionFailed = false;
@@ -256,11 +272,13 @@ class _AppShellState extends State<AppShell> {
     final repository = RepositoryScope.rawOf(context);
     if (!identical(repository, _repository)) {
       unawaited(_accessSubscription?.cancel());
+      unawaited(_administrativeIdentitySubscription?.cancel());
       unawaited(_missionsWarmupSubscription?.cancel());
       unawaited(_locationsWarmupSubscription?.cancel());
       _liveData?.dispose();
       _disposePlatformAdminPreviewData();
       _repository = repository;
+      _administrativeUid = null;
       _readOnlyPreviewRepository = null;
       _readOnlyPreviewOperationId = null;
       _liveData = _createLiveData(repository);
@@ -269,6 +287,17 @@ class _AppShellState extends State<AppShell> {
         _handleAccess,
         onError: (_, _) => _handleAccessError(),
       );
+      if (repository is AdministrativeIdentityReadRepository) {
+        _administrativeIdentitySubscription =
+            (repository as AdministrativeIdentityReadRepository)
+                .watchAdministrativeUid()
+                .listen(
+                  _handleAdministrativeUid,
+                  onError: (_, _) => _handleAdministrativeUid(null),
+                );
+      } else {
+        _administrativeIdentitySubscription = null;
+      }
       _prewarmMissionData();
     }
   }
@@ -276,6 +305,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     unawaited(_accessSubscription?.cancel());
+    unawaited(_administrativeIdentitySubscription?.cancel());
     unawaited(_missionsWarmupSubscription?.cancel());
     unawaited(_locationsWarmupSubscription?.cancel());
     unawaited(_platformAdministratorSubscription?.cancel());
@@ -429,6 +459,12 @@ class _AppShellState extends State<AppShell> {
     _syncOrganizationContext();
   }
 
+  void _handleAdministrativeUid(String? uid) {
+    if (!mounted || uid == _administrativeUid) return;
+    _administrativeUid = uid;
+    _syncOrganizationContext();
+  }
+
   void _handleAccessError() {
     if (!mounted) return;
     markStartupEvent('mobsante-role-route-ready');
@@ -456,15 +492,24 @@ class _AppShellState extends State<AppShell> {
       );
       return;
     }
-    final access = _access;
-    if (access?.active == true) {
-      controller.resolveLegacyIdentity(
-        uid: access!.uid,
-        legacyRoleValues: access.roles,
-      );
+    final uid = _administrativeUid ?? _access?.uid;
+    if (uid == null) {
+      controller.clear();
       return;
     }
-    controller.clear();
+    final current = controller.value;
+    if (current != null &&
+        current.uid == uid &&
+        (current.membership != null || !current.isLegacy)) {
+      return;
+    }
+    final access = _access;
+    controller.resolveLegacyIdentity(
+      uid: uid,
+      legacyRoleValues: access?.active == true && access?.uid == uid
+          ? access!.roles
+          : const [],
+    );
   }
 
   OperationReadRepository? _contextualizedOperationRepository(
@@ -529,6 +574,33 @@ class _AppShellState extends State<AppShell> {
     return _organizationScopedMobilizationProvider;
   }
 
+  AccessibleMobilizationsProvider? _contextualizedAccessibleMobilizations(
+    MultiOperationPlatformRuntime? runtime,
+    PlatformReadRepository? platformRepository,
+  ) {
+    if (runtime == null || platformRepository == null) return null;
+    final rawProvider = runtime.accessibleMobilizationsProvider;
+    final context = _organizationContextController;
+    if (context == null) return rawProvider;
+    if (!identical(rawProvider, _rawAccessibleMobilizationsProvider) ||
+        !identical(
+          platformRepository,
+          _accessibleMobilizationsPlatformRepository,
+        ) ||
+        !identical(context, _accessibleMobilizationsContext)) {
+      _rawAccessibleMobilizationsProvider = rawProvider;
+      _accessibleMobilizationsPlatformRepository = platformRepository;
+      _accessibleMobilizationsContext = context;
+      _organizationScopedAccessibleMobilizationsProvider =
+          OrganizationScopedAccessibleMobilizationsProvider(
+            legacyDelegate: rawProvider,
+            organizationRepository: platformRepository,
+            context: context,
+          );
+    }
+    return _organizationScopedAccessibleMobilizationsProvider;
+  }
+
   MultiMobilizationCoordinationReadRepository?
   _contextualizedMissionReadRepository(
     PlatformReadRepository? platformRepository,
@@ -578,6 +650,37 @@ class _AppShellState extends State<AppShell> {
     return _organizationScopedEngagementReadRepository;
   }
 
+  LocationReadRepository _contextualizedLocationReadRepository(
+    CoordinationRepository repository,
+  ) {
+    final context = _organizationContextController;
+    if (context == null) return repository;
+    if (!identical(repository, _rawLocationReadRepository) ||
+        !identical(context, _locationRepositoryContext)) {
+      _rawLocationReadRepository = repository;
+      _locationRepositoryContext = context;
+      _organizationScopedLocationReadRepository =
+          OrganizationScopedLocationReadRepository(
+            delegate: repository,
+            context: context,
+          );
+    }
+    return _organizationScopedLocationReadRepository!;
+  }
+
+  Stream<List<ResponsePlace>> _contextualizedPlatformLocationStream(
+    CoordinationRepository repository,
+  ) {
+    final locationRepository = _contextualizedLocationReadRepository(
+      repository,
+    );
+    if (!identical(locationRepository, _platformLocationStreamRepository)) {
+      _platformLocationStreamRepository = locationRepository;
+      _platformLocationStream = locationRepository.watchLocations();
+    }
+    return _platformLocationStream!;
+  }
+
   LiveCoordinationData _createLiveData(CoordinationRepository repository) {
     final multiRuntime = widget.platformRuntime is MultiOperationPlatformRuntime
         ? widget.platformRuntime! as MultiOperationPlatformRuntime
@@ -592,11 +695,27 @@ class _AppShellState extends State<AppShell> {
     final missionRepository = _contextualizedMissionReadRepository(
       platformRepository,
     );
+    final locationRepository = _contextualizedLocationReadRepository(
+      repository,
+    );
     return LiveCoordinationData(
       repository,
+      responsibleAccessOverride:
+          _organizationContextController == null ||
+              repository is! AdministrativeIdentityReadRepository
+          ? null
+          : () => const OrganizationResponsibleAccessResolver().watch(
+              legacyAccess: repository.watchResponsibleAccess(),
+              context: _organizationContextController!,
+              closeWhenLegacyAccessCloses: false,
+            ),
       administrativeMissionRepository: missionRepository,
       administrativeEngagementRepository:
           _contextualizedEngagementReadRepository(missionRepository),
+      administrativeLocationRepository:
+          widget.useLegacyCoordinatorShellForTesting
+          ? null
+          : locationRepository,
     );
   }
 
@@ -711,9 +830,15 @@ class _AppShellState extends State<AppShell> {
       widget.platformRuntime,
       platformRepository,
     );
+    final accessibleMobilizationsProvider =
+        _contextualizedAccessibleMobilizations(
+          multiRuntime,
+          platformRepository,
+        );
     final multiReadRepository = _contextualizedMissionReadRepository(
       platformRepository,
     );
+    final locationStream = _contextualizedPlatformLocationStream(_repository!);
     final previewReadRepository =
         crossRolePreview && multiReadRepository != null
         ? _PlatformAdminPreviewMissionRepository(
@@ -777,7 +902,7 @@ class _AppShellState extends State<AppShell> {
                               allowedMobilizationIds:
                                   operationPreviewContext?.mobilizationIds,
                             )
-                    : multiRuntime?.accessibleMobilizationsProvider,
+                    : accessibleMobilizationsProvider,
                 multiMobilizationRepository: previewReadRepository,
                 multiMobilizationMutationRepository: crossRolePreview
                     ? null
@@ -794,7 +919,7 @@ class _AppShellState extends State<AppShell> {
             widget.platformRuntime!.platformAdministrationService,
         operationRepository: operationRepository,
         missionRepository: multiReadRepository,
-        locationStream: _liveData!.watchLocations(),
+        locationStream: locationStream,
         actorRepository: widget.platformRuntime is PlatformActorRuntime
             ? (widget.platformRuntime! as PlatformActorRuntime)
                   .platformActorReadRepository

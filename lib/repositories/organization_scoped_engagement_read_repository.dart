@@ -29,15 +29,15 @@ class OrganizationScopedEngagementReadRepository
       if (mission == null || mission.id != missionId) {
         return Stream<List<EngagementInfo>>.value(const []);
       }
-      return _delegate
-          .watchMissionEngagements(missionId)
-          .map(
-            (engagements) => List<EngagementInfo>.unmodifiable(
-              engagements.where(
-                (engagement) => engagement.missionId == missionId,
-              ),
-            ),
-          );
+      final source = _delegate is OrganizationEngagementReadDataSource
+          ? (_delegate as OrganizationEngagementReadDataSource)
+                .watchAuthorizedMissionEngagements(missionId)
+          : _delegate.watchMissionEngagements(missionId);
+      return source.map(
+        (engagements) => List<EngagementInfo>.unmodifiable(
+          engagements.where((engagement) => engagement.missionId == missionId),
+        ),
+      );
     });
   }
 }

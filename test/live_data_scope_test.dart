@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
+import 'package:interface_incendies_gironde/repositories/location_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 
 void main() {
@@ -262,6 +263,54 @@ void main() {
     },
   );
 
+  test('professional location flow keeps the public RC3 repository', () async {
+    final repository = _RoleAwareMultiRepository(access: null);
+    final administrativeRepository = _AdministrativeLocationRepository();
+    final data = LiveCoordinationData(
+      repository,
+      administrativeLocationRepository: administrativeRepository,
+    );
+
+    final locations = await data.watchLocations().first;
+
+    expect(locations.map((location) => location.id), ['public-location']);
+    expect(repository.locationReads, 1);
+    expect(administrativeRepository.reads, 0);
+    await data.dispose();
+  });
+
+  test(
+    'responsible and coordinator locations use the scoped repository',
+    () async {
+      for (final entry in const [
+        (ResponsibleRole.siteManager, ['site-a']),
+        (ResponsibleRole.coordinator, ['site-a', 'site-b']),
+      ]) {
+        final role = entry.$1;
+        final repository = _RoleAwareMultiRepository(
+          access: ResponsibleAccess(
+            uid: role,
+            role: role,
+            locationIds: const {'site-a'},
+            active: true,
+          ),
+        );
+        final administrativeRepository = _AdministrativeLocationRepository();
+        final data = LiveCoordinationData(
+          repository,
+          administrativeLocationRepository: administrativeRepository,
+        );
+
+        final locations = await data.watchLocations().first;
+
+        expect(locations.map((location) => location.id), entry.$2);
+        expect(repository.locationReads, 0);
+        expect(administrativeRepository.reads, 1);
+        await data.dispose();
+      }
+    },
+  );
+
   test(
     'administrative engagement scope never replaces UID owner reads',
     () async {
@@ -408,6 +457,7 @@ class _RoleAwareMultiRepository extends MockCoordinationRepository
 
   final ResponsibleAccess? access;
   int allMissionReads = 0;
+  int locationReads = 0;
 
   @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() =>
@@ -428,6 +478,25 @@ class _RoleAwareMultiRepository extends MockCoordinationRepository
   Stream<List<CoordinationNeed>> watchMissionsForMobilizations(
     Set<String> mobilizationIds,
   ) => Stream.value(const []);
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    locationReads++;
+    return Stream.value([_location('public-location', 'Site public')]);
+  }
+}
+
+class _AdministrativeLocationRepository implements LocationReadRepository {
+  int reads = 0;
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    reads++;
+    return Stream.value([
+      _location('site-a', 'Site autorisé'),
+      _location('site-b', 'Autre site'),
+    ]);
+  }
 }
 
 class _AdministrativeMissionRepository

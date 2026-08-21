@@ -133,6 +133,7 @@ void main() {
         expect(fixture.missionDataSource.listReads, 0);
         expect(fixture.missionDataSource.targetedReads, 1);
         expect(fixture.engagementDataSource.reads, 1);
+        expect(fixture.engagementDataSource.legacyReads, 0);
         expect(fixture.engagementDataSource.requestedMissionIds, [
           'mission-gironde',
         ]);
@@ -295,16 +296,30 @@ class _ScopedMissionRepository
   ) => throw UnsupportedError('Not used by engagement scoping.');
 }
 
-class _EngagementRepository implements MissionEngagementReadRepository {
+class _EngagementRepository
+    implements
+        MissionEngagementReadRepository,
+        OrganizationEngagementReadDataSource {
   _EngagementRepository(this.engagements);
 
   final List<EngagementInfo> engagements;
   final List<String> requestedMissionIds = [];
   int reads = 0;
+  int legacyReads = 0;
   bool injectCrossMissionResult = false;
 
   @override
   Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
+    legacyReads++;
+    return _watch(missionId);
+  }
+
+  @override
+  Stream<List<EngagementInfo>> watchAuthorizedMissionEngagements(
+    String missionId,
+  ) => _watch(missionId);
+
+  Stream<List<EngagementInfo>> _watch(String missionId) {
     reads++;
     requestedMissionIds.add(missionId);
     final values = engagements

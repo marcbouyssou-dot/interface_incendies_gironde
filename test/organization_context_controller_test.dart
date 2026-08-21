@@ -7,8 +7,8 @@ import 'package:interface_incendies_gironde/models/organization_category.dart';
 import 'package:interface_incendies_gironde/models/organization_membership.dart';
 import 'package:interface_incendies_gironde/models/organization_role.dart';
 import 'package:interface_incendies_gironde/models/organization_visibility.dart';
-import 'package:interface_incendies_gironde/models/responsible_access.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
@@ -219,7 +219,7 @@ void main() {
           organizationContextController: controller,
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpOrganizationRouting(tester);
 
       expect(find.byType(CoordinatorShell), findsOneWidget);
       expect(controller.value?.organization?.id, 'legacy-gironde');
@@ -235,6 +235,7 @@ void main() {
           'responsible-a': _membership(
             uid: 'responsible-a',
             roles: const {OrganizationRole.siteManager},
+            locationIds: const {'merignac'},
           ),
         },
       );
@@ -255,12 +256,52 @@ void main() {
           organizationContextController: controller,
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpOrganizationRouting(tester);
 
       expect(find.byType(ResponsibleShell), findsOneWidget);
       expect(controller.value?.organization?.id, 'legacy-gironde');
       expect(controller.value?.effectiveRoles, {OrganizationRole.siteManager});
     });
+
+    testWidgets(
+      'membership-only coordinator is routed without a legacy role document',
+      (tester) async {
+        final repository = _RecordingOrganizationRepository(
+          organization: _legacyOrganization(),
+          memberships: {
+            'membership-coordinator': _membership(
+              uid: 'membership-coordinator',
+              roles: const {
+                OrganizationRole.coordinator,
+                OrganizationRole.professional,
+              },
+            ),
+          },
+        );
+        final controller = OrganizationContextController(
+          repository: repository,
+        );
+        addTearDown(controller.dispose);
+
+        await tester.pumpWidget(
+          FireCoordinationApp(
+            repository: _MembershipOnlyCoordinationRepository(
+              'membership-coordinator',
+            ),
+            organizationReadRepository: repository,
+            organizationContextController: controller,
+          ),
+        );
+        await _pumpOrganizationRouting(tester);
+
+        expect(find.byType(CoordinatorShell), findsOneWidget);
+        expect(controller.value?.membership, isNotNull);
+        expect(controller.value?.effectiveRoles, {
+          OrganizationRole.coordinator,
+          OrganizationRole.professional,
+        });
+      },
+    );
 
     testWidgets(
       'professional journey performs no organization read or filter',
@@ -280,7 +321,7 @@ void main() {
             organizationContextController: controller,
           ),
         );
-        await tester.pumpAndSettle();
+        await _pumpOrganizationRouting(tester);
 
         expect(find.byType(ProfessionalShell), findsOneWidget);
         expect(controller.value, isNull);
@@ -289,6 +330,12 @@ void main() {
       },
     );
   });
+}
+
+Future<void> _pumpOrganizationRouting(WidgetTester tester) async {
+  for (var index = 0; index < 6; index++) {
+    await tester.pump(const Duration(milliseconds: 20));
+  }
 }
 
 class _RecordingOrganizationRepository implements OrganizationReadRepository {
@@ -343,16 +390,29 @@ Organization _legacyOrganization() => Organization(
 OrganizationMembership _membership({
   required String uid,
   required Set<OrganizationRole> roles,
+  Set<String> locationIds = const {},
   bool active = true,
 }) => OrganizationMembership(
   organizationId: LegacyOrganizationResolver.legacyOrganizationId,
   uid: uid,
   roles: roles,
+  locationIds: locationIds,
   active: active,
   createdAt: DateTime.utc(2026, 8, 21),
   updatedAt: DateTime.utc(2026, 8, 21),
   schemaVersion: 1,
 );
+
+class _MembershipOnlyCoordinationRepository extends MockCoordinationRepository
+    implements AdministrativeIdentityReadRepository {
+  _MembershipOnlyCoordinationRepository(this.uid)
+    : super(responsibleAccess: null);
+
+  final String uid;
+
+  @override
+  Stream<String?> watchAdministrativeUid() => Stream.value(uid);
+}
 
 Operation _operation({String? ownerOrganizationId}) => Operation.fromMap({
   'id': 'operation-a',

@@ -198,6 +198,56 @@ async function seedOrganizations() {
   });
 }
 
+async function seedOrganizationLocations() {
+  await seedOrganizations();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'locations/legacy-implicit'), {
+      id: 'legacy-implicit',
+      name: 'Site legacy implicite',
+      group: 'medoc',
+      type: 'sdisStation',
+      isActive: true,
+      contactName: 'Contact legacy',
+      contactPhone: '0600000000',
+    });
+    await setDoc(doc(admin, 'locations/legacy-explicit'), {
+      id: 'legacy-explicit',
+      name: 'Site legacy explicite',
+      group: 'medoc',
+      type: 'sdisStation',
+      isActive: true,
+      managingOrganizationId: 'legacy-gironde',
+    });
+    await setDoc(doc(admin, 'locations/site-organization-a'), {
+      id: 'site-organization-a',
+      name: 'Site organisation A',
+      group: 'partnerSites',
+      type: 'otherPartnerSite',
+      isActive: true,
+      managingOrganizationId: 'organization-a',
+    });
+    await setDoc(doc(admin, 'locations/site-organization-b'), {
+      id: 'site-organization-b',
+      name: 'Site organisation B',
+      group: 'partnerSites',
+      type: 'otherPartnerSite',
+      isActive: true,
+      managingOrganizationId: 'organization-b',
+    });
+    await setDoc(doc(admin, 'roles/legacy-coordinator'), {
+      role: 'coordinator',
+      locationIds: ['*'],
+      active: true,
+    });
+    await setDoc(doc(admin, 'roles/legacy-manager'), {
+      role: 'site_manager',
+      locationIds: ['legacy-implicit'],
+      active: true,
+    });
+  });
+}
+
 async function seedMultiOrganizationCore() {
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
@@ -293,6 +343,68 @@ async function seedMultiOrganizationCore() {
       await setDoc(doc(admin, `missions/${missionId}`), mission({
         id: missionId,
         mobilizationId,
+      }));
+      await setDoc(
+        doc(admin, `engagements/${missionId}_professional`),
+        {
+          missionId,
+          mobilizationId,
+          volunteerId: 'professional',
+          profession: 'mk',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          status: 'confirmed',
+        },
+      );
+    }
+  });
+}
+
+async function seedOrganizationRoleScope({
+  uid,
+  organizationId,
+  roles,
+  locationIds = [],
+  active = true,
+  seedDocuments = true,
+}) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(admin, `organizationMemberships/${organizationId}_${uid}`),
+      organizationMembership(organizationId, uid, {
+        roles,
+        locationIds,
+        active,
+      }),
+    );
+    if (!seedDocuments) return;
+    for (const [locationId, managingOrganizationId] of [
+      ['site-rc43d-a', 'organization-a'],
+      ['site-rc43d-a-other', 'organization-a'],
+      ['site-rc43d-b', 'organization-b'],
+      ['site-rc43d-b-outside', 'organization-b'],
+    ]) {
+      await setDoc(doc(admin, `locations/${locationId}`), {
+        id: locationId,
+        name: locationId,
+        group: 'partnerSites',
+        type: 'otherPartnerSite',
+        isActive: true,
+        managingOrganizationId,
+      });
+    }
+    for (const [missionId, mobilizationId, locationId] of [
+      ['mission-rc43d-a', 'mobilization-a', 'site-rc43d-a'],
+      ['mission-rc43d-a-other', 'mobilization-a', 'site-rc43d-a-other'],
+      ['mission-rc43d-b', 'mobilization-b', 'site-rc43d-b'],
+      ['mission-rc43d-b-outside', 'mobilization-b', 'site-rc43d-b-outside'],
+    ]) {
+      await setDoc(doc(admin, `missions/${missionId}`), mission({
+        id: missionId,
+        mobilizationId,
+        locationId,
+        locationName: locationId,
       }));
       await setDoc(
         doc(admin, `engagements/${missionId}_professional`),
@@ -595,9 +707,91 @@ async function cancelMission(uid, changes = {}) {
 test('locations: public read allowed, all writes denied', async () => {
   await seed();
   assert.equal((await assertSucceeds(getDoc(doc(db(), 'locations/site-a')))).exists(), true);
+  assert.equal((await assertSucceeds(getDocs(collection(db(), 'locations')))).size, 2);
   await assertFails(setDoc(doc(db('u'), 'locations/new'), {name: 'x'}));
   await assertFails(updateDoc(doc(db('u'), 'locations/site-a'), {name: 'x'}));
   await assertFails(deleteDoc(doc(db('u'), 'locations/site-a')));
+});
+
+test('RC4.3B: legacy locations remain public for RC3 professionals', async () => {
+  await seedOrganizationLocations();
+
+  await assertSucceeds(getDoc(doc(db(), 'locations/legacy-implicit')));
+  await assertSucceeds(getDoc(doc(db(), 'locations/legacy-explicit')));
+  await assertSucceeds(getDoc(
+    doc(db('legacy-coordinator'), 'locations/legacy-implicit'),
+  ));
+  await assertSucceeds(getDoc(
+    doc(db('legacy-manager'), 'locations/legacy-implicit'),
+  ));
+  await assertFails(getDoc(doc(
+    db(),
+    'locations/site-organization-a',
+  )));
+});
+
+test('RC4.3B: organization members only read their managed locations', async () => {
+  await seedOrganizationLocations();
+  const memberDb = db('member-a');
+
+  await assertSucceeds(getDoc(doc(
+    memberDb,
+    'locations/site-organization-a',
+  )));
+  await assertFails(getDoc(doc(
+    memberDb,
+    'locations/site-organization-b',
+  )));
+  const ownLocations = await assertSucceeds(getDocs(query(
+    collection(memberDb, 'locations'),
+    where('managingOrganizationId', '==', 'organization-a'),
+  )));
+  assert.deepEqual(ownLocations.docs.map((item) => item.id), [
+    'site-organization-a',
+  ]);
+  await assertFails(getDocs(query(
+    collection(memberDb, 'locations'),
+    where('managingOrganizationId', '==', 'organization-b'),
+  )));
+});
+
+test('RC4.3B: platform admin is global and inactive membership is refused', async () => {
+  await seedOrganizationLocations();
+
+  const locations = await assertSucceeds(getDocs(
+    collection(db('platform-admin'), 'locations'),
+  ));
+  assert.equal(locations.size, 4);
+  await assertFails(getDoc(doc(
+    db('inactive-member'),
+    'locations/site-organization-a',
+  )));
+  // Le site legacy reste la projection publique RC3, indépendamment du rôle.
+  await assertSucceeds(getDoc(doc(
+    db('inactive-member'),
+    'locations/legacy-implicit',
+  )));
+});
+
+test('RC4.3B: no client identity gains a location write', async () => {
+  await seedOrganizationLocations();
+
+  for (const uid of [null, 'member-a', 'platform-admin']) {
+    const userDb = db(uid);
+    await assertFails(setDoc(doc(userDb, 'locations/forged'), {
+      id: 'forged',
+      name: 'Site forgé',
+      managingOrganizationId: 'organization-a',
+    }));
+    await assertFails(updateDoc(
+      doc(userDb, 'locations/site-organization-a'),
+      {name: 'Site modifié'},
+    ));
+    await assertFails(deleteDoc(doc(
+      userDb,
+      'locations/site-organization-a',
+    )));
+  }
 });
 
 test('missions: public active read and anonymous create denied', async () => {
@@ -3288,6 +3482,294 @@ test('RC4.1F: every client organization write is denied', async () => {
       'organizationMemberships/organization-a_member-a',
     )));
   }
+});
+
+test('RC4.3C: organization admin reads memberships only inside its organization', async () => {
+  await seedOrganizations();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(admin, 'organizationMemberships/organization-a_coordinator-a'),
+      organizationMembership('organization-a', 'coordinator-a', {
+        roles: ['coordinator'],
+      }),
+    );
+    await setDoc(
+      doc(admin, 'organizationMemberships/organization-b_coordinator-a'),
+      organizationMembership('organization-b', 'coordinator-a', {
+        roles: ['site_manager'],
+        locationIds: ['site-b'],
+      }),
+    );
+  });
+  const organizationAdminDb = db('member-a');
+
+  await assertSucceeds(getDoc(doc(
+    organizationAdminDb,
+    'organizationMemberships/organization-a_coordinator-a',
+  )));
+  await assertFails(getDoc(doc(
+    organizationAdminDb,
+    'organizationMemberships/organization-b_coordinator-a',
+  )));
+  const memberships = await assertSucceeds(getDocs(query(
+    collection(organizationAdminDb, 'organizationMemberships'),
+    where('organizationId', '==', 'organization-a'),
+  )));
+  assert.equal(memberships.size, 3);
+  await assertFails(getDocs(query(
+    collection(organizationAdminDb, 'organizationMemberships'),
+    where('organizationId', '==', 'organization-b'),
+  )));
+});
+
+test('RC4.3C: coordinator and site manager do not inherit organization admin', async () => {
+  await seedOrganizations();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    for (const [uid, role] of [
+      ['coordinator-a', 'coordinator'],
+      ['manager-a', 'site_manager'],
+    ]) {
+      await setDoc(
+        doc(admin, `organizationMemberships/organization-a_${uid}`),
+        organizationMembership('organization-a', uid, {
+          roles: [role],
+          locationIds: role === 'site_manager' ? ['site-a'] : [],
+        }),
+      );
+    }
+  });
+
+  for (const uid of ['coordinator-a', 'manager-a']) {
+    const userDb = db(uid);
+    await assertSucceeds(getDoc(doc(
+      userDb,
+      `organizationMemberships/organization-a_${uid}`,
+    )));
+    await assertFails(getDoc(doc(
+      userDb,
+      'organizationMemberships/organization-a_member-a',
+    )));
+    await assertSucceeds(getDoc(doc(
+      userDb,
+      'organizations/organization-a',
+    )));
+  }
+});
+
+test('RC4.3C: inactive and malformed memberships never grant a role', async () => {
+  await seedOrganizations();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(admin, 'organizationMemberships/organization-a_inactive-admin'),
+      organizationMembership('organization-a', 'inactive-admin', {
+        roles: ['organization_admin'],
+        active: false,
+      }),
+    );
+    await setDoc(
+      doc(admin, 'organizationMemberships/organization-a_malformed-admin'),
+      organizationMembership('organization-a', 'malformed-admin', {
+        roles: ['organization_admin', 'unknown'],
+      }),
+    );
+  });
+
+  for (const uid of ['inactive-admin', 'malformed-admin']) {
+    const userDb = db(uid);
+    await assertFails(getDoc(doc(
+      userDb,
+      'organizations/organization-a',
+    )));
+    await assertFails(getDoc(doc(
+      userDb,
+      'organizationMemberships/organization-a_member-a',
+    )));
+  }
+});
+
+test('RC4.3C: roles uid fallback is restricted to legacy Gironde', async () => {
+  await seedOrganizations();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'roles/legacy-only'), {
+      role: 'coordinator',
+      locationIds: [],
+      active: true,
+    });
+    await setDoc(doc(admin, 'roles/legacy-inactive-membership'), {
+      role: 'coordinator',
+      locationIds: [],
+      active: true,
+    });
+    await setDoc(
+      doc(
+        admin,
+        'organizationMemberships/legacy-gironde_legacy-inactive-membership',
+      ),
+      organizationMembership('legacy-gironde', 'legacy-inactive-membership', {
+        roles: ['coordinator'],
+        active: false,
+      }),
+    );
+    await setDoc(doc(admin, 'operations/legacy-fallback-operation'), {
+      id: 'legacy-fallback-operation',
+      name: 'Opération legacy',
+      type: 'emergency',
+      status: 'draft',
+    });
+    await setDoc(doc(admin, 'operations/organization-a-operation'), {
+      id: 'organization-a-operation',
+      name: 'Opération A',
+      type: 'emergency',
+      status: 'draft',
+      ownerOrganizationId: 'organization-a',
+    });
+  });
+
+  await assertSucceeds(getDoc(doc(
+    db('legacy-only'),
+    'operations/legacy-fallback-operation',
+  )));
+  await assertFails(getDoc(doc(
+    db('legacy-only'),
+    'operations/organization-a-operation',
+  )));
+  await assertFails(getDoc(doc(
+    db('legacy-inactive-membership'),
+    'operations/legacy-fallback-operation',
+  )));
+});
+
+test('RC4.3D: coordinator membership is isolated to its organization', async () => {
+  await seedMultiOrganizationCore();
+  await seedOrganizationRoleScope({
+    uid: 'organization-coordinator-a',
+    organizationId: 'organization-a',
+    roles: ['coordinator', 'professional'],
+  });
+
+  const coordinatorDb = db('organization-coordinator-a');
+  await assertSucceeds(getDoc(doc(
+    coordinatorDb,
+    'engagements/mission-rc43d-a_professional',
+  )));
+  await assertFails(getDoc(doc(
+    coordinatorDb,
+    'engagements/mission-rc43d-b_professional',
+  )));
+  await assertSucceeds(getDoc(doc(
+    coordinatorDb,
+    'locations/site-rc43d-a',
+  )));
+  await assertFails(getDoc(doc(
+    coordinatorDb,
+    'locations/site-rc43d-b',
+  )));
+  await assertFails(getDocs(collection(
+    coordinatorDb,
+    'platformAdministrators',
+  )));
+});
+
+test('RC4.3D: site manager membership is limited to declared organization sites', async () => {
+  await seedMultiOrganizationCore();
+  await seedOrganizationRoleScope({
+    uid: 'organization-manager-a',
+    organizationId: 'organization-a',
+    roles: ['site_manager'],
+    locationIds: ['site-rc43d-a'],
+  });
+
+  const managerDb = db('organization-manager-a');
+  await assertSucceeds(getDoc(doc(managerDb, 'locations/site-rc43d-a')));
+  await assertFails(getDoc(doc(managerDb, 'locations/site-rc43d-a-other')));
+  await assertFails(getDoc(doc(managerDb, 'locations/site-rc43d-b')));
+  await assertSucceeds(getDoc(doc(
+    managerDb,
+    'engagements/mission-rc43d-a_professional',
+  )));
+  await assertFails(getDoc(doc(
+    managerDb,
+    'engagements/mission-rc43d-a-other_professional',
+  )));
+  await assertFails(getDoc(doc(
+    managerDb,
+    'engagements/mission-rc43d-b_professional',
+  )));
+});
+
+test('RC4.3D: one UID keeps distinct coordinator and manager roles in A and B', async () => {
+  await seedMultiOrganizationCore();
+  await seedOrganizationRoleScope({
+    uid: 'organization-multi-role',
+    organizationId: 'organization-a',
+    roles: ['organization_admin', 'coordinator'],
+  });
+  await seedOrganizationRoleScope({
+    uid: 'organization-multi-role',
+    organizationId: 'organization-b',
+    roles: ['site_manager'],
+    locationIds: ['site-rc43d-b'],
+    seedDocuments: false,
+  });
+
+  const userDb = db('organization-multi-role');
+  await assertSucceeds(getDoc(doc(
+    userDb,
+    'engagements/mission-rc43d-a_professional',
+  )));
+  await assertSucceeds(getDoc(doc(
+    userDb,
+    'engagements/mission-rc43d-b_professional',
+  )));
+  await assertFails(getDoc(doc(
+    userDb,
+    'engagements/mission-rc43d-b-outside_professional',
+  )));
+});
+
+test('RC4.3D: inactive membership blocks organization roles and legacy fallback', async () => {
+  await seedMultiOrganizationCore();
+  await seedOrganizationRoleScope({
+    uid: 'organization-inactive-coordinator',
+    organizationId: 'organization-a',
+    roles: ['coordinator'],
+    active: false,
+  });
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(
+      admin,
+      'roles/organization-inactive-coordinator',
+    ), {
+      role: 'coordinator',
+      locationIds: [],
+      active: true,
+    });
+    await setDoc(
+      doc(
+        admin,
+        'organizationMemberships/legacy-gironde_organization-inactive-coordinator',
+      ),
+      organizationMembership(
+        'legacy-gironde',
+        'organization-inactive-coordinator',
+        {roles: ['coordinator'], active: false},
+      ),
+    );
+  });
+
+  await assertFails(getDoc(doc(
+    db('organization-inactive-coordinator'),
+    'engagements/mission-rc43d-a_professional',
+  )));
+  await assertFails(getDoc(doc(
+    db('organization-inactive-coordinator'),
+    'engagements/mission-legacy_professional',
+  )));
 });
 
 test('RC4.2G: organization member is isolated across the complete parent chain', async () => {

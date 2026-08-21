@@ -37,6 +37,7 @@ import 'firestore_platform_read_repository.dart';
 import 'firestore_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 import 'location_administration_repository.dart';
+import 'location_read_repository.dart';
 import 'operation_read_repository.dart';
 import 'platform_administration_read_repository.dart';
 import 'platform_actor_read_repository.dart';
@@ -231,6 +232,9 @@ String requireMatchingMobilizationId({
 class FirestoreCoordinationRepository
     implements
         CoordinationRepository,
+        AdministrativeIdentityReadRepository,
+        OrganizationEngagementReadDataSource,
+        OrganizationLocationReadDataSource,
         MultiMobilizationCoordinationReadRepository,
         MultiMobilizationCoordinationMutationRepository,
         PlatformRuntime,
@@ -383,6 +387,12 @@ class FirestoreCoordinationRepository
       FirestoreResponsibleAccessAdministrationRepository.withFirebase(
         auth: _responsibleAuth,
       );
+
+  @override
+  Stream<String?> watchAdministrativeUid() => _responsibleAuth
+      .authStateChanges()
+      .map((user) => user == null || user.isAnonymous ? null : user.uid)
+      .distinct();
 
   @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() {
@@ -726,19 +736,44 @@ class FirestoreCoordinationRepository
 
   @override
   Stream<List<ResponsePlace>> watchLocations() {
-    return _firestore
-        .collection('locations')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map(
-                (document) => FirestoreLocationMapper.fromFirestore(
-                  id: document.id,
-                  data: document.data(),
-                ),
-              )
-              .toList(),
-        );
+    return _watchLocationsQuery(_firestore.collection('locations'));
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchAllAdministrativeLocations() {
+    return _watchLocationsQuery(_responsibleFirestore.collection('locations'));
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsManagedByOrganization(
+    String organizationId,
+  ) {
+    final id = organizationId.trim();
+    if (id.isEmpty || id != organizationId || id.contains('/')) {
+      return Stream<List<ResponsePlace>>.error(
+        const RepositoryException('Organisation de sites invalide.'),
+      );
+    }
+    return _watchLocationsQuery(
+      _responsibleFirestore
+          .collection('locations')
+          .where('managingOrganizationId', isEqualTo: id),
+    );
+  }
+
+  Stream<List<ResponsePlace>> _watchLocationsQuery(
+    Query<Map<String, dynamic>> query,
+  ) {
+    return query.snapshots().map(
+      (snapshot) => List<ResponsePlace>.unmodifiable(
+        snapshot.docs.map(
+          (document) => FirestoreLocationMapper.fromFirestore(
+            id: document.id,
+            data: document.data(),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -897,81 +932,84 @@ class FirestoreCoordinationRepository
                   : _identityResolver.listMissionTeam(missionId),
             );
       }
-      return switchLatest(
-        _responsibleFirestore.collection('missions').doc(missionId).snapshots(),
-        (missionSnapshot) {
-          final mission = missionSnapshot.data();
-          if (!missionSnapshot.exists || mission == null) {
-            return Stream<List<EngagementInfo>>.value(const []);
-          }
-          final mobilizationId = requireMatchingMobilizationId(
-            mission: mission,
-          );
-          return _responsibleFirestore
-              .collection('engagements')
-              .where('missionId', isEqualTo: missionId)
-              .where('mobilizationId', isEqualTo: mobilizationId)
-              .snapshots()
-              .asyncMap((snapshot) async {
-                final engagements = snapshot.docs
-                    .map((document) {
-                      final data = document.data();
-                      if (data['missionId'] != missionId) return null;
-                      final profession = data['profession'];
-                      final volunteerId = data['volunteerId'];
-                      if (profession is! String || volunteerId is! String) {
-                        throw const RepositoryException('Engagement invalide.');
-                      }
-                      return EngagementInfo(
-                        missionId: missionId,
-                        volunteerId: volunteerId,
-                        profession: volunteerProfessionFromId(profession),
-                        status: _engagementStatus(data['status']),
-                        createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-                        updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
-                      );
-                    })
-                    .whereType<EngagementInfo>()
-                    .toList(growable: false);
-                try {
-                  final resolved = await _identityResolver.listMissionTeam(
-                    missionId,
+      return watchAuthorizedMissionEngagements(missionId);
+    });
+  }
+
+  @override
+  Stream<List<EngagementInfo>> watchAuthorizedMissionEngagements(
+    String missionId,
+  ) => switchLatest(
+    _responsibleFirestore.collection('missions').doc(missionId).snapshots(),
+    (missionSnapshot) {
+      final mission = missionSnapshot.data();
+      if (!missionSnapshot.exists || mission == null) {
+        return Stream<List<EngagementInfo>>.value(const []);
+      }
+      final mobilizationId = requireMatchingMobilizationId(mission: mission);
+      return _responsibleFirestore
+          .collection('engagements')
+          .where('missionId', isEqualTo: missionId)
+          .where('mobilizationId', isEqualTo: mobilizationId)
+          .snapshots()
+          .asyncMap((snapshot) async {
+            final engagements = snapshot.docs
+                .map((document) {
+                  final data = document.data();
+                  if (data['missionId'] != missionId) return null;
+                  final profession = data['profession'];
+                  final volunteerId = data['volunteerId'];
+                  if (profession is! String || volunteerId is! String) {
+                    throw const RepositoryException('Engagement invalide.');
+                  }
+                  return EngagementInfo(
+                    missionId: missionId,
+                    volunteerId: volunteerId,
+                    profession: volunteerProfessionFromId(profession),
+                    status: _engagementStatus(data['status']),
+                    createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+                    updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
                   );
-                  final identities = {
-                    for (final engagement in resolved)
-                      engagement.volunteerId: engagement.identity,
-                  };
-                  return engagements
-                      .map(
-                        (engagement) => engagement.copyWith(
-                          identity:
-                              identities[engagement.volunteerId] ??
-                              UserDisplayIdentity(
-                                uid: engagement.volunteerId,
-                                displayName: 'Professionnel',
-                                professionLabel: engagement.profession.label,
-                              ),
-                        ),
-                      )
-                      .toList(growable: false);
-                } catch (_) {
-                  return engagements
-                      .map(
-                        (engagement) => engagement.copyWith(
-                          identity: UserDisplayIdentity(
+                })
+                .whereType<EngagementInfo>()
+                .toList(growable: false);
+            try {
+              final resolved = await _identityResolver.listMissionTeam(
+                missionId,
+              );
+              final identities = {
+                for (final engagement in resolved)
+                  engagement.volunteerId: engagement.identity,
+              };
+              return engagements
+                  .map(
+                    (engagement) => engagement.copyWith(
+                      identity:
+                          identities[engagement.volunteerId] ??
+                          UserDisplayIdentity(
                             uid: engagement.volunteerId,
                             displayName: 'Professionnel',
                             professionLabel: engagement.profession.label,
                           ),
-                        ),
-                      )
-                      .toList(growable: false);
-                }
-              });
-        },
-      );
-    });
-  }
+                    ),
+                  )
+                  .toList(growable: false);
+            } catch (_) {
+              return engagements
+                  .map(
+                    (engagement) => engagement.copyWith(
+                      identity: UserDisplayIdentity(
+                        uid: engagement.volunteerId,
+                        displayName: 'Professionnel',
+                        professionLabel: engagement.profession.label,
+                      ),
+                    ),
+                  )
+                  .toList(growable: false);
+            }
+          });
+    },
+  );
 
   @override
   Future<void> updateEngagementStatus({
