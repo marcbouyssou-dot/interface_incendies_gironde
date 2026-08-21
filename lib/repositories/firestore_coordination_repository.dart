@@ -43,6 +43,7 @@ import 'platform_administration_read_repository.dart';
 import 'platform_actor_read_repository.dart';
 import 'platform_read_repository.dart';
 import 'platform_runtime.dart';
+import 'public_mobilization_read_repository.dart';
 import 'user_display_identity_resolver.dart';
 
 @visibleForTesting
@@ -278,6 +279,10 @@ class FirestoreCoordinationRepository
   final FirebaseFunctions _responsibleFunctions;
   final FirebaseFunctions _volunteerFunctions;
   late final UserDisplayIdentityResolver _identityResolver;
+  late final PublicMobilizationReadRepository _publicMobilizationRepository =
+      PublicMobilizationReadRepository(
+        dataSource: FirestorePublicMobilizationReadDataSource(_firestore),
+      );
 
   FirebaseAuth get _notificationAuth =>
       _responsibleAuth.currentUser?.isAnonymous == false
@@ -569,7 +574,7 @@ class FirestoreCoordinationRepository
     final ids = _validatedQueryIds(locationIds, 'lieu', maxCount: 30);
     if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
     return switchLatest(
-      _watchActiveMobilizationIds(_responsibleFirestore),
+      _watchAdministrativeActiveMobilizationIds(_responsibleFirestore),
       (mobilizationIds) => _combineMissionStreams(
         mobilizationIds.map(
           (mobilizationId) => _watchMissionsInMobilization(
@@ -585,13 +590,13 @@ class FirestoreCoordinationRepository
   @override
   Stream<List<CoordinationNeed>> watchAllActiveMissions() {
     return switchLatest(
-      _watchActiveMobilizationIds(_firestore),
+      _publicMobilizationRepository.watchActiveMobilizationIds(),
       (mobilizationIds) =>
           _watchMissionsInMobilizationBatches(_firestore, mobilizationIds),
     );
   }
 
-  Stream<List<String>> _watchActiveMobilizationIds(
+  Stream<List<String>> _watchAdministrativeActiveMobilizationIds(
     FirebaseFirestore firestore,
   ) {
     return firestore

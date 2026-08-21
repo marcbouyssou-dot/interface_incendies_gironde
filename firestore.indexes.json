@@ -33,6 +33,22 @@
         {"fieldPath": "status", "order": "ASCENDING"},
         {"fieldPath": "startAt", "order": "ASCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "visibility", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "mobilizations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "operationId", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

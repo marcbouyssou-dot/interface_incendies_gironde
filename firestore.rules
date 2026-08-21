@@ -705,6 +705,30 @@ service cloud.firestore {
       );
     }
 
+    function isPublishedOperation(operation) {
+      return operation.get('status', '') in [
+        'planned', 'active', 'suspended', 'completed'
+      ];
+    }
+
+    // Une lecture documentaire conserve le legacy Gironde sans visibilité.
+    // Une requête de collection doit en revanche porter `visibility` afin que
+    // les Rules puissent prouver le bornage sans inspecter après lecture.
+    function isPlatformDiscoverableOperation(operation) {
+      return hasValidOperationOrganization(operation)
+        && isPublishedOperation(operation)
+        && (operation.get('visibility', '__missing__') == 'platform'
+          || (!('visibility' in operation)
+            && operationOwnerOrganizationId(operation)
+              == legacyOrganizationId()));
+    }
+
+    function isExplicitPlatformDiscoverableOperation(operation) {
+      return hasValidOperationOrganization(operation)
+        && operation.get('visibility', '__missing__') == 'platform'
+        && isPublishedOperation(operation);
+    }
+
     function canAccessOrganization(organizationId) {
       return isPlatformAdministrator()
         || hasActiveOrganizationMembership(organizationId)
@@ -792,6 +816,45 @@ service cloud.firestore {
 
     function isLegacyMobilization(mobilization) {
       return !('operationId' in mobilization);
+    }
+
+    function isConfiguredLegacyMobilization(mobilizationId, mobilization) {
+      let configPath = /databases/$(database)/documents/platform/config;
+      return isLegacyMobilization(mobilization)
+        && exists(configPath)
+        && get(configPath).data.get('activeMobilizationId', '')
+          == mobilizationId;
+    }
+
+    function isPlatformDiscoverableMobilization(
+      mobilizationId,
+      mobilization
+    ) {
+      let operationId = mobilization.get('operationId', '__missing__');
+      let path = operationPath(operationId);
+      return isConfiguredLegacyMobilization(mobilizationId, mobilization)
+        || (hasValidMobilizationOperation(mobilization)
+          && exists(path)
+          && isPlatformDiscoverableOperation(get(path).data));
+    }
+
+    function isExplicitPlatformDiscoverableMobilization(mobilization) {
+      let operationId = mobilization.get('operationId', '__missing__');
+      let path = operationPath(operationId);
+      return hasValidMobilizationOperation(mobilization)
+        && exists(path)
+        && isExplicitPlatformDiscoverableOperation(get(path).data);
+    }
+
+    function isPlatformDiscoverableMobilizationById(mobilizationId) {
+      let path = mobilizationPath(mobilizationId);
+      return mobilizationId is string
+        && isNonBlankCanonicalText(mobilizationId)
+        && exists(path)
+        && isPlatformDiscoverableMobilization(
+          mobilizationId,
+          get(path).data
+        );
     }
 
     function canReadMobilizationOrganization(mobilization) {
@@ -986,7 +1049,9 @@ service cloud.firestore {
             || (isActiveSiteManager()
               && locationId in currentRole().locationIds))
           && canUseMobilizationOrganizationAsRole(mobilizationId))
-        || (!isPlatformAdministrator() && !hasActiveRole());
+        || (!isPlatformAdministrator()
+          && !hasActiveRole()
+          && isPlatformDiscoverableMobilizationById(mobilizationId));
     }
 
     function validMissionCreate(missionId) {
@@ -1535,7 +1600,11 @@ service cloud.firestore {
     match /mobilizations/{mobilizationId} {
       allow get: if isPlatformAdministrator()
         || (isActiveMobilization(mobilizationId)
-          && (hasProfessionalProfile()
+          && ((isSignedIn()
+              && isPlatformDiscoverableMobilization(
+                mobilizationId,
+                resource.data
+              ))
             || hasMobilizationOrganizationMembership(resource.data)
             || (canReadMobilizationOrganization(resource.data)
               && (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
@@ -1544,7 +1613,7 @@ service cloud.firestore {
         || (isSignedIn()
           && !isPlatformAdministrator()
           && resource.data.status == 'active'
-          && (hasProfessionalProfile()
+          && (isExplicitPlatformDiscoverableMobilization(resource.data)
             || hasMobilizationOrganizationMembership(resource.data)
             || (isActiveSiteManager()
               && canReadMobilizationOrganization(resource.data))));
@@ -1562,12 +1631,12 @@ service cloud.firestore {
     match /operations/{operationId} {
       allow get: if isPlatformAdministrator()
         || canReadOperationOrganization(resource.data)
-        || (hasProfessionalProfile()
-          && resource.data.status in ['planned', 'active', 'suspended', 'completed']);
+        || (isSignedIn()
+          && isPlatformDiscoverableOperation(resource.data));
       allow list: if isPlatformAdministrator()
         || canReadOperationOrganization(resource.data)
-        || (hasProfessionalProfile()
-          && resource.data.status in ['planned', 'active', 'suspended', 'completed']);
+        || (isSignedIn()
+          && isExplicitPlatformDiscoverableOperation(resource.data));
       allow write: if false;
     }
 

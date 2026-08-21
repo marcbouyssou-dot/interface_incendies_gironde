@@ -3105,7 +3105,7 @@ test('RC3.5A.2: direct mobilization get respects every supported identity', asyn
     db('manager'),
     `mobilizations/${otherMobilizationId}`,
   )));
-  await assertSucceeds(getDoc(doc(
+  await assertFails(getDoc(doc(
     db('professional'),
     `mobilizations/${otherMobilizationId}`,
   )));
@@ -3118,11 +3118,11 @@ test('RC3.5A.2: direct mobilization get respects every supported identity', asyn
     db('assigned-coord'),
     `mobilizations/${otherMobilizationId}`,
   )));
-  await assertFails(getDoc(doc(
+  await assertSucceeds(getDoc(doc(
     db('inactive-coord'),
     `mobilizations/${activeMobilizationId}`,
   )));
-  await assertFails(getDoc(doc(
+  await assertSucceeds(getDoc(doc(
     db('no-role'),
     `mobilizations/${activeMobilizationId}`,
   )));
@@ -3141,6 +3141,7 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
         name,
         type: 'emergency',
         status: 'active',
+        visibility: 'platform',
       });
     }
     for (const [mobilizationId, operationId] of [
@@ -3230,6 +3231,7 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
 
   const activeMobilizations = await assertSucceeds(getDocs(query(
     collection(db('professional'), 'mobilizations'),
+    where('operationId', 'in', ['operation-a', 'operation-b']),
     where('status', '==', 'active'),
   )));
   assert.equal(activeMobilizations.size, 3);
@@ -3278,10 +3280,18 @@ test('RC3.5: one professional engages in two mobilizations without mixing quotas
   await seed({mission: false});
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
+    await setDoc(doc(admin, 'operations/operation-b1'), {
+      id: 'operation-b1',
+      name: 'Opération plateforme B1',
+      type: 'emergency',
+      status: 'active',
+      visibility: 'platform',
+    });
     await setDoc(doc(admin, 'mobilizations/mobilization-b1'), {
       id: 'mobilization-b1',
       territoryId: 'gironde',
       status: 'active',
+      operationId: 'operation-b1',
     });
     await setDoc(doc(admin, 'missions/mission-a1'), mission({
       id: 'mission-a1',
@@ -3900,6 +3910,14 @@ test('RC4.2G: legacy coordinator and responsible retain their RC3 scope', async 
 
 test('RC4.2G: public professional reads and owner engagement rights stay unchanged', async () => {
   await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    for (const operationId of ['operation-a', 'operation-b']) {
+      await updateDoc(doc(admin, `operations/${operationId}`), {
+        visibility: 'platform',
+      });
+    }
+  });
   const professionalDb = db('professional');
 
   for (const mobilizationId of ['mobilization-a', 'mobilization-b']) {
@@ -3915,4 +3933,130 @@ test('RC4.2G: public professional reads and owner engagement rights stay unchang
       `engagements/${missionId}_professional`,
     )));
   }
+});
+
+test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await updateDoc(doc(admin, 'operations/operation-a'), {
+      visibility: 'platform',
+    });
+    await updateDoc(doc(admin, 'operations/operation-b'), {
+      visibility: 'shared',
+    });
+    await setDoc(doc(admin, 'operations/operation-platform-2'), {
+      id: 'operation-platform-2',
+      name: 'Opération plateforme 2',
+      type: 'emergency',
+      status: 'planned',
+      ownerOrganizationId: 'organization-b',
+      visibility: 'platform',
+    });
+    await setDoc(doc(admin, 'operations/operation-private'), {
+      id: 'operation-private',
+      name: 'Opération privée',
+      type: 'emergency',
+      status: 'active',
+      ownerOrganizationId: 'organization-b',
+      visibility: 'organization_private',
+    });
+    await setDoc(doc(admin, 'operations/operation-public'), {
+      id: 'operation-public',
+      name: 'Opération public réservée',
+      type: 'emergency',
+      status: 'active',
+      ownerOrganizationId: 'organization-b',
+      visibility: 'public',
+    });
+    for (const [mobilizationId, operationId] of [
+      ['mobilization-platform-2', 'operation-platform-2'],
+      ['mobilization-private', 'operation-private'],
+      ['mobilization-public', 'operation-public'],
+    ]) {
+      await setDoc(doc(admin, `mobilizations/${mobilizationId}`), {
+        id: mobilizationId,
+        territoryId: 'gironde',
+        status: 'active',
+        operationId,
+      });
+    }
+    await setDoc(doc(admin, 'mobilizations/mobilization-inactive'), {
+      id: 'mobilization-inactive',
+      territoryId: 'gironde',
+      status: 'inactive',
+      operationId: 'operation-a',
+    });
+    await setDoc(doc(admin, 'locations/site-platform-private'), {
+      id: 'site-platform-private',
+      name: 'Site administratif privé',
+      group: 'partnerSites',
+      type: 'otherPartnerSite',
+      isActive: true,
+      managingOrganizationId: 'organization-a',
+    });
+  });
+
+  const publicDb = db('public-session');
+  const operationSnapshot = await assertSucceeds(getDocs(query(
+    collection(publicDb, 'operations'),
+    where('visibility', '==', 'platform'),
+    where('status', 'in', ['planned', 'active', 'suspended', 'completed']),
+  )));
+  assert.deepEqual(
+    operationSnapshot.docs.map((snapshot) => snapshot.id).sort(),
+    ['operation-a', 'operation-platform-2'],
+  );
+
+  const mobilizationSnapshot = await assertSucceeds(getDocs(query(
+    collection(publicDb, 'mobilizations'),
+    where('operationId', 'in', ['operation-a', 'operation-platform-2']),
+    where('status', '==', 'active'),
+  )));
+  assert.deepEqual(
+    mobilizationSnapshot.docs.map((snapshot) => snapshot.id).sort(),
+    ['mobilization-a', 'mobilization-platform-2'],
+  );
+
+  for (const operationId of [
+    'operation-b',
+    'operation-private',
+    'operation-public',
+  ]) {
+    await assertFails(getDocs(query(
+      collection(publicDb, 'mobilizations'),
+      where('operationId', '==', operationId),
+      where('status', '==', 'active'),
+    )));
+  }
+  await assertFails(getDocs(query(
+    collection(publicDb, 'mobilizations'),
+    where('status', '==', 'active'),
+  )));
+  await assertFails(getDoc(doc(
+    publicDb,
+    'mobilizations/mobilization-inactive',
+  )));
+
+  await assertSucceeds(getDoc(doc(publicDb, 'platform/config')));
+  await assertSucceeds(getDoc(doc(
+    publicDb,
+    `mobilizations/${activeMobilizationId}`,
+  )));
+  await assertSucceeds(getDocs(query(
+    collection(publicDb, 'missions'),
+    where('mobilizationId', 'in', [
+      'mobilization-a',
+      'mobilization-platform-2',
+      activeMobilizationId,
+    ]),
+    where('isActive', '==', true),
+  )));
+
+  await assertFails(getDocs(collection(publicDb, 'engagements')));
+  await assertSucceeds(getDoc(doc(publicDb, 'locations/site-a')));
+  await assertFails(getDoc(doc(
+    publicDb,
+    'locations/site-platform-private',
+  )));
 });
