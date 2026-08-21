@@ -73,6 +73,7 @@ class Operation {
     this.context,
     this.endAt,
     this.coordinatorUid,
+    this.ownerOrganizationId,
   });
 
   factory Operation.fromMap(Map<String, Object?> data) {
@@ -103,6 +104,7 @@ class Operation {
       startAt: startAt,
       endAt: endAt,
       coordinatorUid: _optionalOperationUid(data, 'coordinatorUid'),
+      ownerOrganizationId: _optionalOrganizationId(data, 'ownerOrganizationId'),
       scopeRefs: scopeRefs,
       createdBy: _requiredOperationText(data, 'createdBy'),
       createdAt: _requiredOperationValue<DateTime>(data, 'createdAt'),
@@ -120,6 +122,7 @@ class Operation {
   final DateTime startAt;
   final DateTime? endAt;
   final String? coordinatorUid;
+  final String? ownerOrganizationId;
   final List<OperationalScopeRef> scopeRefs;
   final String createdBy;
   final DateTime createdAt;
@@ -136,6 +139,7 @@ class Operation {
     'startAt': startAt,
     'endAt': endAt,
     if (coordinatorUid != null) 'coordinatorUid': coordinatorUid,
+    if (ownerOrganizationId != null) 'ownerOrganizationId': ownerOrganizationId,
     'scopeRefs': scopeRefs.map((ref) => ref.serializedValue).toList(),
     'createdBy': createdBy,
     'createdAt': createdAt,
@@ -181,6 +185,19 @@ String? _optionalOperationUid(Map<String, Object?> data, String key) {
   if (value is! String ||
       value.isEmpty ||
       value.length > 128 ||
+      value.trim() != value ||
+      value.contains('/')) {
+    throw const FormatException('Opération invalide.');
+  }
+  return value;
+}
+
+String? _optionalOrganizationId(Map<String, Object?> data, String key) {
+  final value = data[key];
+  if (value == null) return null;
+  if (value is! String ||
+      value.isEmpty ||
+      value.length > 160 ||
       value.trim() != value ||
       value.contains('/')) {
     throw const FormatException('Opération invalide.');

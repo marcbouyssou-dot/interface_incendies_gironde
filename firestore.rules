@@ -546,6 +546,36 @@ service cloud.firestore {
         && get(platformAdministratorPath(request.auth.uid)).data.active == true;
     }
 
+    function organizationMembershipPath(organizationId, uid) {
+      return /databases/$(database)/documents/organizationMemberships/$(organizationId + '_' + uid);
+    }
+
+    function isCanonicalOrganizationMembership(membershipId, membership) {
+      let organizationId = membership.get('organizationId', '');
+      let uid = membership.get('uid', '');
+      return organizationId is string
+        && uid is string
+        && membershipId == organizationId + '_' + uid;
+    }
+
+    function hasActiveOrganizationMembership(organizationId) {
+      let membershipPath = organizationMembershipPath(
+        organizationId,
+        request.auth.uid
+      );
+      return isSignedIn()
+        && exists(membershipPath)
+        && get(membershipPath).data.get('organizationId', '') == organizationId
+        && get(membershipPath).data.get('uid', '') == request.auth.uid
+        && get(membershipPath).data.get('active', false) == true;
+    }
+
+    function canReadOwnOrganizationMembership(membershipId) {
+      return isSignedIn()
+        && isCanonicalOrganizationMembership(membershipId, resource.data)
+        && resource.data.get('uid', '') == request.auth.uid;
+    }
+
     function canUseProfessionalOwnerWritePath() {
       return isSignedIn() && !isPlatformAdministrator();
     }
@@ -1151,6 +1181,21 @@ service cloud.firestore {
           && resource.data.status in ['planned', 'active', 'suspended', 'completed']);
       allow list: if isPlatformAdministrator();
       allow write: if false;
+    }
+
+    match /organizations/{organizationId} {
+      allow get, list: if isPlatformAdministrator()
+        || hasActiveOrganizationMembership(organizationId);
+      allow create, update, delete: if false;
+    }
+
+    match /organizationMemberships/{membershipId} {
+      allow get: if isPlatformAdministrator()
+        || canReadOwnOrganizationMembership(membershipId);
+      allow list: if isPlatformAdministrator()
+        || (isSignedIn()
+          && resource.data.get('uid', '') == request.auth.uid);
+      allow create, update, delete: if false;
     }
 
     match /platform/{documentId} {

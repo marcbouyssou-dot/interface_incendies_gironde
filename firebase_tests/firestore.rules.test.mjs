@@ -8,6 +8,7 @@ import {
 import {
   doc,
   collection,
+  documentId,
   query,
   where,
   getDoc,
@@ -134,6 +135,67 @@ function v2Role(roles, locationIds, overrides = {}) {
     schemaVersion: 2,
     ...overrides,
   };
+}
+
+function organization(id, overrides = {}) {
+  return {
+    id,
+    name: `Organisation ${id}`,
+    category: 'other',
+    defaultVisibility: 'organization_private',
+    active: true,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
+function organizationMembership(organizationId, uid, overrides = {}) {
+  return {
+    organizationId,
+    uid,
+    roles: ['professional'],
+    locationIds: [],
+    active: true,
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
+async function seedOrganizations() {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+    await setDoc(
+      doc(admin, 'organizations/organization-a'),
+      organization('organization-a'),
+    );
+    await setDoc(
+      doc(admin, 'organizations/organization-b'),
+      organization('organization-b'),
+    );
+    await setDoc(
+      doc(admin, 'organizationMemberships/organization-a_member-a'),
+      organizationMembership('organization-a', 'member-a', {
+        roles: ['organization_admin', 'coordinator'],
+      }),
+    );
+    await setDoc(
+      doc(admin, 'organizationMemberships/organization-b_member-b'),
+      organizationMembership('organization-b', 'member-b'),
+    );
+    await setDoc(
+      doc(admin, 'organizationMemberships/organization-a_inactive-member'),
+      organizationMembership('organization-a', 'inactive-member', {
+        active: false,
+      }),
+    );
+  });
 }
 
 async function createMissionFor(uid, id, locationId = 'site-a') {
@@ -2958,4 +3020,157 @@ test('RC3.5: one professional engages in two mobilizations without mixing quotas
       'mobilization-b1',
     );
   });
+});
+
+test('RC4.1F: platform administrator reads every organization and membership', async () => {
+  await seedOrganizations();
+  const platformAdminDb = db('platform-admin');
+
+  await assertSucceeds(getDoc(doc(
+    platformAdminDb,
+    'organizations/organization-a',
+  )));
+  const organizations = await assertSucceeds(getDocs(
+    collection(platformAdminDb, 'organizations'),
+  ));
+  const memberships = await assertSucceeds(getDocs(
+    collection(platformAdminDb, 'organizationMemberships'),
+  ));
+
+  assert.equal(organizations.size, 2);
+  assert.equal(memberships.size, 3);
+});
+
+test('RC4.1F: active member reads its organization and own memberships', async () => {
+  await seedOrganizations();
+  const memberDb = db('member-a');
+
+  await assertSucceeds(getDoc(doc(
+    memberDb,
+    'organizations/organization-a',
+  )));
+  const organizations = await assertSucceeds(getDocs(query(
+    collection(memberDb, 'organizations'),
+    where(documentId(), 'in', ['organization-a']),
+  )));
+  const memberships = await assertSucceeds(getDocs(query(
+    collection(memberDb, 'organizationMemberships'),
+    where('uid', '==', 'member-a'),
+  )));
+  await assertSucceeds(getDoc(doc(
+    memberDb,
+    'organizationMemberships/organization-a_member-a',
+  )));
+
+  assert.equal(organizations.size, 1);
+  assert.equal(memberships.size, 1);
+});
+
+test('RC4.1F: inactive member reads its status but not the organization', async () => {
+  await seedOrganizations();
+  const inactiveDb = db('inactive-member');
+
+  await assertFails(getDoc(doc(
+    inactiveDb,
+    'organizations/organization-a',
+  )));
+  const memberships = await assertSucceeds(getDocs(query(
+    collection(inactiveDb, 'organizationMemberships'),
+    where('uid', '==', 'inactive-member'),
+  )));
+  await assertSucceeds(getDoc(doc(
+    inactiveDb,
+    'organizationMemberships/organization-a_inactive-member',
+  )));
+
+  assert.equal(memberships.size, 1);
+  assert.equal(memberships.docs[0].data().active, false);
+});
+
+test('RC4.1F: organization and membership reads remain isolated', async () => {
+  await seedOrganizations();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(
+        context.firestore(),
+        'organizationMemberships/organization-b_member-a',
+      ),
+      organizationMembership('organization-a', 'member-a'),
+    );
+  });
+  const memberDb = db('member-a');
+
+  await assertFails(getDoc(doc(
+    memberDb,
+    'organizations/organization-b',
+  )));
+  await assertFails(getDocs(query(
+    collection(memberDb, 'organizations'),
+    where(documentId(), 'in', ['organization-a', 'organization-b']),
+  )));
+  await assertFails(getDoc(doc(
+    memberDb,
+    'organizationMemberships/organization-b_member-b',
+  )));
+  await assertFails(getDoc(doc(
+    memberDb,
+    'organizationMemberships/organization-b_member-a',
+  )));
+  await assertFails(getDocs(query(
+    collection(memberDb, 'organizationMemberships'),
+    where('uid', '==', 'member-b'),
+  )));
+  await assertFails(getDocs(
+    collection(memberDb, 'organizationMemberships'),
+  ));
+  await assertFails(getDoc(doc(
+    db('non-member'),
+    'organizations/organization-a',
+  )));
+  await assertFails(getDoc(doc(
+    db('non-member'),
+    'organizationMemberships/organization-a_member-a',
+  )));
+  await assertFails(getDoc(doc(
+    db(),
+    'organizations/organization-a',
+  )));
+});
+
+test('RC4.1F: every client organization write is denied', async () => {
+  await seedOrganizations();
+
+  for (const uid of [null, 'member-a', 'platform-admin']) {
+    const userDb = db(uid);
+    await assertFails(setDoc(
+      doc(userDb, 'organizations/forged'),
+      organization('forged'),
+    ));
+    await assertFails(updateDoc(
+      doc(userDb, 'organizations/organization-a'),
+      {name: 'Nom modifié'},
+    ));
+    await assertFails(deleteDoc(doc(
+      userDb,
+      'organizations/organization-a',
+    )));
+    await assertFails(setDoc(
+      doc(
+        userDb,
+        `organizationMemberships/organization-a_${uid ?? 'anonymous'}-forged`,
+      ),
+      organizationMembership(
+        'organization-a',
+        `${uid ?? 'anonymous'}-forged`,
+      ),
+    ));
+    await assertFails(updateDoc(
+      doc(userDb, 'organizationMemberships/organization-a_member-a'),
+      {active: false},
+    ));
+    await assertFails(deleteDoc(doc(
+      userDb,
+      'organizationMemberships/organization-a_member-a',
+    )));
+  }
 });
