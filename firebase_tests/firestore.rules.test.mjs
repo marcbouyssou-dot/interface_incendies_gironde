@@ -20,6 +20,7 @@ import {
   writeBatch,
   Timestamp,
   serverTimestamp,
+  deleteField,
 } from 'firebase/firestore';
 import {readFileSync} from 'node:fs';
 
@@ -835,9 +836,13 @@ test('notifications: owner can read and toggle readAt only', async () => {
   ));
 });
 
-test('notification events and delivery journal remain server-only', async () => {
+test('notification event, delivery and solicitation journals remain server-only', async () => {
   await seed();
-  for (const collectionName of ['notificationEvents', 'notificationDeliveries']) {
+  for (const collectionName of [
+    'notificationEvents',
+    'notificationDeliveries',
+    'professionalSolicitationJournal',
+  ]) {
     await env.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), `${collectionName}/entry-a`), {uid: 'professional-a'});
     });
@@ -1304,6 +1309,31 @@ test('volunteers: verification is preserved or invalidated with identity changes
   ));
 });
 
+test('volunteers: a merged identity edit must clear every verification field', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'volunteers/alice'),
+      verifiedVolunteer('alice'),
+    );
+  });
+  await assertFails(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    profession: 'physician',
+    updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    profession: 'physician',
+    verificationStatus: 'unverified',
+    verificationSource: deleteField(),
+    verifiedFirstName: deleteField(),
+    verifiedLastName: deleteField(),
+    verifiedProfessionCode: deleteField(),
+    verifiedProfessionLabel: deleteField(),
+    verifiedAt: deleteField(),
+    updatedAt: serverTimestamp(),
+  }));
+});
+
 test('volunteers: modular professional IDs and legacy RPPS are accepted', async () => {
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {
@@ -1399,26 +1429,181 @@ test('volunteers: invalid professional identifiers are denied', async () => {
   ));
 });
 
-test('volunteers: other equipment requires non-empty details', async () => {
+test('volunteers: canonical customizable equipment requires details', async () => {
   await seed();
   await assertFails(setDoc(
     doc(db('alice'), 'volunteers/alice'),
-    volunteer('alice', {equipment: ['Autre matériel']}),
+    volunteer('alice', {equipment: ['other_equipment']}),
   ));
   await assertFails(setDoc(
     doc(db('bob'), 'volunteers/bob'),
     volunteer('bob', {
-      equipment: ['Autre matériel'],
+      equipment: ['other_equipment'],
       otherEquipmentDetails: '',
     }),
   ));
   await assertSucceeds(setDoc(
     doc(db('charlie'), 'volunteers/charlie'),
     volunteer('charlie', {
-      equipment: ['Autre matériel'],
+      equipment: ['other_equipment'],
       otherEquipmentDetails: 'Coussin ergonomique',
     }),
   ));
+  await assertFails(setDoc(
+    doc(db('diane'), 'volunteers/diane'),
+    volunteer('diane', {equipment: ['profession_specific_equipment']}),
+  ));
+  await assertFails(setDoc(
+    doc(db('eve'), 'volunteers/eve'),
+    volunteer('eve', {equipment: ['other_veterinary_equipment']}),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('frank'), 'volunteers/frank'),
+    volunteer('frank', {equipment: ['Autre matériel']}),
+  ));
+});
+
+test('volunteers: RC3 profile remains valid without any V2 field', async () => {
+  await seed();
+  const profile = volunteer('alice');
+  for (const key of [
+    'profileSchemaVersion',
+    'competencies',
+    'mobilizationPreferences',
+    'communicationPreferences',
+    'consentRecords',
+  ]) {
+    delete profile[key];
+  }
+  await assertSucceeds(setDoc(doc(db('alice'), 'volunteers/alice'), profile));
+});
+
+test('volunteers: complete additive V2 profile is accepted', async () => {
+  await seed();
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice', {
+      profileSchemaVersion: 2,
+      competencies: {
+        skillIds: ['triage', 'emergency_care'],
+        otherSkillDetails: 'Coordination terrain',
+        taxonomyVersion: 3,
+      },
+      mobilizationPreferences: {
+        preferredMobilizationTypes: ['emergency', 'future_type'],
+        territoryIds: ['gironde', 'landes'],
+        locationIds: ['site-a', 'site-b'],
+        preferredWeekdays: ['monday', 'saturday'],
+        preferredTimeBands: ['morning', 'future_band'],
+        schemaVersion: 2,
+      },
+      communicationPreferences: {
+        push: true,
+        email: false,
+        sms: true,
+        compatibleMissions: true,
+        engagementUpdates: false,
+        operationalAlerts: true,
+        quietHoursStart: 22,
+        quietHoursEnd: 7,
+        schemaVersion: 2,
+      },
+      consentRecords: [
+        {
+          type: 'privacy_notice', version: '2026-08', state: 'granted',
+          recordedAt: Timestamp.now(), source: 'profile',
+        },
+        {
+          type: 'privacy_notice', version: '2027-01', state: 'future_state',
+          recordedAt: Timestamp.now(), source: 'future_source',
+        },
+      ],
+    }),
+  ));
+});
+
+test('volunteers: partial additive V2 blocks are accepted', async () => {
+  await seed();
+  await assertSucceeds(setDoc(
+    doc(db('bob'), 'volunteers/bob'),
+    volunteer('bob', {
+      competencies: {taxonomyVersion: 1},
+      communicationPreferences: {push: true},
+      consentRecords: [],
+    }),
+  ));
+});
+
+test('volunteers: each additive V2 block is accepted independently', async () => {
+  await seed();
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice', {competencies: {
+      skillIds: ['triage'], otherSkillDetails: 'Terrain', taxonomyVersion: 2,
+    }}),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('bob'), 'volunteers/bob'),
+    volunteer('bob', {mobilizationPreferences: {
+      preferredMobilizationTypes: ['future_type'],
+      territoryIds: ['gironde'], locationIds: ['site-a'],
+      preferredWeekdays: ['monday'], preferredTimeBands: ['future_band'],
+      schemaVersion: 2,
+    }}),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('charlie'), 'volunteers/charlie'),
+    volunteer('charlie', {communicationPreferences: {
+      push: true, email: false, sms: true,
+      quietHoursStart: 22, quietHoursEnd: 7, schemaVersion: 2,
+    }}),
+  ));
+  await assertSucceeds(setDoc(
+    doc(db('diane'), 'volunteers/diane'),
+    volunteer('diane', {consentRecords: [{
+      type: 'privacy_notice', version: '2026-08', state: 'granted',
+      recordedAt: Timestamp.now(), source: 'profile',
+    }]}),
+  ));
+});
+
+test('volunteers: V2 fields merge additively with an RC3 profile', async () => {
+  await seed();
+  await assertSucceeds(setDoc(
+    doc(db('alice'), 'volunteers/alice'),
+    volunteer('alice'),
+  ));
+  await assertSucceeds(updateDoc(doc(db('alice'), 'volunteers/alice'), {
+    profileSchemaVersion: 2,
+    competencies: {skillIds: ['triage'], taxonomyVersion: 1},
+    communicationPreferences: {push: true, email: true, sms: false},
+    updatedAt: serverTimestamp(),
+  }));
+  const saved = (await getDoc(doc(db('alice'), 'volunteers/alice'))).data();
+  assert.equal(saved.rpps, '10123456789');
+  assert.equal(saved.professionalIdType, 'rpps');
+  assert.deepEqual(saved.competencies.skillIds, ['triage']);
+});
+
+test('volunteers: malformed V2 blocks and consent records are denied', async () => {
+  await seed();
+  for (const [uid, overrides] of [
+    ['alice', {profileSchemaVersion: 0}],
+    ['bob', {competencies: 'triage'}],
+    ['charlie', {competencies: {skillIds: 'triage'}}],
+    ['diane', {mobilizationPreferences: {preferredWeekdays: ['holiday']}}],
+    ['eve', {communicationPreferences: {push: 'yes'}}],
+    ['frank', {communicationPreferences: {quietHoursStart: 22}}],
+    ['grace', {consentRecords: [{
+      type: 'privacy_notice', version: '1', state: 'granted',
+      recordedAt: 'today', source: 'profile',
+    }]}],
+  ]) {
+    await assertFails(setDoc(
+      doc(db(uid), `volunteers/${uid}`),
+      volunteer(uid, overrides),
+    ));
+  }
 });
 
 test('volunteers: CPTS label is primary and legacy identifiers stay valid', async () => {

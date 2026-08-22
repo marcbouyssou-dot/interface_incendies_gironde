@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
+import '../models/professional_profile_validation.dart';
 import '../models/volunteer_profile.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
@@ -1917,14 +1918,10 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     _professionalIdController.text,
   );
 
-  bool get _isProfessionalIdentifierReady {
-    final value = _professionalIdController.text.trim();
-    if (_professionalIdType == ProfessionalIdType.rpps) {
-      return RegExp(r'^\d{11}$').hasMatch(value);
-    }
-    return _professionalIdType == ProfessionalIdType.ordinal &&
-        value.isNotEmpty;
-  }
+  bool get _isProfessionalIdentifierReady => isValidProfessionalIdentifier(
+    _professionalIdType,
+    _professionalIdController.text,
+  );
 
   int get _professionalIdentifierMaxLength =>
       _professionalIdType == ProfessionalIdType.rpps ? 11 : 32;
@@ -2597,7 +2594,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   static String? _email(String? value) {
     final normalized = value?.trim() ?? '';
     if (normalized.isEmpty) return 'Champ requis';
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized)) {
+    if (!ProfessionalProfileValidation.isValidEmail(normalized)) {
       return 'Email invalide';
     }
     return null;
@@ -2610,10 +2607,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
           ? 'Saisissez votre numéro RPPS.'
           : 'Saisissez votre numéro ordinal.';
     }
-    if (_professionalIdType == ProfessionalIdType.rpps &&
-        !RegExp(r'^\d{11}$').hasMatch(normalized)) {
-      return 'Le numéro RPPS doit contenir exactement 11 chiffres.';
-    }
+    final validationMessage = professionalIdentifierValidationMessage(
+      _professionalIdType,
+      normalized,
+    );
+    if (validationMessage != null) return validationMessage;
     if (_professionalIdType == ProfessionalIdType.ordinal &&
         normalized.length > 32) {
       return 'Le numéro ordinal ne peut pas dépasser 32 caractères.';

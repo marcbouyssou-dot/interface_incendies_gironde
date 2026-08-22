@@ -5,6 +5,7 @@ import '../models/admin_location.dart';
 import '../models/app_notification.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
+import '../models/professional_profile_validation.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../models/user_display_identity.dart';
@@ -237,7 +238,7 @@ class MockCoordinationRepository implements CoordinationRepository {
 
   @override
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
-    _validateRequiredProfileFields(
+    _validateProfileFields(
       email: profile.email,
       professionalIdType: profile.effectiveProfessionalIdType,
       professionalIdValue: profile.effectiveProfessionalIdValue,
@@ -258,11 +259,12 @@ class MockCoordinationRepository implements CoordinationRepository {
     }
     final existing = volunteerProfiles[volunteerUid];
     final preservesVerification =
-        existing?.hasVerifiedProfessionalIdentity == true &&
-        existing!.profession == profile.profession &&
-        profile.effectiveProfessionalIdType == ProfessionalIdType.rpps &&
-        existing.effectiveProfessionalIdValue ==
-            profile.effectiveProfessionalIdValue;
+        ProfessionalProfileValidation.preservesVerification(
+          existing: existing,
+          profession: profile.profession,
+          professionalIdType: profile.effectiveProfessionalIdType,
+          professionalIdValue: profile.effectiveProfessionalIdValue,
+        );
     final now = DateTime.now();
     volunteerProfiles[volunteerUid] = VolunteerProfile(
       uid: volunteerUid,
@@ -274,7 +276,7 @@ class MockCoordinationRepository implements CoordinationRepository {
           ? _normalizeRpps(profile.effectiveProfessionalIdValue)
           : null,
       professionalIdType: profile.effectiveProfessionalIdType,
-      professionalIdValue: _normalizeProfessionalIdValue(
+      professionalIdValue: normalizeProfessionalIdentifier(
         profile.effectiveProfessionalIdType,
         profile.effectiveProfessionalIdValue,
       ),
@@ -293,21 +295,30 @@ class MockCoordinationRepository implements CoordinationRepository {
       otherEquipmentDetails: _nullableTrim(profile.otherEquipmentDetails),
       verificationStatus: preservesVerification ? 'verified' : 'unverified',
       verificationSource: preservesVerification
-          ? existing.verificationSource
+          ? existing?.verificationSource
           : null,
       verifiedFirstName: preservesVerification
-          ? existing.verifiedFirstName
+          ? existing?.verifiedFirstName
           : null,
       verifiedLastName: preservesVerification
-          ? existing.verifiedLastName
+          ? existing?.verifiedLastName
           : null,
       verifiedProfessionCode: preservesVerification
-          ? existing.verifiedProfessionCode
+          ? existing?.verifiedProfessionCode
           : null,
       verifiedProfessionLabel: preservesVerification
-          ? existing.verifiedProfessionLabel
+          ? existing?.verifiedProfessionLabel
           : null,
-      verifiedAt: preservesVerification ? existing.verifiedAt : null,
+      verifiedAt: preservesVerification ? existing?.verifiedAt : null,
+      profileSchemaVersion:
+          profile.profileSchemaVersion ?? existing?.profileSchemaVersion,
+      competencies: profile.competencies ?? existing?.competencies,
+      mobilizationPreferences:
+          profile.mobilizationPreferences ?? existing?.mobilizationPreferences,
+      communicationPreferences:
+          profile.communicationPreferences ??
+          existing?.communicationPreferences,
+      consentRecords: profile.consentRecords ?? existing?.consentRecords,
       createdAt: existing?.createdAt ?? profile.createdAt ?? now,
       updatedAt: now,
     );
@@ -355,6 +366,11 @@ class MockCoordinationRepository implements CoordinationRepository {
       verifiedProfessionCode: verification.professionCode.trim(),
       verifiedProfessionLabel: verification.professionLabel.trim(),
       verifiedAt: now,
+      profileSchemaVersion: existing.profileSchemaVersion,
+      competencies: existing.competencies,
+      mobilizationPreferences: existing.mobilizationPreferences,
+      communicationPreferences: existing.communicationPreferences,
+      consentRecords: existing.consentRecords,
       createdAt: existing.createdAt,
       updatedAt: now,
     );
@@ -758,7 +774,7 @@ class MockCoordinationRepository implements CoordinationRepository {
         'participer.',
       );
     }
-    _validateRequiredProfileFields(
+    _validateProfileFields(
       email: email,
       professionalIdType: resolvedProfessionalIdType,
       professionalIdValue: resolvedProfessionalIdValue,
@@ -815,6 +831,13 @@ class MockCoordinationRepository implements CoordinationRepository {
       ),
     );
     final existingProfile = volunteerProfiles[volunteerUid];
+    final preservesVerification =
+        ProfessionalProfileValidation.preservesVerification(
+          existing: existingProfile,
+          profession: profession,
+          professionalIdType: resolvedProfessionalIdType,
+          professionalIdValue: resolvedProfessionalIdValue,
+        );
     final now = DateTime.now();
     volunteerProfiles[volunteerUid] = VolunteerProfile(
       uid: volunteerUid,
@@ -826,7 +849,7 @@ class MockCoordinationRepository implements CoordinationRepository {
           ? _normalizeRpps(resolvedProfessionalIdValue)
           : null,
       professionalIdType: resolvedProfessionalIdType,
-      professionalIdValue: _normalizeProfessionalIdValue(
+      professionalIdValue: normalizeProfessionalIdentifier(
         resolvedProfessionalIdType,
         resolvedProfessionalIdValue,
       ),
@@ -840,6 +863,28 @@ class MockCoordinationRepository implements CoordinationRepository {
       profession: profession,
       equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(equipment),
       otherEquipmentDetails: _nullableTrim(otherEquipmentDetails),
+      verificationStatus: preservesVerification ? 'verified' : 'unverified',
+      verificationSource: preservesVerification
+          ? existingProfile?.verificationSource
+          : null,
+      verifiedFirstName: preservesVerification
+          ? existingProfile?.verifiedFirstName
+          : null,
+      verifiedLastName: preservesVerification
+          ? existingProfile?.verifiedLastName
+          : null,
+      verifiedProfessionCode: preservesVerification
+          ? existingProfile?.verifiedProfessionCode
+          : null,
+      verifiedProfessionLabel: preservesVerification
+          ? existingProfile?.verifiedProfessionLabel
+          : null,
+      verifiedAt: preservesVerification ? existingProfile?.verifiedAt : null,
+      profileSchemaVersion: existingProfile?.profileSchemaVersion,
+      competencies: existingProfile?.competencies,
+      mobilizationPreferences: existingProfile?.mobilizationPreferences,
+      communicationPreferences: existingProfile?.communicationPreferences,
+      consentRecords: existingProfile?.consentRecords,
       createdAt: existingProfile?.createdAt ?? now,
       updatedAt: now,
     );
@@ -970,18 +1015,7 @@ class MockCoordinationRepository implements CoordinationRepository {
     return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
-  static String _normalizeProfessionalIdValue(
-    ProfessionalIdType type,
-    String value,
-  ) {
-    return switch (type) {
-      ProfessionalIdType.rpps => value.replaceAll(RegExp(r'\s+'), ''),
-      ProfessionalIdType.ordinal => value.trim(),
-      ProfessionalIdType.none => '',
-    };
-  }
-
-  static void _validateRequiredProfileFields({
+  static void _validateProfileFields({
     required String? email,
     required ProfessionalIdType professionalIdType,
     required String professionalIdValue,
@@ -995,51 +1029,20 @@ class MockCoordinationRepository implements CoordinationRepository {
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) {
-    final normalizedEmail = _nullableTrim(email);
-    if (normalizedEmail == null ||
-        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
-      throw const RepositoryException('Saisissez une adresse email valide.');
-    }
-    final normalizedId = _normalizeProfessionalIdValue(
-      professionalIdType,
-      professionalIdValue,
+    final error = ProfessionalProfileValidation.persistenceError(
+      email: email,
+      professionalIdType: professionalIdType,
+      professionalIdValue: professionalIdValue,
+      cptsId: cptsId,
+      cptsLabel: cptsLabel,
+      professionalAddressLine1: professionalAddressLine1,
+      professionalAddressLine2: professionalAddressLine2,
+      professionalPostalCode: professionalPostalCode,
+      professionalCity: professionalCity,
+      professionalCountryCode: professionalCountryCode,
+      equipment: equipment,
+      otherEquipmentDetails: otherEquipmentDetails,
     );
-    if (professionalIdType == ProfessionalIdType.rpps &&
-        !RegExp(r'^\d{11}$').hasMatch(normalizedId)) {
-      throw const RepositoryException(
-        'Saisissez un numéro RPPS valide à 11 chiffres.',
-      );
-    }
-    if (professionalIdType == ProfessionalIdType.ordinal &&
-        normalizedId.isEmpty) {
-      throw const RepositoryException('Saisissez votre numéro ordinal.');
-    }
-    if (professionalIdType == ProfessionalIdType.none &&
-        professionalIdValue.trim().isNotEmpty) {
-      throw const RepositoryException(
-        'Aucun identifiant professionnel ne doit être renseigné.',
-      );
-    }
-    if ((_nullableTrim(cptsId)?.length ?? 0) > 160 ||
-        (_nullableTrim(cptsLabel)?.length ?? 0) > 160) {
-      throw const RepositoryException('Le nom de la CPTS est trop long.');
-    }
-    final address = ProfessionalAddress(
-      line1: professionalAddressLine1,
-      line2: professionalAddressLine2,
-      postalCode: professionalPostalCode,
-      city: professionalCity,
-      countryCode: professionalCountryCode,
-    );
-    final addressError = address.validationMessage;
-    if (addressError != null) {
-      throw RepositoryException(addressError);
-    }
-    if (ProfessionalEquipmentRegistry.requiresDetails(equipment) &&
-        _nullableTrim(otherEquipmentDetails) == null) {
-      throw const RepositoryException(
-        'Précisez le matériel que vous pouvez apporter.',
-      );
-    }
+    if (error != null) throw RepositoryException(error);
   }
 }

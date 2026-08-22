@@ -12,6 +12,7 @@ import '../models/mobilization.dart';
 import '../models/need.dart';
 import '../models/platform_administrator_access.dart';
 import '../models/professional_equipment.dart';
+import '../models/professional_profile_validation.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../models/user_display_identity.dart';
@@ -34,6 +35,7 @@ import 'organization_read_repository.dart';
 import 'firestore_platform_administration_read_repository.dart';
 import 'firebase_platform_actor_read_repository.dart';
 import 'firestore_platform_read_repository.dart';
+import 'professional_profile_v2_firestore_mapper.dart';
 import 'firestore_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 import 'location_administration_repository.dart';
@@ -801,7 +803,7 @@ class FirestoreCoordinationRepository
 
   @override
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {
-    _validateRequiredProfileFields(
+    _validateProfileFields(
       email: profile.email,
       professionalIdType: profile.effectiveProfessionalIdType,
       professionalIdValue: profile.effectiveProfessionalIdValue,
@@ -831,6 +833,10 @@ class FirestoreCoordinationRepository
           final existingData = existing.data();
           transaction.set(reference, {
             ..._profileData(profile, now, uid: user.uid),
+            ...ProfessionalProfileV2FirestoreMapper.forSave(
+              profile: profile,
+              existingData: existingData,
+            ),
             ..._verificationDataForClientSave(existingData, profile),
             'createdAt': existingData?['createdAt'] ?? now,
           });
@@ -1380,7 +1386,7 @@ class FirestoreCoordinationRepository
         'participer.',
       );
     }
-    _validateRequiredProfileFields(
+    _validateProfileFields(
       email: email,
       professionalIdType: resolvedProfessionalIdType,
       professionalIdValue: resolvedProfessionalIdValue,
@@ -1434,6 +1440,10 @@ class FirestoreCoordinationRepository
             }
             final isReengagement = existing != null;
             final existingVolunteer = await transaction.get(volunteerRef);
+            final existingVolunteerData = existingVolunteer.data();
+            final existingProfile = existingVolunteerData == null
+                ? null
+                : _profileFromFirestore(uid, existingVolunteerData);
             final data = snapshot.data()!;
             final mobilizationId = requireMatchingMobilizationId(
               mission: data,
@@ -1476,7 +1486,7 @@ class FirestoreCoordinationRepository
                 equipment,
               ),
             };
-            final resolvedIdValue = _normalizeProfessionalIdValue(
+            final resolvedIdValue = normalizeProfessionalIdentifier(
               resolvedProfessionalIdType,
               resolvedProfessionalIdValue,
             );
@@ -1505,7 +1515,13 @@ class FirestoreCoordinationRepository
             }
             transaction.set(volunteerRef, {
               ...volunteerData,
-              'createdAt': existingVolunteer.data()?['createdAt'] ?? now,
+              ..._verificationDataForProfileMerge(
+                existing: existingProfile,
+                profession: profession,
+                professionalIdType: resolvedProfessionalIdType,
+                professionalIdValue: resolvedIdValue,
+              ),
+              'createdAt': existingVolunteerData?['createdAt'] ?? now,
             }, SetOptions(merge: true));
             if (isReengagement) {
               transaction.update(engagementRef, {
@@ -1719,6 +1735,12 @@ class FirestoreCoordinationRepository
     String uid,
     Map<String, dynamic> data,
   ) {
+    late final ProfessionalProfileV2Fields v2;
+    try {
+      v2 = ProfessionalProfileV2FirestoreMapper.fromFirestore(data);
+    } on FormatException catch (error) {
+      throw RepositoryException(error.message);
+    }
     final professionName = data['profession'] as String?;
     VolunteerProfession? profession;
     if (professionName != null) {
@@ -1774,6 +1796,11 @@ class FirestoreCoordinationRepository
         data['verifiedProfessionLabel'] as String?,
       ),
       verifiedAt: (data['verifiedAt'] as Timestamp?)?.toDate(),
+      profileSchemaVersion: v2.profileSchemaVersion,
+      competencies: v2.competencies,
+      mobilizationPreferences: v2.mobilizationPreferences,
+      communicationPreferences: v2.communicationPreferences,
+      consentRecords: v2.consentRecords,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
@@ -1786,7 +1813,7 @@ class FirestoreCoordinationRepository
   }) {
     final email = _nullableTrim(profile.email);
     final professionalIdType = profile.effectiveProfessionalIdType;
-    final professionalIdValue = _normalizeProfessionalIdValue(
+    final professionalIdValue = normalizeProfessionalIdentifier(
       professionalIdType,
       profile.effectiveProfessionalIdValue,
     );
@@ -1825,15 +1852,15 @@ class FirestoreCoordinationRepository
     Map<String, dynamic>? existing,
     VolunteerProfile profile,
   ) {
-    if (existing?['verificationStatus'] != 'verified' ||
-        existing?['professionalIdType'] != 'rpps' ||
-        existing?['profession'] != profile.profession.canonicalId ||
-        existing?['professionalIdValue'] !=
-            _normalizeProfessionalIdValue(
-              profile.effectiveProfessionalIdType,
-              profile.effectiveProfessionalIdValue,
-            ) ||
-        profile.effectiveProfessionalIdType != ProfessionalIdType.rpps) {
+    final existingProfile = existing == null
+        ? null
+        : _profileFromFirestore(profile.uid, existing);
+    if (!ProfessionalProfileValidation.preservesVerification(
+      existing: existingProfile,
+      profession: profile.profession,
+      professionalIdType: profile.effectiveProfessionalIdType,
+      professionalIdValue: profile.effectiveProfessionalIdValue,
+    )) {
       return const {'verificationStatus': 'unverified'};
     }
     return {
@@ -1844,6 +1871,34 @@ class FirestoreCoordinationRepository
       'verifiedProfessionCode': existing?['verifiedProfessionCode'],
       'verifiedProfessionLabel': existing?['verifiedProfessionLabel'],
       'verifiedAt': existing?['verifiedAt'],
+    };
+  }
+
+  static Map<String, dynamic> _verificationDataForProfileMerge({
+    required VolunteerProfile? existing,
+    required VolunteerProfession profession,
+    required ProfessionalIdType professionalIdType,
+    required String professionalIdValue,
+  }) {
+    if (ProfessionalProfileValidation.preservesVerification(
+      existing: existing,
+      profession: profession,
+      professionalIdType: professionalIdType,
+      professionalIdValue: professionalIdValue,
+    )) {
+      return const {};
+    }
+    if (existing == null) {
+      return const {'verificationStatus': 'unverified'};
+    }
+    return {
+      'verificationStatus': 'unverified',
+      'verificationSource': FieldValue.delete(),
+      'verifiedFirstName': FieldValue.delete(),
+      'verifiedLastName': FieldValue.delete(),
+      'verifiedProfessionCode': FieldValue.delete(),
+      'verifiedProfessionLabel': FieldValue.delete(),
+      'verifiedAt': FieldValue.delete(),
     };
   }
 
@@ -1881,18 +1936,7 @@ class FirestoreCoordinationRepository
         : '';
   }
 
-  static String _normalizeProfessionalIdValue(
-    ProfessionalIdType type,
-    String value,
-  ) {
-    return switch (type) {
-      ProfessionalIdType.rpps => value.replaceAll(RegExp(r'\s+'), ''),
-      ProfessionalIdType.ordinal => value.trim(),
-      ProfessionalIdType.none => '',
-    };
-  }
-
-  static void _validateRequiredProfileFields({
+  static void _validateProfileFields({
     required String? email,
     required ProfessionalIdType professionalIdType,
     required String professionalIdValue,
@@ -1906,52 +1950,21 @@ class FirestoreCoordinationRepository
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) {
-    final normalizedEmail = _nullableTrim(email);
-    if (normalizedEmail == null ||
-        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
-      throw const RepositoryException('Saisissez une adresse email valide.');
-    }
-    final normalizedId = _normalizeProfessionalIdValue(
-      professionalIdType,
-      professionalIdValue,
+    final error = ProfessionalProfileValidation.persistenceError(
+      email: email,
+      professionalIdType: professionalIdType,
+      professionalIdValue: professionalIdValue,
+      cptsId: cptsId,
+      cptsLabel: cptsLabel,
+      professionalAddressLine1: professionalAddressLine1,
+      professionalAddressLine2: professionalAddressLine2,
+      professionalPostalCode: professionalPostalCode,
+      professionalCity: professionalCity,
+      professionalCountryCode: professionalCountryCode,
+      equipment: equipment,
+      otherEquipmentDetails: otherEquipmentDetails,
     );
-    if (professionalIdType == ProfessionalIdType.rpps &&
-        !RegExp(r'^\d{11}$').hasMatch(normalizedId)) {
-      throw const RepositoryException(
-        'Saisissez un numéro RPPS valide à 11 chiffres.',
-      );
-    }
-    if (professionalIdType == ProfessionalIdType.ordinal &&
-        normalizedId.isEmpty) {
-      throw const RepositoryException('Saisissez votre numéro ordinal.');
-    }
-    if (professionalIdType == ProfessionalIdType.none &&
-        professionalIdValue.trim().isNotEmpty) {
-      throw const RepositoryException(
-        'Aucun identifiant professionnel ne doit être renseigné.',
-      );
-    }
-    if ((_nullableTrim(cptsId)?.length ?? 0) > 160 ||
-        (_nullableTrim(cptsLabel)?.length ?? 0) > 160) {
-      throw const RepositoryException('Le nom de la CPTS est trop long.');
-    }
-    final address = ProfessionalAddress(
-      line1: professionalAddressLine1,
-      line2: professionalAddressLine2,
-      postalCode: professionalPostalCode,
-      city: professionalCity,
-      countryCode: professionalCountryCode,
-    );
-    final addressError = address.validationMessage;
-    if (addressError != null) {
-      throw RepositoryException(addressError);
-    }
-    if (ProfessionalEquipmentRegistry.requiresDetails(equipment) &&
-        _nullableTrim(otherEquipmentDetails) == null) {
-      throw const RepositoryException(
-        'Précisez le matériel que vous pouvez apporter.',
-      );
-    }
+    if (error != null) throw RepositoryException(error);
   }
 
   static EngagementStatus _engagementStatus(Object? value) {

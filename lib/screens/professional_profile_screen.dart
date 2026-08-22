@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
+import '../models/professional_profile_validation.dart';
 import '../models/volunteer_profile.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
@@ -106,7 +107,9 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
             return const V5LoadingState(label: 'Chargement du profil…');
           }
           final profile = snapshot.hasError ? null : snapshot.data;
-          final profileComplete = _isProfileComplete(profile);
+          final profileComplete = ProfessionalProfileValidation.isComplete(
+            profile,
+          );
           return LayoutBuilder(
             builder: (context, constraints) {
               final horizontalPadding = constraints.maxWidth <= 556
@@ -380,22 +383,6 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
       labels.add(profile.otherEquipmentDetails!.trim());
     }
     return labels.join(' • ');
-  }
-
-  bool _isProfileComplete(VolunteerProfile? profile) {
-    if (profile == null || !profile.hasValidProfessionalIdentifier) {
-      return false;
-    }
-    final email = profile.email?.trim() ?? '';
-    final hasIdentity =
-        profile.firstName.trim().isNotEmpty &&
-        profile.lastName.trim().isNotEmpty &&
-        profile.phone.trim().isNotEmpty &&
-        RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
-    final hasEquipmentDetails =
-        !ProfessionalEquipmentRegistry.requiresDetails(profile.equipment) ||
-        (profile.otherEquipmentDetails?.trim().isNotEmpty ?? false);
-    return hasIdentity && hasEquipmentDetails;
   }
 }
 
@@ -933,24 +920,14 @@ class _ProfessionalProfileEditorState
       value?.trim().isNotEmpty == true ? null : 'Champ requis';
 
   static String? _emailValidator(String? value) {
-    final normalized = value?.trim() ?? '';
-    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized)) {
+    if (!ProfessionalProfileValidation.isValidEmail(value)) {
       return 'Email invalide';
     }
     return null;
   }
 
-  String? _idValidator(String? value) {
-    final normalized = value?.trim() ?? '';
-    if (_idType == ProfessionalIdType.rpps &&
-        !RegExp(r'^\d{11}$').hasMatch(normalized)) {
-      return 'Le numéro RPPS doit contenir exactement 11 chiffres.';
-    }
-    if (_idType == ProfessionalIdType.ordinal && normalized.isEmpty) {
-      return 'Saisissez votre numéro ordinal.';
-    }
-    return null;
-  }
+  String? _idValidator(String? value) =>
+      professionalIdentifierValidationMessage(_idType, value);
 
   bool get _hasProfessionalAddressInput => [
     _professionalAddressLine1.text,

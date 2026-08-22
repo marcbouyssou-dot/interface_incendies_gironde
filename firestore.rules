@@ -405,6 +405,11 @@ service cloud.firestore {
     }
 
     function validProfessionalAddress(data) {
+      let addressKeys = [
+        'professionalAddressLine1', 'professionalAddressLine2',
+        'professionalPostalCode', 'professionalCity',
+        'professionalCountryCode'
+      ];
       let line1 = data.get('professionalAddressLine1', '');
       let line2 = data.get('professionalAddressLine2', '');
       let postalCode = data.get('professionalPostalCode', '');
@@ -414,29 +419,152 @@ service cloud.firestore {
         || line2 != ''
         || postalCode != ''
         || city != '';
-      return line1 is string
-        && line2 is string
-        && postalCode is string
-        && city is string
-        && countryCode is string
-        && line1.size() <= 240
-        && line2.size() <= 240
-        && postalCode.size() <= 16
-        && city.size() <= 120
-        && countryCode.matches('^[A-Z]{2}$')
-        && (!hasAddress
-          || (isNonBlankCanonicalText(line1)
-            && isNonBlankCanonicalText(city)
-            && (countryCode == 'FR'
-              ? postalCode.matches('^[0-9]{5}$')
-              : postalCode.matches('^[A-Za-z0-9][A-Za-z0-9 -]{1,15}$'))));
+      return !data.keys().hasAny(addressKeys)
+        || (line1 is string
+          && line2 is string
+          && postalCode is string
+          && city is string
+          && countryCode is string
+          && line1.size() <= 240
+          && line2.size() <= 240
+          && postalCode.size() <= 16
+          && city.size() <= 120
+          && countryCode.matches('^[A-Z]{2}$')
+          && (!hasAddress
+            || (isNonBlankCanonicalText(line1)
+              && isNonBlankCanonicalText(city)
+              && (countryCode == 'FR'
+                ? postalCode.matches('^[0-9]{5}$')
+                : postalCode.matches(
+                  '^[A-Za-z0-9][A-Za-z0-9 -]{1,15}$'
+                )))));
     }
 
     function validOptionalEquipmentDetails(data) {
       let details = data.get('otherEquipmentDetails', '');
+      let customizableEquipment = [
+        'other_equipment',
+        'profession_specific_equipment',
+        'other_veterinary_equipment'
+      ];
       return details is string
-        && (!data.equipment.hasAny(['Autre matériel'])
-          || details.size() > 0);
+        && (!data.equipment.hasAny(customizableEquipment)
+          || isNonBlankCanonicalText(details));
+    }
+
+    function validOptionalProfileSchemaVersion(data) {
+      let version = data.get('profileSchemaVersion', 1);
+      return version is int && version >= 1;
+    }
+
+    function validOpenPreferenceList(block, key) {
+      let values = block.get(key, []);
+      return values is list;
+    }
+
+    function validOptionalCompetencies(data) {
+      let block = data.get('competencies', {});
+      let details = block.get('otherSkillDetails', '');
+      let taxonomyVersion = block.get('taxonomyVersion', 1);
+      return !('competencies' in data)
+        || (block is map
+          && block.keys().hasOnly([
+            'skillIds', 'otherSkillDetails', 'taxonomyVersion'
+          ])
+          && validOpenPreferenceList(block, 'skillIds')
+          && details is string
+          && taxonomyVersion is int
+          && taxonomyVersion >= 1);
+    }
+
+    function validOptionalMobilizationPreferences(data) {
+      let block = data.get('mobilizationPreferences', {});
+      let weekdays = block.get('preferredWeekdays', []);
+      let schemaVersion = block.get('schemaVersion', 1);
+      return !('mobilizationPreferences' in data)
+        || (block is map
+          && block.keys().hasOnly([
+            'preferredMobilizationTypes', 'territoryIds', 'locationIds',
+            'preferredWeekdays', 'preferredTimeBands', 'schemaVersion'
+          ])
+          && validOpenPreferenceList(block, 'preferredMobilizationTypes')
+          && validOpenPreferenceList(block, 'territoryIds')
+          && validOpenPreferenceList(block, 'locationIds')
+          && weekdays is list
+          && weekdays.size() <= 7
+          && weekdays.toSet().hasOnly([
+            'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+            'saturday', 'sunday'
+          ])
+          && validOpenPreferenceList(block, 'preferredTimeBands')
+          && schemaVersion is int
+          && schemaVersion >= 1);
+    }
+
+    function validOptionalCommunicationPreferences(data) {
+      let block = data.get('communicationPreferences', {});
+      let hasQuietStart = 'quietHoursStart' in block;
+      let hasQuietEnd = 'quietHoursEnd' in block;
+      let quietStart = block.get('quietHoursStart', 0);
+      let quietEnd = block.get('quietHoursEnd', 0);
+      let schemaVersion = block.get('schemaVersion', 1);
+      let channelValues = [
+        block.get('push', false), block.get('email', false),
+        block.get('sms', false), block.get('compatibleMissions', false),
+        block.get('engagementUpdates', false),
+        block.get('operationalAlerts', false)
+      ];
+      return !('communicationPreferences' in data)
+        || (block is map
+          && block.keys().hasOnly([
+            'push', 'email', 'sms', 'compatibleMissions',
+            'engagementUpdates', 'operationalAlerts', 'quietHoursStart',
+            'quietHoursEnd', 'schemaVersion'
+          ])
+          && channelValues.toSet().hasOnly([true, false])
+          && hasQuietStart == hasQuietEnd
+          && (!hasQuietStart
+            || (quietStart is int
+              && quietStart >= 0
+              && quietStart <= 23
+              && quietEnd is int
+              && quietEnd >= 0
+              && quietEnd <= 23))
+          && schemaVersion is int
+          && schemaVersion >= 1);
+    }
+
+    function validProfessionalConsentRecord(record) {
+      return record is map
+        && record.keys().hasOnly([
+          'type', 'version', 'state', 'recordedAt', 'source'
+        ])
+        && record.get('type', '').matches(
+          '^[a-z0-9][a-z0-9._-]{0,79}$'
+        )
+        && record.get('version', '').matches('^.{1,80}$')
+        && record.get('state', '').matches(
+          '^[a-z0-9][a-z0-9._-]{0,79}$'
+        )
+        && record.recordedAt is timestamp
+        && record.get('source', '').matches(
+          '^[a-z0-9][a-z0-9._-]{0,79}$'
+        );
+    }
+
+    function validProfessionalConsentRecords(records) {
+      return records is list
+        && records.size() <= 5
+        && (records.size() < 1 || validProfessionalConsentRecord(records[0]))
+        && (records.size() < 2 || validProfessionalConsentRecord(records[1]))
+        && (records.size() < 3 || validProfessionalConsentRecord(records[2]))
+        && (records.size() < 4 || validProfessionalConsentRecord(records[3]))
+        && (records.size() < 5 || validProfessionalConsentRecord(records[4]));
+    }
+
+    function validOptionalProfessionalConsentRecords(data) {
+      return !('consentRecords' in data)
+        || validProfessionalConsentRecords(data.consentRecords);
     }
 
     function hasNoVerifiedIdentityFields(data) {
@@ -515,6 +643,9 @@ service cloud.firestore {
           'verificationStatus', 'verificationSource', 'verifiedFirstName',
           'verifiedLastName', 'verifiedProfessionCode',
           'verifiedProfessionLabel', 'verifiedAt',
+          'profileSchemaVersion', 'competencies',
+          'mobilizationPreferences', 'communicationPreferences',
+          'consentRecords',
           'createdAt', 'updatedAt'
         ])
         && request.resource.data.keys().hasAll([
@@ -530,10 +661,14 @@ service cloud.firestore {
         && request.resource.data.email is string
         && request.resource.data.email.size() > 0
         && validProfessionalIdentity(request.resource.data)
-        && validVerificationData(request.resource.data)
         && validOptionalCpts(request.resource.data)
         && validProfessionalAddress(request.resource.data)
-        && validOptionalEquipmentDetails(request.resource.data);
+        && validOptionalEquipmentDetails(request.resource.data)
+        && validOptionalProfileSchemaVersion(request.resource.data)
+        && validOptionalCompetencies(request.resource.data)
+        && validOptionalMobilizationPreferences(request.resource.data)
+        && validOptionalCommunicationPreferences(request.resource.data)
+        && validOptionalProfessionalConsentRecords(request.resource.data);
     }
 
     function platformAdministratorPath(uid) {
@@ -1472,6 +1607,10 @@ service cloud.firestore {
     }
 
     match /notificationDeliveries/{deliveryId} {
+      allow read, write: if false;
+    }
+
+    match /professionalSolicitationJournal/{entryId} {
       allow read, write: if false;
     }
 

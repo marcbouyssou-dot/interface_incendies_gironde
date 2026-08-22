@@ -49,6 +49,15 @@
         {"fieldPath": "operationId", "order": "ASCENDING"},
         {"fieldPath": "status", "order": "ASCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "professionalSolicitationJournal",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "recipientUid", "order": "ASCENDING"},
+        {"fieldPath": "occurredAt", "order": "DESCENDING"},
+        {"fieldPath": "entryId", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

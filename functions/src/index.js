@@ -101,6 +101,12 @@ import {
   persistCanonicalEvents,
   processPendingDeliveries,
 } from './operational_notifications/firestore_service.js';
+import {
+  listProfessionalSolicitationJournal as listProfessionalSolicitationJournalRequest,
+  recordProfessionalSolicitationConsulted as recordProfessionalSolicitationConsultedRequest,
+  solicitationJournalFirestoreServices,
+  SolicitationJournalError,
+} from './operational_notifications/solicitation_journal.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -199,9 +205,41 @@ export const retryDeferredNotifications = onSchedule(
   }),
 );
 
+const solicitationJournalCallableOptions = Object.freeze({
+  region: 'europe-west1',
+});
+
+export const recordProfessionalSolicitationConsulted = onCall(
+  solicitationJournalCallableOptions,
+  async (request) => solicitationJournalCallable(() =>
+    recordProfessionalSolicitationConsultedRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: solicitationJournalServices(),
+    })),
+);
+
+export const listProfessionalSolicitationJournal = onCall(
+  solicitationJournalCallableOptions,
+  async (request) => solicitationJournalCallable(() =>
+    listProfessionalSolicitationJournalRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: solicitationJournalServices(),
+    })),
+);
+
 function eventTimestamp(event) {
   const date = new Date(event.time);
   return Timestamp.fromDate(Number.isNaN(date.getTime()) ? new Date() : date);
+}
+
+function solicitationJournalServices() {
+  return solicitationJournalFirestoreServices({
+    firestore: getFirestore(),
+    serverTimestamp: FieldValue.serverTimestamp,
+    timestampFromMillis: Timestamp.fromMillis,
+  });
 }
 
 async function missionForEngagement(firestore, engagement) {
@@ -1162,6 +1200,23 @@ async function missionUpdateCallable(action) {
       type: error?.constructor?.name ?? 'Unknown',
     });
     throw new HttpsError('internal', 'La mission n’a pas pu être mise à jour.');
+  }
+}
+
+async function solicitationJournalCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof SolicitationJournalError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('SOLICITATION_JOURNAL_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'Le journal des sollicitations est indisponible.',
+    );
   }
 }
 

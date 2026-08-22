@@ -1,4 +1,8 @@
 import 'need.dart';
+import 'mobilization_preferences.dart';
+import 'professional_communication_preferences.dart';
+import 'professional_competencies.dart';
+import 'professional_consent.dart';
 
 enum ProfessionalIdType { rpps, ordinal, none }
 
@@ -11,9 +15,33 @@ extension ProfessionalIdTypeLabel on ProfessionalIdType {
 }
 
 bool isValidProfessionalIdentifier(ProfessionalIdType type, String? value) {
-  return (type == ProfessionalIdType.rpps ||
-          type == ProfessionalIdType.ordinal) &&
-      (value?.trim().isNotEmpty ?? false);
+  return type != ProfessionalIdType.none &&
+      professionalIdentifierValidationMessage(type, value) == null;
+}
+
+String normalizeProfessionalIdentifier(ProfessionalIdType type, String? value) {
+  final rawValue = value ?? '';
+  return switch (type) {
+    ProfessionalIdType.rpps => rawValue.replaceAll(RegExp(r'\s+'), ''),
+    ProfessionalIdType.ordinal => rawValue.trim(),
+    ProfessionalIdType.none => '',
+  };
+}
+
+String? professionalIdentifierValidationMessage(
+  ProfessionalIdType type,
+  String? value,
+) {
+  final normalized = normalizeProfessionalIdentifier(type, value);
+  return switch (type) {
+    ProfessionalIdType.rpps when !RegExp(r'^\d{11}$').hasMatch(normalized) =>
+      'Le numéro RPPS doit contenir exactement 11 chiffres.',
+    ProfessionalIdType.ordinal when normalized.isEmpty =>
+      'Saisissez votre numéro ordinal.',
+    ProfessionalIdType.none when (value?.trim().isNotEmpty ?? false) =>
+      'Aucun identifiant professionnel ne doit être renseigné.',
+    _ => null,
+  };
 }
 
 class ProfessionalAddress {
@@ -120,9 +148,14 @@ class VolunteerProfile {
     this.verifiedProfessionCode,
     this.verifiedProfessionLabel,
     this.verifiedAt,
+    this.profileSchemaVersion,
+    this.competencies,
+    this.mobilizationPreferences,
+    this.communicationPreferences,
+    this.consentRecords,
     this.createdAt,
     this.updatedAt,
-  });
+  }) : assert(profileSchemaVersion == null || profileSchemaVersion >= 1);
 
   final String uid;
   final String firstName;
@@ -149,6 +182,11 @@ class VolunteerProfile {
   final String? verifiedProfessionCode;
   final String? verifiedProfessionLabel;
   final DateTime? verifiedAt;
+  final int? profileSchemaVersion;
+  final ProfessionalCompetencies? competencies;
+  final MobilizationPreferences? mobilizationPreferences;
+  final ProfessionalCommunicationPreferences? communicationPreferences;
+  final List<ProfessionalConsentRecord>? consentRecords;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -228,6 +266,11 @@ class VolunteerProfile {
     String? verifiedProfessionCode,
     String? verifiedProfessionLabel,
     DateTime? verifiedAt,
+    int? profileSchemaVersion,
+    ProfessionalCompetencies? competencies,
+    MobilizationPreferences? mobilizationPreferences,
+    ProfessionalCommunicationPreferences? communicationPreferences,
+    List<ProfessionalConsentRecord>? consentRecords,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -264,6 +307,13 @@ class VolunteerProfile {
       verifiedProfessionLabel:
           verifiedProfessionLabel ?? this.verifiedProfessionLabel,
       verifiedAt: verifiedAt ?? this.verifiedAt,
+      profileSchemaVersion: profileSchemaVersion ?? this.profileSchemaVersion,
+      competencies: competencies ?? this.competencies,
+      mobilizationPreferences:
+          mobilizationPreferences ?? this.mobilizationPreferences,
+      communicationPreferences:
+          communicationPreferences ?? this.communicationPreferences,
+      consentRecords: consentRecords ?? this.consentRecords,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

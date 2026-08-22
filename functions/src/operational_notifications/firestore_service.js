@@ -7,6 +7,11 @@ import {
   notificationContent,
   recipientsForEvent,
 } from './targeting.js';
+import {
+  canonicalSolicitationEntry,
+  deriveSolicitationOrganizationContext,
+  ensureCanonicalSolicitationEntry,
+} from './solicitation_journal.js';
 
 export async function persistCanonicalEvents({firestore, events}) {
   if (events.length === 0) return;
@@ -61,6 +66,12 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
     event, mission, roles, assignments, volunteers, engagements, preferences,
     recentNotifications, now: now.getTime(),
   });
+  if (recipients.length === 0) return {notifications: 0, pushes: 0};
+  const solicitationContext = await deriveSolicitationOrganizationContext({
+    firestore,
+    missionId: event.missionId,
+    mission,
+  });
   const content = notificationContent(event);
   let pushes = 0;
   for (const recipient of recipients) {
@@ -68,24 +79,44 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
     const notificationRef = firestore.collection('notifications').doc(notificationId);
     await firestore.runTransaction(async (transaction) => {
       const existing = await transaction.get(notificationRef);
-      if (existing.exists) return;
-      transaction.create(notificationRef, {
-        notificationId,
-        eventId: event.eventId,
-        eventType: event.eventType,
-        recipientUid: recipient.uid,
-        recipientRole: recipient.role,
-        missionId: event.missionId,
-        mobilizationId: event.mobilizationId,
-        engagementId: event.payload.engagementId ?? null,
-        title: content.title,
-        body: content.body,
-        category: categoryFor(event.eventType),
-        occurredAt: event.occurredAt,
-        createdAt: FieldValue.serverTimestamp(),
-        readAt: null,
-        version: 1,
+      await ensureCanonicalSolicitationEntry({
+        firestore,
+        transaction,
+        entry: canonicalSolicitationEntry({
+          solicitationId: notificationId,
+          recipientUid: recipient.uid,
+          factType: 'created',
+          ...solicitationContext,
+          channel: 'in_app',
+          occurredAt: event.occurredAt,
+          source: 'notification_dispatch',
+          sourceRecordIds: [notificationId, event.eventId],
+          causeEventId: event.eventId,
+          causeType: event.eventType,
+          category: categoryFor(event.eventType),
+          engagementId: event.payload.engagementId ?? null,
+          recordedAt: FieldValue.serverTimestamp(),
+        }),
       });
+      if (!existing.exists) {
+        transaction.create(notificationRef, {
+          notificationId,
+          eventId: event.eventId,
+          eventType: event.eventType,
+          recipientUid: recipient.uid,
+          recipientRole: recipient.role,
+          missionId: event.missionId,
+          mobilizationId: event.mobilizationId,
+          engagementId: event.payload.engagementId ?? null,
+          title: content.title,
+          body: content.body,
+          category: categoryFor(event.eventType),
+          occurredAt: event.occurredAt,
+          createdAt: FieldValue.serverTimestamp(),
+          readAt: null,
+          version: 1,
+        });
+      }
     });
     const subscriptions = await firestore.collection('pushSubscriptions')
       .where('uid', '==', recipient.uid).where('active', '==', true).get();
@@ -96,6 +127,7 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
         firestore, messaging, event, content, recipientUid: recipient.uid,
         subscription: {id: subscription.id, ...subscription.data()},
         notificationId, deferred, preferences: recipient.preferences, now,
+        context: solicitationContext,
       });
       if (result === 'delivered') pushes += 1;
     }
@@ -103,7 +135,12 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
   return {notifications: recipients.length, pushes};
 }
 
-export async function deliverPush({firestore, messaging, event, content, recipientUid, subscription, notificationId, deferred = false, preferences, now = new Date()}) {
+export async function deliverPush({firestore, messaging, event, content, recipientUid, subscription, notificationId, deferred = false, preferences, now = new Date(), context = null}) {
+  const solicitationContext = context ??
+    await deriveSolicitationOrganizationContext({
+      firestore,
+      missionId: event.missionId,
+    });
   const channel = `push:${subscription.installationId}`;
   const deliveryId = digest(`${event.eventId}:${recipientUid}:${channel}`);
   const reference = firestore.collection('notificationDeliveries').doc(deliveryId);
@@ -127,7 +164,7 @@ export async function deliverPush({firestore, messaging, event, content, recipie
   });
   if (!claim) return deferred ? 'pending' : 'skipped';
   try {
-    await messaging.send({
+    const providerMessageId = await messaging.send({
       token: subscription.token,
       data: {
         title: content.title,
@@ -138,9 +175,42 @@ export async function deliverPush({firestore, messaging, event, content, recipie
         url: `/?notification=${encodeURIComponent(notificationId)}`,
       },
     });
-    await reference.update({
-      status: 'delivered', deliveredAt: FieldValue.serverTimestamp(),
-      leaseExpiresAt: null, updatedAt: FieldValue.serverTimestamp(),
+    if (typeof providerMessageId !== 'string' || providerMessageId === '') {
+      throw new Error('Le fournisseur push n’a retourné aucune preuve.');
+    }
+    const acceptedAt = FieldValue.serverTimestamp();
+    const providerEvidenceId = `provider-${digest(providerMessageId)}`;
+    await firestore.runTransaction(async (transaction) => {
+      await ensureCanonicalSolicitationEntry({
+        firestore,
+        transaction,
+        entry: canonicalSolicitationEntry({
+          solicitationId: notificationId,
+          recipientUid,
+          factType: 'provider_accepted',
+          ...solicitationContext,
+          channel: 'push',
+          occurredAt: acceptedAt,
+          source: 'push_provider',
+          sourceRecordIds: [
+            deliveryId,
+            notificationId,
+            event.eventId,
+            providerEvidenceId,
+          ],
+          causeEventId: event.eventId,
+          causeType: event.eventType,
+          category: categoryFor(event.eventType),
+          engagementId: event.payload.engagementId ?? null,
+          evidenceId: deliveryId,
+          recordedAt: acceptedAt,
+        }),
+      });
+      transaction.update(reference, {
+        status: 'delivered', deliveredAt: acceptedAt,
+        providerMessageId,
+        leaseExpiresAt: null, updatedAt: acceptedAt,
+      });
     });
     return 'delivered';
   } catch (error) {
