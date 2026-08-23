@@ -252,6 +252,91 @@ service cloud.firestore {
           == data.registeredByProfession.get('podiatrist', 0);
     }
 
+    function missionCreateQuotaValues(value) {
+      return [
+        value.get('physiotherapist', 0),
+        value.get('podiatrist', 0),
+        value.get('physician', 0),
+        value.get('nurse', 0),
+        value.get('veterinarian', 0),
+        value.get('other_health_professional', 0)
+      ];
+    }
+
+    function validMissionCreateQuotaValues(values) {
+      return values[0] is int
+        && values[1] is int
+        && values[2] is int
+        && values[3] is int
+        && values[4] is int
+        && values[5] is int
+        && values[0] >= 0
+        && values[1] >= 0
+        && values[2] >= 0
+        && values[3] >= 0
+        && values[4] >= 0
+        && values[5] >= 0;
+    }
+
+    function validGenericMissionCreateQuotaData(data) {
+      let required = data.get('requiredByProfession', null);
+      let registered = data.get('registeredByProfession', null);
+      let requiredValues = required is map
+        ? missionCreateQuotaValues(required)
+        : [];
+      let registeredValues = registered is map
+        ? missionCreateQuotaValues(registered)
+        : [];
+      return required is map
+        && registered is map
+        && required.keys().hasOnly([
+          'physiotherapist', 'podiatrist', 'physician', 'nurse',
+          'veterinarian', 'other_health_professional'
+        ])
+        && registered.keys().hasOnly([
+          'physiotherapist', 'podiatrist', 'physician', 'nurse',
+          'veterinarian', 'other_health_professional'
+        ])
+        && validMissionCreateQuotaValues(requiredValues)
+        && validMissionCreateQuotaValues(registeredValues)
+        && registeredValues[0] <= requiredValues[0]
+        && registeredValues[1] <= requiredValues[1]
+        && registeredValues[2] <= requiredValues[2]
+        && registeredValues[3] <= requiredValues[3]
+        && registeredValues[4] <= requiredValues[4]
+        && registeredValues[5] <= requiredValues[5]
+        && data.requiredMk == requiredValues[0]
+        && data.requiredPp == requiredValues[1]
+        && data.registeredMk == registeredValues[0]
+        && data.registeredPp == registeredValues[1]
+        && data.registeredMk == 0
+        && data.registeredPp == 0
+        && registeredValues == [0, 0, 0, 0, 0, 0]
+        && data.requiredMk is int
+        && data.requiredPp is int
+        && data.requiredMk >= 0
+        && data.requiredMk <= 50
+        && data.requiredPp >= 0
+        && data.requiredPp <= 50
+        && requiredValues != [0, 0, 0, 0, 0, 0];
+    }
+
+    function validMissionCreateQuotaData(data) {
+      return !hasGenericQuotas(data)
+        ? (data.registeredMk == 0
+          && data.registeredPp == 0
+          && validGenericQuotaData(data)
+          && totalRegistered(data) == 0
+          && data.requiredMk is int
+          && data.requiredPp is int
+          && data.requiredMk >= 0
+          && data.requiredMk <= 50
+          && data.requiredPp >= 0
+          && data.requiredPp <= 50
+          && totalRequired(data) > 0)
+        : validGenericMissionCreateQuotaData(data);
+    }
+
     function validCounterQuotaData(before, after) {
       return !hasGenericQuotas(after)
         ? (sameRequiredQuotas(before, after)
@@ -818,6 +903,16 @@ service cloud.firestore {
       return hasActiveOrganizationMembership(organizationId);
     }
 
+    // Le chemin canonique borne l'organisation et l'uid. Les memberships sont
+    // non inscriptibles par le client ; le rôle et le lieu restent contrôlés
+    // séparément par canManageMobilizationLocation().
+    function hasActiveLegacyOrganizationMembershipDocument() {
+      return get(organizationMembershipPath(
+        legacyOrganizationId(),
+        request.auth.uid
+      )).data.get('active', false) == true;
+    }
+
     function legacyOrganizationId() {
       return 'legacy-gironde';
     }
@@ -1102,7 +1197,8 @@ service cloud.firestore {
 
     function canUseMobilizationOrganizationAsRole(mobilizationId) {
       return (isLegacyMobilizationById(mobilizationId)
-          && !hasOrganizationMembershipDocument(legacyOrganizationId()))
+          && (!hasOrganizationMembershipDocument(legacyOrganizationId())
+            || hasActiveLegacyOrganizationMembershipDocument()))
         || canUseExplicitMobilizationOrganizationAsRole(mobilizationId);
     }
 
@@ -1178,6 +1274,39 @@ service cloud.firestore {
         && canUseMobilizationOrganizationAsRole(mobilizationId);
     }
 
+    function canCreateMissionAtMobilizationLocation(
+      mobilizationId,
+      locationId
+    ) {
+      let currentRolePath = rolePath();
+      let role = isSignedIn() && exists(currentRolePath)
+        ? get(currentRolePath).data
+        : {};
+      let assignmentPath = mobilizationAssignmentPath(
+        mobilizationId,
+        request.auth.uid
+      );
+      let configPath = platformConfigPath();
+      return isSignedIn()
+        && exists(currentRolePath)
+        && isValidRoleDocument(role)
+        && role.active == true
+        && ((hasRole(role, 'coordinator')
+            && ((exists(assignmentPath)
+                && get(assignmentPath).data.uid == request.auth.uid
+                && get(assignmentPath).data.mobilizationId == mobilizationId
+                && get(assignmentPath).data.role == 'coordinator'
+                && get(assignmentPath).data.active == true)
+              || ((!('hasActiveMobilizationAssignments' in role)
+                    || role.hasActiveMobilizationAssignments == false)
+                && exists(configPath)
+                && get(configPath).data.activeMobilizationId
+                  == mobilizationId)))
+          || (hasRole(role, 'site_manager')
+            && locationId in role.locationIds))
+        && canUseMobilizationOrganizationAsRole(mobilizationId);
+    }
+
     function canReadMissionScope(mobilizationId, locationId) {
       return canReadOrganizationMissionScope(mobilizationId, locationId)
         || ((isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
@@ -1210,17 +1339,7 @@ service cloud.firestore {
           request.resource.data.mobilizationId
         )
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.registeredMk == 0
-        && request.resource.data.registeredPp == 0
-        && validGenericQuotaData(request.resource.data)
-        && totalRegistered(request.resource.data) == 0
-        && request.resource.data.requiredMk is int
-        && request.resource.data.requiredPp is int
-        && request.resource.data.requiredMk >= 0
-        && request.resource.data.requiredMk <= 50
-        && request.resource.data.requiredPp >= 0
-        && request.resource.data.requiredPp <= 50
-        && totalRequired(request.resource.data) > 0
+        && validMissionCreateQuotaData(request.resource.data)
         && request.resource.data.startAt is timestamp
         && request.resource.data.endAt is timestamp
         && request.resource.data.endAt > request.resource.data.startAt
@@ -1231,7 +1350,7 @@ service cloud.firestore {
         && request.resource.data.isActive == true
         && request.resource.data.status == 'critical'
         && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
-        && canManageMobilizationLocation(
+        && canCreateMissionAtMobilizationLocation(
           request.resource.data.mobilizationId,
           request.resource.data.locationId
         );
