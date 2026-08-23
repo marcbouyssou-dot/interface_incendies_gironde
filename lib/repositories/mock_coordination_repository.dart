@@ -657,6 +657,7 @@ class MockCoordinationRepository implements CoordinationRepository {
       registeredPodiatrists: 0,
       professionQuotas: draft.professionQuotas,
       equipment: List.of(draft.equipment),
+      priority: draft.priority,
       details: draft.details,
       createdBy: _responsibleAccess?.uid,
     );
@@ -732,6 +733,7 @@ class MockCoordinationRepository implements CoordinationRepository {
       registeredPodiatrists: pp.registered,
       professionQuotas: quotas,
       equipment: List.of(draft.equipment),
+      priority: draft.priority,
       details: draft.details.trim(),
       isActive: mission.isActive,
       isCancelled: mission.isCancelled,

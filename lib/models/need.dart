@@ -3,6 +3,26 @@ import 'profession_quotas.dart';
 
 enum NeedStatus { critical, toComplete, complete }
 
+enum NeedPriority {
+  standard('standard', 'Standard'),
+  priority('priority', 'Prioritaire'),
+  urgent('urgent', 'Urgent'),
+  crisis('crisis', 'Crise majeure');
+
+  const NeedPriority(this.serializedValue, this.label);
+
+  final String serializedValue;
+  final String label;
+
+  static NeedPriority fromFirestore(Object? value) {
+    if (value == null) return NeedPriority.standard;
+    return NeedPriority.values.firstWhere(
+      (priority) => priority.serializedValue == value,
+      orElse: () => throw const FormatException('Priorité de besoin invalide.'),
+    );
+  }
+}
+
 enum VolunteerProfession {
   mk,
   pp,
@@ -109,6 +129,7 @@ class CoordinationNeed {
     required this.requiredPodiatrists,
     required this.registeredPodiatrists,
     required this.equipment,
+    this.priority = NeedPriority.standard,
     this.mobilizationId,
     this.locationId,
     this.startAt,
@@ -135,6 +156,7 @@ class CoordinationNeed {
   final int requiredPodiatrists;
   final int registeredPodiatrists;
   final List<String> equipment;
+  final NeedPriority priority;
   final String? mobilizationId;
   final String? locationId;
   final DateTime? startAt;
@@ -194,6 +216,7 @@ class CoordinationNeed {
       registeredPodiatrists:
           registeredPodiatrists ?? this.registeredPodiatrists,
       equipment: equipment,
+      priority: priority,
       mobilizationId: mobilizationId,
       locationId: locationId,
       startAt: startAt,

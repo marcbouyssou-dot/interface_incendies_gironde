@@ -97,11 +97,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
+  NeedPriority _priority = NeedPriority.standard;
   final Set<String> _equipment = {};
   final List<String> _equipmentProfessionHistory = [];
   final _detailsController = TextEditingController();
   bool _publishing = false;
   String? _errorMessage;
+  MissionDraft? _reviewDraft;
   _PublishedMission? _publishedMission;
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
@@ -124,6 +126,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     _endTime = mission.endAt == null
         ? null
         : TimeOfDay.fromDateTime(mission.endAt!);
+    _priority = mission.priority;
     for (final quota in mission.professionQuotas.values) {
       _requiredByProfession[quota.professionId] = quota.required;
     }
@@ -229,6 +232,22 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         onCreateAnother: _resetForm,
       );
     }
+    if (!_isEditing && _reviewDraft != null) {
+      return _MissionReviewView(
+        draft: _reviewDraft!,
+        publishing: _publishing,
+        errorMessage: _errorMessage,
+        onBack: _publishing
+            ? null
+            : () => setState(() {
+                _reviewDraft = null;
+                _errorMessage = null;
+              }),
+        onPublish: _publishing
+            ? null
+            : () => _publish(access, confirmedDraft: _reviewDraft!),
+      );
+    }
     if (_isEditing && _selectedLocation == null) {
       _selectedLocation = responsePlaceForNeed(widget.mission!, locations);
     }
@@ -310,7 +329,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                           child: Text(
                             _isEditing
                                 ? 'Modifier la mission'
-                                : 'Créer un besoin',
+                                : 'Exprimer un besoin',
                             style: TextStyle(
                               color: context.v5Colors.textPrimary,
                               fontSize: 24,
@@ -325,38 +344,96 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       ],
                     ),
                     const SizedBox(height: 14),
-                    _NeedSummaryCard(
-                      location: _selectedLocation,
-                      date: _selectedDate,
-                      startTime: _startTime,
-                      endTime: _endTime,
-                      requestedProfessionals: requestedProfessionals,
-                    ),
-                    const SizedBox(height: 10),
                     V5Section(
-                      title: 'Planification',
+                      title: _isEditing
+                          ? 'Professionnels recherchés'
+                          : '1. De quoi avez-vous besoin ?',
+                      leading: const Icon(Icons.groups_2_outlined),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!_isEditing) ...[
+                            Text(
+                              'Choisissez la profession recherchée.',
+                              style: TextStyle(
+                                color: context.v5Colors.textSecondary,
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: V5Spacing.md),
+                            Text(
+                              '2. Combien ?',
+                              style: TextStyle(
+                                color: context.v5Colors.textPrimary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: V5Spacing.xs),
+                          ],
+                          Text(
+                            'Un besoin concerne une seule profession. Ajouter '
+                            'une autre profession remplace la sélection actuelle.',
+                            style: TextStyle(
+                              color: context.v5Colors.textSecondary,
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: V5Spacing.sm),
+                          for (final profession
+                              in HealthProfessionRegistry.values) ...[
+                            _QuotaStepper(
+                              key: _quotaKeys[profession.id],
+                              profession: profession,
+                              value: _requiredByProfession[profession.id]!,
+                              removeKey: Key('${profession.id}-remove'),
+                              addKey: Key('${profession.id}-add'),
+                              addFocusNode: _quotaFocusNodes[profession.id]!,
+                              onRemove:
+                                  !_publishing &&
+                                      _requiredByProfession[profession.id]! > 0
+                                  ? () => _changeQuota(profession.id, -1)
+                                  : null,
+                              onAdd: _publishing
+                                  ? null
+                                  : () => _changeQuota(profession.id, 1),
+                            ),
+                            if (profession !=
+                                HealthProfessionRegistry.values.last)
+                              const SizedBox(height: V5Spacing.xs),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    V5Section(
+                      title: _isEditing ? 'Lieu' : '3. Où ?',
+                      leading: const Icon(Icons.place_outlined),
+                      child: _LocationInput(
+                        key: _locationKey,
+                        access: access,
+                        locations: locations,
+                        selectedLocation: _selectedLocation,
+                        preserveUnavailableSelection: _isEditing,
+                        enabled: !_publishing,
+                        focusNode: _locationFocusNode,
+                        onSelected: (location) {
+                          if (!mounted) return;
+                          setState(() {
+                            _selectedLocation = location;
+                            _errorMessage = null;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    V5Section(
+                      title: _isEditing ? 'Créneau' : '4. Quand ?',
                       leading: const Icon(Icons.event_available_outlined),
                       child: Column(
                         children: [
-                          if (responsibleLocationId == null) ...[
-                            _LocationInput(
-                              key: _locationKey,
-                              access: access,
-                              locations: locations,
-                              selectedLocation: _selectedLocation,
-                              preserveUnavailableSelection: _isEditing,
-                              enabled: !_publishing,
-                              focusNode: _locationFocusNode,
-                              onSelected: (location) {
-                                if (!mounted) return;
-                                setState(() {
-                                  _selectedLocation = location;
-                                  _errorMessage = null;
-                                });
-                              },
-                            ),
-                            const SizedBox(height: V5Spacing.md),
-                          ],
                           KeyedSubtree(
                             key: _dateKey,
                             child: V5DateField(
@@ -435,38 +512,38 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     ),
                     const SizedBox(height: 20),
                     V5Section(
-                      title: 'Professionnels recherchés',
-                      leading: const Icon(Icons.groups_2_outlined),
-                      child: Column(
-                        children: [
-                          for (final profession
-                              in HealthProfessionRegistry.values) ...[
-                            _QuotaStepper(
-                              key: _quotaKeys[profession.id],
-                              profession: profession,
-                              value: _requiredByProfession[profession.id]!,
-                              removeKey: Key('${profession.id}-remove'),
-                              addKey: Key('${profession.id}-add'),
-                              addFocusNode: _quotaFocusNodes[profession.id]!,
-                              onRemove:
-                                  !_publishing &&
-                                      _requiredByProfession[profession.id]! > 0
-                                  ? () => _changeQuota(profession.id, -1)
-                                  : null,
-                              onAdd: _publishing
-                                  ? null
-                                  : () => _changeQuota(profession.id, 1),
+                      title: _isEditing ? 'Priorité' : '5. Priorité',
+                      leading: const Icon(Icons.priority_high_rounded),
+                      child: V5SelectField<NeedPriority>(
+                        key: const Key('mission-priority'),
+                        label: 'Priorité',
+                        value: _priority,
+                        sheetTitle: 'Choisir la priorité',
+                        supportingText:
+                            'La priorité qualifie le besoin sans modifier les droits.',
+                        options: [
+                          for (final priority in NeedPriority.values)
+                            V5SelectOption(
+                              value: priority,
+                              label: priority.label,
                             ),
-                            if (profession !=
-                                HealthProfessionRegistry.values.last)
-                              const SizedBox(height: V5Spacing.xs),
-                          ],
                         ],
+                        onChanged: _publishing
+                            ? null
+                            : (value) {
+                                if (value == null || !mounted) return;
+                                setState(() {
+                                  _priority = value;
+                                  _errorMessage = null;
+                                });
+                              },
                       ),
                     ),
                     const SizedBox(height: 20),
                     V5Section(
-                      title: 'Matériel conseillé',
+                      title: _isEditing
+                          ? 'Informations complémentaires'
+                          : '6. Informations complémentaires',
                       leading: const Icon(Icons.medical_services_outlined),
                       child: equipmentProfession == null
                           ? Padding(
@@ -585,20 +662,24 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     const SizedBox(height: 28),
                     V5Button(
                       key: Key(
-                        _isEditing ? 'update-mission' : 'publish-mission',
+                        _isEditing ? 'update-mission' : 'review-mission',
                       ),
                       expanded: true,
                       backgroundColor: context.v5Colors.accent,
                       foregroundColor: context.v5Colors.onAccent,
                       loading: _publishing,
-                      onPressed: _publishing ? null : () => _publish(access),
+                      onPressed: _publishing
+                          ? null
+                          : _isEditing
+                          ? () => _publish(access)
+                          : _review,
                       label: _publishing
                           ? _isEditing
                                 ? 'Enregistrement…'
                                 : 'Publication…'
                           : _isEditing
                           ? 'Enregistrer les modifications'
-                          : 'Publier le besoin',
+                          : 'Voir le résumé',
                     ),
                     const SizedBox(height: 8),
                     Center(
@@ -646,9 +727,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     );
   }
 
-  Future<void> _publish(ResponsibleAccess access) async {
-    if (_publishing) return;
-
+  void _review() {
     final validation = _validate();
     if (validation != null) {
       setState(() => _errorMessage = validation.message);
@@ -657,7 +736,29 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       );
       return;
     }
-    final draft = _buildDraft();
+    setState(() {
+      _reviewDraft = _buildDraft();
+      _errorMessage = null;
+    });
+  }
+
+  Future<void> _publish(
+    ResponsibleAccess access, {
+    MissionDraft? confirmedDraft,
+  }) async {
+    if (_publishing) return;
+
+    if (confirmedDraft == null) {
+      final validation = _validate();
+      if (validation != null) {
+        setState(() => _errorMessage = validation.message);
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _showValidationError(validation),
+        );
+        return;
+      }
+    }
+    final draft = confirmedDraft ?? _buildDraft();
     setState(() {
       _publishing = true;
       _errorMessage = null;
@@ -700,12 +801,14 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
           registeredPodiatrists: 0,
           professionQuotas: draft.professionQuotas,
           equipment: List.of(draft.equipment),
+          priority: draft.priority,
           details: draft.details.trim(),
           createdBy: access.uid,
         ),
       );
       setState(() {
         _publishing = false;
+        _reviewDraft = null;
         _publishedMission = _PublishedMission(id: id, draft: draft);
       });
     } on RepositoryException catch (error, stackTrace) {
@@ -760,7 +863,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         focusNode: _endTimeFocusNode,
       );
     }
-    if (_minutes(_startTime!) == _minutes(_endTime!)) {
+    if (_minutes(_endTime!) <= _minutes(_startTime!)) {
       return _MissionFormValidationError(
         message: 'L’heure de fin doit être postérieure à l’heure de début.',
         targetKey: _endTimeKey,
@@ -821,6 +924,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       startAt: schedule.startAt,
       endAt: schedule.endAt,
       requiredByProfession: Map.of(_requiredByProfession),
+      priority: _priority,
       equipment: _equipment.toList(growable: false),
       details: _detailsController.text,
     );
@@ -832,6 +936,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       _selectedDate = null;
       _startTime = null;
       _endTime = null;
+      _priority = NeedPriority.standard;
       for (final profession in _requiredByProfession.keys) {
         _requiredByProfession[profession] = 0;
       }
@@ -839,6 +944,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       _equipment.clear();
       _detailsController.clear();
       _errorMessage = null;
+      _reviewDraft = null;
       _publishedMission = null;
     });
   }
@@ -847,6 +953,16 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     final current = _requiredByProfession[professionId]!;
     final updated = current + delta;
     setState(() {
+      if (!_isEditing && delta > 0 && current == 0) {
+        for (final otherProfessionId in _requiredByProfession.keys) {
+          if (otherProfessionId != professionId) {
+            _requiredByProfession[otherProfessionId] = 0;
+          }
+        }
+        _equipmentProfessionHistory.removeWhere(
+          (otherProfessionId) => otherProfessionId != professionId,
+        );
+      }
       _requiredByProfession[professionId] = updated;
       _equipmentProfessionHistory.remove(professionId);
       if (updated > 0) _equipmentProfessionHistory.add(professionId);
@@ -937,122 +1053,6 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
 
   static int _minutes(TimeOfDay value) => value.hour * 60 + value.minute;
   static String _formatDate(DateTime value) => FrenchDateTime.date(value);
-}
-
-class _NeedSummaryCard extends StatelessWidget {
-  const _NeedSummaryCard({
-    required this.location,
-    required this.date,
-    required this.startTime,
-    required this.endTime,
-    required this.requestedProfessionals,
-  });
-
-  final ResponsePlace? location;
-  final DateTime? date;
-  final TimeOfDay? startTime;
-  final TimeOfDay? endTime;
-  final int requestedProfessionals;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.v5Colors;
-    final dateLabel = date == null
-        ? 'Date à définir'
-        : 'Date · ${FrenchDateTime.date(date!)}';
-    final timeLabel = switch ((startTime, endTime)) {
-      (final start?, final end?) => '${_formatTime(start)}–${_formatTime(end)}',
-      (final start?, null) => 'Début ${_formatTime(start)} · fin à définir',
-      (null, final end?) => 'Début à définir · fin ${_formatTime(end)}',
-      _ => 'Horaires à définir',
-    };
-    final professionLabel = requestedProfessionals == 1
-        ? 'professionnel'
-        : 'professionnels';
-    final requestedLabel =
-        '$requestedProfessionals $professionLabel '
-        '${requestedProfessionals == 1 ? 'demandé' : 'demandés'}';
-    final useStackedLayout = MediaQuery.textScalerOf(context).scale(12) >= 18;
-    final details = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          location == null ? 'Lieu à définir' : 'Lieu · ${location!.name}',
-          style: TextStyle(
-            color: colors.textPrimary,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$dateLabel · $timeLabel',
-          style: TextStyle(
-            color: colors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-    final requestedCount = Semantics(
-      label: requestedLabel,
-      child: ExcludeSemantics(
-        child: Text.rich(
-          TextSpan(
-            text: '$requestedProfessionals\n',
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 22,
-              height: 0.9,
-              fontWeight: FontWeight.w800,
-            ),
-            children: [
-              TextSpan(
-                text: professionLabel,
-                style: TextStyle(
-                  color: colors.textSecondary,
-                  fontSize: 12,
-                  height: 1.8,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          textAlign: useStackedLayout ? TextAlign.start : TextAlign.center,
-        ),
-      ),
-    );
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(13, 12, 13, 11),
-      decoration: BoxDecoration(
-        color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: colors.outline),
-      ),
-      child: useStackedLayout
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                details,
-                const SizedBox(height: V5Spacing.sm),
-                requestedCount,
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(child: details),
-                const SizedBox(width: 14),
-                requestedCount,
-              ],
-            ),
-    );
-  }
-
-  static String _formatTime(TimeOfDay value) =>
-      FrenchDateTime.timeFromParts(value.hour, value.minute);
 }
 
 class _EquipmentProfessionContext extends StatelessWidget {
@@ -1385,6 +1385,75 @@ class _MissionFormValidationError {
   final FocusNode focusNode;
 }
 
+class _MissionReviewView extends StatelessWidget {
+  const _MissionReviewView({
+    required this.draft,
+    required this.publishing,
+    required this.errorMessage,
+    required this.onBack,
+    required this.onPublish,
+  });
+
+  final MissionDraft draft;
+  final bool publishing;
+  final String? errorMessage;
+  final VoidCallback? onBack;
+  final VoidCallback? onPublish;
+
+  @override
+  Widget build(BuildContext context) {
+    return PageContainer(
+      child: ListView(
+        key: const Key('need-review'),
+        padding: const EdgeInsets.fromLTRB(20, 32, 20, 36),
+        children: [
+          TextButton.icon(
+            key: const Key('edit-need-from-review'),
+            style: TextButton.styleFrom(
+              alignment: Alignment.centerLeft,
+              padding: EdgeInsets.zero,
+            ),
+            onPressed: onBack,
+            icon: const Icon(Icons.chevron_left_rounded),
+            label: const Text('Modifier le besoin'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Résumé du besoin',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Vérifiez les informations avant de publier.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 24),
+          _MissionDraftSummary(draft: draft),
+          if (errorMessage != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              errorMessage!,
+              key: const Key('mission-review-error'),
+              style: TextStyle(
+                color: context.v5Colors.danger,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          V5Button(
+            key: const Key('publish-mission'),
+            expanded: true,
+            loading: publishing,
+            onPressed: onPublish,
+            label: publishing ? 'Publication…' : 'Publier le besoin',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MissionPublishedView extends StatelessWidget {
   const _MissionPublishedView({
     required this.mission,
@@ -1410,59 +1479,73 @@ class _MissionPublishedView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Mission publiée',
+            'Votre besoin est publié.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: 24),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SummaryLine(label: 'Lieu', value: draft.location.name),
-                  const SizedBox(height: 14),
-                  _SummaryLine(
-                    label: 'Date',
-                    value: _CreateNeedScreenState._formatDate(draft.startAt),
-                  ),
-                  const SizedBox(height: 14),
-                  _SummaryLine(
-                    label: 'Horaires',
-                    value: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
-                  ),
-                  const SizedBox(height: 14),
-                  _SummaryLine(
-                    label: 'Quotas',
-                    value: HealthProfessionRegistry.values
-                        .where(
-                          (profession) =>
-                              draft.requiredByProfession[profession.id]! > 0,
-                        )
-                        .map(
-                          (profession) =>
-                              '${profession.shortLabel} '
-                              '${draft.requiredByProfession[profession.id]}',
-                        )
-                        .join(' • '),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _MissionDraftSummary(draft: draft, status: 'En attente de diffusion'),
           const SizedBox(height: 20),
           V5Button(
             expanded: true,
             onPressed: onViewMission,
-            label: 'Voir la mission',
+            label: 'Voir le besoin',
           ),
           const SizedBox(height: 10),
           OutlinedButton(
             onPressed: onCreateAnother,
-            child: const Text('Déclarer un autre besoin'),
+            child: const Text('Exprimer un autre besoin'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MissionDraftSummary extends StatelessWidget {
+  const _MissionDraftSummary({required this.draft, this.status});
+
+  final MissionDraft draft;
+  final String? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final professions = HealthProfessionRegistry.values
+        .where((item) => draft.requiredByProfession[item.id]! > 0)
+        .toList(growable: false);
+    final quantity = professions.fold<int>(
+      0,
+      (total, item) => total + draft.requiredByProfession[item.id]!,
+    );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SummaryLine(
+              label: 'Profession',
+              value: professions.map((item) => item.missionLabel).join(', '),
+            ),
+            const SizedBox(height: 14),
+            _SummaryLine(label: 'Quantité', value: '$quantity'),
+            const SizedBox(height: 14),
+            _SummaryLine(label: 'Lieu', value: draft.location.name),
+            const SizedBox(height: 14),
+            _SummaryLine(
+              label: 'Créneau',
+              value:
+                  '${_CreateNeedScreenState._formatDate(draft.startAt)} · '
+                  '${FrenchDateTime.timeRange(draft.startAt, draft.endAt)}',
+            ),
+            const SizedBox(height: 14),
+            _SummaryLine(label: 'Priorité', value: draft.priority.label),
+            if (status != null) ...[
+              const SizedBox(height: 14),
+              _SummaryLine(label: 'Statut', value: status!),
+            ],
+          ],
+        ),
       ),
     );
   }

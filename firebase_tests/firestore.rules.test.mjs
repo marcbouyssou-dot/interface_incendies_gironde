@@ -455,6 +455,7 @@ function mission(overrides = {}) {
     registeredPp: 0,
     requestedEquipment: ['Tables'],
     details: '',
+    priority: 'standard',
     status: 'critical',
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
@@ -985,6 +986,42 @@ test('missions: coordinator and authorized manager create', async () => {
   await assertSucceeds(setDoc(doc(db('manager'), 'missions/m1'), mission({
     id: 'm1', createdBy: 'manager',
   })));
+});
+
+test('missions: priority is closed and legacy documents stay readable', async () => {
+  await seed({mission: false});
+  for (const priority of ['standard', 'priority', 'urgent', 'crisis']) {
+    await assertSucceeds(setDoc(
+      doc(db('coord'), `missions/priority-${priority}`),
+      mission({id: `priority-${priority}`, priority}),
+    ));
+  }
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/priority-unknown'),
+    mission({id: 'priority-unknown', priority: 'information'}),
+  ));
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/priority-wrong-type'),
+    mission({id: 'priority-wrong-type', priority: 1}),
+  ));
+  const missingPriority = mission({id: 'priority-missing'});
+  delete missingPriority.priority;
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/priority-missing'),
+    missingPriority,
+  ));
+  await assertFails(setDoc(
+    doc(db('coord'), 'missions/priority-extra-field'),
+    mission({id: 'priority-extra-field', unexpected: true}),
+  ));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'missions/priority-legacy'),
+      missingPriority,
+    );
+  });
+  await assertSucceeds(getDoc(doc(db(), 'missions/priority-legacy')));
 });
 
 test('missions: active mobilization is mandatory for create and list', async () => {

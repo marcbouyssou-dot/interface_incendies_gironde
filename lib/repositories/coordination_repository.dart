@@ -255,6 +255,7 @@ class MissionDraft {
     int requiredPhysiotherapists = 0,
     int requiredPodiatrists = 0,
     Map<String, int>? requiredByProfession,
+    this.priority = NeedPriority.standard,
     required this.equipment,
     required this.details,
   }) : professionQuotas = requiredByProfession == null
@@ -273,6 +274,7 @@ class MissionDraft {
   final DateTime startAt;
   final DateTime endAt;
   final ProfessionQuotas professionQuotas;
+  final NeedPriority priority;
   final List<String> equipment;
   final String details;
 
@@ -295,7 +297,7 @@ class MissionSchedule {
     required int startMinutes,
     required int endMinutes,
   }) {
-    if (startMinutes == endMinutes) {
+    if (endMinutes <= startMinutes) {
       throw const FormatException(
         'L’heure de fin doit être postérieure à l’heure de début',
       );
@@ -307,16 +309,13 @@ class MissionSchedule {
       startMinutes ~/ 60,
       startMinutes % 60,
     );
-    var endAt = DateTime(
+    final endAt = DateTime(
       date.year,
       date.month,
       date.day,
       endMinutes ~/ 60,
       endMinutes % 60,
     );
-    if (endAt.isBefore(startAt)) {
-      endAt = endAt.add(const Duration(days: 1));
-    }
     return MissionSchedule(startAt: startAt, endAt: endAt);
   }
 }

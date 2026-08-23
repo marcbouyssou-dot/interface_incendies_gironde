@@ -32,6 +32,7 @@ function request(overrides = {}) {
     requiredByProfession: quotas({physiotherapist: 2, podiatrist: 1}),
     equipment: ['Tables'],
     details: 'Accès nord',
+    priority: 'standard',
     ...overrides,
   };
 }
@@ -116,6 +117,7 @@ test('strict request validation accepts the six canonical quotas', () => {
     podiatrist: 1,
   }));
   assert.equal(value.details, 'Accès nord');
+  assert.equal(value.priority, 'standard');
   assert.ok(Object.isFrozen(value));
 });
 
@@ -131,9 +133,29 @@ test('strict request validation refuses malformed schedules and payloads', () =>
     request({requiredByProfession: quotas({physiotherapist: -1})}),
     request({requiredByProfession: quotas()}),
     request({equipment: ['Tables', 'Tables']}),
+    request({priority: 'information'}),
+    request({priority: 1}),
   ]) {
     assertCode(() => validateMissionUpdateRequest(value), 'invalid-argument');
   }
+});
+
+test('the four priorities are accepted and legacy omission stays compatible', () => {
+  for (const priority of ['standard', 'priority', 'urgent', 'crisis']) {
+    const value = validateMissionUpdateRequest(request({priority}));
+    assert.equal(value.priority, priority);
+    assert.equal(mutation({request: request({priority})}).fields.priority,
+      priority);
+  }
+
+  const legacyRequest = request();
+  delete legacyRequest.priority;
+  const validatedLegacy = validateMissionUpdateRequest(legacyRequest);
+  assert.equal(Object.hasOwn(validatedLegacy, 'priority'), false);
+  assert.equal(
+    Object.hasOwn(mutation({request: legacyRequest}).fields, 'priority'),
+    false,
+  );
 });
 
 test('veterinarian quotas and counters are validated and preserved', () => {
@@ -170,6 +192,7 @@ test('coordinator update preserves counters and only returns editable fields', (
   assert.equal(value.fields.registeredMk, 1);
   assert.equal(value.fields.registeredByProfession.physiotherapist, 1);
   assert.equal(value.fields.status, 'critical');
+  assert.equal(value.fields.priority, 'standard');
   assert.equal(value.fields.updatedAt, 'server-time');
   for (const protectedField of ['id', 'createdAt', 'createdBy', 'isActive']) {
     assert.equal(Object.hasOwn(value.fields, protectedField), false);

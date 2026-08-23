@@ -49,14 +49,20 @@ void main() {
   }
 
   Future<void> chooseLocation(WidgetTester tester) async {
-    await tester.tap(find.byKey(const Key('mission-location')));
+    final field = find.byKey(const Key('mission-location'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
     await tester.pumpAndSettle();
     await tester.tap(find.text(places.first.name).last);
     await tester.pumpAndSettle();
   }
 
   Future<void> chooseDate(WidgetTester tester) async {
-    await tester.tap(find.byKey(const Key('mission-date')));
+    final field = find.byKey(const Key('mission-date'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
     await tester.pumpAndSettle();
     expect(find.byType(CupertinoDatePicker), findsOneWidget);
     await tester.tap(find.text('Valider'));
@@ -68,12 +74,45 @@ void main() {
     Key fieldKey,
     String expected,
   ) async {
-    await tester.tap(find.byKey(fieldKey));
+    final field = find.byKey(fieldKey);
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
     await tester.pumpAndSettle();
     expect(find.byType(CupertinoDatePicker), findsOneWidget);
     await tester.tap(find.text('Valider'));
     await tester.pumpAndSettle();
     expect(find.text(expected), findsOneWidget);
+  }
+
+  Future<void> chooseTimeValue(
+    WidgetTester tester,
+    Key fieldKey,
+    int hour,
+  ) async {
+    final field = find.byKey(fieldKey);
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    tester
+        .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
+        .onDateTimeChanged(DateTime(2026, 8, 3, hour));
+    await tester.tap(find.text('Valider'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> incrementQuota(WidgetTester tester, String professionId) async {
+    final button = find.byKey(Key('$professionId-add'));
+    await tester.scrollUntilVisible(
+      button,
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pump();
   }
 
   Future<void> completeRequiredFields(
@@ -86,34 +125,47 @@ void main() {
     await chooseTime(tester, const Key('mission-start-time'), '08:00');
     await chooseTime(tester, const Key('mission-end-time'), '12:00');
     if (addQuota) {
-      await tester.tap(
-        find.byKey(const Key('physiotherapist-add')),
-        warnIfMissed: false,
-      );
-      await tester.pump();
+      await incrementQuota(tester, 'physiotherapist');
     }
   }
 
-  Future<void> revealPublishButton(WidgetTester tester) async {
+  Future<void> revealReviewButton(WidgetTester tester) async {
     await tester.scrollUntilVisible(
-      find.byKey(const Key('publish-mission')),
+      find.byKey(const Key('review-mission')),
       400,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
   }
 
-  Future<void> addQuota(WidgetTester tester, String professionId) async {
-    final button = find.byKey(Key('$professionId-add'));
+  Future<void> openReview(WidgetTester tester) async {
+    await revealReviewButton(tester);
+    await tester.tap(find.byKey(const Key('review-mission')));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> publishReviewedNeed(WidgetTester tester) async {
+    await openReview(tester);
+    await tester.tap(find.byKey(const Key('publish-mission')));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> choosePriority(
+    WidgetTester tester,
+    NeedPriority priority,
+  ) async {
+    final field = find.byKey(const Key('mission-priority'));
     await tester.scrollUntilVisible(
-      button,
+      field,
       260,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.ensureVisible(button);
+    await tester.ensureVisible(field);
     await tester.pumpAndSettle();
-    await tester.tap(button);
-    await tester.pump();
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(priority.label).last);
+    await tester.pumpAndSettle();
   }
 
   testWidgets('date and both time pickers open and retain their choices', (
@@ -132,8 +184,8 @@ void main() {
   testWidgets('publication refuses a missing location', (tester) async {
     final repository = _MissionRepository();
     await pumpForm(tester, repository);
-    await revealPublishButton(tester);
-    await tester.tap(find.byKey(const Key('publish-mission')));
+    await revealReviewButton(tester);
+    await tester.tap(find.byKey(const Key('review-mission')));
     await tester.pump();
 
     expect(find.text('Choisissez un lieu d’intervention.'), findsOneWidget);
@@ -144,12 +196,33 @@ void main() {
     final repository = _MissionRepository();
     await pumpForm(tester, repository);
     await completeRequiredFields(tester, addQuota: false);
-    await revealPublishButton(tester);
-    await tester.tap(find.byKey(const Key('publish-mission')));
+    await revealReviewButton(tester);
+    await tester.tap(find.byKey(const Key('review-mission')));
     await tester.pump();
 
     expect(
       find.text('Indiquez au moins un professionnel nécessaire.'),
+      findsOneWidget,
+    );
+    expect(repository.calls, 0);
+  });
+
+  testWidgets('publication refuses an end time before the start time', (
+    tester,
+  ) async {
+    final repository = _MissionRepository();
+    await pumpForm(tester, repository);
+    await chooseLocation(tester);
+    await chooseDate(tester);
+    await chooseTimeValue(tester, const Key('mission-start-time'), 12);
+    await chooseTimeValue(tester, const Key('mission-end-time'), 8);
+    await incrementQuota(tester, 'physiotherapist');
+    await revealReviewButton(tester);
+    await tester.tap(find.byKey(const Key('review-mission')));
+    await tester.pump();
+
+    expect(
+      find.text('L’heure de fin doit être postérieure à l’heure de début.'),
       findsOneWidget,
     );
     expect(repository.calls, 0);
@@ -160,14 +233,42 @@ void main() {
     (tester) async {
       final repository = _MissionRepository(pending: true);
       await pumpForm(tester, repository);
+
+      expect(find.text('Exprimer un besoin'), findsOneWidget);
+      expect(
+        tester
+            .widgetList<V5Section>(find.byType(V5Section))
+            .map((section) => section.title),
+        [
+          '1. De quoi avez-vous besoin ?',
+          '3. Où ?',
+          '4. Quand ?',
+          '5. Priorité',
+          '6. Informations complémentaires',
+        ],
+      );
+      expect(find.text('2. Combien ?'), findsOneWidget);
+
       await completeRequiredFields(tester);
-      await revealPublishButton(tester);
+      await openReview(tester);
+
+      expect(repository.calls, 0);
+      expect(find.text('Résumé du besoin'), findsOneWidget);
+      expect(find.text('Publier le besoin'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('edit-need-from-review')));
+      await tester.pumpAndSettle();
+      expect(find.text('Exprimer un besoin'), findsOneWidget);
+      expect(find.text('08:00'), findsOneWidget);
+      expect(repository.calls, 0);
+
+      await openReview(tester);
       await tester.tap(find.byKey(const Key('publish-mission')));
       await tester.pump();
 
       expect(repository.calls, 1);
+      expect(repository.lastDraft?.priority, NeedPriority.standard);
       expect(find.text('Publication…'), findsOneWidget);
-      expect(find.text('Mission publiée'), findsNothing);
+      expect(find.text('Votre besoin est publié.'), findsNothing);
       final button = tester.widget<V5Button>(
         find.byKey(const Key('publish-mission')),
       );
@@ -175,19 +276,19 @@ void main() {
 
       repository.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Mission publiée'), findsOneWidget);
+      expect(find.text('Votre besoin est publié.'), findsOneWidget);
       expect(find.text(places.first.name), findsOneWidget);
-      expect(find.text('MK 1'), findsOneWidget);
+      expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
+      expect(find.text('En attente de diffusion'), findsOneWidget);
     },
   );
 
-  testWidgets('all profession quotas start at zero and are persisted', (
-    tester,
-  ) async {
+  testWidgets('a new need keeps exactly one profession', (tester) async {
     final repository = _MissionRepository();
     await pumpForm(tester, repository);
 
-    expect(find.text('Professionnels recherchés'), findsOneWidget);
+    expect(find.text('1. De quoi avez-vous besoin ?'), findsOneWidget);
+    expect(find.text('2. Combien ?'), findsOneWidget);
     expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
     expect(find.text('Pédicure-podologue'), findsOneWidget);
     expect(find.text('Médecin'), findsOneWidget);
@@ -197,24 +298,34 @@ void main() {
     expect(find.text('0'), findsNWidgets(6));
 
     await completeRequiredFields(tester, addQuota: false);
-    await addQuota(tester, 'physician');
-    await addQuota(tester, 'nurse');
-    await addQuota(tester, 'nurse');
-    await addQuota(tester, 'veterinarian');
-    await addQuota(tester, 'other_health_professional');
-    await revealPublishButton(tester);
-    await tester.tap(find.byKey(const Key('publish-mission')));
-    await tester.pumpAndSettle();
+    await incrementQuota(tester, 'physician');
+    await incrementQuota(tester, 'nurse');
+    await incrementQuota(tester, 'nurse');
+    await publishReviewedNeed(tester);
 
     expect(repository.calls, 1);
     expect(repository.lastDraft?.requiredByProfession, {
       'physiotherapist': 0,
       'podiatrist': 0,
-      'physician': 1,
+      'physician': 0,
       'nurse': 2,
-      'veterinarian': 1,
-      'other_health_professional': 1,
+      'veterinarian': 0,
+      'other_health_professional': 0,
     });
+  });
+
+  testWidgets('publication persists the selected priority', (tester) async {
+    final repository = _MissionRepository();
+    await pumpForm(tester, repository);
+
+    expect(find.text(NeedPriority.standard.label), findsOneWidget);
+    await choosePriority(tester, NeedPriority.urgent);
+    await completeRequiredFields(tester);
+    await publishReviewedNeed(tester);
+
+    expect(repository.calls, 1);
+    expect(repository.lastDraft?.priority, NeedPriority.urgent);
+    expect(find.text(NeedPriority.urgent.label), findsOneWidget);
   });
 
   testWidgets('repository errors remain on the form and are explicit', (
@@ -223,19 +334,17 @@ void main() {
     final repository = _MissionRepository(error: true);
     await pumpForm(tester, repository);
     await completeRequiredFields(tester);
-    await revealPublishButton(tester);
-    await tester.tap(find.byKey(const Key('publish-mission')));
-    await tester.pumpAndSettle();
+    await publishReviewedNeed(tester);
 
     expect(
       find.text('La mission n’a pas pu être publiée. Réessayez.'),
       findsOneWidget,
     );
-    expect(find.text('Mission publiée'), findsNothing);
+    expect(find.text('Votre besoin est publié.'), findsNothing);
     expect(repository.calls, 1);
   });
 
-  testWidgets('site manager has one prefilled location and no location field', (
+  testWidgets('site manager sees the prefilled location without a selector', (
     tester,
   ) async {
     final merignac = places.singleWhere(
@@ -252,16 +361,14 @@ void main() {
     );
     await pumpForm(tester, repository);
 
-    expect(find.text('Créer un besoin'), findsOneWidget);
-    expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+    expect(find.text('Exprimer un besoin'), findsOneWidget);
+    expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
     expect(find.byKey(const Key('mission-location')), findsNothing);
-    expect(find.text('Lieu · Mérignac'), findsOneWidget);
+    expect(find.text('Mérignac'), findsOneWidget);
     expect(find.text(places.first.name), findsNothing);
 
     await completeRequiredFields(tester, selectLocation: false);
-    await revealPublishButton(tester);
-    await tester.tap(find.byKey(const Key('publish-mission')));
-    await tester.pumpAndSettle();
+    await publishReviewedNeed(tester);
 
     expect(repository.calls, 1);
     expect(repository.lastDraft?.location.id, merignac.id);
@@ -278,6 +385,8 @@ void main() {
 
     expect(find.byKey(const Key('mission-location')), findsOneWidget);
     expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('mission-location')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('mission-location')));
     await tester.pumpAndSettle();
     expect(find.text('Bordeaux Bastide'), findsOneWidget);
@@ -366,22 +475,17 @@ void main() {
     },
   );
 
-  test('an earlier end time crosses midnight and equal times are invalid', () {
-    final overnight = MissionSchedule.fromLocal(
-      date: DateTime(2026, 7, 30),
-      startMinutes: 22 * 60,
-      endMinutes: 2 * 60,
-    );
-    expect(overnight.startAt, DateTime(2026, 7, 30, 22));
-    expect(overnight.endAt, DateTime(2026, 7, 31, 2));
-    expect(
-      () => MissionSchedule.fromLocal(
-        date: DateTime(2026, 7, 30),
-        startMinutes: 8 * 60,
-        endMinutes: 8 * 60,
-      ),
-      throwsA(isA<FormatException>()),
-    );
+  test('an earlier or equal end time is invalid', () {
+    for (final endMinutes in [2 * 60, 22 * 60]) {
+      expect(
+        () => MissionSchedule.fromLocal(
+          date: DateTime(2026, 7, 30),
+          startMinutes: 22 * 60,
+          endMinutes: endMinutes,
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    }
   });
 
   testWidgets('edit mode pre-fills the mission and updates it once', (
@@ -404,6 +508,7 @@ void main() {
       registeredPodiatrists: 0,
       equipment: const ['Tables', 'Huiles'],
       details: 'Consigne initiale',
+      priority: NeedPriority.crisis,
       createdBy: 'another-manager',
     );
     final repository = _MissionRepository(locations: [location]);
@@ -416,6 +521,7 @@ void main() {
     expect(find.text('12:00'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
     expect(find.text('Consigne initiale'), findsOneWidget);
+    expect(find.text(NeedPriority.crisis.label), findsOneWidget);
     expect(find.byKey(const Key('publish-mission')), findsNothing);
     await tester.ensureVisible(find.byKey(const Key('update-mission')));
     await tester.pumpAndSettle();
@@ -427,6 +533,7 @@ void main() {
     expect(repository.updatedMissionId, mission.id);
     expect(repository.lastDraft?.location.id, location.id);
     expect(repository.lastDraft?.requiredPhysiotherapists, 2);
+    expect(repository.lastDraft?.priority, NeedPriority.crisis);
     expect(find.text('Mission mise à jour.'), findsOneWidget);
   });
 
@@ -519,6 +626,8 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.byKey(const Key('physiotherapist-remove')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('physiotherapist-remove')));
     await tester.ensureVisible(find.byKey(const Key('update-mission')));
     await tester.pumpAndSettle();

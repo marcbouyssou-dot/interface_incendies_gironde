@@ -29,6 +29,7 @@ const REQUEST_KEYS = Object.freeze([
   'equipment',
   'details',
 ]);
+const PRIORITIES = Object.freeze(['standard', 'priority', 'urgent', 'crisis']);
 
 export class MissionUpdateError extends Error {
   constructor(code, message, options = {}) {
@@ -50,7 +51,9 @@ export async function updateMission({callerUid, data, services}) {
 }
 
 export function validateMissionUpdateRequest(data) {
-  if (!isPlainObject(data) || !hasExactlyKeys(data, REQUEST_KEYS)) {
+  if (!isPlainObject(data)
+      || (!hasExactlyKeys(data, REQUEST_KEYS)
+        && !hasExactlyKeys(data, [...REQUEST_KEYS, 'priority']))) {
     throw invalidArgument();
   }
   const missionId = requiredText(data.missionId, 200);
@@ -63,6 +66,9 @@ export function validateMissionUpdateRequest(data) {
   );
   const equipment = validateEquipment(data.equipment);
   const details = optionalText(data.details, 2000);
+  const priority = data.priority === undefined
+    ? null
+    : requiredPriority(data.priority);
   return Object.freeze({
     missionId,
     locationId,
@@ -71,6 +77,7 @@ export function validateMissionUpdateRequest(data) {
     requiredByProfession,
     equipment,
     details,
+    ...(priority === null ? {} : {priority}),
   });
 }
 
@@ -157,6 +164,7 @@ export function missionUpdateMutation({
     registeredPp: registeredByProfession.podiatrist,
     requestedEquipment: [...request.equipment],
     details: request.details,
+    ...(request.priority === undefined ? {} : {priority: request.priority}),
     status: coverageStatus(
       request.requiredByProfession,
       registeredByProfession,
@@ -292,6 +300,13 @@ function optionalText(value, maxLength) {
     throw invalidArgument();
   }
   return isCanonicalBlankText(value) ? '' : value.trim();
+}
+
+function requiredPriority(value) {
+  if (typeof value !== 'string' || !PRIORITIES.includes(value)) {
+    throw invalidArgument();
+  }
+  return value;
 }
 
 function timestampMillis(value) {

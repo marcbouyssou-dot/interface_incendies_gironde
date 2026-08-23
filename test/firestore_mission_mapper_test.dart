@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
+import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/firestore_mission_mapper.dart';
 
@@ -53,6 +54,7 @@ void main() {
       'other_health_professional': 0,
     });
     expect(data['isActive'], isTrue);
+    expect(data['priority'], 'standard');
     expect(data['mobilizationId'], 'incendies-gironde-2026');
     expect(data['createdBy'], 'manager-uid');
     expect(mission.locationId, places.first.id);
@@ -62,6 +64,7 @@ void main() {
     expect(mission.time, '22:00 — 02:00');
     expect(mission.requiredPhysiotherapists, 2);
     expect(mission.requiredPodiatrists, 1);
+    expect(mission.priority, NeedPriority.standard);
     expect(mission.createdAt, DateTime(2026, 7, 29));
     expect(mission.updatedAt, DateTime(2026, 7, 29));
   });
@@ -94,13 +97,60 @@ void main() {
       'startAtMillis',
       'endAtMillis',
       'requiredByProfession',
+      'priority',
       'equipment',
       'details',
     });
     expect(data['missionId'], 'mission-stable');
     expect(data['requiredByProfession'], draft.requiredByProfession);
+    expect(data['priority'], 'standard');
     expect(data.containsKey('registeredByProfession'), isFalse);
     expect(data.containsKey('createdBy'), isFalse);
+  });
+
+  test('the four priorities round-trip and legacy falls back to standard', () {
+    for (final priority in NeedPriority.values) {
+      final draft = MissionDraft(
+        location: places.first,
+        startAt: DateTime(2026, 8, 3, 8),
+        endAt: DateTime(2026, 8, 3, 12),
+        requiredPhysiotherapists: 1,
+        priority: priority,
+        equipment: const [],
+        details: '',
+      );
+      final data = FirestoreMissionMapper.toFirestore(
+        id: 'priority-${priority.serializedValue}',
+        mobilizationId: 'incendies-gironde-2026',
+        draft: draft,
+        serverTimestamp: Timestamp.fromDate(DateTime(2026, 8, 2)),
+        createdBy: 'manager-uid',
+      );
+
+      expect(data['priority'], priority.serializedValue);
+      expect(
+        FirestoreMissionMapper.fromFirestore(
+          id: 'priority-${priority.serializedValue}',
+          data: data,
+        ).priority,
+        priority,
+      );
+    }
+
+    expect(
+      FirestoreMissionMapper.fromFirestore(
+        id: 'legacy',
+        data: const {'requiredMk': 1},
+      ).priority,
+      NeedPriority.standard,
+    );
+    expect(
+      () => FirestoreMissionMapper.fromFirestore(
+        id: 'invalid-priority',
+        data: const {'requiredMk': 1, 'priority': 'information'},
+      ),
+      throwsFormatException,
+    );
   });
 
   test('generic maps take priority without merging legacy fields', () {

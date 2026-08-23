@@ -16,6 +16,7 @@ abstract final class FirestoreMissionMapper {
       'startAtMillis': draft.startAt.millisecondsSinceEpoch,
       'endAtMillis': draft.endAt.millisecondsSinceEpoch,
       'requiredByProfession': draft.requiredByProfession,
+      'priority': draft.priority.serializedValue,
       'equipment': List<String>.of(draft.equipment),
       'details': draft.details,
     };
@@ -54,6 +55,7 @@ abstract final class FirestoreMissionMapper {
       'endAt': Timestamp.fromDate(draft.endAt),
       ...quotas.toMissionUpdate(),
       'requestedEquipment': List<String>.of(draft.equipment),
+      'priority': draft.priority.serializedValue,
       'details': draft.details.trim(),
       'status': NeedStatus.critical.name,
       'createdAt': serverTimestamp,
@@ -103,6 +105,7 @@ abstract final class FirestoreMissionMapper {
             data['equipment'] as List? ??
             const [],
       ),
+      priority: NeedPriority.fromFirestore(data['priority']),
       details: data['details'] as String?,
       isActive: data['isActive'] as bool? ?? true,
       isCancelled: data['status'] == 'cancelled',

@@ -1195,14 +1195,14 @@ service cloud.firestore {
           'territorialGroup', 'startAt',
           'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
           'requiredByProfession', 'registeredByProfession',
-          'requestedEquipment', 'details', 'status', 'createdAt', 'updatedAt',
+          'requestedEquipment', 'details', 'priority', 'status', 'createdAt', 'updatedAt',
           'isActive', 'createdBy'
         ])
       && request.resource.data.keys().hasAll([
           'id', 'mobilizationId', 'locationId', 'locationName',
           'territorialGroup', 'startAt',
           'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
-          'requestedEquipment', 'details', 'status', 'createdAt', 'updatedAt',
+          'requestedEquipment', 'details', 'priority', 'status', 'createdAt', 'updatedAt',
           'isActive', 'createdBy'
         ])
         && request.resource.data.id == missionId
@@ -1224,6 +1224,10 @@ service cloud.firestore {
         && request.resource.data.startAt is timestamp
         && request.resource.data.endAt is timestamp
         && request.resource.data.endAt > request.resource.data.startAt
+        && request.resource.data.priority is string
+        && request.resource.data.priority in [
+          'standard', 'priority', 'urgent', 'crisis'
+        ]
         && request.resource.data.isActive == true
         && request.resource.data.status == 'critical'
         && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
