@@ -152,6 +152,27 @@ void main() {
         expect(fixture.platformDataSource.lastIncludeInactive, isTrue);
       },
     );
+
+    for (final withMembership in [false, true]) {
+      test(
+        'legacy site manager ${withMembership ? 'with' : 'without'} membership '
+        'uses only the configured mobilization',
+        () async {
+          final fixture = _Fixture()
+            ..selectLegacySiteManager(withMembership: withMembership);
+          addTearDown(fixture.dispose);
+
+          final mobilizations = await fixture.repository
+              .watchResponsibleActiveMobilizations()
+              .first;
+
+          expect(mobilizations.map((item) => item.id), ['mobilization-legacy']);
+          expect(fixture.operationDataSource.listReads, 0);
+          expect(fixture.platformDataSource.listReads, 0);
+          expect(fixture.platformDataSource.activeReads, 1);
+        },
+      );
+    }
   });
 }
 
@@ -197,6 +218,16 @@ class _Fixture {
       uid: 'legacy-coordinator',
       selectedOrganization: LegacyOrganizationResolver.legacyOrganization,
       legacyRoleValues: const ['coordinator'],
+    );
+  }
+
+  void selectLegacySiteManager({required bool withMembership}) {
+    platformDataSource.activeMobilizationId = 'mobilization-legacy';
+    context.value = resolver.resolveContext(
+      uid: 'legacy-manager',
+      selectedOrganization: LegacyOrganizationResolver.legacyOrganization,
+      membership: withMembership ? _legacyMembership() : null,
+      legacyRoleValues: withMembership ? const [] : const ['site_manager'],
     );
   }
 
@@ -252,9 +283,10 @@ class _Fixture {
 }
 
 class _OperationRepository implements OperationReadRepository {
-  const _OperationRepository(this.operations);
+  _OperationRepository(this.operations);
 
   final List<Operation> operations;
+  int listReads = 0;
 
   @override
   Stream<Operation?> watchOperation(String operationId) => Stream.value(
@@ -262,15 +294,17 @@ class _OperationRepository implements OperationReadRepository {
   );
 
   @override
-  Stream<List<Operation>> watchOperations({Set<OperationStatus>? statuses}) =>
-      Stream.value(
-        operations
-            .where(
-              (operation) =>
-                  statuses == null || statuses.contains(operation.status),
-            )
-            .toList(growable: false),
-      );
+  Stream<List<Operation>> watchOperations({Set<OperationStatus>? statuses}) {
+    listReads++;
+    return Stream.value(
+      operations
+          .where(
+            (operation) =>
+                statuses == null || statuses.contains(operation.status),
+          )
+          .toList(growable: false),
+    );
+  }
 }
 
 class _PlatformRepository implements PlatformReadRepository {
@@ -279,6 +313,7 @@ class _PlatformRepository implements PlatformReadRepository {
   final List<Mobilization> mobilizations;
   int listReads = 0;
   int activeReads = 0;
+  String activeMobilizationId = 'mobilization-test';
   String? lastTerritoryId;
   bool? lastIncludeInactive;
 
@@ -287,7 +322,7 @@ class _PlatformRepository implements PlatformReadRepository {
     activeReads++;
     return Stream.value(
       mobilizations.firstWhere(
-        (mobilization) => mobilization.id == 'mobilization-test',
+        (mobilization) => mobilization.id == activeMobilizationId,
       ),
     );
   }
@@ -377,6 +412,17 @@ OrganizationMembership _membership({required bool active}) =>
       updatedAt: DateTime.utc(2026, 8, 21),
       schemaVersion: 1,
     );
+
+OrganizationMembership _legacyMembership() => OrganizationMembership(
+  organizationId: LegacyOrganizationResolver.legacyOrganizationId,
+  uid: 'legacy-manager',
+  roles: const {OrganizationRole.siteManager},
+  locationIds: const {'location-legacy'},
+  active: true,
+  createdAt: DateTime.utc(2026, 8, 21),
+  updatedAt: DateTime.utc(2026, 8, 21),
+  schemaVersion: 1,
+);
 
 Future<void> _flushStreams() async {
   await Future<void>.delayed(Duration.zero);

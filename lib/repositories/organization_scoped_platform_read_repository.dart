@@ -18,7 +18,7 @@ import 'platform_read_repository.dart';
 /// Les territoires restent partagés. Toutes les lectures de mobilisations,
 /// y compris la mobilisation active legacy, appliquent la même politique.
 class OrganizationScopedPlatformReadRepository
-    implements PlatformReadRepository {
+    implements PlatformReadRepository, ResponsibleMobilizationReadRepository {
   const OrganizationScopedPlatformReadRepository({
     required PlatformReadRepository delegate,
     required OperationReadRepository operationRepository,
@@ -42,6 +42,33 @@ class OrganizationScopedPlatformReadRepository
   Stream<List<Territory>> watchTerritories() => _delegate.watchTerritories();
 
   @override
+  Stream<List<Mobilization>> watchResponsibleActiveMobilizations() =>
+      switchLatest(watchValueListenable(_context), (context) {
+        final organizationId =
+            OrganizationContextReadPolicy.readableOrganizationId(context);
+        if (organizationId == null) {
+          return Stream<List<Mobilization>>.value(const []);
+        }
+        if (organizationId != LegacyOrganizationResolver.legacyOrganizationId) {
+          return _watchMobilizationsForContext(
+            context: context,
+            organizationId: organizationId,
+          );
+        }
+        return _delegate.watchActiveMobilization().map((mobilization) {
+          if (mobilization == null ||
+              !_resolver.isMobilizationAccessible(
+                mobilization: mobilization,
+                organizationId: organizationId,
+                accessibleOperationIds: const {},
+              )) {
+            return const <Mobilization>[];
+          }
+          return List<Mobilization>.unmodifiable([mobilization]);
+        });
+      });
+
+  @override
   Stream<List<Mobilization>> watchMobilizations({
     String? territoryId,
     bool includeInactive = false,
@@ -58,6 +85,26 @@ class OrganizationScopedPlatformReadRepository
     if (organizationId == null) {
       return Stream<List<Mobilization>>.value(const []);
     }
+    return _watchMobilizationsForContext(
+      context: context,
+      organizationId: organizationId,
+      territoryId: territoryId,
+      includeInactive: includeInactive,
+    );
+  });
+
+  Stream<List<Mobilization>> _watchMobilizationsForContext({
+    required OrganizationContext? context,
+    required String organizationId,
+    String? territoryId,
+    bool includeInactive = false,
+  }) {
+    if (OrganizationContextReadPolicy.hasGlobalPlatformAccess(context)) {
+      return _delegate.watchMobilizations(
+        territoryId: territoryId,
+        includeInactive: includeInactive,
+      );
+    }
     return _combineLatestOperationsAndMobilizations(
       _operationRepository.watchOperations(),
       _delegate.watchMobilizations(
@@ -70,7 +117,7 @@ class OrganizationScopedPlatformReadRepository
         mobilizations: mobilizations,
       ),
     );
-  });
+  }
 
   @override
   Stream<Mobilization?> watchActiveMobilization() =>

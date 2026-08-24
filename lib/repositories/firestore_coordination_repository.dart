@@ -239,6 +239,7 @@ class FirestoreCoordinationRepository
         OrganizationEngagementReadDataSource,
         OrganizationLocationReadDataSource,
         MultiMobilizationCoordinationReadRepository,
+        MobilizationLocationMissionReadRepository,
         MultiMobilizationCoordinationMutationRepository,
         PlatformRuntime,
         MultiOperationPlatformRuntime,
@@ -584,6 +585,27 @@ class FirestoreCoordinationRepository
             mobilizationId,
             locationIds: ids,
           ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizationsAndLocations({
+    required Set<String> mobilizationIds,
+    required Set<String> locationIds,
+  }) {
+    final mobilizations = _validatedQueryIds(mobilizationIds, 'mobilisation');
+    final locations = _validatedQueryIds(locationIds, 'lieu', maxCount: 30);
+    if (mobilizations.isEmpty || locations.isEmpty) {
+      return Stream<List<CoordinationNeed>>.value(const []);
+    }
+    return _combineMissionStreams(
+      mobilizations.map(
+        (mobilizationId) => _watchMissionsInMobilization(
+          _responsibleFirestore,
+          mobilizationId,
+          locationIds: locations,
         ),
       ),
     );

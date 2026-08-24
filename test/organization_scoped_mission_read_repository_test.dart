@@ -151,17 +151,52 @@ void main() {
     );
 
     test(
-      'location filter is applied after the bounded mission query',
+      'legacy mission query is bounded by mobilization and location',
       () async {
-        final fixture = _Fixture()..selectLegacy();
+        final fixture = _Fixture()
+          ..selectLegacySiteManager(withMembership: false);
+        addTearDown(fixture.dispose);
+        fixture.missionDataSource.missions.add(
+          _mission(
+            id: 'mission-other-site',
+            mobilizationId: 'mobilization-legacy',
+            locationId: 'location-other',
+          ),
+        );
+
+        final missions = await fixture.repository.watchMissionsForLocations({
+          'location-legacy',
+        }).first;
+
+        expect(missions.map((mission) => mission.id), ['mission-legacy']);
+        final scope = fixture
+            .missionDataSource
+            .requestedMobilizationLocationScopes
+            .single;
+        expect(scope.mobilizationIds, {'mobilization-legacy'});
+        expect(scope.locationIds, {'location-legacy'});
+        expect(fixture.missionDataSource.reads, 1);
+      },
+    );
+
+    test(
+      'legacy site manager with membership uses the same bounded read',
+      () async {
+        final fixture = _Fixture()
+          ..selectLegacySiteManager(withMembership: true);
         addTearDown(fixture.dispose);
 
         final missions = await fixture.repository.watchMissionsForLocations({
-          'location-gironde',
+          'location-legacy',
         }).first;
 
-        expect(missions.map((mission) => mission.id), ['mission-gironde']);
-        expect(fixture.missionDataSource.reads, 1);
+        expect(missions.map((mission) => mission.id), ['mission-legacy']);
+        final scope = fixture
+            .missionDataSource
+            .requestedMobilizationLocationScopes
+            .single;
+        expect(scope.mobilizationIds, {'mobilization-legacy'});
+        expect(scope.locationIds, {'location-legacy'});
       },
     );
   });
@@ -208,6 +243,15 @@ class _Fixture {
       uid: 'legacy-coordinator',
       selectedOrganization: LegacyOrganizationResolver.legacyOrganization,
       legacyRoleValues: const ['coordinator'],
+    );
+  }
+
+  void selectLegacySiteManager({required bool withMembership}) {
+    context.value = resolver.resolveContext(
+      uid: 'legacy-manager',
+      selectedOrganization: LegacyOrganizationResolver.legacyOrganization,
+      membership: withMembership ? _legacyMembership() : null,
+      legacyRoleValues: withMembership ? const [] : const ['site_manager'],
     );
   }
 
@@ -260,11 +304,15 @@ class _Fixture {
 }
 
 class _MissionRepository
-    implements MultiMobilizationCoordinationReadRepository {
+    implements
+        MultiMobilizationCoordinationReadRepository,
+        MobilizationLocationMissionReadRepository {
   _MissionRepository(this.missions);
 
   final List<CoordinationNeed> missions;
   final List<Set<String>> requestedMobilizationIds = [];
+  final List<({Set<String> mobilizationIds, Set<String> locationIds})>
+  requestedMobilizationLocationScopes = [];
   int reads = 0;
   int globalReads = 0;
   int unitReads = 0;
@@ -300,6 +348,28 @@ class _MissionRepository
           .toList(growable: false),
     );
   }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizationsAndLocations({
+    required Set<String> mobilizationIds,
+    required Set<String> locationIds,
+  }) {
+    reads++;
+    requestedMobilizationLocationScopes.add((
+      mobilizationIds: Set.unmodifiable(mobilizationIds),
+      locationIds: Set.unmodifiable(locationIds),
+    ));
+    return Stream.value(
+      missions
+          .where(
+            (mission) =>
+                mobilizationIds.contains(mission.mobilizationId) &&
+                mission.locationId != null &&
+                locationIds.contains(mission.locationId),
+          )
+          .toList(growable: false),
+    );
+  }
 }
 
 class _OperationRepository implements OperationReadRepository {
@@ -330,7 +400,11 @@ class _PlatformRepository implements PlatformReadRepository {
   final List<Mobilization> mobilizations;
 
   @override
-  Stream<Mobilization?> watchActiveMobilization() => Stream.value(null);
+  Stream<Mobilization?> watchActiveMobilization() => Stream.value(
+    mobilizations.firstWhere(
+      (mobilization) => mobilization.id == 'mobilization-legacy',
+    ),
+  );
 
   @override
   Stream<List<Mobilization>> watchMobilizations({
@@ -445,6 +519,17 @@ OrganizationMembership _membership({required bool active}) =>
       updatedAt: DateTime.utc(2026, 8, 21),
       schemaVersion: 1,
     );
+
+OrganizationMembership _legacyMembership() => OrganizationMembership(
+  organizationId: LegacyOrganizationResolver.legacyOrganizationId,
+  uid: 'legacy-manager',
+  roles: const {OrganizationRole.siteManager},
+  locationIds: const {'location-legacy'},
+  active: true,
+  createdAt: DateTime.utc(2026, 8, 21),
+  updatedAt: DateTime.utc(2026, 8, 21),
+  schemaVersion: 1,
+);
 
 Future<void> _flushStreams() async {
   await Future<void>.delayed(Duration.zero);
