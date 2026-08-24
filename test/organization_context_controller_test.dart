@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
@@ -264,6 +266,106 @@ void main() {
     });
 
     testWidgets(
+      'legacy responsible is routed when UID arrives before the role',
+      (tester) async {
+        final organizationRepository = _RecordingOrganizationRepository(
+          organization: _legacyOrganization(),
+        );
+        final controller = OrganizationContextController(
+          repository: organizationRepository,
+        );
+        final coordinationRepository = _DelayedLegacyRoleRepository();
+        addTearDown(controller.dispose);
+        addTearDown(coordinationRepository.disposeStreams);
+
+        await tester.pumpWidget(
+          FireCoordinationApp(
+            repository: coordinationRepository,
+            organizationReadRepository: organizationRepository,
+            organizationContextController: controller,
+          ),
+        );
+        await _pumpOrganizationRouting(tester);
+
+        expect(find.byType(ProfessionalShell), findsOneWidget);
+
+        coordinationRepository.emitUid('responsible-late');
+        await _pumpOrganizationRouting(tester);
+
+        expect(controller.value?.isLegacy, isTrue);
+        expect(controller.value?.membership, isNull);
+        expect(controller.value?.effectiveRoles, isEmpty);
+
+        coordinationRepository.emitAccess(
+          const ResponsibleAccess(
+            uid: 'responsible-late',
+            role: ResponsibleRole.siteManager,
+            locationIds: {'bordeauxmetropole-bassens'},
+            active: true,
+          ),
+        );
+        await _pumpOrganizationRouting(tester);
+
+        expect(find.byType(ProfessionalShell), findsNothing);
+        expect(find.byType(ResponsibleShell), findsOneWidget);
+        expect(controller.value?.effectiveRoles, {
+          OrganizationRole.siteManager,
+        });
+      },
+    );
+
+    testWidgets(
+      'explicit inactive membership still blocks a delayed legacy role',
+      (tester) async {
+        final organizationRepository = _RecordingOrganizationRepository(
+          organization: _legacyOrganization(),
+          memberships: {
+            'responsible-inactive': _membership(
+              uid: 'responsible-inactive',
+              roles: const {OrganizationRole.siteManager},
+              locationIds: const {'bordeauxmetropole-bassens'},
+              active: false,
+            ),
+          },
+        );
+        final controller = OrganizationContextController(
+          repository: organizationRepository,
+        );
+        final coordinationRepository = _DelayedLegacyRoleRepository();
+        addTearDown(controller.dispose);
+        addTearDown(coordinationRepository.disposeStreams);
+
+        await tester.pumpWidget(
+          FireCoordinationApp(
+            repository: coordinationRepository,
+            organizationReadRepository: organizationRepository,
+            organizationContextController: controller,
+          ),
+        );
+        await _pumpOrganizationRouting(tester);
+
+        coordinationRepository.emitUid('responsible-inactive');
+        await _pumpOrganizationRouting(tester);
+
+        expect(controller.value?.membership?.active, isFalse);
+
+        coordinationRepository.emitAccess(
+          const ResponsibleAccess(
+            uid: 'responsible-inactive',
+            role: ResponsibleRole.siteManager,
+            locationIds: {'bordeauxmetropole-bassens'},
+            active: true,
+          ),
+        );
+        await _pumpOrganizationRouting(tester);
+
+        expect(find.byType(ProfessionalShell), findsOneWidget);
+        expect(find.byType(ResponsibleShell), findsNothing);
+        expect(controller.value?.effectiveRoles, isEmpty);
+      },
+    );
+
+    testWidgets(
       'membership-only coordinator is routed without a legacy role document',
       (tester) async {
         final repository = _RecordingOrganizationRepository(
@@ -412,6 +514,41 @@ class _MembershipOnlyCoordinationRepository extends MockCoordinationRepository
 
   @override
   Stream<String?> watchAdministrativeUid() => Stream.value(uid);
+}
+
+class _DelayedLegacyRoleRepository extends MockCoordinationRepository
+    implements AdministrativeIdentityReadRepository {
+  _DelayedLegacyRoleRepository() : super(responsibleAccess: null);
+
+  final _accessUpdates = StreamController<ResponsibleAccess?>.broadcast(
+    sync: true,
+  );
+  final _uidUpdates = StreamController<String?>.broadcast(sync: true);
+
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() =>
+      Stream<ResponsibleAccess?>.multi((controller) {
+        controller.add(null);
+        final subscription = _accessUpdates.stream.listen(controller.add);
+        controller.onCancel = subscription.cancel;
+      });
+
+  @override
+  Stream<String?> watchAdministrativeUid() =>
+      Stream<String?>.multi((controller) {
+        controller.add(null);
+        final subscription = _uidUpdates.stream.listen(controller.add);
+        controller.onCancel = subscription.cancel;
+      });
+
+  void emitUid(String uid) => _uidUpdates.add(uid);
+
+  void emitAccess(ResponsibleAccess access) => _accessUpdates.add(access);
+
+  Future<void> disposeStreams() async {
+    await _accessUpdates.close();
+    await _uidUpdates.close();
+  }
 }
 
 Operation _operation({String? ownerOrganizationId}) => Operation.fromMap({

@@ -97,15 +97,6 @@ class OrganizationResponsibleAccessResolver {
         legacyAccess?.uid != context.uid) {
       return null;
     }
-    final expectedRoles = <String>{
-      if (context.hasRole(OrganizationRole.coordinator))
-        ResponsibleRole.coordinator,
-      if (context.hasRole(OrganizationRole.siteManager))
-        ResponsibleRole.siteManager,
-    };
-    return legacyAccess!.roles.length == expectedRoles.length &&
-            legacyAccess.roles.containsAll(expectedRoles)
-        ? legacyAccess
-        : null;
+    return legacyAccess!.hasPrivilegedAccess ? legacyAccess : null;
   }
 }
