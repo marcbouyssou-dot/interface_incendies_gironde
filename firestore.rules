@@ -1318,6 +1318,19 @@ service cloud.firestore {
           && isPlatformDiscoverableMobilizationById(mobilizationId));
     }
 
+    function canReadManagedNeed(needId) {
+      let path = missionPath(needId);
+      let need = needId is string && exists(path) ? get(path).data : {};
+      let mobilizationId = need.get('mobilizationId', '');
+      let locationId = need.get('locationId', '');
+      return needId is string
+        && isNonBlankCanonicalText(needId)
+        && exists(path)
+        && isActiveMobilization(mobilizationId)
+        && (canReadOrganizationMissionScope(mobilizationId, locationId)
+          || canManageMobilizationLocation(mobilizationId, locationId));
+    }
+
     function validMissionCreate(missionId) {
       return request.resource.data.keys().hasOnly([
           'id', 'mobilizationId', 'locationId', 'locationName',
@@ -1674,6 +1687,18 @@ service cloud.firestore {
           engagementPath(missionId, request.auth.uid)
         ) && (validManagedMissionCounterUpdate() || validMissionCancellation());
       allow delete: if false;
+    }
+
+    match /diffusions/{diffusionId} {
+      allow get: if resource.data.get('id', '') == diffusionId
+        && canReadManagedNeed(resource.data.get('needId', ''));
+      allow list, create, update, delete: if false;
+    }
+
+    match /diffusionSnapshots/{diffusionId} {
+      allow get: if resource.data.get('diffusionId', '') == diffusionId
+        && canReadManagedNeed(resource.data.get('needId', ''));
+      allow list, create, update, delete: if false;
     }
 
     match /volunteers/{uid} {
