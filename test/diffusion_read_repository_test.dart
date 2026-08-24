@@ -73,6 +73,79 @@ void main() {
       expect(source.reads, [(collection: 'diffusions', documentId: 'missing')]);
     });
 
+    test(
+      'keeps an authorized Diffusion when its optional Snapshot is absent',
+      () async {
+        final source = _FakeDiffusionReadDataSource(
+          diffusion: _diffusionDocument(),
+          snapshotError: FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'permission-denied',
+          ),
+        );
+        final repository = FirestoreDiffusionReadRepository(source);
+
+        final model = await repository.readDiffusion('diffusion-a');
+
+        expect(model?.status, 'READY');
+        expect(model?.populationCount, isNull);
+        expect(model?.snapshotAvailable, isFalse);
+        expect(source.reads, [
+          (collection: 'diffusions', documentId: 'diffusion-a'),
+          (collection: 'diffusionSnapshots', documentId: 'diffusion-a'),
+          (collection: 'diffusions', documentId: 'diffusion-a'),
+        ]);
+      },
+    );
+
+    test('does not hide a genuine Snapshot read error', () async {
+      final source = _FakeDiffusionReadDataSource(
+        diffusion: _diffusionDocument(),
+        snapshotError: FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'unavailable',
+        ),
+      );
+      final repository = FirestoreDiffusionReadRepository(source);
+
+      await expectLater(
+        repository.readDiffusion('diffusion-a'),
+        throwsA(
+          isA<FirebaseException>().having(
+            (error) => error.code,
+            'code',
+            'unavailable',
+          ),
+        ),
+      );
+    });
+
+    test('does not hide a lost Diffusion authorization', () async {
+      final source = _FakeDiffusionReadDataSource(
+        diffusion: _diffusionDocument(),
+        snapshotError: FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'permission-denied',
+        ),
+        diffusionErrorAfterFirstRead: FirebaseException(
+          plugin: 'cloud_firestore',
+          code: 'permission-denied',
+        ),
+      );
+      final repository = FirestoreDiffusionReadRepository(source);
+
+      await expectLater(
+        repository.readDiffusion('diffusion-a'),
+        throwsA(
+          isA<FirebaseException>().having(
+            (error) => error.code,
+            'code',
+            'permission-denied',
+          ),
+        ),
+      );
+    });
+
     test('rejects an invalid id before any Firestore read', () async {
       final source = _FakeDiffusionReadDataSource();
       final repository = FirestoreDiffusionReadRepository(source);
@@ -87,21 +160,35 @@ void main() {
 }
 
 class _FakeDiffusionReadDataSource implements DiffusionReadDataSource {
-  _FakeDiffusionReadDataSource({this.diffusion, this.snapshot});
+  _FakeDiffusionReadDataSource({
+    this.diffusion,
+    this.snapshot,
+    this.snapshotError,
+    this.diffusionErrorAfterFirstRead,
+  });
 
   final DiffusionReadDocument? diffusion;
   final DiffusionReadDocument? snapshot;
+  final FirebaseException? snapshotError;
+  final FirebaseException? diffusionErrorAfterFirstRead;
   final reads = <({String collection, String documentId})>[];
+  var _diffusionReadCount = 0;
 
   @override
   Future<DiffusionReadDocument?> getDiffusion(String diffusionId) async {
     reads.add((collection: 'diffusions', documentId: diffusionId));
+    _diffusionReadCount++;
+    if (_diffusionReadCount > 1) {
+      final error = diffusionErrorAfterFirstRead;
+      if (error != null) throw error;
+    }
     return diffusion;
   }
 
   @override
   Future<DiffusionReadDocument?> getSnapshot(String diffusionId) async {
     reads.add((collection: 'diffusionSnapshots', documentId: diffusionId));
+    if (snapshotError case final error?) throw error;
     return snapshot;
   }
 }

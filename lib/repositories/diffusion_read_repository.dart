@@ -57,11 +57,36 @@ class FirestoreDiffusionReadRepository implements DiffusionReadRepository {
     _validateIdentifier(diffusionId);
     final diffusion = await _dataSource.getDiffusion(diffusionId);
     if (diffusion == null) return null;
-    final snapshot = await _dataSource.getSnapshot(diffusionId);
+    final snapshot = await _readOptionalSnapshot(
+      diffusionId: diffusionId,
+      diffusion: diffusion,
+    );
     return FirestoreDiffusionReadMapper.fromFirestore(
       diffusion: diffusion,
       snapshot: snapshot,
     );
+  }
+
+  Future<DiffusionReadDocument?> _readOptionalSnapshot({
+    required String diffusionId,
+    required DiffusionReadDocument diffusion,
+  }) async {
+    try {
+      return await _dataSource.getSnapshot(diffusionId);
+    } on FirebaseException catch (error) {
+      if (error.code != 'permission-denied') rethrow;
+
+      // Snapshot reads are authorized from resource.data. Firestore therefore
+      // reports permission-denied while this optional document does not exist.
+      // Re-reading the Diffusion distinguishes that race from a lost access.
+      final confirmedDiffusion = await _dataSource.getDiffusion(diffusionId);
+      if (confirmedDiffusion == null ||
+          confirmedDiffusion.id != diffusion.id ||
+          confirmedDiffusion.data['needId'] != diffusion.data['needId']) {
+        rethrow;
+      }
+      return null;
+    }
   }
 
   void _validateIdentifier(String value) {
