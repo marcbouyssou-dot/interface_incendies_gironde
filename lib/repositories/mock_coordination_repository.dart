@@ -19,7 +19,8 @@ import 'mock_location_administration_repository.dart';
 import 'mock_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 
-class MockCoordinationRepository implements CoordinationRepository {
+class MockCoordinationRepository
+    implements CoordinationRepository, PushSubscriptionReadRepository {
   MockCoordinationRepository({
     List<CoordinationNeed>? initialMissions,
     List<ResponsePlace>? initialLocations,
@@ -79,6 +80,7 @@ class MockCoordinationRepository implements CoordinationRepository {
   NotificationPreferences notificationPreferences =
       const NotificationPreferences();
   final Map<String, PushSubscriptionRegistration> pushSubscriptions = {};
+  int pushSubscriptionReadCalls = 0;
   final _notificationUpdates =
       StreamController<List<AppNotification>>.broadcast();
   final _preferenceUpdates =
@@ -209,6 +211,15 @@ class MockCoordinationRepository implements CoordinationRepository {
     PushSubscriptionRegistration registration,
   ) async {
     pushSubscriptions[registration.installationId] = registration;
+  }
+
+  @override
+  Future<bool> hasActivePushSubscription(String installationId) async {
+    pushSubscriptionReadCalls += 1;
+    final registration = pushSubscriptions[installationId];
+    return registration != null &&
+        registration.platform == 'web' &&
+        registration.token.trim().isNotEmpty;
   }
 
   @override

@@ -46,9 +46,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   void initState() {
     super.initState();
     _pushGateway = widget.pushGateway ?? createPushNotificationGateway();
-    _pushGateway.permissionState().then((value) {
-      if (mounted) setState(() => _permission = value);
-    });
   }
 
   @override
@@ -59,6 +56,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     _repository = repository;
     _notifications = repository.watchNotifications();
     _preferences = repository.watchNotificationPreferences();
+    unawaited(_hydratePushSubscription(repository));
     unawaited(_registrationSubscription?.cancel());
     _registrationSubscription = _pushGateway.registrationUpdates.listen(
       (registration) => unawaited(_persistRefreshedRegistration(registration)),
@@ -71,6 +69,37 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         }
       },
     );
+  }
+
+  Future<void> _hydratePushSubscription(
+    CoordinationRepository repository,
+  ) async {
+    PushPermissionState? permission;
+    try {
+      permission = await _pushGateway.permissionState();
+      var persisted = false;
+      final pushRepository = repository is PushSubscriptionReadRepository
+          ? repository as PushSubscriptionReadRepository
+          : null;
+      if (permission == PushPermissionState.granted && pushRepository != null) {
+        persisted = await pushRepository.hasActivePushSubscription(
+          _pushGateway.installationId,
+        );
+      }
+      if (!mounted || !identical(repository, _repository)) return;
+      setState(() {
+        _permission = permission;
+        _subscriptionPersisted = persisted;
+        _activationFailed = false;
+      });
+    } catch (_) {
+      if (!mounted || !identical(repository, _repository)) return;
+      setState(() {
+        _permission = permission;
+        _subscriptionPersisted = false;
+        _activationFailed = permission == PushPermissionState.granted;
+      });
+    }
   }
 
   @override

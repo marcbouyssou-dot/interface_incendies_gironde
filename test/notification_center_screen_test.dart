@@ -59,6 +59,15 @@ void main() {
     readAt: readAt,
   );
 
+  void seedActiveSubscription(MockCoordinationRepository repository) {
+    repository.pushSubscriptions['device-test'] =
+        const PushSubscriptionRegistration(
+          installationId: 'device-test',
+          token: 'persisted-token',
+          platform: 'web',
+        );
+  }
+
   Future<void> pumpCenter(
     WidgetTester tester, {
     required MockCoordinationRepository repository,
@@ -92,7 +101,7 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   testWidgets('permission is requested only after explicit activation', (
@@ -106,6 +115,7 @@ void main() {
 
     expect(gateway.activationCalls, 0);
     expect(gateway.tokenRequests, 0);
+    expect(repository.pushSubscriptionReadCalls, 0);
     expect(find.text('Aucune notification'), findsOneWidget);
     await tester.tap(find.byKey(const Key('activate-notifications')));
     await tester.pump();
@@ -115,6 +125,24 @@ void main() {
     expect(repository.pushSubscriptions.keys, contains('device-test'));
     expect(find.text('Notifications activées'), findsOneWidget);
   });
+
+  testWidgets(
+    'existing subscription hydrates active state without permission request or token',
+    (tester) async {
+      final repository = MockCoordinationRepository();
+      seedActiveSubscription(repository);
+      final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      expect(find.text('Notifications activées'), findsOneWidget);
+      expect(find.text('Activation incomplète'), findsNothing);
+      expect(repository.pushSubscriptionReadCalls, 1);
+      expect(gateway.permissionStateCalls, 1);
+      expect(gateway.activationCalls, 0);
+      expect(gateway.tokenRequests, 0);
+    },
+  );
 
   testWidgets(
     'failed persistence stays incomplete, leaks no token and retry succeeds',
@@ -157,16 +185,82 @@ void main() {
     tester,
   ) async {
     final repository = MockCoordinationRepository();
-    await pumpCenter(
-      tester,
-      repository: repository,
-      gateway: _FakePushGateway(permission: PushPermissionState.granted),
-    );
+    final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+    await pumpCenter(tester, repository: repository, gateway: gateway);
 
     expect(repository.pushSubscriptions, isEmpty);
+    expect(repository.pushSubscriptionReadCalls, 1);
+    expect(gateway.activationCalls, 0);
+    expect(gateway.tokenRequests, 0);
     expect(find.text('Activation incomplète'), findsOneWidget);
     expect(find.text('Notifications activées'), findsNothing);
     expect(find.text('Réessayer'), findsOneWidget);
+  });
+
+  testWidgets('non-granted permission skips subscription read', (tester) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final gateway = _FakePushGateway();
+
+    await pumpCenter(tester, repository: repository, gateway: gateway);
+
+    expect(repository.pushSubscriptionReadCalls, 0);
+    expect(gateway.permissionStateCalls, 1);
+    expect(gateway.activationCalls, 0);
+    expect(gateway.tokenRequests, 0);
+    expect(find.text('Notifications activées'), findsNothing);
+  });
+
+  testWidgets('leaving and reopening the screen preserves active state', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+    await tester.pumpWidget(
+      RepositoryScope(
+        repository: repository,
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: _NotificationNavigationHost(gateway: gateway),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('open-notification-center')));
+    await tester.pumpAndSettle();
+    expect(find.text('Notifications activées'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('notification-center-close')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-notification-center')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notifications activées'), findsOneWidget);
+    expect(repository.pushSubscriptionReadCalls, 2);
+    expect(gateway.activationCalls, 0);
+    expect(gateway.tokenRequests, 0);
+  });
+
+  testWidgets('PWA relaunch hydrates an existing subscription', (tester) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+
+    await pumpCenter(tester, repository: repository, gateway: gateway);
+    expect(find.text('Notifications activées'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await pumpCenter(tester, repository: repository, gateway: gateway);
+
+    expect(find.text('Notifications activées'), findsOneWidget);
+    expect(repository.pushSubscriptionReadCalls, 2);
+    expect(gateway.activationCalls, 0);
+    expect(gateway.tokenRequests, 0);
   });
 
   testWidgets('Plus tard dismisses the consent explanation without prompting', (
@@ -366,6 +460,27 @@ void main() {
   });
 }
 
+class _NotificationNavigationHost extends StatelessWidget {
+  const _NotificationNavigationHost({required this.gateway});
+
+  final PushNotificationGateway gateway;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: Center(
+      child: TextButton(
+        key: const Key('open-notification-center'),
+        onPressed: () => Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => NotificationCenterScreen(pushGateway: gateway),
+          ),
+        ),
+        child: const Text('Ouvrir les notifications'),
+      ),
+    ),
+  );
+}
+
 class _FakePushGateway implements PushNotificationGateway {
   _FakePushGateway({
     this.permission = PushPermissionState.prompt,
@@ -377,8 +492,12 @@ class _FakePushGateway implements PushNotificationGateway {
   final PushPermissionState activationState;
   final String token;
   int activationCalls = 0;
+  int permissionStateCalls = 0;
   int tokenRequests = 0;
   int lastBadge = 0;
+
+  @override
+  String get installationId => 'device-test';
 
   @override
   Stream<PushSubscriptionRegistration> get registrationUpdates =>
@@ -402,7 +521,10 @@ class _FakePushGateway implements PushNotificationGateway {
   }
 
   @override
-  Future<PushPermissionState> permissionState() async => permission;
+  Future<PushPermissionState> permissionState() async {
+    permissionStateCalls += 1;
+    return permission;
+  }
 
   @override
   Future<void> updateBadge(int count) async => lastBadge = count;

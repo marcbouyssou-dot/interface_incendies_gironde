@@ -37,6 +37,9 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
   static final instance = FirebaseWebPushNotificationGateway._();
 
   @override
+  String get installationId => _installationId();
+
+  @override
   Stream<PushSubscriptionRegistration> get registrationUpdates =>
       FirebaseMessaging.instance.onTokenRefresh
           .where((token) => token.isNotEmpty)

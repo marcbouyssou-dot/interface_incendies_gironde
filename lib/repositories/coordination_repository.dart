@@ -43,6 +43,11 @@ abstract interface class MissionAccessReadRepository {
   Stream<CoordinationNeed?> watchAccessibleMission(String missionId);
 }
 
+/// Lecture ciblée de l'abonnement Push de l'installation courante.
+abstract interface class PushSubscriptionReadRepository {
+  Future<bool> hasActivePushSubscription(String installationId);
+}
+
 abstract interface class CoordinationRepository
     implements MissionEngagementReadRepository, LocationReadRepository {
   AdminInvitationRepository get adminInvitationRepository;

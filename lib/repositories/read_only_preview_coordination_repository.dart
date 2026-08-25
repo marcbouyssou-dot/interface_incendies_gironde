@@ -14,7 +14,8 @@ import 'responsible_access_administration_repository.dart';
 const readOnlyPreviewMessage =
     'Cette action est désactivée dans la prévisualisation Administrateur.';
 
-class ReadOnlyPreviewCoordinationRepository implements CoordinationRepository {
+class ReadOnlyPreviewCoordinationRepository
+    implements CoordinationRepository, PushSubscriptionReadRepository {
   ReadOnlyPreviewCoordinationRepository(this.source, {this.operationContext})
     : adminInvitationRepository = ReadOnlyPreviewAdminInvitationRepository(
         source.adminInvitationRepository,
@@ -148,6 +149,15 @@ class ReadOnlyPreviewCoordinationRepository implements CoordinationRepository {
   Future<void> registerPushSubscription(
     PushSubscriptionRegistration registration,
   ) => _blocked();
+  @override
+  Future<bool> hasActivePushSubscription(String installationId) {
+    final repository = source;
+    return repository is PushSubscriptionReadRepository
+        ? (repository as PushSubscriptionReadRepository)
+              .hasActivePushSubscription(installationId)
+        : Future.value(false);
+  }
+
   @override
   Future<void> disablePushSubscription(String installationId) => _blocked();
 }

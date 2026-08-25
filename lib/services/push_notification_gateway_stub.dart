@@ -19,6 +19,7 @@ class PushActivationResult {
 }
 
 abstract interface class PushNotificationGateway {
+  String get installationId;
   Future<PushPermissionState> permissionState();
   Future<PushActivationResult> activate();
   Future<void> updateBadge(int count);
@@ -30,6 +31,9 @@ PushNotificationGateway createPushNotificationGateway() =>
 
 class UnsupportedPushNotificationGateway implements PushNotificationGateway {
   const UnsupportedPushNotificationGateway();
+
+  @override
+  String get installationId => '';
 
   @override
   Future<PushActivationResult> activate() async =>

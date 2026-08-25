@@ -235,6 +235,7 @@ String requireMatchingMobilizationId({
 class FirestoreCoordinationRepository
     implements
         CoordinationRepository,
+        PushSubscriptionReadRepository,
         AdministrativeIdentityReadRepository,
         OrganizationEngagementReadDataSource,
         OrganizationLocationReadDataSource,
@@ -2117,6 +2118,25 @@ class FirestoreCoordinationRepository
         'updatedAt': now,
       }, SetOptions(merge: true));
     });
+  }
+
+  @override
+  Future<bool> hasActivePushSubscription(String installationId) async {
+    if (installationId.isEmpty) return false;
+    final uid = _notificationUid;
+    final snapshot = await _notificationFirestore
+        .collection('pushSubscriptions')
+        .doc('${uid}_$installationId')
+        .get();
+    final data = snapshot.data();
+    final token = data?['token'];
+    return snapshot.exists &&
+        data?['uid'] == uid &&
+        data?['installationId'] == installationId &&
+        data?['platform'] == 'web' &&
+        data?['active'] == true &&
+        token is String &&
+        token.trim().isNotEmpty;
   }
 
   @override
