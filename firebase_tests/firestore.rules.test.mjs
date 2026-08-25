@@ -706,6 +706,36 @@ async function cancelMission(uid, changes = {}) {
   });
 }
 
+async function seedJob0048CancellationMission(uid, overrides = {}) {
+  const locationId = overrides.locationId ?? 'bordeauxmetropole-bassens';
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, `locations/${locationId}`), {
+      id: locationId,
+      name: locationId === 'bordeauxmetropole-bassens'
+        ? 'Bassens'
+        : locationId,
+      group: 'bordeauxmetropole',
+      type: 'sdisStation',
+      isActive: true,
+    });
+    await setDoc(doc(admin, 'missions/mission-a'), genericMission({
+      id: 'mission-a',
+      locationId,
+      locationName: locationId === 'bordeauxmetropole-bassens'
+        ? 'Bassens'
+        : locationId,
+      requiredByProfession: {
+        ...emptyQuotas(),
+        physician: 3,
+      },
+      priority: 'urgent',
+      createdBy: uid,
+      ...overrides,
+    }));
+  });
+}
+
 test('locations: public read allowed, all writes denied', async () => {
   await seed();
   assert.equal((await assertSucceeds(getDoc(doc(db(), 'locations/site-a')))).exists(), true);
@@ -2247,6 +2277,170 @@ test('mission cancellation: unauthorized, quota mutation and reactivation denied
   await assertFails(updateDoc(doc(db('coord'), 'missions/mission-a'), {
     status: 'critical', isActive: true, updatedAt: serverTimestamp(),
   }));
+});
+
+test('JOB-0048: V2 Bassens manager cancels an owned need below the expression limit', async () => {
+  const uid = 'job-0048-bassens-manager';
+  await seed({mission: false});
+  await seedRole(
+    uid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await seedJob0048CancellationMission(uid);
+
+  await assertSucceeds(cancelMission(uid));
+});
+
+test('JOB-0048: cancellation keeps site, organization, identity and payload boundaries', async () => {
+  const outsideSiteUid = 'job-0048-outside-site';
+  await seed({mission: false});
+  await seedRole(outsideSiteUid, v2Role(['site_manager'], ['site-b']));
+  await seedJob0048CancellationMission(outsideSiteUid);
+  await assertFails(cancelMission(outsideSiteUid));
+
+  const otherOrganizationUid = 'job-0048-other-organization';
+  await seed({mission: false});
+  await seedRole(
+    otherOrganizationUid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/legacy-gironde_${otherOrganizationUid}`,
+      ),
+      organizationMembership('legacy-gironde', otherOrganizationUid, {
+        roles: ['site_manager'],
+        locationIds: ['bordeauxmetropole-bassens'],
+        active: false,
+      }),
+    );
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/organization-a_${otherOrganizationUid}`,
+      ),
+      organizationMembership('organization-a', otherOrganizationUid, {
+        roles: ['site_manager'],
+        locationIds: ['bordeauxmetropole-bassens'],
+      }),
+    );
+  });
+  await seedJob0048CancellationMission(otherOrganizationUid);
+  await assertFails(cancelMission(otherOrganizationUid));
+
+  const professionalUid = 'job-0048-professional';
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), `volunteers/${professionalUid}`),
+      volunteer(professionalUid),
+    );
+  });
+  await seedJob0048CancellationMission(professionalUid);
+  await assertFails(cancelMission(professionalUid));
+
+  await seed({mission: false});
+  await seedJob0048CancellationMission('job-0048-anonymous-owner');
+  await assertFails(updateDoc(doc(db(), 'missions/mission-a'), {
+    status: 'cancelled',
+    isActive: false,
+    cancelledAt: serverTimestamp(),
+    cancelledBy: 'job-0048-anonymous-owner',
+    cancellationReason: 'Vent violent',
+    updatedAt: serverTimestamp(),
+  }));
+
+  const invalidPayloadUid = 'job-0048-invalid-payload';
+  await seed({mission: false});
+  await seedRole(
+    invalidPayloadUid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await seedJob0048CancellationMission(invalidPayloadUid);
+  await assertFails(cancelMission(invalidPayloadUid, {requiredMk: 9}));
+
+  const inactiveMobilizationUid = 'job-0048-inactive-mobilization';
+  await seed({mission: false});
+  await seedRole(
+    inactiveMobilizationUid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await seedJob0048CancellationMission(inactiveMobilizationUid);
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(
+      doc(context.firestore(), `mobilizations/${activeMobilizationId}`),
+      {status: 'completed'},
+    );
+  });
+  await assertFails(cancelMission(inactiveMobilizationUid));
+
+  const administratorUid = 'job-0048-platform-administrator';
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), `platformAdministrators/${administratorUid}`),
+      {active: true},
+    );
+  });
+  await seedJob0048CancellationMission(administratorUid);
+  await assertFails(cancelMission(administratorUid));
+});
+
+test('JOB-0048: cumulative V2 role retains coordinator cancellation scope', async () => {
+  const uid = 'job-0048-cumulative';
+  await seed({mission: false});
+  await seedRole(
+    uid,
+    v2Role(['coordinator', 'site_manager'], ['site-a']),
+  );
+  await seedJob0048CancellationMission(uid, {
+    locationId: 'bordeauxmetropole-bassens',
+  });
+
+  await assertSucceeds(cancelMission(uid));
+});
+
+test('JOB-0048: explicit mobilization cancellation stays organization-scoped', async () => {
+  const authorizedUid = 'job-0048-organization-a-manager';
+  const otherOrganizationUid = 'job-0048-organization-b-manager';
+  await seedMultiOrganizationCore();
+  await seedRole(authorizedUid, v2Role(['site_manager'], ['site-a']));
+  await seedRole(otherOrganizationUid, v2Role(['site_manager'], ['site-a']));
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(admin, `organizationMemberships/organization-a_${authorizedUid}`),
+      organizationMembership('organization-a', authorizedUid, {
+        roles: ['site_manager'],
+        locationIds: ['site-a'],
+      }),
+    );
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/organization-b_${otherOrganizationUid}`,
+      ),
+      organizationMembership('organization-b', otherOrganizationUid, {
+        roles: ['site_manager'],
+        locationIds: ['site-a'],
+      }),
+    );
+  });
+
+  await seedJob0048CancellationMission(authorizedUid, {
+    mobilizationId: 'mobilization-a',
+    locationId: 'site-a',
+  });
+  await assertSucceeds(cancelMission(authorizedUid));
+
+  await seedJob0048CancellationMission(otherOrganizationUid, {
+    mobilizationId: 'mobilization-a',
+    locationId: 'site-a',
+  });
+  await assertFails(cancelMission(otherOrganizationUid));
 });
 
 test('engagement on a cancelled mission is denied and existing engagement stays', async () => {

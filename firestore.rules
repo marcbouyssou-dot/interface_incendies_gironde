@@ -1307,6 +1307,86 @@ service cloud.firestore {
         && canUseMobilizationOrganizationAsRole(mobilizationId);
     }
 
+    function canResolvedRoleManageMobilizationLocation(
+      role,
+      mobilizationId,
+      locationId
+    ) {
+      let assignmentPath = mobilizationAssignmentPath(
+        mobilizationId,
+        request.auth.uid
+      );
+      let configPath = platformConfigPath();
+      return (hasRole(role, 'coordinator')
+          && ((exists(assignmentPath)
+              && get(assignmentPath).data.uid == request.auth.uid
+              && get(assignmentPath).data.mobilizationId == mobilizationId
+              && get(assignmentPath).data.role == 'coordinator'
+              && get(assignmentPath).data.active == true)
+            || ((!('hasActiveMobilizationAssignments' in role)
+                  || role.hasActiveMobilizationAssignments == false)
+              && exists(configPath)
+              && get(configPath).data.activeMobilizationId
+                == mobilizationId)))
+        || (hasRole(role, 'site_manager')
+          && locationId in role.locationIds);
+    }
+
+    function canUseResolvedLegacyMobilizationOrganizationAsRole() {
+      let membershipPath = organizationMembershipPath(
+        legacyOrganizationId(),
+        request.auth.uid
+      );
+      return !exists(membershipPath)
+        || get(membershipPath).data.get('active', false) == true;
+    }
+
+    function canUseResolvedExplicitMobilizationOrganizationAsRole(
+      mobilization
+    ) {
+      let operationId = mobilization.get('operationId', '__missing__');
+      let operation = get(operationPath(operationId)).data;
+      return hasValidMobilizationOperation(mobilization)
+        && (!('ownerOrganizationId' in operation)
+          || hasActiveCanonicalMembershipDocument(
+            operation.ownerOrganizationId
+          ));
+    }
+
+    function canUseResolvedMobilizationOrganizationAsRole(mobilization) {
+      return (isLegacyMobilization(mobilization)
+          && canUseResolvedLegacyMobilizationOrganizationAsRole())
+        || canUseResolvedExplicitMobilizationOrganizationAsRole(mobilization);
+    }
+
+    // Chemin compact d'annulation : rôle et mobilisation ne sont résolus
+    // qu'une fois, sans modifier les invariants appliqués par les helpers
+    // génériques de gestion.
+    function canCancelMissionAtMobilizationLocation(
+      mobilizationId,
+      locationId
+    ) {
+      let currentRolePath = rolePath();
+      let roleExists = exists(currentRolePath);
+      let role = roleExists ? get(currentRolePath).data : {};
+      let currentMobilizationPath = mobilizationPath(mobilizationId);
+      let mobilizationExists = exists(currentMobilizationPath);
+      let mobilization = mobilizationExists
+        ? get(currentMobilizationPath).data
+        : {};
+      return roleExists
+        && isValidRoleDocument(role)
+        && role.active == true
+        && mobilizationExists
+        && mobilization.status == 'active'
+        && canResolvedRoleManageMobilizationLocation(
+          role,
+          mobilizationId,
+          locationId
+        )
+        && canUseResolvedMobilizationOrganizationAsRole(mobilization);
+    }
+
     function canReadMissionScope(mobilizationId, locationId) {
       return canReadOrganizationMissionScope(mobilizationId, locationId)
         || ((isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
@@ -1469,9 +1549,9 @@ service cloud.firestore {
     function validMissionCancellation() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isSignedIn()
+        && resource.data.mobilizationId is string
         && resource.data.isActive == true
-        && isActiveMobilization(resource.data.mobilizationId)
-        && canManageMobilizationLocation(
+        && canCancelMissionAtMobilizationLocation(
           resource.data.mobilizationId,
           resource.data.locationId
         )
@@ -1685,7 +1765,9 @@ service cloud.firestore {
         ) && validMissionCounterUpdate(missionId);
       allow update: if !existsAfter(
           engagementPath(missionId, request.auth.uid)
-        ) && (validManagedMissionCounterUpdate() || validMissionCancellation());
+        ) && (request.resource.data.status == 'cancelled'
+          ? validMissionCancellation()
+          : validManagedMissionCounterUpdate());
       allow delete: if false;
     }
 
