@@ -11,7 +11,11 @@ import 'push_installation_id.dart';
 import 'push_notification_gateway_stub.dart';
 
 export 'push_notification_gateway_stub.dart'
-    show PushActivationResult, PushNotificationGateway, PushPermissionState;
+    show
+        PushActivationResult,
+        PushNotificationGateway,
+        PushPermissionState,
+        resolveWebPushPermissionState;
 
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_PUSH_VAPID_KEY');
 const _installationKey = 'mobsante.push.installation.v1';
@@ -46,11 +50,19 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
 
   @override
   Future<PushPermissionState> permissionState() async {
-    if (!await FirebaseMessaging.instance.isSupported()) {
-      return PushPermissionState.unsupported;
-    }
+    final isSupported = await FirebaseMessaging.instance.isSupported();
+    final availability = resolveWebPushPermissionState(
+      isSupported: isSupported,
+      vapidKey: _vapidKey,
+      permission: PushPermissionState.prompt,
+    );
+    if (availability != PushPermissionState.prompt) return availability;
     final settings = await FirebaseMessaging.instance.getNotificationSettings();
-    return _map(settings.authorizationStatus);
+    return resolveWebPushPermissionState(
+      isSupported: isSupported,
+      vapidKey: _vapidKey,
+      permission: _map(settings.authorizationStatus),
+    );
   }
 
   @override

@@ -30,6 +30,7 @@ if [[ "${USE_FIREBASE:-false}" == "true" ]]; then
     FIREBASE_AUTH_DOMAIN
     FIREBASE_STORAGE_BUCKET
     FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY
+    FIREBASE_WEB_PUSH_VAPID_KEY
   )
 
   for variable_name in "${required_firebase_variables[@]}"; do
@@ -49,6 +50,7 @@ if [[ "${USE_FIREBASE:-false}" == "true" ]]; then
     "--dart-define=FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}"
     "--dart-define=FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}"
     "--dart-define=FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY=${FIREBASE_APP_CHECK_RECAPTCHA_V3_SITE_KEY}"
+    "--dart-define=FIREBASE_WEB_PUSH_VAPID_KEY=${FIREBASE_WEB_PUSH_VAPID_KEY}"
   )
 fi
 
