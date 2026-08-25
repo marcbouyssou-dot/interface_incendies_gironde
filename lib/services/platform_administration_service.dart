@@ -10,6 +10,10 @@ abstract interface class PlatformAdministrationSessionProvider {
   ValueListenable<PlatformAdministrationSessionState> get sessionState;
 }
 
+abstract interface class TargetedPushTestService {
+  Future<void> sendTargetedPushTest({required String installationId});
+}
+
 class PlatformAdministrationSessionController
     extends ValueNotifier<PlatformAdministrationSessionState> {
   PlatformAdministrationSessionController({bool initiallyValid = true})

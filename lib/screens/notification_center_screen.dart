@@ -8,6 +8,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../services/push_notification_gateway.dart';
+import '../services/platform_administration_service.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
@@ -18,10 +19,12 @@ class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({
     super.key,
     this.pushGateway,
+    this.targetedPushTestService,
     this.initialNotificationId,
   });
 
   final PushNotificationGateway? pushGateway;
+  final TargetedPushTestService? targetedPushTestService;
   final String? initialNotificationId;
 
   @override
@@ -39,6 +42,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   bool _subscriptionPersisted = false;
   bool _activationFailed = false;
   bool _consentDeferred = false;
+  bool _sendingPushTest = false;
   bool _initialNotificationHandled = false;
   StreamSubscription<PushSubscriptionRegistration>? _registrationSubscription;
 
@@ -162,6 +166,49 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     });
   }
 
+  Future<void> _sendPushTest() async {
+    final service = widget.targetedPushTestService;
+    if (service == null || !_subscriptionPersisted || _sendingPushTest) return;
+    setState(() => _sendingPushTest = true);
+    try {
+      final confirmed = await showV5Confirmation(
+        context: context,
+        title: 'Envoyer une notification test ?',
+        message:
+            'Une seule notification neutre sera envoyée à cette installation. '
+            'Cette action ne pourra pas être répétée.',
+        cancelLabel: 'Annuler',
+        confirmLabel: 'Envoyer le test',
+        barrierDismissible: false,
+        icon: Icons.notification_add_outlined,
+        cancelKey: const Key('cancel-targeted-push-test'),
+        confirmKey: const Key('confirm-targeted-push-test'),
+      );
+      if (confirmed != true || !mounted) return;
+      await service.sendTargetedPushTest(
+        installationId: _pushGateway.installationId,
+      );
+      if (!mounted) return;
+      V5Toast.show(
+        context,
+        message: 'Notification test envoyée à cette installation.',
+        tone: V5ToastTone.success,
+      );
+    } on PlatformAdministrationException catch (error) {
+      if (!mounted) return;
+      V5Toast.show(context, message: error.message, tone: V5ToastTone.danger);
+    } catch (_) {
+      if (!mounted) return;
+      V5Toast.show(
+        context,
+        message: 'La notification test n’a pas pu être envoyée.',
+        tone: V5ToastTone.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _sendingPushTest = false);
+    }
+  }
+
   Future<void> _open(AppNotification notification) async {
     if (!notification.isRead) {
       await _repository!.setNotificationRead(notification.id, read: true);
@@ -241,6 +288,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                   onChanged: _repository!.saveNotificationPreferences,
                 ),
               ),
+              if (widget.targetedPushTestService != null) ...[
+                const SizedBox(height: V5Spacing.lg),
+                _AdminPushTestCard(
+                  subscriptionActive: _subscriptionPersisted,
+                  sending: _sendingPushTest,
+                  onSend: _sendPushTest,
+                ),
+              ],
               const SizedBox(height: V5Spacing.xl),
               if (snapshot.connectionState == ConnectionState.waiting)
                 const V5LoadingState(label: 'Chargement des notifications…')
@@ -308,6 +363,43 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       if (mounted) unawaited(_open(notification));
     });
   }
+}
+
+class _AdminPushTestCard extends StatelessWidget {
+  const _AdminPushTestCard({
+    required this.subscriptionActive,
+    required this.sending,
+    required this.onSend,
+  });
+
+  final bool subscriptionActive;
+  final bool sending;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) => V5Section(
+    title: 'Diagnostic administrateur',
+    leading: const Icon(Icons.admin_panel_settings_outlined),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          subscriptionActive
+              ? 'Vérifiez la réception Push sur cette installation.'
+              : 'Un abonnement Push actif est requis sur cette installation.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: V5Spacing.sm),
+        V5Button(
+          key: const Key('send-targeted-push-test'),
+          label: sending ? 'Envoi en cours…' : 'Envoyer une notification test',
+          icon: Icons.notification_add_outlined,
+          tone: V5ButtonTone.secondary,
+          onPressed: subscriptionActive && !sending ? onSend : null,
+        ),
+      ],
+    ),
+  );
 }
 
 class _ConsentCard extends StatelessWidget {

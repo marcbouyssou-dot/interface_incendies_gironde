@@ -109,6 +109,30 @@ void main() {
     expect(calls, 0);
   });
 
+  test(
+    'targeted push test derives the only target from the current session',
+    () async {
+      final calls = <({String name, Map<String, Object?> data})>[];
+      final service = FirebasePlatformAdministrationService(
+        currentUserUid: () => 'platform-admin',
+        callable: (name, data) async {
+          calls.add((name: name, data: Map.of(data)));
+          return {'sent': true, 'subscriptionId': data['subscriptionId']};
+        },
+      );
+
+      await service.sendTargetedPushTest(installationId: 'current-device');
+
+      expect(calls, hasLength(1));
+      expect(calls.single.name, 'sendTargetedPushTest');
+      expect(calls.single.data, {
+        'subscriptionId': 'platform-admin_current-device',
+        'confirmation': 'SEND_ONE_TEST_PUSH',
+      });
+      expect(calls.single.data.keys, hasLength(2));
+    },
+  );
+
   test('callable failures remain technical and readable', () async {
     final unavailable = FirebasePlatformAdministrationService(
       callable: (name, data) => throw FirebaseFunctionsException(

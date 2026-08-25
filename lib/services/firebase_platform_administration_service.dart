@@ -12,14 +12,18 @@ typedef PlatformCallable =
 class FirebasePlatformAdministrationService
     implements
         PlatformAdministrationService,
-        PlatformAdministrationSessionProvider {
+        PlatformAdministrationSessionProvider,
+        TargetedPushTestService {
   FirebasePlatformAdministrationService({
     FirebaseFunctions? functions,
     FirebaseAuth? auth,
     PlatformCallable? callable,
+    String? Function()? currentUserUid,
   }) : assert(functions == null || callable == null),
+       _auth = auth,
        _functions = functions,
-       _callable = callable {
+       _callable = callable,
+       _currentUserUid = currentUserUid {
     if (auth != null) {
       _setSessionFromUser(auth.currentUser);
       _authSubscription = auth.idTokenChanges().listen(
@@ -31,8 +35,10 @@ class FirebasePlatformAdministrationService
 
   static const region = 'europe-west1';
 
+  final FirebaseAuth? _auth;
   final FirebaseFunctions? _functions;
   final PlatformCallable? _callable;
+  final String? Function()? _currentUserUid;
   final PlatformAdministrationSessionController _sessionState =
       PlatformAdministrationSessionController();
   StreamSubscription<User?>? _authSubscription;
@@ -55,6 +61,25 @@ class FirebasePlatformAdministrationService
 
   @override
   bool get isAvailable => true;
+
+  @override
+  Future<void> sendTargetedPushTest({required String installationId}) {
+    final user = _auth?.currentUser;
+    final uid =
+        _currentUserUid?.call() ??
+        (user?.isAnonymous == false ? user?.uid : null);
+    if (uid == null || uid.isEmpty) {
+      _sessionState.markExpired();
+      throw const PlatformAdministrationException(
+        'Votre session a expiré. Reconnectez-vous.',
+      );
+    }
+    final currentInstallationId = _validInstallationId(installationId);
+    return _invoke('sendTargetedPushTest', {
+      'subscriptionId': '${uid}_$currentInstallationId',
+      'confirmation': 'SEND_ONE_TEST_PUSH',
+    });
+  }
 
   @override
   Future<void> createMobilization(MobilizationAdministrationDraft draft) =>
@@ -231,6 +256,19 @@ class FirebasePlatformAdministrationService
     return value;
   }
 
+  String _validInstallationId(Object? value) {
+    if (value is! String ||
+        value.isEmpty ||
+        value.length > 200 ||
+        value.trim() != value ||
+        value.contains('/')) {
+      throw const PlatformAdministrationException(
+        'L’installation Push courante est invalide.',
+      );
+    }
+    return value;
+  }
+
   String _validText(Object? value, {required int maximumLength}) {
     if (value is! String ||
         value.trim().isEmpty ||
@@ -250,6 +288,8 @@ class FirebasePlatformAdministrationService
     'not-found' => 'Cette donnée n’existe plus. Actualisez la page.',
     'failed-precondition' =>
       'Cette action n’est plus possible dans l’état actuel.',
+    'resource-exhausted' =>
+      'Une notification test a déjà été envoyée à cette installation.',
     'unavailable' ||
     'deadline-exceeded' => 'Le service est momentanément indisponible.',
     _ => 'L’action d’administration n’a pas pu aboutir.',

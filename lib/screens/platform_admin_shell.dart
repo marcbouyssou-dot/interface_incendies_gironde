@@ -107,7 +107,10 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
         missionRepository: widget.missionRepository,
       ),
     ),
-    4 => PlatformAdminMoreScreen(onSignOut: widget.onSignOut),
+    4 => PlatformAdminMoreScreen(
+      onSignOut: widget.onSignOut,
+      administrationService: widget.administrationService,
+    ),
     _ => throw RangeError.index(index, _screens),
   };
 

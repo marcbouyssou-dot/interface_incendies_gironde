@@ -6,6 +6,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/notification_center_screen.dart';
 import 'package:interface_incendies_gironde/services/push_notification_gateway.dart';
+import 'package:interface_incendies_gironde/services/platform_administration_service.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 
 void main() {
@@ -72,6 +73,7 @@ void main() {
     WidgetTester tester, {
     required MockCoordinationRepository repository,
     required _FakePushGateway gateway,
+    TargetedPushTestService? targetedPushTestService,
     String? initialNotificationId,
     ThemeMode themeMode = ThemeMode.light,
     double textScale = 1,
@@ -96,6 +98,7 @@ void main() {
           ),
           home: NotificationCenterScreen(
             pushGateway: gateway,
+            targetedPushTestService: targetedPushTestService,
             initialNotificationId: initialNotificationId,
           ),
         ),
@@ -124,6 +127,149 @@ void main() {
     expect(gateway.tokenRequests, 1);
     expect(repository.pushSubscriptions.keys, contains('device-test'));
     expect(find.text('Notifications activées'), findsOneWidget);
+  });
+
+  testWidgets('non-admin never sees the targeted push test control', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: _FakePushGateway(permission: PushPermissionState.granted),
+    );
+
+    expect(find.byKey(const Key('send-targeted-push-test')), findsNothing);
+    expect(find.text('Diagnostic administrateur'), findsNothing);
+  });
+
+  testWidgets(
+    'platform admin sees a test control for the current installation',
+    (tester) async {
+      final repository = MockCoordinationRepository();
+      seedActiveSubscription(repository);
+      final service = _FakeTargetedPushTestService();
+      await pumpCenter(
+        tester,
+        repository: repository,
+        gateway: _FakePushGateway(permission: PushPermissionState.granted),
+        targetedPushTestService: service,
+      );
+
+      expect(find.text('Diagnostic administrateur'), findsOneWidget);
+      expect(find.text('Envoyer une notification test'), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+    },
+  );
+
+  testWidgets('missing subscription disables the admin test control', (
+    tester,
+  ) async {
+    final service = _FakeTargetedPushTestService();
+    await pumpCenter(
+      tester,
+      repository: MockCoordinationRepository(),
+      gateway: _FakePushGateway(permission: PushPermissionState.granted),
+      targetedPushTestService: service,
+    );
+
+    final button = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('send-targeted-push-test')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(button.onPressed, isNull);
+    expect(find.textContaining('abonnement Push actif'), findsOneWidget);
+    expect(service.installationIds, isEmpty);
+  });
+
+  testWidgets('cancelled confirmation never calls the targeted push service', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final service = _FakeTargetedPushTestService();
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: _FakePushGateway(permission: PushPermissionState.granted),
+      targetedPushTestService: service,
+    );
+
+    await tester.tap(find.byKey(const Key('send-targeted-push-test')));
+    await tester.pumpAndSettle();
+    expect(find.text('Envoyer une notification test ?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('cancel-targeted-push-test')));
+    await tester.pumpAndSettle();
+
+    expect(service.installationIds, isEmpty);
+  });
+
+  testWidgets('confirmed test calls once and reports success without token', (
+    tester,
+  ) async {
+    const token = 'secret-fcm-token-never-rendered';
+    final repository = MockCoordinationRepository();
+    repository.pushSubscriptions['device-test'] =
+        const PushSubscriptionRegistration(
+          installationId: 'device-test',
+          token: token,
+          platform: 'web',
+        );
+    final service = _FakeTargetedPushTestService();
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: _FakePushGateway(
+        permission: PushPermissionState.granted,
+        token: token,
+      ),
+      targetedPushTestService: service,
+    );
+
+    await tester.tap(find.byKey(const Key('send-targeted-push-test')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-targeted-push-test')));
+    await tester.pump();
+
+    expect(service.installationIds, ['device-test']);
+    expect(
+      find.text('Notification test envoyée à cette installation.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining(token), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('callable error is presented as controlled feedback', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final service = _FakeTargetedPushTestService(
+      error: const PlatformAdministrationException(
+        'Une notification test a déjà été envoyée à cette installation.',
+      ),
+    );
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: _FakePushGateway(permission: PushPermissionState.granted),
+      targetedPushTestService: service,
+    );
+
+    await tester.tap(find.byKey(const Key('send-targeted-push-test')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-targeted-push-test')));
+    await tester.pump();
+
+    expect(service.installationIds, ['device-test']);
+    expect(
+      find.textContaining('déjà été envoyée à cette installation'),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -528,6 +674,19 @@ class _FakePushGateway implements PushNotificationGateway {
 
   @override
   Future<void> updateBadge(int count) async => lastBadge = count;
+}
+
+class _FakeTargetedPushTestService implements TargetedPushTestService {
+  _FakeTargetedPushTestService({this.error});
+
+  final Object? error;
+  final List<String> installationIds = [];
+
+  @override
+  Future<void> sendTargetedPushTest({required String installationId}) async {
+    installationIds.add(installationId);
+    if (error case final error?) throw error;
+  }
 }
 
 class _FlakyPushRepository extends MockCoordinationRepository {
