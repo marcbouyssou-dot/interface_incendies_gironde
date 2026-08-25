@@ -62,6 +62,17 @@ test('mission update is a v2 callable without notification secrets', () => {
   assert.equal(endpoint.secrets, undefined);
 });
 
+test('targeted push test is App Check enforced without secrets', () => {
+  const endpoint = discoverExport({
+    GCLOUD_PROJECT: 'mobilisation-sante',
+  }, 'sendTargetedPushTest');
+
+  assert.equal(endpoint.callable, true);
+  assert.deepEqual(endpoint.region, ['europe-west1']);
+  assert.equal(endpoint.secrets, undefined);
+  assert.equal(endpoint.appCheckEnforced, true);
+});
+
 test('RPPS verification is callable without secret during discovery', () => {
   const endpoint = discoverExport({
     FUNCTIONS_EMULATOR: 'true',
