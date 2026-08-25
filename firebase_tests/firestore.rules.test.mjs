@@ -832,6 +832,34 @@ test('missions: public active read and anonymous create denied', async () => {
   await assertFails(setDoc(doc(db(), 'missions/new'), mission({id: 'new'})));
 });
 
+test('JOB-0066: ended need stays readable without a client update path', async () => {
+  await seed({mission: false});
+  const endedAt = Timestamp.fromMillis(Date.now() - 1000);
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'missions/mission-ended'), mission({
+      id: 'mission-ended',
+      startAt: Timestamp.fromMillis(endedAt.toMillis() - 3600000),
+      endAt: endedAt,
+      details: 'Historique conservé',
+    }));
+  });
+
+  await assertSucceeds(getDoc(doc(db(), 'missions/mission-ended')));
+  await assertSucceeds(getDoc(doc(db('manager'), 'missions/mission-ended')));
+  await assertFails(updateDoc(doc(db('coord'), 'missions/mission-ended'), {
+    details: 'Altération historique',
+    updatedAt: serverTimestamp(),
+  }));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    const stored = await getDoc(doc(
+      context.firestore(),
+      'missions/mission-ended',
+    ));
+    assert.equal(stored.data().details, 'Historique conservé');
+  });
+});
+
 test('notifications: owner can read and toggle readAt only', async () => {
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {

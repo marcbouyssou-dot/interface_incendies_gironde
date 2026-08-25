@@ -21,6 +21,12 @@ import {
 
 const projectId = 'demo-mobsante';
 const activeMobilizationId = 'incendies-gironde-2026';
+const hourInMillis = 60 * 60 * 1000;
+const fixtureReference = Date.now();
+const defaultMissionStart = fixtureReference + 24 * hourInMillis;
+const defaultMissionEnd = defaultMissionStart + 4 * hourInMillis;
+const updatedMissionStart = fixtureReference + 48 * hourInMillis;
+const updatedMissionEnd = updatedMissionStart + 4 * hourInMillis;
 const adminApp = initializeAdminApp({projectId}, 'mission-update-tests');
 const adminAuth = getAdminAuth(adminApp);
 const db = getAdminFirestore(adminApp);
@@ -104,8 +110,8 @@ async function seedMission(sourceId, overrides = {}) {
     locationId: sourceId,
     locationName: `Centre ${sourceId}`,
     territorialGroup: 'medoc',
-    startAt: new Date('2026-08-03T08:00:00Z'),
-    endAt: new Date('2026-08-03T12:00:00Z'),
+    startAt: new Date(defaultMissionStart),
+    endAt: new Date(defaultMissionEnd),
     requiredByProfession: quotas(2, 1),
     registeredByProfession: quotas(1, 0),
     requiredMk: 2,
@@ -128,8 +134,8 @@ function updateRequest(missionId, locationId, overrides = {}) {
   return {
     missionId,
     locationId,
-    startAtMillis: Date.parse('2026-08-04T09:00:00Z'),
-    endAtMillis: Date.parse('2026-08-04T13:00:00Z'),
+    startAtMillis: updatedMissionStart,
+    endAtMillis: updatedMissionEnd,
     requiredByProfession: quotas(3, 1),
     equipment: ['Tables', 'Serviettes'],
     details: 'Après',
@@ -291,6 +297,54 @@ test('site manager must manage the source and destination', async () => {
       );
     }
   }
+});
+
+test('active-today mission remains editable before its end', async () => {
+  const source = unique('source');
+  await seedLocation(source);
+  const missionId = await seedMission(source, {
+    startAt: new Date(Date.now() - hourInMillis),
+    endAt: new Date(Date.now() + hourInMillis),
+  });
+  const user = await createUser(managerRole([source]));
+
+  await (await callable(user))(updateRequest(missionId, source));
+
+  assert.equal(
+    (await db.collection('missions').doc(missionId).get()).data().details,
+    'Après',
+  );
+});
+
+test('ended mission update is refused without changing its history', async () => {
+  const source = unique('source');
+  await seedLocation(source);
+  const missionId = await seedMission(source, {
+    startAt: new Date(Date.now() - 2 * hourInMillis),
+    endAt: new Date(Date.now() - hourInMillis),
+  });
+  const engagementId = unique('historical-engagement');
+  await db.collection('engagements').doc(engagementId).set({
+    missionId,
+    mobilizationId: activeMobilizationId,
+    volunteerId: unique('volunteer'),
+    profession: 'mk',
+    status: 'cancelled',
+  });
+  const user = await createUser(managerRole([source]));
+  const update = await callable(user);
+
+  await assertCode(
+    () => update(updateRequest(missionId, source)),
+    'failed-precondition',
+  );
+
+  const [storedMission, storedEngagement] = await Promise.all([
+    db.collection('missions').doc(missionId).get(),
+    db.collection('engagements').doc(engagementId).get(),
+  ]);
+  assert.equal(storedMission.data().details, 'Avant');
+  assert.equal(storedEngagement.data().status, 'cancelled');
 });
 
 test('cumulative coordinator is not restricted to its site-manager scope', async () => {

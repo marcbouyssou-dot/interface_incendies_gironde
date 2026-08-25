@@ -91,6 +91,7 @@ export function missionUpdateMutation({
   engagements,
   serverTimestamp,
   timestampFromMillis,
+  nowMillis = Date.now(),
 }) {
   if (!isPlainObject(mission)) {
     throw new MissionUpdateError('not-found', 'Mission introuvable.');
@@ -116,7 +117,11 @@ export function missionUpdateMutation({
       || !canManage(access, request.locationId, coordinatorAuthorized)) {
     throw outsideScope();
   }
-  if (mission.isActive === false || mission.status === 'cancelled') {
+  if (
+    mission.isActive === false
+    || mission.status === 'cancelled'
+    || missionHasEnded(mission, nowMillis)
+  ) {
     throw new MissionUpdateError(
       'failed-precondition',
       'Cette mission ne peut plus être modifiée.',
@@ -192,6 +197,24 @@ function canManage(access, locationId, coordinatorAuthorized) {
   if (typeof locationId !== 'string' || locationId === '') return false;
   return access.roles.includes('site_manager')
     && access.locationIds.includes(locationId);
+}
+
+function missionHasEnded(mission, nowMillis) {
+  const endAtMillis = storedTimestampMillis(mission.endAt);
+  return !Number.isSafeInteger(nowMillis) || nowMillis >= endAtMillis;
+}
+
+function storedTimestampMillis(value) {
+  const millis = value instanceof Date
+    ? value.getTime()
+    : value?.toMillis?.();
+  if (!Number.isSafeInteger(millis) || millis <= 0) {
+    throw new MissionUpdateError(
+      'failed-precondition',
+      'Cette mission ne peut plus être modifiée.',
+    );
+  }
+  return millis;
 }
 
 function registeredQuotas(mission) {
