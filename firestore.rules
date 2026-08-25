@@ -921,6 +921,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/operations/$(operationId);
     }
 
+    function organizationPath(organizationId) {
+      return /databases/$(database)/documents/organizations/$(organizationId);
+    }
+
     function missionPath(missionId) {
       return /databases/$(database)/documents/missions/$(missionId);
     }
@@ -935,22 +939,41 @@ service cloud.firestore {
       );
     }
 
+    // `defaultVisibility` sert uniquement de compatibilité aux opérations qui
+    // ne portent pas encore leur valeur effective. Les nouvelles opérations
+    // doivent persister `visibility`; une valeur explicite reste prioritaire.
+    function effectiveOperationVisibility(operation) {
+      let organizationId = operationOwnerOrganizationId(operation);
+      let ownerPath = organizationPath(organizationId);
+      return 'visibility' in operation
+        ? operation.visibility
+        : (organizationId == legacyOrganizationId()
+          ? 'platform'
+          : (exists(ownerPath)
+            ? get(ownerPath).data.get(
+                'defaultVisibility',
+                'organization_private'
+              )
+            : 'organization_private'));
+    }
+
+    function hasValidEffectiveOperationVisibility(operation) {
+      return effectiveOperationVisibility(operation) in [
+        'organization_private', 'shared', 'platform', 'public'
+      ];
+    }
+
     function isPublishedOperation(operation) {
       return operation.get('status', '') in [
         'planned', 'active', 'suspended', 'completed'
       ];
     }
 
-    // Une lecture documentaire conserve le legacy Gironde sans visibilité.
-    // Une requête de collection doit en revanche porter `visibility` afin que
-    // les Rules puissent prouver le bornage sans inspecter après lecture.
     function isPlatformDiscoverableOperation(operation) {
       return hasValidOperationOrganization(operation)
-        && isPublishedOperation(operation)
-        && (operation.get('visibility', '__missing__') == 'platform'
-          || (!('visibility' in operation)
-            && operationOwnerOrganizationId(operation)
-              == legacyOrganizationId()));
+        && hasValidEffectiveOperationVisibility(operation)
+        && effectiveOperationVisibility(operation) == 'platform'
+        && isPublishedOperation(operation);
     }
 
     function isExplicitPlatformDiscoverableOperation(operation) {
@@ -1388,11 +1411,19 @@ service cloud.firestore {
     }
 
     function canReadMissionScope(mobilizationId, locationId) {
-      return canReadOrganizationMissionScope(mobilizationId, locationId)
+      let path = mobilizationPath(mobilizationId);
+      let mobilization = mobilizationId is string && exists(path)
+        ? get(path).data
+        : {};
+      return isPlatformAdministrator()
+        || canReadOrganizationMissionScope(mobilizationId, locationId)
         || ((isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
             || (isActiveSiteManager()
               && locationId in currentRole().locationIds))
           && canUseMobilizationOrganizationAsRole(mobilizationId))
+        || (mobilizationId is string
+          && exists(path)
+          && hasMobilizationOrganizationMembership(mobilization))
         || (!isPlatformAdministrator()
           && !hasActiveRole()
           && isPlatformDiscoverableMobilizationById(mobilizationId));

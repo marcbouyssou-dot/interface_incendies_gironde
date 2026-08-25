@@ -3669,7 +3669,7 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
     professionalMissionCount += professionalMissions.size;
   }
   assert.equal(professionalMissionCount, 3);
-  await assertFails(getDocs(query(
+  await assertSucceeds(getDocs(query(
     collection(db('platform-admin'), 'missions'),
     where('mobilizationId', '==', activeMobilizationId),
     where('isActive', '==', true),
@@ -4292,8 +4292,9 @@ test('RC4.2G: inactive membership is denied and platform admin stays global', as
   await assertSucceeds(getDocs(collection(platformAdminDb, 'operations')));
   await assertSucceeds(getDocs(collection(platformAdminDb, 'mobilizations')));
 
-  // RC3.8F.3 remains stricter than the organization boundary for previews.
-  await assertFails(getDoc(doc(platformAdminDb, 'missions/mission-org-a')));
+  // Platform administration includes active missions, but never inherits a
+  // professional owner's engagement access.
+  await assertSucceeds(getDoc(doc(platformAdminDb, 'missions/mission-org-a')));
   await assertFails(getDoc(doc(
     platformAdminDb,
     'engagements/mission-org-a_professional',
@@ -4324,6 +4325,106 @@ test('RC4.2G: legacy coordinator and responsible retain their RC3 scope', async 
   )));
 });
 
+test('RECOVERY-004 canReadMissionScope: platform_admin is limited to active mission scope', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'mobilizations/mobilization-inactive'), {
+      id: 'mobilization-inactive',
+      territoryId: 'gironde',
+      status: 'completed',
+      operationId: 'operation-a',
+    });
+    await setDoc(doc(admin, 'missions/mission-inactive-mobilization'), mission({
+      id: 'mission-inactive-mobilization',
+      mobilizationId: 'mobilization-inactive',
+    }));
+    await setDoc(doc(admin, 'missions/mission-inactive'), mission({
+      id: 'mission-inactive',
+      mobilizationId: 'mobilization-a',
+      isActive: false,
+    }));
+  });
+  const platformAdminDb = db('platform-admin');
+
+  await assertSucceeds(getDoc(doc(
+    platformAdminDb,
+    'missions/mission-org-a',
+  )));
+  await assertSucceeds(getDoc(doc(
+    platformAdminDb,
+    'missions/mission-org-b',
+  )));
+  await assertFails(getDoc(doc(
+    platformAdminDb,
+    'missions/mission-inactive-mobilization',
+  )));
+  await assertFails(getDoc(doc(
+    platformAdminDb,
+    'missions/mission-inactive',
+  )));
+  await assertFails(getDocs(query(
+    collection(platformAdminDb, 'missions'),
+    where('mobilizationId', '==', 'mobilization-inactive'),
+    where('isActive', '==', true),
+  )));
+  await assertFails(getDoc(doc(
+    platformAdminDb,
+    'engagements/mission-org-a_professional',
+  )));
+});
+
+test('RECOVERY-002 canReadMissionScope: organization member reads its mission scope', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertSucceeds(getDoc(doc(
+    db('member-b'),
+    'missions/mission-org-b',
+  )));
+});
+
+test('RECOVERY-002 canReadMissionScope: organization member is denied out of scope', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertFails(getDoc(doc(
+    db('member-b'),
+    'missions/mission-org-a',
+  )));
+});
+
+test('RECOVERY-002 canReadMissionScope: organization outsider is denied', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertFails(getDoc(doc(
+    db('organization-outsider'),
+    'missions/mission-org-a',
+  )));
+});
+
+test('RECOVERY-002 canReadMissionScope: unauthenticated mission read is denied', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertFails(getDoc(doc(db(), 'missions/mission-org-a')));
+});
+
+test('RECOVERY-004 defaultVisibility organization_private keeps mission organization-scoped', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertSucceeds(getDoc(doc(
+    db('member-b'),
+    'missions/mission-org-b',
+  )));
+  await assertFails(getDoc(doc(
+    db('member-b'),
+    'missions/mission-org-a',
+  )));
+  await assertFails(getDoc(doc(
+    db('organization-outsider'),
+    'missions/mission-org-b',
+  )));
+  await assertFails(getDoc(doc(db(), 'missions/mission-org-b')));
+});
+
 test('RC4.2G: public professional reads and owner engagement rights stay unchanged', async () => {
   await seedMultiOrganizationCore();
   await env.withSecurityRulesDisabled(async (context) => {
@@ -4349,6 +4450,32 @@ test('RC4.2G: public professional reads and owner engagement rights stay unchang
       `engagements/${missionId}_professional`,
     )));
   }
+});
+
+test('RECOVERY-002: organization platform default is inherited by its public scope', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(
+      context.firestore(),
+      'organizations/organization-a',
+    ), {defaultVisibility: 'platform'});
+  });
+
+  const operation = await assertSucceeds(getDoc(doc(
+    db('professional'),
+    'operations/operation-a',
+  )));
+  const mobilization = await assertSucceeds(getDoc(doc(
+    db('professional'),
+    'mobilizations/mobilization-a',
+  )));
+  const missionSnapshot = await assertSucceeds(getDoc(doc(
+    db(),
+    'missions/mission-org-a',
+  )));
+  assert.equal(operation.id, 'operation-a');
+  assert.equal(mobilization.id, 'mobilization-a');
+  assert.equal(missionSnapshot.id, 'mission-org-a');
 });
 
 test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', async () => {
