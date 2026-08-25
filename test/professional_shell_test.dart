@@ -13,6 +13,7 @@ import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/screens/responsible_home_screen.dart';
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
+import 'package:interface_incendies_gironde/utils/mission_timing.dart';
 import 'package:interface_incendies_gironde/widgets/responsible_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/coordinator_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
@@ -315,7 +316,20 @@ void main() {
     tester,
   ) async {
     final merignac = places.firstWhere((place) => place.name == 'Mérignac');
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
     final repository = MockCoordinationRepository(
+      initialMissions: [
+        _responsibleMission(
+          id: 'mission-merignac',
+          location: merignac,
+          day: tomorrow,
+          startHour: 8,
+          endHour: 12,
+          requiredMk: 4,
+          registeredMk: 1,
+        ),
+      ],
       responsibleAccess: ResponsibleAccess(
         uid: 'manager',
         role: ResponsibleRole.siteManager,
@@ -447,6 +461,196 @@ void main() {
     expect(find.text('Réglages'), findsOneWidget);
     expect(find.text('Gestion des responsables'), findsNothing);
     expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
+  });
+
+  test('responsible tomorrow scope distinguishes local calendar days', () {
+    final bassens = places.first;
+    final now = DateTime(2026, 8, 25, 12);
+
+    CoordinationNeed missionOn(int day, int startHour, int endHour) =>
+        _responsibleMission(
+          id: 'mission-$day',
+          location: bassens,
+          day: DateTime(2026, 8, day),
+          startHour: startHour,
+          endHour: endHour,
+          requiredMk: 1,
+        );
+
+    expect(
+      isMissionScheduledForTomorrow(missionOn(24, 8, 12), now: now),
+      isFalse,
+    );
+    expect(
+      isMissionScheduledForTomorrow(missionOn(25, 14, 18), now: now),
+      isFalse,
+    );
+    expect(
+      isMissionScheduledForTomorrow(missionOn(26, 8, 12), now: now),
+      isTrue,
+    );
+    expect(
+      isMissionScheduledForTomorrow(missionOn(27, 8, 12), now: now),
+      isFalse,
+    );
+  });
+
+  testWidgets(
+    'responsible home aggregates only tomorrow missions and their deadline',
+    (tester) async {
+      final bassens = places.first;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      final repository = MockCoordinationRepository(
+        initialMissions: [
+          _responsibleMission(
+            id: 'past-need',
+            location: bassens,
+            day: DateTime(today.year, today.month, today.day - 2),
+            startHour: 8,
+            endHour: 10,
+            requiredMk: 40,
+          ),
+          _responsibleMission(
+            id: 'today-need',
+            location: bassens,
+            day: today,
+            startHour: 0,
+            endHour: 23,
+            requiredMk: 50,
+          ),
+          _responsibleMission(
+            id: 'tomorrow-early',
+            location: bassens,
+            day: tomorrow,
+            startHour: 8,
+            endHour: 10,
+            requiredMk: 2,
+            registeredMk: 1,
+            requiredPp: 1,
+            dateLabel: 'Demain tôt',
+          ),
+          _responsibleMission(
+            id: 'tomorrow-late',
+            location: bassens,
+            day: tomorrow,
+            startHour: 14,
+            endHour: 18,
+            requiredMk: 3,
+            registeredMk: 1,
+            requiredPp: 2,
+            registeredPp: 1,
+            dateLabel: 'Demain tard',
+          ),
+          _responsibleMission(
+            id: 'after-tomorrow-need',
+            location: bassens,
+            day: DateTime(today.year, today.month, today.day + 2),
+            startHour: 8,
+            endHour: 10,
+            requiredMk: 60,
+          ),
+        ],
+        initialLocations: [bassens],
+        responsibleAccess: ResponsibleAccess(
+          uid: 'manager-tomorrow',
+          role: ResponsibleRole.siteManager,
+          locationIds: {bassens.id},
+          active: true,
+        ),
+      );
+
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('5 postes restent à couvrir demain.'), findsOneWidget);
+      expect(
+        find.text('Masseur-kinésithérapeute · 3 · Pédicure-podologue · 2'),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('responsible-next-deadline')),
+          matching: find.text('Demain tôt · 08:00–10:00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-tomorrow-early')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-tomorrow-late')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-past-need')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-today-need')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-after-tomorrow-need')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('responsible home never falls back outside tomorrow', (
+    tester,
+  ) async {
+    final bassens = places.first;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final repository = MockCoordinationRepository(
+      initialMissions: [
+        _responsibleMission(
+          id: 'past-only',
+          location: bassens,
+          day: DateTime(today.year, today.month, today.day - 1),
+          startHour: 8,
+          endHour: 10,
+          requiredMk: 20,
+        ),
+        _responsibleMission(
+          id: 'future-only',
+          location: bassens,
+          day: DateTime(today.year, today.month, today.day + 2),
+          startHour: 8,
+          endHour: 10,
+          requiredMk: 30,
+        ),
+      ],
+      initialLocations: [bassens],
+      responsibleAccess: ResponsibleAccess(
+        uid: 'manager-no-tomorrow',
+        role: ResponsibleRole.siteManager,
+        locationIds: {bassens.id},
+        active: true,
+      ),
+    );
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
+    expect(find.text('Aucune profession manquante.'), findsOneWidget);
+    expect(find.text('Aucune échéance demain.'), findsOneWidget);
+    expect(
+      find.text('Rien ne nécessite votre intervention pour demain.'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('responsible-open-need-past-only')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('responsible-open-need-future-only')),
+      findsNothing,
+    );
   });
 
   testWidgets('site manager never sees the technical perspective selector', (
@@ -686,3 +890,33 @@ class _RoleAwareRepository extends MockCoordinationRepository {
 
   Future<void> disposeRoleStream() => _accessUpdates.close();
 }
+
+CoordinationNeed _responsibleMission({
+  required String id,
+  required ResponsePlace location,
+  required DateTime day,
+  required int startHour,
+  required int endHour,
+  int requiredMk = 0,
+  int registeredMk = 0,
+  int requiredPp = 0,
+  int registeredPp = 0,
+  String? dateLabel,
+}) => CoordinationNeed(
+  id: id,
+  place: location.name,
+  group: location.group,
+  date: dateLabel ?? 'Jour du besoin',
+  time:
+      '${startHour.toString().padLeft(2, '0')}:00–'
+      '${endHour.toString().padLeft(2, '0')}:00',
+  requiredPhysiotherapists: requiredMk,
+  registeredPhysiotherapists: registeredMk,
+  requiredPodiatrists: requiredPp,
+  registeredPodiatrists: registeredPp,
+  equipment: const [],
+  mobilizationId: 'mobilization-test',
+  locationId: location.id,
+  startAt: DateTime(day.year, day.month, day.day, startHour),
+  endAt: DateTime(day.year, day.month, day.day, endHour),
+);

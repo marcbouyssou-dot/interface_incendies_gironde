@@ -7,6 +7,7 @@ import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
+import '../utils/mission_timing.dart';
 import '../utils/runtime_stream_diagnostics.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/responsible_mission_card.dart';
@@ -173,7 +174,7 @@ class _ResponsibleHomeContent extends StatelessWidget {
       previewLocationId: previewLocationId,
     );
     final planningNeeds = visibleMissions
-        .where((need) => need.isActive && !need.isCancelled)
+        .where(isMissionScheduledForTomorrow)
         .toList(growable: false);
     final toHandle = planningNeeds
         .where((need) => need.status == NeedStatus.critical)
