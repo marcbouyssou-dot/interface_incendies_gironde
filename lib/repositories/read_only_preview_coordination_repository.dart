@@ -150,12 +150,14 @@ class ReadOnlyPreviewCoordinationRepository
     PushSubscriptionRegistration registration,
   ) => _blocked();
   @override
-  Future<bool> hasActivePushSubscription(String installationId) {
+  Future<PushSubscriptionState> readPushSubscriptionState(
+    String installationId,
+  ) {
     final repository = source;
     return repository is PushSubscriptionReadRepository
         ? (repository as PushSubscriptionReadRepository)
-              .hasActivePushSubscription(installationId)
-        : Future.value(false);
+              .readPushSubscriptionState(installationId)
+        : Future.value(PushSubscriptionState.absent);
   }
 
   @override

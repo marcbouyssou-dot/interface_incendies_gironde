@@ -22,7 +22,7 @@ function request(overrides = {}) {
   };
 }
 
-function harness({administrator = true, subscription = {}} = {}) {
+function harness({administrator = true, subscription = {}, send} = {}) {
   const firestore = new MemoryFirestore();
   if (administrator !== null) {
     firestore.seed(`platformAdministrators/${ADMIN_UID}`, {
@@ -45,6 +45,9 @@ function harness({administrator = true, subscription = {}} = {}) {
     messaging: {
       async send(message) {
         messages.push(message);
+        if (send) {
+          return send({message, messages, firestore});
+        }
         return 'projects/demo/messages/test-message';
       },
     },
@@ -90,8 +93,16 @@ test('non platform administrator is refused without sending', async () => {
   assert.equal(messages.length, 0);
 });
 
-test('authorized administrator sends fixed payload to one installation', async () => {
-  const {firestore, messages, services} = harness();
+test('authorized administrator sends fixed payload then records success', async () => {
+  const {firestore, messages, services} = harness({
+    send: async ({firestore}) => {
+      assert.equal(
+        firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
+        'pending',
+      );
+      return 'projects/demo/messages/test-message';
+    },
+  });
   const result = await sendTargetedPushTest({
     callerUid: ADMIN_UID,
     data: request(),
@@ -113,7 +124,157 @@ test('authorized administrator sends fixed payload to one installation', async (
   assert.deepEqual(firestore.writtenCollections(), ['pushTestDispatches']);
   assert.equal(
     firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
-    'delivered',
+    'success',
+  );
+});
+
+test('invalid FCM token marks both dispatch failed and subscription stale', async () => {
+  const {firestore, services} = harness({
+    send: async () => {
+      throw messagingError('messaging/registration-token-not-registered');
+    },
+  });
+
+  await assert.rejects(() => sendTargetedPushTest({
+    callerUid: ADMIN_UID,
+    data: request(),
+    services,
+  }));
+
+  const dispatch = firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`);
+  const subscription = firestore.data(`pushSubscriptions/${SUBSCRIPTION_ID}`);
+  assert.equal(dispatch.status, 'failed');
+  assert.equal(
+    dispatch.errorCode,
+    'messaging/registration-token-not-registered',
+  );
+  assert.equal(subscription.active, false);
+  assert.equal(
+    subscription.disabledReason,
+    'messaging/registration-token-not-registered',
+  );
+});
+
+test('same token cannot retry after a failed send', async () => {
+  let sendCalls = 0;
+  const {firestore, services} = harness({
+    send: async () => {
+      sendCalls += 1;
+      throw messagingError('messaging/registration-token-not-registered');
+    },
+  });
+  await assert.rejects(() => sendTargetedPushTest({
+    callerUid: ADMIN_UID,
+    data: request(),
+    services,
+  }));
+  firestore.seed(`pushSubscriptions/${SUBSCRIPTION_ID}`, {
+    uid: OWNER_UID,
+    installationId: INSTALLATION_ID,
+    token: TOKEN,
+    platform: 'web',
+    active: true,
+  });
+
+  await assertCode(
+    () => sendTargetedPushTest({
+      callerUid: ADMIN_UID,
+      data: request(),
+      services,
+    }),
+    'resource-exhausted',
+  );
+  assert.equal(sendCalls, 1);
+});
+
+test('a genuinely renewed token can retry a failed send once', async () => {
+  let sendCalls = 0;
+  const {firestore, messages, services} = harness({
+    send: async () => {
+      sendCalls += 1;
+      if (sendCalls === 1) {
+        throw messagingError('messaging/registration-token-not-registered');
+      }
+      return 'projects/demo/messages/renewed-token';
+    },
+  });
+  await assert.rejects(() => sendTargetedPushTest({
+    callerUid: ADMIN_UID,
+    data: request(),
+    services,
+  }));
+  firestore.seed(`pushSubscriptions/${SUBSCRIPTION_ID}`, {
+    uid: OWNER_UID,
+    installationId: INSTALLATION_ID,
+    token: 'renewed-private-fcm-token',
+    platform: 'web',
+    active: true,
+  });
+
+  const result = await sendTargetedPushTest({
+    callerUid: ADMIN_UID,
+    data: request(),
+    services,
+  });
+
+  assert.deepEqual(result, {sent: true, subscriptionId: SUBSCRIPTION_ID});
+  assert.equal(messages.length, 2);
+  assert.equal(messages[1].token, 'renewed-private-fcm-token');
+  assert.equal(
+    firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
+    'success',
+  );
+});
+
+test('other FCM errors do not mark the subscription stale', async () => {
+  const {firestore, services} = harness({
+    send: async () => {
+      throw messagingError('messaging/internal-error');
+    },
+  });
+
+  await assert.rejects(() => sendTargetedPushTest({
+    callerUid: ADMIN_UID,
+    data: request(),
+    services,
+  }));
+
+  const subscription = firestore.data(`pushSubscriptions/${SUBSCRIPTION_ID}`);
+  assert.equal(subscription.active, true);
+  assert.equal(subscription.disabledReason, undefined);
+  assert.equal(
+    firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
+    'failed',
+  );
+});
+
+test('legacy invalid-token failure is reconciled without sending again', async () => {
+  const {firestore, messages, services} = harness();
+  firestore.seed(`pushTestDispatches/${SUBSCRIPTION_ID}`, {
+    dispatchId: SUBSCRIPTION_ID,
+    subscriptionId: SUBSCRIPTION_ID,
+    requestedBy: ADMIN_UID,
+    status: 'failed',
+    errorCode: 'messaging/registration-token-not-registered',
+  });
+
+  await assertCode(
+    () => sendTargetedPushTest({
+      callerUid: ADMIN_UID,
+      data: request(),
+      services,
+    }),
+    'failed-precondition',
+  );
+
+  assert.equal(messages.length, 0);
+  assert.equal(
+    firestore.data(`pushSubscriptions/${SUBSCRIPTION_ID}`).active,
+    false,
+  );
+  assert.match(
+    firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).tokenFingerprint,
+    /^[a-f0-9]{64}$/,
   );
 });
 
@@ -205,8 +366,15 @@ class MemoryFirestore {
     return action({
       get: async (reference) => reference.get(),
       create: (reference, value) => reference.create(value),
+      update: (reference, value) => reference.update(value),
     });
   }
+}
+
+function messagingError(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
 }
 
 class MemoryReference {

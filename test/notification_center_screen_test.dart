@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/app_notification.dart';
+import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/notification_center_screen.dart';
@@ -289,6 +290,67 @@ void main() {
       expect(gateway.tokenRequests, 0);
     },
   );
+
+  testWidgets(
+    'stale subscription renews its token without permission request or new installation',
+    (tester) async {
+      final repository = MockCoordinationRepository();
+      repository.pushSubscriptions['device-test'] =
+          const PushSubscriptionRegistration(
+            installationId: 'device-test',
+            token: 'stale-token',
+            platform: 'web',
+          );
+      repository.pushSubscriptionStates['device-test'] =
+          PushSubscriptionState.stale;
+      final gateway = _FakePushGateway(
+        permission: PushPermissionState.granted,
+        renewedToken: 'renewed-token',
+      );
+
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      expect(find.text('Notifications activées'), findsOneWidget);
+      expect(find.text('Activation incomplète'), findsNothing);
+      expect(repository.pushSubscriptionReadCalls, 1);
+      expect(
+        repository.pushSubscriptions['device-test']?.token,
+        'renewed-token',
+      );
+      expect(repository.pushSubscriptions.keys, ['device-test']);
+      expect(gateway.permissionStateCalls, 1);
+      expect(gateway.activationCalls, 0);
+      expect(gateway.tokenRequests, 1);
+      expect(gateway.renewalCalls, 1);
+    },
+  );
+
+  testWidgets('stale renewal retry never requests permission', (tester) async {
+    final repository = MockCoordinationRepository();
+    repository.pushSubscriptions['device-test'] =
+        const PushSubscriptionRegistration(
+          installationId: 'device-test',
+          token: 'stale-token',
+          platform: 'web',
+        );
+    repository.pushSubscriptionStates['device-test'] =
+        PushSubscriptionState.stale;
+    final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+
+    await pumpCenter(tester, repository: repository, gateway: gateway);
+    expect(find.text('Activation incomplète'), findsOneWidget);
+    expect(gateway.activationCalls, 0);
+    expect(gateway.renewalCalls, 1);
+
+    gateway.renewedToken = 'renewed-after-retry';
+    await tester.tap(find.byKey(const Key('activate-notifications')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notifications activées'), findsOneWidget);
+    expect(gateway.activationCalls, 0);
+    expect(gateway.renewalCalls, 2);
+    expect(gateway.tokenRequests, 1);
+  });
 
   testWidgets(
     'failed persistence stays incomplete, leaks no token and retry succeeds',
@@ -632,12 +694,15 @@ class _FakePushGateway implements PushNotificationGateway {
     this.permission = PushPermissionState.prompt,
     this.activationState = PushPermissionState.granted,
     this.token = 'token-test',
+    this.renewedToken,
   });
 
   PushPermissionState permission;
   final PushPermissionState activationState;
   final String token;
+  String? renewedToken;
   int activationCalls = 0;
+  int renewalCalls = 0;
   int permissionStateCalls = 0;
   int tokenRequests = 0;
   int lastBadge = 0;
@@ -670,6 +735,19 @@ class _FakePushGateway implements PushNotificationGateway {
   Future<PushPermissionState> permissionState() async {
     permissionStateCalls += 1;
     return permission;
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> renewRegistration() async {
+    renewalCalls += 1;
+    final refreshedToken = renewedToken;
+    if (refreshedToken == null) return null;
+    tokenRequests += 1;
+    return PushSubscriptionRegistration(
+      installationId: installationId,
+      token: refreshedToken,
+      platform: 'web',
+    );
   }
 
   @override

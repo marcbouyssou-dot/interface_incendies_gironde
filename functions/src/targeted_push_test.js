@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+
 import {FieldValue} from 'firebase-admin/firestore';
 
 import {isPlatformAdministrator} from './platform_administration.js';
@@ -6,6 +8,7 @@ const REQUIRED_FIELDS = Object.freeze(['confirmation', 'subscriptionId']);
 const CONFIRMATION = 'SEND_ONE_TEST_PUSH';
 const TEST_TITLE = 'MobSanté — Test notification';
 const TEST_BODY = 'Votre appareil peut recevoir les notifications MobSanté.';
+const INVALID_TOKEN_CODE = 'messaging/registration-token-not-registered';
 
 export class TargetedPushTestError extends Error {
   constructor(code, message, options = {}) {
@@ -20,8 +23,9 @@ export async function sendTargetedPushTest({callerUid, data, services}) {
   const subscriptionId = validateRequest(data);
   requireServices(services);
   const claim = await services.claim({callerUid, subscriptionId});
+  let providerMessageId;
   try {
-    const providerMessageId = await services.send({
+    providerMessageId = await services.send({
       token: claim.token,
       data: {
         title: TEST_TITLE,
@@ -36,12 +40,11 @@ export async function sendTargetedPushTest({callerUid, data, services}) {
         'Le fournisseur Push n’a retourné aucune preuve.',
       );
     }
-    await services.complete({dispatchId: claim.dispatchId});
-    return {sent: true, subscriptionId: claim.subscriptionId};
   } catch (error) {
     try {
       await services.fail({
         dispatchId: claim.dispatchId,
+        subscriptionId: claim.subscriptionId,
         errorCode: normalizeErrorCode(error),
       });
     } catch (_) {
@@ -49,6 +52,8 @@ export async function sendTargetedPushTest({callerUid, data, services}) {
     }
     throw error;
   }
+  await services.complete({dispatchId: claim.dispatchId});
+  return {sent: true, subscriptionId: claim.subscriptionId};
 }
 
 export function targetedPushTestServices({
@@ -64,7 +69,7 @@ export function targetedPushTestServices({
           .collection('pushSubscriptions').doc(subscriptionId);
       const dispatchRef = firestore
           .collection('pushTestDispatches').doc(subscriptionId);
-      return firestore.runTransaction(async (transaction) => {
+      const result = await firestore.runTransaction(async (transaction) => {
         const [administrator, subscription, existingDispatch] =
           await Promise.all([
             transaction.get(administratorRef),
@@ -93,7 +98,6 @@ export function targetedPushTestServices({
         const installationId = value?.installationId;
         const uid = value?.uid;
         if (
-          value?.active !== true ||
           value?.platform !== 'web' ||
           typeof token !== 'string' ||
           token === '' ||
@@ -108,39 +112,106 @@ export function targetedPushTestServices({
             'L’abonnement Push n’est pas actif ou valide.',
           );
         }
+        const tokenFingerprint = fingerprint(token);
+        const timestamp = serverTimestamp();
         if (existingDispatch.exists) {
+          const current = existingDispatch.data();
+          if (current?.status !== 'failed') {
+            throw alreadyConsumed();
+          }
+          const previousFingerprint = current?.tokenFingerprint;
+          if (
+            typeof previousFingerprint !== 'string' ||
+            previousFingerprint === ''
+          ) {
+            if (current?.errorCode === INVALID_TOKEN_CODE) {
+              transaction.update(dispatchRef, {
+                tokenFingerprint,
+                updatedAt: timestamp,
+              });
+              transaction.update(subscriptionRef, {
+                active: false,
+                disabledReason: INVALID_TOKEN_CODE,
+                updatedAt: timestamp,
+              });
+              return {requiresTokenRenewal: true};
+            }
+            throw alreadyConsumed();
+          }
+          if (previousFingerprint === tokenFingerprint) throw alreadyConsumed();
+          if (value?.active !== true) {
+            throw new TargetedPushTestError(
+              'failed-precondition',
+              'L’abonnement Push doit être renouvelé avant un nouveau test.',
+            );
+          }
+          transaction.update(dispatchRef, {
+            requestedBy: callerUid,
+            status: 'pending',
+            tokenFingerprint,
+            errorCode: null,
+            updatedAt: timestamp,
+          });
+          return {
+            dispatchId: subscriptionId,
+            subscriptionId,
+            token,
+          };
+        }
+        if (value?.active !== true) {
           throw new TargetedPushTestError(
-            'resource-exhausted',
-            'Une notification de test a déjà été demandée pour cette installation.',
+            'failed-precondition',
+            'L’abonnement Push n’est pas actif ou valide.',
           );
         }
-        const timestamp = serverTimestamp();
         transaction.create(dispatchRef, {
           dispatchId: subscriptionId,
           subscriptionId,
           requestedBy: callerUid,
-          status: 'processing',
+          status: 'pending',
+          tokenFingerprint,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
         return {dispatchId: subscriptionId, subscriptionId, token};
       });
+      if (result.requiresTokenRenewal === true) {
+        throw new TargetedPushTestError(
+          'failed-precondition',
+          'Le token Push invalide doit être renouvelé avant un nouveau test.',
+        );
+      }
+      return result;
     },
     send(message) {
       return messaging.send(message);
     },
     complete({dispatchId}) {
       return firestore.collection('pushTestDispatches').doc(dispatchId).update({
-        status: 'delivered',
+        status: 'success',
         deliveredAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     },
-    fail({dispatchId, errorCode}) {
-      return firestore.collection('pushTestDispatches').doc(dispatchId).update({
-        status: 'failed',
-        errorCode,
-        updatedAt: serverTimestamp(),
+    fail({dispatchId, subscriptionId, errorCode}) {
+      const dispatchRef = firestore
+          .collection('pushTestDispatches').doc(dispatchId);
+      const subscriptionRef = firestore
+          .collection('pushSubscriptions').doc(subscriptionId);
+      return firestore.runTransaction(async (transaction) => {
+        const timestamp = serverTimestamp();
+        transaction.update(dispatchRef, {
+          status: 'failed',
+          errorCode,
+          updatedAt: timestamp,
+        });
+        if (errorCode === INVALID_TOKEN_CODE) {
+          transaction.update(subscriptionRef, {
+            active: false,
+            disabledReason: errorCode,
+            updatedAt: timestamp,
+          });
+        }
       });
     },
   };
@@ -197,6 +268,17 @@ function invalidArgument() {
 function normalizeErrorCode(error) {
   const code = typeof error?.code === 'string' ? error.code : 'unknown';
   return code.slice(0, 120);
+}
+
+function fingerprint(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function alreadyConsumed() {
+  return new TargetedPushTestError(
+    'resource-exhausted',
+    'Une notification de test a déjà été demandée avec ce token.',
+  );
 }
 
 function isPlainObject(value) {

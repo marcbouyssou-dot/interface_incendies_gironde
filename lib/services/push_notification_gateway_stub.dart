@@ -22,6 +22,7 @@ abstract interface class PushNotificationGateway {
   String get installationId;
   Future<PushPermissionState> permissionState();
   Future<PushActivationResult> activate();
+  Future<PushSubscriptionRegistration?> renewRegistration();
   Future<void> updateBadge(int count);
   Stream<PushSubscriptionRegistration> get registrationUpdates;
 }
@@ -42,6 +43,9 @@ class UnsupportedPushNotificationGateway implements PushNotificationGateway {
   @override
   Future<PushPermissionState> permissionState() async =>
       PushPermissionState.unsupported;
+
+  @override
+  Future<PushSubscriptionRegistration?> renewRegistration() async => null;
 
   @override
   Future<void> updateBadge(int count) async {}

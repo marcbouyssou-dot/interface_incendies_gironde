@@ -80,6 +80,7 @@ class MockCoordinationRepository
   NotificationPreferences notificationPreferences =
       const NotificationPreferences();
   final Map<String, PushSubscriptionRegistration> pushSubscriptions = {};
+  final Map<String, PushSubscriptionState> pushSubscriptionStates = {};
   int pushSubscriptionReadCalls = 0;
   final _notificationUpdates =
       StreamController<List<AppNotification>>.broadcast();
@@ -211,20 +212,29 @@ class MockCoordinationRepository
     PushSubscriptionRegistration registration,
   ) async {
     pushSubscriptions[registration.installationId] = registration;
+    pushSubscriptionStates[registration.installationId] =
+        PushSubscriptionState.active;
   }
 
   @override
-  Future<bool> hasActivePushSubscription(String installationId) async {
+  Future<PushSubscriptionState> readPushSubscriptionState(
+    String installationId,
+  ) async {
     pushSubscriptionReadCalls += 1;
+    final explicitState = pushSubscriptionStates[installationId];
+    if (explicitState != null) return explicitState;
     final registration = pushSubscriptions[installationId];
-    return registration != null &&
+    final active =
+        registration != null &&
         registration.platform == 'web' &&
         registration.token.trim().isNotEmpty;
+    return active ? PushSubscriptionState.active : PushSubscriptionState.absent;
   }
 
   @override
   Future<void> disablePushSubscription(String installationId) async {
     pushSubscriptions.remove(installationId);
+    pushSubscriptionStates[installationId] = PushSubscriptionState.inactive;
   }
 
   @override

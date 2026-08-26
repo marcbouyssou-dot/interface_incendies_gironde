@@ -44,8 +44,12 @@ abstract interface class MissionAccessReadRepository {
 }
 
 /// Lecture ciblée de l'abonnement Push de l'installation courante.
+enum PushSubscriptionState { absent, active, stale, inactive }
+
 abstract interface class PushSubscriptionReadRepository {
-  Future<bool> hasActivePushSubscription(String installationId);
+  Future<PushSubscriptionState> readPushSubscriptionState(
+    String installationId,
+  );
 }
 
 abstract interface class CoordinationRepository

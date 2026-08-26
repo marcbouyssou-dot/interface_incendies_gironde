@@ -2121,8 +2121,10 @@ class FirestoreCoordinationRepository
   }
 
   @override
-  Future<bool> hasActivePushSubscription(String installationId) async {
-    if (installationId.isEmpty) return false;
+  Future<PushSubscriptionState> readPushSubscriptionState(
+    String installationId,
+  ) async {
+    if (installationId.isEmpty) return PushSubscriptionState.absent;
     final uid = _notificationUid;
     final snapshot = await _notificationFirestore
         .collection('pushSubscriptions')
@@ -2130,13 +2132,20 @@ class FirestoreCoordinationRepository
         .get();
     final data = snapshot.data();
     final token = data?['token'];
-    return snapshot.exists &&
+    if (!snapshot.exists) return PushSubscriptionState.absent;
+    final validIdentity =
         data?['uid'] == uid &&
         data?['installationId'] == installationId &&
         data?['platform'] == 'web' &&
-        data?['active'] == true &&
         token is String &&
         token.trim().isNotEmpty;
+    if (!validIdentity) return PushSubscriptionState.inactive;
+    if (data?['active'] == true) return PushSubscriptionState.active;
+    if (data?['disabledReason'] ==
+        'messaging/registration-token-not-registered') {
+      return PushSubscriptionState.stale;
+    }
+    return PushSubscriptionState.inactive;
   }
 
   @override

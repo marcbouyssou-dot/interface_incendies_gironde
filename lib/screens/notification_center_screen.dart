@@ -39,6 +39,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Stream<NotificationPreferences>? _preferences;
   PushPermissionState? _permission;
   bool _activating = false;
+  bool _hydratingPush = true;
+  PushSubscriptionState _subscriptionState = PushSubscriptionState.absent;
   bool _subscriptionPersisted = false;
   bool _activationFailed = false;
   bool _consentDeferred = false;
@@ -58,6 +60,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     final repository = RepositoryScope.of(context);
     if (identical(repository, _repository)) return;
     _repository = repository;
+    _hydratingPush = true;
     _notifications = repository.watchNotifications();
     _preferences = repository.watchNotificationPreferences();
     unawaited(_hydratePushSubscription(repository));
@@ -79,6 +82,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     CoordinationRepository repository,
   ) async {
     PushPermissionState? permission;
+    var subscriptionState = PushSubscriptionState.absent;
     try {
       permission = await _pushGateway.permissionState();
       var persisted = false;
@@ -86,22 +90,35 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           ? repository as PushSubscriptionReadRepository
           : null;
       if (permission == PushPermissionState.granted && pushRepository != null) {
-        persisted = await pushRepository.hasActivePushSubscription(
+        subscriptionState = await pushRepository.readPushSubscriptionState(
           _pushGateway.installationId,
         );
+        persisted = subscriptionState == PushSubscriptionState.active;
+        if (subscriptionState == PushSubscriptionState.stale) {
+          final registration = await _pushGateway.renewRegistration();
+          if (registration != null &&
+              registration.installationId == _pushGateway.installationId) {
+            persisted = await _persist(registration, repository: repository);
+            if (persisted) subscriptionState = PushSubscriptionState.active;
+          }
+        }
       }
       if (!mounted || !identical(repository, _repository)) return;
       setState(() {
         _permission = permission;
+        _subscriptionState = subscriptionState;
         _subscriptionPersisted = persisted;
         _activationFailed = false;
+        _hydratingPush = false;
       });
     } catch (_) {
       if (!mounted || !identical(repository, _repository)) return;
       setState(() {
         _permission = permission;
+        _subscriptionState = subscriptionState;
         _subscriptionPersisted = false;
         _activationFailed = permission == PushPermissionState.granted;
+        _hydratingPush = false;
       });
     }
   }
@@ -119,7 +136,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       _activationFailed = false;
     });
     try {
-      final result = await _pushGateway.activate();
+      final result =
+          _permission == PushPermissionState.granted &&
+              _subscriptionState == PushSubscriptionState.stale
+          ? PushActivationResult(
+              PushPermissionState.granted,
+              registration: await _pushGateway.renewRegistration(),
+            )
+          : await _pushGateway.activate();
       var persisted = false;
       if (result.registration case final registration?) {
         persisted = await _persist(registration);
@@ -127,6 +151,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       if (mounted) {
         setState(() {
           _permission = result.state;
+          if (persisted) _subscriptionState = PushSubscriptionState.active;
           _subscriptionPersisted =
               result.state == PushPermissionState.granted && persisted;
           _activationFailed =
@@ -145,9 +170,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     }
   }
 
-  Future<bool> _persist(PushSubscriptionRegistration registration) async {
+  Future<bool> _persist(
+    PushSubscriptionRegistration registration, {
+    CoordinationRepository? repository,
+  }) async {
     try {
-      await _repository!.registerPushSubscription(registration);
+      await (repository ?? _repository!).registerPushSubscription(registration);
       return true;
     } catch (_) {
       return false;
@@ -161,6 +189,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     if (!mounted) return;
     setState(() {
       _permission = PushPermissionState.granted;
+      if (persisted) _subscriptionState = PushSubscriptionState.active;
       _subscriptionPersisted = persisted;
       _activationFailed = !persisted;
     });
@@ -176,7 +205,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         title: 'Envoyer une notification test ?',
         message:
             'Une seule notification neutre sera envoyée à cette installation. '
-            'Cette action ne pourra pas être répétée.',
+            'Un test réussi ne pourra pas être répété.',
         cancelLabel: 'Annuler',
         confirmLabel: 'Envoyer le test',
         barrierDismissible: false,
@@ -271,7 +300,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
               if (!_consentDeferred) ...[
                 _ConsentCard(
                   permission: _permission,
-                  activating: _activating,
+                  activating: _activating || _hydratingPush,
                   subscriptionPersisted: _subscriptionPersisted,
                   activationFailed: _activationFailed,
                   onActivate: _activate,

@@ -99,6 +99,28 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
   }
 
   @override
+  Future<PushSubscriptionRegistration?> renewRegistration() async {
+    if (!await FirebaseMessaging.instance.isSupported() ||
+        _vapidKey.trim().isEmpty) {
+      return null;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (_map(settings.authorizationStatus) != PushPermissionState.granted) {
+      return null;
+    }
+    await FirebaseMessaging.instance.deleteToken();
+    final token = await FirebaseMessaging.instance.getToken(
+      vapidKey: _vapidKey,
+    );
+    if (token == null || token.isEmpty) return null;
+    return PushSubscriptionRegistration(
+      installationId: _installationId(),
+      token: token,
+      platform: 'web',
+    );
+  }
+
+  @override
   Future<void> updateBadge(int count) async {
     try {
       if (count <= 0) {
