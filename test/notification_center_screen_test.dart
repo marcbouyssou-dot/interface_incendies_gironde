@@ -48,6 +48,91 @@ void main() {
     );
   });
 
+  test(
+    'stale token renewal traces delete then get without sensitive data',
+    () async {
+      final traces = <String>[];
+
+      final token = await runTracedStaleTokenRenewal(
+        deleteToken: () async {},
+        getToken: () async => 'private-token',
+        trace: traces.add,
+      );
+
+      expect(token, 'private-token');
+      expect(traces, [
+        PushRenewalTraceState.deleteTokenStarted,
+        PushRenewalTraceState.deleteTokenOk,
+        PushRenewalTraceState.getTokenStarted,
+        PushRenewalTraceState.getTokenOk,
+      ]);
+      expect(traces.where((state) => state.contains('private-token')), isEmpty);
+    },
+  );
+
+  test('stale token renewal stops and traces a delete failure', () async {
+    final traces = <String>[];
+    var getTokenCalls = 0;
+
+    await expectLater(
+      runTracedStaleTokenRenewal(
+        deleteToken: () async => throw StateError('private-delete-error'),
+        getToken: () async {
+          getTokenCalls += 1;
+          return 'must-not-be-created';
+        },
+        trace: traces.add,
+      ),
+      throwsStateError,
+    );
+
+    expect(getTokenCalls, 0);
+    expect(traces, [
+      PushRenewalTraceState.deleteTokenStarted,
+      PushRenewalTraceState.deleteTokenFailed,
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('stale token renewal traces a get failure after deletion', () async {
+    final traces = <String>[];
+
+    await expectLater(
+      runTracedStaleTokenRenewal(
+        deleteToken: () async {},
+        getToken: () async => throw StateError('private-get-error'),
+        trace: traces.add,
+      ),
+      throwsStateError,
+    );
+
+    expect(traces, [
+      PushRenewalTraceState.deleteTokenStarted,
+      PushRenewalTraceState.deleteTokenOk,
+      PushRenewalTraceState.getTokenStarted,
+      PushRenewalTraceState.getTokenFailed,
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('trace failures never affect stale token renewal', () async {
+    var deleteTokenCalls = 0;
+    var getTokenCalls = 0;
+
+    final token = await runTracedStaleTokenRenewal(
+      deleteToken: () async => deleteTokenCalls += 1,
+      getToken: () async {
+        getTokenCalls += 1;
+        return 'private-token';
+      },
+      trace: (_) => throw StateError('unavailable-trace-sink'),
+    );
+
+    expect(token, 'private-token');
+    expect(deleteTokenCalls, 1);
+    expect(getTokenCalls, 1);
+  });
+
   test('forced renewal invalidates a pending reconciliation result', () async {
     final completer = Completer<PushSubscriptionRegistration?>();
     final gateway = _FakePushGateway(
@@ -538,6 +623,104 @@ void main() {
   testWidgets(
     'stale subscription renews its token without permission request or new installation',
     (tester) async {
+      final logs = <String>[];
+      final previousDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) logs.add(message);
+      };
+      try {
+        final repository = MockCoordinationRepository();
+        repository.pushSubscriptions['device-test'] =
+            const PushSubscriptionRegistration(
+              installationId: 'device-test',
+              token: 'stale-token',
+              platform: 'web',
+            );
+        repository.pushSubscriptionStates['device-test'] =
+            PushSubscriptionState.stale;
+        final gateway = _FakePushGateway(
+          permission: PushPermissionState.granted,
+          renewedToken: 'renewed-token',
+        );
+
+        await pumpCenter(tester, repository: repository, gateway: gateway);
+
+        expect(find.text('Notifications activées'), findsOneWidget);
+        expect(find.text('Activation incomplète'), findsNothing);
+        expect(repository.pushSubscriptionReadCalls, 1);
+        expect(
+          repository.pushSubscriptions['device-test']?.token,
+          'renewed-token',
+        );
+        expect(repository.pushSubscriptions.keys, ['device-test']);
+        expect(gateway.permissionStateCalls, 1);
+        expect(gateway.activationCalls, 0);
+        expect(gateway.tokenRequests, 1);
+        expect(gateway.renewalCalls, 1);
+        expect(gateway.reconciliationCalls, 0);
+        expect(logs, [
+          PushRenewalTraceState.staleRenewalStarted,
+          PushRenewalTraceState.deleteTokenStarted,
+          PushRenewalTraceState.deleteTokenOk,
+          PushRenewalTraceState.getTokenStarted,
+          PushRenewalTraceState.getTokenOk,
+          PushRenewalTraceState.persistStarted,
+          PushRenewalTraceState.persistOk,
+          PushRenewalTraceState.staleRenewalReady,
+        ]);
+      } finally {
+        debugPrint = previousDebugPrint;
+      }
+    },
+  );
+
+  testWidgets('failed stale persistence traces failure without leaking data', (
+    tester,
+  ) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = _FlakyPushRepository(failuresBeforeSuccess: 1);
+      seedActiveSubscription(repository);
+      repository.pushSubscriptionStates['device-test'] =
+          PushSubscriptionState.stale;
+      final gateway = _FakePushGateway(
+        permission: PushPermissionState.granted,
+        renewedToken: 'private-renewed-token',
+      );
+
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      expect(find.text('Activation incomplète'), findsOneWidget);
+      expect(logs, [
+        PushRenewalTraceState.staleRenewalStarted,
+        PushRenewalTraceState.deleteTokenStarted,
+        PushRenewalTraceState.deleteTokenOk,
+        PushRenewalTraceState.getTokenStarted,
+        PushRenewalTraceState.getTokenOk,
+        PushRenewalTraceState.persistStarted,
+        PushRenewalTraceState.persistFailed,
+        PushRenewalTraceState.staleRenewalFailed,
+      ]);
+      expect(
+        logs.where((message) => message.contains('private-renewed-token')),
+        isEmpty,
+      );
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('stale renewal retry never requests permission', (tester) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
       final repository = MockCoordinationRepository();
       repository.pushSubscriptions['device-test'] =
           const PushSubscriptionRegistration(
@@ -545,6 +728,54 @@ void main() {
             token: 'stale-token',
             platform: 'web',
           );
+      repository.pushSubscriptionStates['device-test'] =
+          PushSubscriptionState.stale;
+      final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+      expect(find.text('Activation incomplète'), findsOneWidget);
+      expect(gateway.activationCalls, 0);
+      expect(gateway.renewalCalls, 1);
+
+      gateway.renewedToken = 'renewed-after-retry';
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Notifications activées'), findsOneWidget);
+      expect(gateway.activationCalls, 0);
+      expect(gateway.renewalCalls, 2);
+      expect(gateway.tokenRequests, 2);
+      expect(logs, [
+        PushRenewalTraceState.staleRenewalStarted,
+        PushRenewalTraceState.deleteTokenStarted,
+        PushRenewalTraceState.deleteTokenOk,
+        PushRenewalTraceState.getTokenStarted,
+        PushRenewalTraceState.getTokenFailed,
+        PushRenewalTraceState.staleRenewalFailed,
+        PushRenewalTraceState.staleRenewalStarted,
+        PushRenewalTraceState.deleteTokenStarted,
+        PushRenewalTraceState.deleteTokenOk,
+        PushRenewalTraceState.getTokenStarted,
+        PushRenewalTraceState.getTokenOk,
+        PushRenewalTraceState.persistStarted,
+        PushRenewalTraceState.persistOk,
+        PushRenewalTraceState.staleRenewalReady,
+      ]);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('trace sink failures never change stale hydration', (
+    tester,
+  ) async {
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      throw StateError('unavailable-trace-sink');
+    };
+    try {
+      final repository = MockCoordinationRepository();
+      seedActiveSubscription(repository);
       repository.pushSubscriptionStates['device-test'] =
           PushSubscriptionState.stale;
       final gateway = _FakePushGateway(
@@ -555,46 +786,14 @@ void main() {
       await pumpCenter(tester, repository: repository, gateway: gateway);
 
       expect(find.text('Notifications activées'), findsOneWidget);
-      expect(find.text('Activation incomplète'), findsNothing);
-      expect(repository.pushSubscriptionReadCalls, 1);
       expect(
         repository.pushSubscriptions['device-test']?.token,
         'renewed-token',
       );
-      expect(repository.pushSubscriptions.keys, ['device-test']);
-      expect(gateway.permissionStateCalls, 1);
-      expect(gateway.activationCalls, 0);
-      expect(gateway.tokenRequests, 1);
       expect(gateway.renewalCalls, 1);
-      expect(gateway.reconciliationCalls, 0);
-    },
-  );
-
-  testWidgets('stale renewal retry never requests permission', (tester) async {
-    final repository = MockCoordinationRepository();
-    repository.pushSubscriptions['device-test'] =
-        const PushSubscriptionRegistration(
-          installationId: 'device-test',
-          token: 'stale-token',
-          platform: 'web',
-        );
-    repository.pushSubscriptionStates['device-test'] =
-        PushSubscriptionState.stale;
-    final gateway = _FakePushGateway(permission: PushPermissionState.granted);
-
-    await pumpCenter(tester, repository: repository, gateway: gateway);
-    expect(find.text('Activation incomplète'), findsOneWidget);
-    expect(gateway.activationCalls, 0);
-    expect(gateway.renewalCalls, 1);
-
-    gateway.renewedToken = 'renewed-after-retry';
-    await tester.tap(find.byKey(const Key('activate-notifications')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Notifications activées'), findsOneWidget);
-    expect(gateway.activationCalls, 0);
-    expect(gateway.renewalCalls, 2);
-    expect(gateway.tokenRequests, 1);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
   });
 
   testWidgets(
@@ -1074,9 +1273,15 @@ class _FakePushGateway implements PushNotificationGateway {
       }
     }
     renewalCalls += 1;
-    final refreshedToken = renewedToken;
+    final refreshedToken = await runTracedStaleTokenRenewal(
+      deleteToken: () async {},
+      getToken: () async {
+        tokenRequests += 1;
+        return renewedToken;
+      },
+      trace: debugPrint,
+    );
     if (refreshedToken == null) return null;
-    tokenRequests += 1;
     final registration = PushSubscriptionRegistration(
       installationId: installationId,
       token: refreshedToken,

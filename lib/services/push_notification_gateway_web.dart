@@ -6,6 +6,7 @@ import 'dart:js_interop';
 import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/app_notification.dart';
 import 'push_installation_id.dart';
@@ -191,11 +192,12 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
     if (_map(settings.authorizationStatus) != PushPermissionState.granted) {
       return null;
     }
-    await FirebaseMessaging.instance.deleteToken();
-    final token = await FirebaseMessaging.instance.getToken(
-      vapidKey: _vapidKey,
+    final token = await runTracedStaleTokenRenewal(
+      deleteToken: FirebaseMessaging.instance.deleteToken,
+      getToken: () => FirebaseMessaging.instance.getToken(vapidKey: _vapidKey),
+      trace: debugPrint,
     );
-    if (token == null || token.isEmpty) return null;
+    if (token == null) return null;
     final registration = PushSubscriptionRegistration(
       installationId: _installationId(),
       token: token,
