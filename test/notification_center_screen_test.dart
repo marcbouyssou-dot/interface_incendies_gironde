@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +48,53 @@ void main() {
     );
   });
 
+  test('forced renewal invalidates a pending reconciliation result', () async {
+    final completer = Completer<PushSubscriptionRegistration?>();
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      renewedToken: 'renewed-token',
+      reconciliationFuture: completer.future,
+    );
+
+    final reconciliation = gateway.reconcileRegistration();
+    final renewal = gateway.renewRegistration();
+    completer.complete(
+      const PushSubscriptionRegistration(
+        installationId: 'device-test',
+        token: 'invalidated-token',
+        platform: 'web',
+      ),
+    );
+
+    expect(await reconciliation, isNull);
+    expect((await renewal)?.token, 'renewed-token');
+    expect((await gateway.reconcileRegistration())?.token, 'renewed-token');
+    expect(gateway.renewalCalls, 1);
+  });
+
+  test('forced renewal supersedes a pending activation token', () async {
+    final completer = Completer<PushSubscriptionRegistration?>();
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      renewedToken: 'renewed-token',
+      activationFuture: completer.future,
+    );
+
+    final activation = gateway.activate();
+    final renewal = gateway.renewRegistration();
+    completer.complete(
+      const PushSubscriptionRegistration(
+        installationId: 'device-test',
+        token: 'superseded-activation-token',
+        platform: 'web',
+      ),
+    );
+
+    expect((await activation).registration?.token, 'renewed-token');
+    expect((await renewal)?.token, 'renewed-token');
+    expect((await gateway.reconcileRegistration())?.token, 'renewed-token');
+  });
+
   AppNotification notification({
     String id = 'notification-a',
     String missionId = 'mission-merignac',
@@ -79,6 +128,7 @@ void main() {
     ThemeMode themeMode = ThemeMode.light,
     double textScale = 1,
     bool reduceMotion = false,
+    bool settle = true,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -105,7 +155,11 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+    }
   }
 
   testWidgets('permission is requested only after explicit activation', (
@@ -274,7 +328,7 @@ void main() {
   });
 
   testWidgets(
-    'existing subscription hydrates active state without permission request or token',
+    'active subscription reconciles and persists without forced renewal',
     (tester) async {
       final repository = MockCoordinationRepository();
       seedActiveSubscription(repository);
@@ -287,9 +341,199 @@ void main() {
       expect(repository.pushSubscriptionReadCalls, 1);
       expect(gateway.permissionStateCalls, 1);
       expect(gateway.activationCalls, 0);
-      expect(gateway.tokenRequests, 0);
+      expect(gateway.reconciliationCalls, 1);
+      expect(gateway.renewalCalls, 0);
+      expect(gateway.tokenRequests, 1);
+      expect(repository.pushSubscriptions['device-test']?.token, 'token-test');
     },
   );
+
+  testWidgets(
+    'failed active reconciliation stays unusable and disables admin test',
+    (tester) async {
+      final repository = MockCoordinationRepository();
+      seedActiveSubscription(repository);
+      final gateway = _FakePushGateway(
+        permission: PushPermissionState.granted,
+        reconciliationSucceeds: false,
+      );
+      final service = _FakeTargetedPushTestService();
+
+      await pumpCenter(
+        tester,
+        repository: repository,
+        gateway: gateway,
+        targetedPushTestService: service,
+      );
+
+      expect(find.text('Activation incomplète'), findsOneWidget);
+      expect(gateway.reconciliationCalls, 1);
+      expect(gateway.renewalCalls, 0);
+      final button = tester.widget<CupertinoButton>(
+        find.descendant(
+          of: find.byKey(const Key('send-targeted-push-test')),
+          matching: find.byType(CupertinoButton),
+        ),
+      );
+      expect(button.onPressed, isNull);
+      expect(service.installationIds, isEmpty);
+    },
+  );
+
+  testWidgets('reconciliation exception stays unusable', (tester) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      reconciliationThrows: true,
+    );
+    final service = _FakeTargetedPushTestService();
+
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: gateway,
+      targetedPushTestService: service,
+    );
+
+    expect(find.text('Activation incomplète'), findsOneWidget);
+    final button = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('send-targeted-push-test')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(button.onPressed, isNull);
+    expect(service.installationIds, isEmpty);
+  });
+
+  testWidgets('admin test stays disabled until reconciled token is persisted', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final completer = Completer<PushSubscriptionRegistration?>();
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      reconciliationFuture: completer.future,
+    );
+    final service = _FakeTargetedPushTestService();
+
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: gateway,
+      targetedPushTestService: service,
+      settle: false,
+    );
+    await tester.pump();
+
+    var button = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('send-targeted-push-test')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(button.onPressed, isNull);
+
+    completer.complete(
+      const PushSubscriptionRegistration(
+        installationId: 'device-test',
+        token: 'reconciled-token',
+        platform: 'web',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      repository.pushSubscriptions['device-test']?.token,
+      'reconciled-token',
+    );
+    button = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('send-targeted-push-test')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(button.onPressed, isNotNull);
+    expect(service.installationIds, isEmpty);
+  });
+
+  testWidgets('identity change cancels pending reconciliation persistence', (
+    tester,
+  ) async {
+    final repository = _IdentityAwarePushRepository(
+      failuresBeforeSuccess: 0,
+      administrativeUid: 'owner-a',
+    );
+    seedActiveSubscription(repository);
+    final completer = Completer<PushSubscriptionRegistration?>();
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      reconciliationFuture: completer.future,
+    );
+
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: gateway,
+      settle: false,
+    );
+    await tester.pump();
+    repository.administrativeUid = 'owner-b';
+    completer.complete(
+      const PushSubscriptionRegistration(
+        installationId: 'device-test',
+        token: 'must-not-cross-account',
+        platform: 'web',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.registrationCalls, 0);
+    expect(
+      repository.pushSubscriptions['device-test']?.token,
+      'persisted-token',
+    );
+    expect(find.text('Activation incomplète'), findsOneWidget);
+    final retryButton = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('activate-notifications')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(retryButton.onPressed, isNotNull);
+  });
+
+  testWidgets('unmount cancels pending reconciliation persistence', (
+    tester,
+  ) async {
+    final repository = _FlakyPushRepository(failuresBeforeSuccess: 0);
+    seedActiveSubscription(repository);
+    final completer = Completer<PushSubscriptionRegistration?>();
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      reconciliationFuture: completer.future,
+    );
+
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: gateway,
+      settle: false,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    completer.complete(
+      const PushSubscriptionRegistration(
+        installationId: 'device-test',
+        token: 'must-not-persist-after-unmount',
+        platform: 'web',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.registrationCalls, 0);
+  });
 
   testWidgets(
     'stale subscription renews its token without permission request or new installation',
@@ -322,6 +566,7 @@ void main() {
       expect(gateway.activationCalls, 0);
       expect(gateway.tokenRequests, 1);
       expect(gateway.renewalCalls, 1);
+      expect(gateway.reconciliationCalls, 0);
     },
   );
 
@@ -450,7 +695,9 @@ void main() {
     expect(find.text('Notifications activées'), findsOneWidget);
     expect(repository.pushSubscriptionReadCalls, 2);
     expect(gateway.activationCalls, 0);
-    expect(gateway.tokenRequests, 0);
+    expect(gateway.reconciliationCalls, 1);
+    expect(gateway.renewalCalls, 0);
+    expect(gateway.tokenRequests, 1);
   });
 
   testWidgets('PWA relaunch hydrates an existing subscription', (tester) async {
@@ -468,7 +715,9 @@ void main() {
     expect(find.text('Notifications activées'), findsOneWidget);
     expect(repository.pushSubscriptionReadCalls, 2);
     expect(gateway.activationCalls, 0);
-    expect(gateway.tokenRequests, 0);
+    expect(gateway.reconciliationCalls, 1);
+    expect(gateway.renewalCalls, 0);
+    expect(gateway.tokenRequests, 1);
   });
 
   testWidgets('Plus tard dismisses the consent explanation without prompting', (
@@ -695,17 +944,29 @@ class _FakePushGateway implements PushNotificationGateway {
     this.activationState = PushPermissionState.granted,
     this.token = 'token-test',
     this.renewedToken,
+    this.reconciliationSucceeds = true,
+    this.reconciliationThrows = false,
+    this.reconciliationFuture,
+    this.activationFuture,
   });
 
   PushPermissionState permission;
   final PushPermissionState activationState;
   final String token;
   String? renewedToken;
+  final bool reconciliationSucceeds;
+  final bool reconciliationThrows;
+  final Future<PushSubscriptionRegistration?>? reconciliationFuture;
+  final Future<PushSubscriptionRegistration?>? activationFuture;
   int activationCalls = 0;
+  int reconciliationCalls = 0;
   int renewalCalls = 0;
   int permissionStateCalls = 0;
   int tokenRequests = 0;
   int lastBadge = 0;
+  Future<PushSubscriptionRegistration?>? _sessionReconciliation;
+  Future<PushSubscriptionRegistration?>? _forcedRenewal;
+  int _registrationGeneration = 0;
 
   @override
   String get installationId => 'device-test';
@@ -719,16 +980,37 @@ class _FakePushGateway implements PushNotificationGateway {
     activationCalls += 1;
     permission = activationState;
     if (activationState == PushPermissionState.granted) tokenRequests += 1;
-    return PushActivationResult(
-      activationState,
-      registration: activationState == PushPermissionState.granted
-          ? PushSubscriptionRegistration(
-              installationId: 'device-test',
-              token: token,
-              platform: 'web',
-            )
-          : null,
+    if (activationState != PushPermissionState.granted) {
+      return PushActivationResult(activationState);
+    }
+    _registrationGeneration += 1;
+    final generation = _registrationGeneration;
+    final pending = activationFuture;
+    final candidate =
+        pending ??
+        Future.value(
+          PushSubscriptionRegistration(
+            installationId: 'device-test',
+            token: token,
+            platform: 'web',
+          ),
+        );
+    final activation = candidate.then(
+      (registration) =>
+          generation == _registrationGeneration ? registration : null,
     );
+    _sessionReconciliation = activation;
+    final registration = await activation;
+    if (registration == null && generation != _registrationGeneration) {
+      return PushActivationResult(
+        activationState,
+        registration: await _forcedRenewal,
+      );
+    }
+    if (registration != null) {
+      _sessionReconciliation = Future.value(registration);
+    }
+    return PushActivationResult(activationState, registration: registration);
   }
 
   @override
@@ -738,16 +1020,70 @@ class _FakePushGateway implements PushNotificationGateway {
   }
 
   @override
-  Future<PushSubscriptionRegistration?> renewRegistration() async {
+  Future<PushSubscriptionRegistration?> reconcileRegistration() {
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) return forcedRenewal;
+    final generation = _registrationGeneration;
+    return _sessionReconciliation ??= _reconcileRegistration().then(
+      (registration) =>
+          generation == _registrationGeneration ? registration : null,
+    );
+  }
+
+  Future<PushSubscriptionRegistration?> _reconcileRegistration() async {
+    reconciliationCalls += 1;
+    tokenRequests += 1;
+    if (reconciliationThrows) {
+      throw StateError('reconciliation failed');
+    }
+    final pending = reconciliationFuture;
+    if (pending != null) return pending;
+    if (!reconciliationSucceeds) return null;
+    return PushSubscriptionRegistration(
+      installationId: installationId,
+      token: token,
+      platform: 'web',
+    );
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> renewRegistration() {
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) return forcedRenewal;
+    final previousOperation = _sessionReconciliation;
+    _registrationGeneration += 1;
+    _sessionReconciliation = null;
+    late final Future<PushSubscriptionRegistration?> guardedRenewal;
+    guardedRenewal = _renewRegistration(previousOperation).whenComplete(() {
+      if (identical(_forcedRenewal, guardedRenewal)) {
+        _forcedRenewal = null;
+      }
+    });
+    _forcedRenewal = guardedRenewal;
+    return guardedRenewal;
+  }
+
+  Future<PushSubscriptionRegistration?> _renewRegistration(
+    Future<PushSubscriptionRegistration?>? previousOperation,
+  ) async {
+    if (previousOperation != null) {
+      try {
+        await previousOperation;
+      } catch (_) {
+        // The forced renewal supersedes any failed prior operation.
+      }
+    }
     renewalCalls += 1;
     final refreshedToken = renewedToken;
     if (refreshedToken == null) return null;
     tokenRequests += 1;
-    return PushSubscriptionRegistration(
+    final registration = PushSubscriptionRegistration(
       installationId: installationId,
       token: refreshedToken,
       platform: 'web',
     );
+    _sessionReconciliation = Future.value(registration);
+    return registration;
   }
 
   @override
@@ -784,4 +1120,17 @@ class _FlakyPushRepository extends MockCoordinationRepository {
     }
     await super.registerPushSubscription(registration);
   }
+}
+
+class _IdentityAwarePushRepository extends _FlakyPushRepository
+    implements AdministrativeIdentityReadRepository {
+  _IdentityAwarePushRepository({
+    required super.failuresBeforeSuccess,
+    required this.administrativeUid,
+  });
+
+  String? administrativeUid;
+
+  @override
+  Stream<String?> watchAdministrativeUid() => Stream.value(administrativeUid);
 }

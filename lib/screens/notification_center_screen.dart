@@ -90,12 +90,50 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           ? repository as PushSubscriptionReadRepository
           : null;
       if (permission == PushPermissionState.granted && pushRepository != null) {
+        final identityRepository =
+            repository is AdministrativeIdentityReadRepository
+            ? repository as AdministrativeIdentityReadRepository
+            : null;
+        final ownerIdentity = identityRepository == null
+            ? null
+            : await identityRepository.watchAdministrativeUid().first;
         subscriptionState = await pushRepository.readPushSubscriptionState(
           _pushGateway.installationId,
         );
-        persisted = subscriptionState == PushSubscriptionState.active;
-        if (subscriptionState == PushSubscriptionState.stale) {
+        if (!await _isCurrentPushHydration(
+          repository,
+          identityRepository,
+          ownerIdentity,
+        )) {
+          _finishCancelledPushHydration(repository, permission);
+          return;
+        }
+        if (subscriptionState == PushSubscriptionState.active) {
+          final registration = await _pushGateway.reconcileRegistration();
+          final current = await _isCurrentPushHydration(
+            repository,
+            identityRepository,
+            ownerIdentity,
+          );
+          if (!current) {
+            _finishCancelledPushHydration(repository, permission);
+            return;
+          }
+          if (registration != null &&
+              registration.installationId == _pushGateway.installationId) {
+            persisted = await _persist(registration, repository: repository);
+          }
+        } else if (subscriptionState == PushSubscriptionState.stale) {
           final registration = await _pushGateway.renewRegistration();
+          final current = await _isCurrentPushHydration(
+            repository,
+            identityRepository,
+            ownerIdentity,
+          );
+          if (!current) {
+            _finishCancelledPushHydration(repository, permission);
+            return;
+          }
           if (registration != null &&
               registration.installationId == _pushGateway.installationId) {
             persisted = await _persist(registration, repository: repository);
@@ -120,6 +158,39 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         _activationFailed = permission == PushPermissionState.granted;
         _hydratingPush = false;
       });
+    }
+  }
+
+  void _finishCancelledPushHydration(
+    CoordinationRepository repository,
+    PushPermissionState? permission,
+  ) {
+    if (!mounted || !identical(repository, _repository)) return;
+    setState(() {
+      _permission = permission;
+      _subscriptionState = PushSubscriptionState.absent;
+      _subscriptionPersisted = false;
+      _activationFailed = permission == PushPermissionState.granted;
+      _hydratingPush = false;
+    });
+  }
+
+  Future<bool> _isCurrentPushHydration(
+    CoordinationRepository repository,
+    AdministrativeIdentityReadRepository? identityRepository,
+    String? ownerIdentity,
+  ) async {
+    if (!mounted || !identical(repository, _repository)) return false;
+    if (identityRepository == null) return true;
+    try {
+      final currentIdentity = await identityRepository
+          .watchAdministrativeUid()
+          .first;
+      return mounted &&
+          identical(repository, _repository) &&
+          currentIdentity == ownerIdentity;
+    } catch (_) {
+      return false;
     }
   }
 

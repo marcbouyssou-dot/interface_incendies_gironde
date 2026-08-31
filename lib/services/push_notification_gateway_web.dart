@@ -1,5 +1,6 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
+import 'dart:async';
 import 'dart:html' as html;
 import 'dart:js_interop';
 import 'dart:math';
@@ -35,6 +36,11 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
   FirebaseWebPushNotificationGateway._();
 
   static final instance = FirebaseWebPushNotificationGateway._();
+
+  Future<void> _operationTail = Future.value();
+  Future<PushSubscriptionRegistration?>? _sessionReconciliation;
+  Future<PushSubscriptionRegistration?>? _forcedRenewal;
+  int _registrationGeneration = 0;
 
   @override
   String get installationId => _installationId();
@@ -81,25 +87,102 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
     if (state != PushPermissionState.granted) {
       return PushActivationResult(state);
     }
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) {
+      return PushActivationResult(state, registration: await forcedRenewal);
+    }
+    _registrationGeneration += 1;
+    final generation = _registrationGeneration;
+    late final Future<PushSubscriptionRegistration?> activation;
+    activation = _enqueueRegistration(() async {
+      final token = await FirebaseMessaging.instance.getToken(
+        vapidKey: _vapidKey,
+      );
+      if (token == null || token.isEmpty) return null;
+      final registration = PushSubscriptionRegistration(
+        installationId: _installationId(),
+        token: token,
+        platform: 'web',
+      );
+      return generation == _registrationGeneration ? registration : null;
+    });
+    _sessionReconciliation = activation;
+    var registration = await activation;
+    if (registration == null && generation != _registrationGeneration) {
+      final replacement = _forcedRenewal;
+      if (replacement != null) registration = await replacement;
+      return PushActivationResult(state, registration: registration);
+    }
+    if (registration == null) {
+      return const PushActivationResult(PushPermissionState.misconfigured);
+    }
+    _sessionReconciliation = Future.value(registration);
+    return PushActivationResult(state, registration: registration);
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> reconcileRegistration() {
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) return forcedRenewal;
+    final generation = _registrationGeneration;
+    return _sessionReconciliation ??= _enqueueRegistration(() async {
+      final registration = await _reconcileRegistration();
+      return generation == _registrationGeneration ? registration : null;
+    });
+  }
+
+  Future<PushSubscriptionRegistration?> _enqueueRegistration(
+    Future<PushSubscriptionRegistration?> Function() operation,
+  ) {
+    final completer = Completer<PushSubscriptionRegistration?>();
+    _operationTail = _operationTail.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<PushSubscriptionRegistration?> _reconcileRegistration() async {
+    if (!await FirebaseMessaging.instance.isSupported() ||
+        _vapidKey.trim().isEmpty) {
+      return null;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (_map(settings.authorizationStatus) != PushPermissionState.granted) {
+      return null;
+    }
     final token = await FirebaseMessaging.instance.getToken(
       vapidKey: _vapidKey,
     );
-    if (token == null || token.isEmpty) {
-      return const PushActivationResult(PushPermissionState.misconfigured);
-    }
-    final installationId = _installationId();
-    return PushActivationResult(
-      state,
-      registration: PushSubscriptionRegistration(
-        installationId: installationId,
-        token: token,
-        platform: 'web',
-      ),
+    if (token == null || token.isEmpty) return null;
+    return PushSubscriptionRegistration(
+      installationId: _installationId(),
+      token: token,
+      platform: 'web',
     );
   }
 
   @override
-  Future<PushSubscriptionRegistration?> renewRegistration() async {
+  Future<PushSubscriptionRegistration?> renewRegistration() {
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) return forcedRenewal;
+    _registrationGeneration += 1;
+    _sessionReconciliation = null;
+    late final Future<PushSubscriptionRegistration?> guardedRenewal;
+    guardedRenewal = _enqueueRegistration(_renewRegistration).whenComplete(() {
+      if (identical(_forcedRenewal, guardedRenewal)) {
+        _forcedRenewal = null;
+      }
+    });
+    _forcedRenewal = guardedRenewal;
+    return guardedRenewal;
+  }
+
+  Future<PushSubscriptionRegistration?> _renewRegistration() async {
+    _sessionReconciliation = null;
     if (!await FirebaseMessaging.instance.isSupported() ||
         _vapidKey.trim().isEmpty) {
       return null;
@@ -113,11 +196,13 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
       vapidKey: _vapidKey,
     );
     if (token == null || token.isEmpty) return null;
-    return PushSubscriptionRegistration(
+    final registration = PushSubscriptionRegistration(
       installationId: _installationId(),
       token: token,
       platform: 'web',
     );
+    _sessionReconciliation = Future.value(registration);
+    return registration;
   }
 
   @override
