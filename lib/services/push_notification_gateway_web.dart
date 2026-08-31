@@ -17,6 +17,7 @@ export 'push_notification_gateway_stub.dart'
         PushActivationResult,
         PushNotificationGateway,
         PushPermissionState,
+        PushRenewalTraceState,
         resolveWebPushPermissionState;
 
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_PUSH_VAPID_KEY');
