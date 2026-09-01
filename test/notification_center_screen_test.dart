@@ -126,6 +126,147 @@ void main() {
   });
 
   test(
+    'admin Firestore subscription read traces a successful result',
+    () async {
+      final traces = <String>[];
+
+      final state = await runTracedAdminSubscriptionRead(
+        read: () async => PushSubscriptionState.active,
+        trace: traces.add,
+      );
+
+      expect(state, PushSubscriptionState.active);
+      expect(traces, [
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
+      ]);
+    },
+  );
+
+  test(
+    'admin Firestore subscription read traces failure without details',
+    () async {
+      const sensitiveError = 'private-uid/private-installation/private-path';
+      final traces = <String>[];
+
+      await expectLater(
+        runTracedAdminSubscriptionRead<PushSubscriptionState>(
+          read: () async => throw StateError(sensitiveError),
+          trace: traces.add,
+        ),
+        throwsStateError,
+      );
+
+      expect(traces, [
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadFailed,
+      ]);
+      expect(traces.where((state) => state.contains('private')), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'admin Firestore timeout observes a pending read without changing it',
+    (tester) async {
+      final traces = <String>[];
+      final completer = Completer<PushSubscriptionState>();
+      var completed = false;
+      final read =
+          runTracedAdminSubscriptionRead(
+            read: () => completer.future,
+            trace: traces.add,
+          ).then((state) {
+            completed = true;
+            return state;
+          });
+
+      await tester.pump(const Duration(seconds: 14));
+      expect(completed, isFalse);
+      expect(
+        traces,
+        isNot(
+          contains(
+            AdminNotificationHydrationTraceState
+                .firestoreSubscriptionReadTimeout,
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(completed, isFalse);
+      expect(traces, [
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadTimeout,
+      ]);
+
+      completer.complete(PushSubscriptionState.active);
+      await tester.pump();
+      expect(await read, PushSubscriptionState.active);
+      expect(traces, [
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadTimeout,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
+      ]);
+    },
+  );
+
+  test('admin preflight traces STARTED then OK', () async {
+    final traces = <String>[];
+
+    final result = await runTracedAdminPreflight(
+      preflight: () async => true,
+      trace: traces.add,
+    );
+
+    expect(result, isTrue);
+    expect(traces, [
+      AdminNotificationHydrationTraceState.preflightStarted,
+      AdminNotificationHydrationTraceState.preflightOk,
+    ]);
+  });
+
+  test('admin preflight traces STARTED then FAILED', () async {
+    final traces = <String>[];
+
+    final result = await runTracedAdminPreflight(
+      preflight: () async => false,
+      trace: traces.add,
+    );
+
+    expect(result, isFalse);
+    expect(traces, [
+      AdminNotificationHydrationTraceState.preflightStarted,
+      AdminNotificationHydrationTraceState.preflightFailed,
+    ]);
+  });
+
+  test('admin trace sink failures do not affect reads or preflight', () async {
+    var readCalls = 0;
+    var preflightCalls = 0;
+    void failingTrace(String _) => throw StateError('trace-sink-unavailable');
+
+    final state = await runTracedAdminSubscriptionRead(
+      read: () async {
+        readCalls += 1;
+        return PushSubscriptionState.active;
+      },
+      trace: failingTrace,
+    );
+    final targetAvailable = await runTracedAdminPreflight(
+      preflight: () async {
+        preflightCalls += 1;
+        return true;
+      },
+      trace: failingTrace,
+    );
+
+    expect(state, PushSubscriptionState.active);
+    expect(targetAvailable, isTrue);
+    expect(readCalls, 1);
+    expect(preflightCalls, 1);
+  });
+
+  test(
     'stale token renewal traces delete then get without sensitive data',
     () async {
       final traces = <String>[];
@@ -737,6 +878,42 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     },
   );
+
+  testWidgets('admin hydration traces identity, Firestore, then preflight', (
+    tester,
+  ) async {
+    const sensitiveUid = 'private-admin-uid';
+    final traces = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) traces.add(message);
+    };
+    try {
+      final repository = _IdentityAwarePushRepository(
+        failuresBeforeSuccess: 0,
+        administrativeUid: sensitiveUid,
+      );
+      seedActiveSubscription(repository);
+
+      await pumpCenter(
+        tester,
+        repository: repository,
+        gateway: _FakePushGateway(permission: PushPermissionState.granted),
+        targetedPushTestService: _FakeTargetedPushTestService(),
+      );
+
+      expect(traces, [
+        AdminNotificationHydrationTraceState.identityReady,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
+        AdminNotificationHydrationTraceState.preflightStarted,
+        AdminNotificationHydrationTraceState.preflightOk,
+      ]);
+      expect(traces.where((state) => state.contains(sensitiveUid)), isEmpty);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
 
   testWidgets('admin can target this device without an identity subscription', (
     tester,

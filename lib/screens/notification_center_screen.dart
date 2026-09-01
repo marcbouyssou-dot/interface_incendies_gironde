@@ -15,6 +15,95 @@ import '../widgets/common.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
+abstract final class AdminNotificationHydrationTraceState {
+  static const identityReady = 'ADMIN_IDENTITY_READY';
+  static const firestoreSubscriptionReadStarted =
+      'FIRESTORE_SUBSCRIPTION_READ_STARTED';
+  static const firestoreSubscriptionReadOk = 'FIRESTORE_SUBSCRIPTION_READ_OK';
+  static const firestoreSubscriptionReadFailed =
+      'FIRESTORE_SUBSCRIPTION_READ_FAILED';
+  static const firestoreSubscriptionReadTimeout =
+      'FIRESTORE_SUBSCRIPTION_READ_TIMEOUT';
+  static const preflightStarted = 'ADMIN_PREFLIGHT_STARTED';
+  static const preflightOk = 'ADMIN_PREFLIGHT_OK';
+  static const preflightFailed = 'ADMIN_PREFLIGHT_FAILED';
+}
+
+void emitAdminNotificationHydrationTrace(
+  void Function(String state) trace,
+  String state,
+) {
+  try {
+    trace(state);
+  } catch (_) {
+    // Diagnostic output must never affect notification hydration.
+  }
+}
+
+Future<T> runTracedAdminSubscriptionRead<T>({
+  required Future<T> Function() read,
+  required void Function(String state) trace,
+  Duration observationDelay = const Duration(seconds: 15),
+}) async {
+  emitAdminNotificationHydrationTrace(
+    trace,
+    AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+  );
+  var completed = false;
+  final observer = Timer(observationDelay, () {
+    if (!completed) {
+      emitAdminNotificationHydrationTrace(
+        trace,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadTimeout,
+      );
+    }
+  });
+  try {
+    final result = await read();
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
+    );
+    return result;
+  } catch (_) {
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.firestoreSubscriptionReadFailed,
+    );
+    rethrow;
+  } finally {
+    observer.cancel();
+  }
+}
+
+Future<bool> runTracedAdminPreflight({
+  required Future<bool> Function() preflight,
+  required void Function(String state) trace,
+}) async {
+  emitAdminNotificationHydrationTrace(
+    trace,
+    AdminNotificationHydrationTraceState.preflightStarted,
+  );
+  try {
+    final result = await preflight();
+    emitAdminNotificationHydrationTrace(
+      trace,
+      result
+          ? AdminNotificationHydrationTraceState.preflightOk
+          : AdminNotificationHydrationTraceState.preflightFailed,
+    );
+    return result;
+  } catch (_) {
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.preflightFailed,
+    );
+    rethrow;
+  }
+}
+
 class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({
     super.key,
@@ -106,12 +195,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         final ownerIdentity = identityRepository == null
             ? null
             : await identityRepository.watchAdministrativeUid().first;
+        _traceAdminHydration(
+          AdminNotificationHydrationTraceState.identityReady,
+        );
         final adminInstallationId = _pushGateway.existingInstallationId;
         if (permission == PushPermissionState.granted &&
             pushRepository != null &&
             adminInstallationId != null) {
-          subscriptionState = await pushRepository.readPushSubscriptionState(
-            adminInstallationId,
+          subscriptionState = await runTracedAdminSubscriptionRead(
+            read: () =>
+                pushRepository.readPushSubscriptionState(adminInstallationId),
+            trace: _traceAdminHydration,
           );
         }
         if (!await _isCurrentPushHydration(
@@ -126,11 +220,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
             adminInstallationId != null &&
             permission == PushPermissionState.granted &&
             await _pushGateway.hasUsableLocalSubscription();
-        final targetResolvable =
-            localReady &&
-            await adminService.canSendTargetedPushTest(
-              installationId: adminInstallationId,
-            );
+        final targetResolvable = localReady
+            ? await runTracedAdminPreflight(
+                preflight: () => adminService.canSendTargetedPushTest(
+                  installationId: adminInstallationId,
+                ),
+                trace: _traceAdminHydration,
+              )
+            : false;
         if (!await _isCurrentPushHydration(
           repository,
           identityRepository,
@@ -272,6 +369,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     } catch (_) {
       // Diagnostic output must never affect notification activation.
     }
+  }
+
+  void _traceAdminHydration(String state) {
+    emitAdminNotificationHydrationTrace(debugPrint, state);
   }
 
   Future<bool> _isCurrentPushHydration(
