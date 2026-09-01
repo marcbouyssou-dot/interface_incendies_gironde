@@ -1,6 +1,24 @@
+import 'dart:convert';
+
 import '../models/app_notification.dart';
 
 enum PushPermissionState { unsupported, prompt, granted, denied, misconfigured }
+
+bool applicationServerKeyMatchesVapid({
+  required List<int> applicationServerKey,
+  required String vapidKey,
+}) {
+  try {
+    final expectedKey = base64Url.decode(base64Url.normalize(vapidKey));
+    if (applicationServerKey.length != expectedKey.length) return false;
+    for (var index = 0; index < expectedKey.length; index += 1) {
+      if (applicationServerKey[index] != expectedKey[index]) return false;
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 abstract final class LocalSubscriptionTraceState {
   static const vapidConfigPresent = 'LOCAL_VAPID_CONFIG_PRESENT';

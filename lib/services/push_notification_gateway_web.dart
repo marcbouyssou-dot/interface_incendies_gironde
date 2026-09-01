@@ -1,7 +1,6 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:js_interop';
 import 'dart:math';
@@ -27,6 +26,7 @@ export 'push_notification_gateway_stub.dart'
         PushStaleRecoveryGateway,
         PushUnsubscribeErrorClass,
         PushUnsubscribeErrorInfo,
+        applicationServerKeyMatchesVapid,
         emitPushActivationPermission,
         emitPushActivationTrace,
         emitLocalSubscriptionTrace,
@@ -439,9 +439,9 @@ class FirebaseWebPushNotificationGateway
     try {
       final applicationServerKey = subscription.options?.applicationServerKey;
       if (applicationServerKey == null) return false;
-      return listEquals(
-        applicationServerKey.asUint8List(),
-        base64Url.decode(_vapidKey),
+      return applicationServerKeyMatchesVapid(
+        applicationServerKey: applicationServerKey.asUint8List(),
+        vapidKey: _vapidKey,
       );
     } catch (_) {
       return false;

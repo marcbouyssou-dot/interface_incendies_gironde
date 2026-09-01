@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -836,6 +838,75 @@ void main() {
         state: 'activated',
       ),
       throwsStateError,
+    );
+  });
+
+  test('VAPID matcher accepts the unpadded Web Push key shape', () {
+    final keyBytes = Uint8List.fromList([
+      251,
+      255,
+      ...List<int>.generate(63, (index) => index),
+    ]);
+    final unpaddedVapid = base64Url.encode(keyBytes).replaceAll('=', '');
+
+    expect(unpaddedVapid.length, 87);
+    expect(unpaddedVapid, contains('-'));
+    expect(unpaddedVapid, contains('_'));
+    expect(
+      applicationServerKeyMatchesVapid(
+        applicationServerKey: keyBytes,
+        vapidKey: unpaddedVapid,
+      ),
+      isTrue,
+    );
+  });
+
+  test('VAPID matcher accepts padding and respects typed view bounds', () {
+    final keyBytes = Uint8List.fromList([
+      251,
+      255,
+      ...List<int>.generate(63, (index) => 63 - index),
+    ]);
+    final backing = Uint8List(keyBytes.length + 2)
+      ..setRange(1, keyBytes.length + 1, keyBytes);
+    final keyView = Uint8List.sublistView(backing, 1, keyBytes.length + 1);
+
+    expect(
+      applicationServerKeyMatchesVapid(
+        applicationServerKey: keyView,
+        vapidKey: base64Url.encode(keyBytes),
+      ),
+      isTrue,
+    );
+    expect(
+      applicationServerKeyMatchesVapid(
+        applicationServerKey: backing,
+        vapidKey: base64Url.encode(keyBytes),
+      ),
+      isFalse,
+    );
+  });
+
+  test('VAPID matcher rejects different or malformed keys', () {
+    final keyBytes = Uint8List.fromList(
+      List<int>.generate(65, (index) => index),
+    );
+    final changedBytes = Uint8List.fromList(keyBytes)..[32] ^= 1;
+    final unpaddedVapid = base64Url.encode(keyBytes).replaceAll('=', '');
+
+    expect(
+      applicationServerKeyMatchesVapid(
+        applicationServerKey: changedBytes,
+        vapidKey: unpaddedVapid,
+      ),
+      isFalse,
+    );
+    expect(
+      applicationServerKeyMatchesVapid(
+        applicationServerKey: keyBytes,
+        vapidKey: 'invalid VAPID',
+      ),
+      isFalse,
     );
   });
 

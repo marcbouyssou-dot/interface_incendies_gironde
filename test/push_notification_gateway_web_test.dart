@@ -1,7 +1,9 @@
 @TestOn('browser')
 library;
 
+import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/services/push_notification_gateway_web.dart';
@@ -74,5 +76,35 @@ void main() {
       ),
     ]);
     expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('Safari WebKit ArrayBuffer view matches an unpadded VAPID key', () {
+    final keyBytes = Uint8List.fromList([
+      251,
+      255,
+      ...List<int>.generate(63, (index) => index),
+    ]);
+    final backingBuffer = JSArrayBuffer(keyBytes.length + 2);
+    final applicationServerKey = JSUint8Array(
+      backingBuffer,
+      1,
+      keyBytes.length,
+    ).toDart..setAll(0, keyBytes);
+    final unpaddedVapid = base64Url.encode(keyBytes).replaceAll('=', '');
+
+    expect(
+      applicationServerKeyMatchesVapid(
+        applicationServerKey: applicationServerKey,
+        vapidKey: unpaddedVapid,
+      ),
+      isTrue,
+    );
+    expect(
+      applicationServerKeyMatchesVapid(
+        applicationServerKey: JSUint8Array(backingBuffer).toDart,
+        vapidKey: unpaddedVapid,
+      ),
+      isFalse,
+    );
   });
 }
