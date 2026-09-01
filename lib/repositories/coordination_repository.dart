@@ -52,6 +52,20 @@ abstract interface class PushSubscriptionReadRepository {
   );
 }
 
+bool didPushTokenChange(Object? existingToken, String candidateToken) =>
+    existingToken is! String || existingToken != candidateToken;
+
+/// Persistance instrumentée réservée au parcours d’activation Push explicite.
+///
+/// La comparaison est issue de la lecture déjà effectuée par la transaction ;
+/// aucun token n’est exposé au callback.
+abstract interface class PushActivationPersistenceRepository {
+  Future<void> registerPushSubscriptionForActivation(
+    PushSubscriptionRegistration registration, {
+    required void Function(bool tokenChanged) onTokenCompared,
+  });
+}
+
 abstract interface class CoordinationRepository
     implements MissionEngagementReadRepository, LocationReadRepository {
   AdminInvitationRepository get adminInvitationRepository;

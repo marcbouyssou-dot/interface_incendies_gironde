@@ -237,6 +237,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         _subscriptionState == PushSubscriptionState.stale;
     if (staleRecovery) {
       _tracePushRecovery(PushRecoveryTraceState.recoveryStarted);
+    } else {
+      _tracePushActivation(PushActivationTraceState.activationStarted);
     }
     setState(() {
       _activating = true;
@@ -256,13 +258,23 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       if (result.registration case final registration?) {
         if (staleRecovery) {
           _tracePushRecovery(PushRecoveryTraceState.persistStarted);
+        } else {
+          _tracePushActivation(PushActivationTraceState.persistStarted);
         }
-        persisted = await _persist(registration);
+        persisted = staleRecovery
+            ? await _persist(registration)
+            : await _persistActivation(registration);
         if (staleRecovery) {
           _tracePushRecovery(
             persisted
                 ? PushRecoveryTraceState.persistOk
                 : PushRecoveryTraceState.persistFailed,
+          );
+        } else {
+          _tracePushActivation(
+            persisted
+                ? PushActivationTraceState.persistOk
+                : PushActivationTraceState.persistFailed,
           );
         }
       }
@@ -271,6 +283,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           persisted
               ? PushRecoveryTraceState.recoveryReady
               : PushRecoveryTraceState.recoveryFailed,
+        );
+      } else {
+        _tracePushActivation(
+          persisted
+              ? PushActivationTraceState.activationReady
+              : PushActivationTraceState.activationFailed,
         );
       }
       if (mounted) {
@@ -286,6 +304,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     } catch (_) {
       if (staleRecovery) {
         _tracePushRecovery(PushRecoveryTraceState.recoveryFailed);
+      } else {
+        _tracePushActivation(PushActivationTraceState.activationFailed);
       }
       if (mounted) {
         setState(() {
@@ -308,6 +328,37 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<bool> _persistActivation(
+    PushSubscriptionRegistration registration,
+  ) async {
+    try {
+      final repository = _repository!;
+      final activationRepository =
+          repository is PushActivationPersistenceRepository
+          ? repository as PushActivationPersistenceRepository
+          : null;
+      if (activationRepository != null) {
+        await activationRepository.registerPushSubscriptionForActivation(
+          registration,
+          onTokenCompared: (tokenChanged) => _tracePushActivation(
+            tokenChanged
+                ? PushActivationTraceState.tokenChanged
+                : PushActivationTraceState.tokenUnchanged,
+          ),
+        );
+      } else {
+        await repository.registerPushSubscription(registration);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _tracePushActivation(String state) {
+    emitPushActivationTrace(debugPrint, state);
   }
 
   Future<void> _persistRefreshedRegistration(

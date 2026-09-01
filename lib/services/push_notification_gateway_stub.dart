@@ -2,6 +2,77 @@ import '../models/app_notification.dart';
 
 enum PushPermissionState { unsupported, prompt, granted, denied, misconfigured }
 
+abstract final class PushActivationTraceState {
+  static const activationStarted = 'ACTIVATION_STARTED';
+  static const permissionGranted = 'PERMISSION_GRANTED';
+  static const permissionDenied = 'PERMISSION_DENIED';
+  static const getTokenStarted = 'GET_TOKEN_STARTED';
+  static const getTokenOk = 'GET_TOKEN_OK';
+  static const getTokenFailed = 'GET_TOKEN_FAILED';
+  static const tokenChanged = 'TOKEN_CHANGED';
+  static const tokenUnchanged = 'TOKEN_UNCHANGED';
+  static const persistStarted = 'PERSIST_STARTED';
+  static const persistOk = 'PERSIST_OK';
+  static const persistFailed = 'PERSIST_FAILED';
+  static const activationReady = 'ACTIVATION_READY';
+  static const activationFailed = 'ACTIVATION_FAILED';
+
+  static const values = <String>{
+    activationStarted,
+    permissionGranted,
+    permissionDenied,
+    getTokenStarted,
+    getTokenOk,
+    getTokenFailed,
+    tokenChanged,
+    tokenUnchanged,
+    persistStarted,
+    persistOk,
+    persistFailed,
+    activationReady,
+    activationFailed,
+  };
+}
+
+void emitPushActivationTrace(void Function(String state) trace, String state) {
+  try {
+    trace(state);
+  } catch (_) {
+    // Diagnostic output must never affect push activation.
+  }
+}
+
+void emitPushActivationPermission({
+  required bool granted,
+  required void Function(String state) trace,
+}) {
+  emitPushActivationTrace(
+    trace,
+    granted
+        ? PushActivationTraceState.permissionGranted
+        : PushActivationTraceState.permissionDenied,
+  );
+}
+
+Future<String?> runTracedPushActivationTokenRequest({
+  required Future<String?> Function() getToken,
+  required void Function(String state) trace,
+}) async {
+  emitPushActivationTrace(trace, PushActivationTraceState.getTokenStarted);
+  try {
+    final token = await getToken();
+    if (token == null || token.isEmpty) {
+      emitPushActivationTrace(trace, PushActivationTraceState.getTokenFailed);
+      return null;
+    }
+    emitPushActivationTrace(trace, PushActivationTraceState.getTokenOk);
+    return token;
+  } catch (_) {
+    emitPushActivationTrace(trace, PushActivationTraceState.getTokenFailed);
+    rethrow;
+  }
+}
+
 abstract final class PushRenewalTraceState {
   static const staleRenewalStarted = 'STALE_RENEWAL_STARTED';
   static const deleteTokenStarted = 'DELETE_TOKEN_STARTED';

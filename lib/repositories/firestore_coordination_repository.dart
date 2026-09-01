@@ -236,6 +236,7 @@ class FirestoreCoordinationRepository
     implements
         CoordinationRepository,
         PushSubscriptionReadRepository,
+        PushActivationPersistenceRepository,
         AdministrativeIdentityReadRepository,
         OrganizationEngagementReadDataSource,
         OrganizationLocationReadDataSource,
@@ -2099,13 +2100,30 @@ class FirestoreCoordinationRepository
   @override
   Future<void> registerPushSubscription(
     PushSubscriptionRegistration registration,
-  ) async {
+  ) => _registerPushSubscription(registration);
+
+  @override
+  Future<void> registerPushSubscriptionForActivation(
+    PushSubscriptionRegistration registration, {
+    required void Function(bool tokenChanged) onTokenCompared,
+  }) =>
+      _registerPushSubscription(registration, onTokenCompared: onTokenCompared);
+
+  Future<void> _registerPushSubscription(
+    PushSubscriptionRegistration registration, {
+    void Function(bool tokenChanged)? onTokenCompared,
+  }) async {
     final uid = _notificationUid;
     final reference = _notificationFirestore
         .collection('pushSubscriptions')
         .doc('${uid}_${registration.installationId}');
+    bool? tokenChanged;
     await _notificationFirestore.runTransaction((transaction) async {
       final existing = await transaction.get(reference);
+      tokenChanged = didPushTokenChange(
+        existing.data()?['token'],
+        registration.token,
+      );
       final now = FieldValue.serverTimestamp();
       transaction.set(reference, {
         'uid': uid,
@@ -2118,6 +2136,13 @@ class FirestoreCoordinationRepository
         'updatedAt': now,
       }, SetOptions(merge: true));
     });
+    if (onTokenCompared case final callback?) {
+      try {
+        callback(tokenChanged ?? true);
+      } catch (_) {
+        // Diagnostic output must never affect a committed subscription.
+      }
+    }
   }
 
   @override

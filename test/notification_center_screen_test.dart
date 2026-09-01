@@ -48,6 +48,83 @@ void main() {
     );
   });
 
+  test('normal activation traces granted permission', () {
+    final traces = <String>[];
+
+    emitPushActivationPermission(granted: true, trace: traces.add);
+
+    expect(traces, [PushActivationTraceState.permissionGranted]);
+  });
+
+  test('normal activation traces denied permission', () {
+    final traces = <String>[];
+
+    emitPushActivationPermission(granted: false, trace: traces.add);
+
+    expect(traces, [PushActivationTraceState.permissionDenied]);
+  });
+
+  test(
+    'normal activation traces successful getToken without token data',
+    () async {
+      final traces = <String>[];
+
+      final token = await runTracedPushActivationTokenRequest(
+        getToken: () async => 'private-activation-token',
+        trace: traces.add,
+      );
+
+      expect(token, 'private-activation-token');
+      expect(traces, [
+        PushActivationTraceState.getTokenStarted,
+        PushActivationTraceState.getTokenOk,
+      ]);
+      expect(traces.where((state) => state.contains('private')), isEmpty);
+    },
+  );
+
+  test('normal activation traces failed getToken without raw error', () async {
+    final traces = <String>[];
+
+    await expectLater(
+      runTracedPushActivationTokenRequest(
+        getToken: () async => throw StateError('private-activation-error'),
+        trace: traces.add,
+      ),
+      throwsStateError,
+    );
+
+    expect(traces, [
+      PushActivationTraceState.getTokenStarted,
+      PushActivationTraceState.getTokenFailed,
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('normal activation token comparison stays boolean-only', () {
+    expect(didPushTokenChange('old-token', 'new-token'), isTrue);
+    expect(didPushTokenChange('same-token', 'same-token'), isFalse);
+  });
+
+  test('normal activation trace failure has no token-request effect', () async {
+    var getTokenCalls = 0;
+
+    emitPushActivationPermission(
+      granted: true,
+      trace: (_) => throw StateError('unavailable-trace-sink'),
+    );
+    final token = await runTracedPushActivationTokenRequest(
+      getToken: () async {
+        getTokenCalls += 1;
+        return 'private-activation-token';
+      },
+      trace: (_) => throw StateError('unavailable-trace-sink'),
+    );
+
+    expect(token, 'private-activation-token');
+    expect(getTokenCalls, 1);
+  });
+
   test(
     'stale token renewal traces delete then get without sensitive data',
     () async {
@@ -1255,6 +1332,181 @@ void main() {
     }
   });
 
+  testWidgets('normal activation traces changed token through ready', (
+    tester,
+  ) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = _ActivationTracePushRepository(
+        existingToken: 'old-private-token',
+      );
+      final gateway = _FakePushGateway(token: 'new-private-token');
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Notifications activées'), findsOneWidget);
+      expect(logs, [
+        PushActivationTraceState.activationStarted,
+        PushActivationTraceState.permissionGranted,
+        PushActivationTraceState.getTokenStarted,
+        PushActivationTraceState.getTokenOk,
+        PushActivationTraceState.persistStarted,
+        PushActivationTraceState.tokenChanged,
+        PushActivationTraceState.persistOk,
+        PushActivationTraceState.activationReady,
+      ]);
+      expect(logs.where((state) => state.contains('private')), isEmpty);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('normal activation traces unchanged token', (tester) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = _ActivationTracePushRepository(
+        existingToken: 'same-private-token',
+      );
+      final gateway = _FakePushGateway(token: 'same-private-token');
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(logs, contains(PushActivationTraceState.tokenUnchanged));
+      expect(logs, contains(PushActivationTraceState.activationReady));
+      expect(logs.where((state) => state.contains('private')), isEmpty);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('normal activation traces denied permission and failure', (
+    tester,
+  ) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = _ActivationTracePushRepository();
+      final gateway = _FakePushGateway(
+        activationState: PushPermissionState.denied,
+      );
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(logs, [
+        PushActivationTraceState.activationStarted,
+        PushActivationTraceState.permissionDenied,
+        PushActivationTraceState.activationFailed,
+      ]);
+      expect(gateway.tokenRequests, 0);
+      expect(repository.registrationCalls, 0);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('normal activation traces getToken failure before persistence', (
+    tester,
+  ) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = _ActivationTracePushRepository();
+      final gateway = _FakePushGateway(activationGetTokenThrows: true);
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(logs, [
+        PushActivationTraceState.activationStarted,
+        PushActivationTraceState.permissionGranted,
+        PushActivationTraceState.getTokenStarted,
+        PushActivationTraceState.getTokenFailed,
+        PushActivationTraceState.activationFailed,
+      ]);
+      expect(repository.registrationCalls, 0);
+      expect(logs.where((state) => state.contains('private')), isEmpty);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('normal activation traces persistence failure', (tester) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = _ActivationTracePushRepository(failPersistence: true);
+      final gateway = _FakePushGateway(token: 'private-activation-token');
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Activation incomplète'), findsOneWidget);
+      expect(logs, [
+        PushActivationTraceState.activationStarted,
+        PushActivationTraceState.permissionGranted,
+        PushActivationTraceState.getTokenStarted,
+        PushActivationTraceState.getTokenOk,
+        PushActivationTraceState.persistStarted,
+        PushActivationTraceState.persistFailed,
+        PushActivationTraceState.activationFailed,
+      ]);
+      expect(repository.registrationCalls, 1);
+      expect(logs.where((state) => state.contains('private')), isEmpty);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('normal activation trace sink failure has no business effect', (
+    tester,
+  ) async {
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      throw StateError('unavailable-trace-sink');
+    };
+    try {
+      final repository = _ActivationTracePushRepository(
+        existingToken: 'old-token',
+      );
+      final gateway = _FakePushGateway(token: 'new-token');
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      await tester.tap(find.byKey(const Key('activate-notifications')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Notifications activées'), findsOneWidget);
+      expect(repository.registrationCalls, 1);
+      expect(repository.pushSubscriptions['device-test']?.token, 'new-token');
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
   testWidgets(
     'failed persistence stays incomplete, leaks no token and retry succeeds',
     (tester) async {
@@ -1632,6 +1884,7 @@ class _FakePushGateway
     this.activationFuture,
     this.unsubscribeSucceeds = true,
     this.recoveryGetTokenThrows = false,
+    this.activationGetTokenThrows = false,
   });
 
   PushPermissionState permission;
@@ -1644,6 +1897,7 @@ class _FakePushGateway
   final Future<PushSubscriptionRegistration?>? activationFuture;
   final bool unsubscribeSucceeds;
   final bool recoveryGetTokenThrows;
+  final bool activationGetTokenThrows;
   int activationCalls = 0;
   int reconciliationCalls = 0;
   int renewalCalls = 0;
@@ -1669,22 +1923,36 @@ class _FakePushGateway
   Future<PushActivationResult> activate() async {
     activationCalls += 1;
     permission = activationState;
-    if (activationState == PushPermissionState.granted) tokenRequests += 1;
+    emitPushActivationPermission(
+      granted: activationState == PushPermissionState.granted,
+      trace: debugPrint,
+    );
     if (activationState != PushPermissionState.granted) {
       return PushActivationResult(activationState);
     }
     _registrationGeneration += 1;
     final generation = _registrationGeneration;
     final pending = activationFuture;
-    final candidate =
-        pending ??
-        Future.value(
-          PushSubscriptionRegistration(
-            installationId: 'device-test',
-            token: token,
-            platform: 'web',
-          ),
-        );
+    final candidate = pending == null
+        ? runTracedPushActivationTokenRequest(
+            getToken: () async {
+              tokenRequests += 1;
+              if (activationGetTokenThrows) {
+                throw StateError('private-activation-get-token-error');
+              }
+              return token;
+            },
+            trace: debugPrint,
+          ).then(
+            (token) => token == null
+                ? null
+                : PushSubscriptionRegistration(
+                    installationId: 'device-test',
+                    token: token,
+                    platform: 'web',
+                  ),
+          )
+        : _tracePendingActivation(pending);
     final activation = candidate.then(
       (registration) =>
           generation == _registrationGeneration ? registration : null,
@@ -1701,6 +1969,24 @@ class _FakePushGateway
       _sessionReconciliation = Future.value(registration);
     }
     return PushActivationResult(activationState, registration: registration);
+  }
+
+  Future<PushSubscriptionRegistration?> _tracePendingActivation(
+    Future<PushSubscriptionRegistration?> pending,
+  ) async {
+    final token = await runTracedPushActivationTokenRequest(
+      getToken: () async {
+        tokenRequests += 1;
+        return (await pending)?.token;
+      },
+      trace: debugPrint,
+    );
+    if (token == null) return null;
+    return PushSubscriptionRegistration(
+      installationId: installationId,
+      token: token,
+      platform: 'web',
+    );
   }
 
   @override
@@ -1836,6 +2122,35 @@ class _FakeTargetedPushTestService implements TargetedPushTestService {
   Future<void> sendTargetedPushTest({required String installationId}) async {
     installationIds.add(installationId);
     if (error case final error?) throw error;
+  }
+}
+
+class _ActivationTracePushRepository extends MockCoordinationRepository
+    implements PushActivationPersistenceRepository {
+  _ActivationTracePushRepository({
+    this.existingToken,
+    this.failPersistence = false,
+  });
+
+  final String? existingToken;
+  final bool failPersistence;
+  int registrationCalls = 0;
+
+  @override
+  Future<void> registerPushSubscriptionForActivation(
+    PushSubscriptionRegistration registration, {
+    required void Function(bool tokenChanged) onTokenCompared,
+  }) async {
+    registrationCalls += 1;
+    if (failPersistence) {
+      throw StateError('private-persistence-error');
+    }
+    await super.registerPushSubscription(registration);
+    try {
+      onTokenCompared(didPushTokenChange(existingToken, registration.token));
+    } catch (_) {
+      // Mirrors the production best-effort diagnostic callback.
+    }
   }
 }
 

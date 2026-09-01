@@ -16,6 +16,7 @@ import 'push_notification_gateway_stub.dart';
 export 'push_notification_gateway_stub.dart'
     show
         PushActivationResult,
+        PushActivationTraceState,
         PushNotificationGateway,
         PushPermissionState,
         PushRecoveryTraceState,
@@ -24,7 +25,10 @@ export 'push_notification_gateway_stub.dart'
         PushStaleRecoveryGateway,
         PushUnsubscribeErrorClass,
         PushUnsubscribeErrorInfo,
+        emitPushActivationPermission,
+        emitPushActivationTrace,
         isExpectedFirebaseMessagingServiceWorker,
+        runTracedPushActivationTokenRequest,
         runTracedPushUnsubscribeCall,
         runTracedStalePushRecovery,
         resolveWebPushPermissionState,
@@ -121,6 +125,10 @@ class FirebaseWebPushNotificationGateway
     }
     final settings = await FirebaseMessaging.instance.requestPermission();
     final state = _map(settings.authorizationStatus);
+    emitPushActivationPermission(
+      granted: state == PushPermissionState.granted,
+      trace: debugPrint,
+    );
     if (state != PushPermissionState.granted) {
       return PushActivationResult(state);
     }
@@ -132,8 +140,10 @@ class FirebaseWebPushNotificationGateway
     final generation = _registrationGeneration;
     late final Future<PushSubscriptionRegistration?> activation;
     activation = _enqueueRegistration(() async {
-      final token = await FirebaseMessaging.instance.getToken(
-        vapidKey: _vapidKey,
+      final token = await runTracedPushActivationTokenRequest(
+        getToken: () =>
+            FirebaseMessaging.instance.getToken(vapidKey: _vapidKey),
+        trace: debugPrint,
       );
       if (token == null || token.isEmpty) return null;
       final registration = PushSubscriptionRegistration(
