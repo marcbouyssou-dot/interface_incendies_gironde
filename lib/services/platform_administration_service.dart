@@ -16,6 +16,45 @@ abstract interface class TargetedPushTestService {
   Future<void> sendTargetedPushTest({required String installationId});
 }
 
+enum FcmChainComparison {
+  identical('IDENTIQUE'),
+  different('DIFFÉRENT'),
+  indeterminate('INDÉTERMINÉ');
+
+  const FcmChainComparison(this.label);
+  final String label;
+
+  static FcmChainComparison parse(Object? value) => switch (value) {
+    'IDENTIQUE' => identical,
+    'DIFFÉRENT' => different,
+    _ => indeterminate,
+  };
+}
+
+class FcmChainDiagnosticResult {
+  const FcmChainDiagnosticResult({
+    required this.postTokenVsFirestore,
+    required this.firestoreSha256VsDispatchSha256,
+    required this.installationVsTargetResolved,
+  });
+
+  const FcmChainDiagnosticResult.indeterminate()
+    : postTokenVsFirestore = FcmChainComparison.indeterminate,
+      firestoreSha256VsDispatchSha256 = FcmChainComparison.indeterminate,
+      installationVsTargetResolved = FcmChainComparison.indeterminate;
+
+  final FcmChainComparison postTokenVsFirestore;
+  final FcmChainComparison firestoreSha256VsDispatchSha256;
+  final FcmChainComparison installationVsTargetResolved;
+}
+
+abstract interface class FcmChainDiagnosticService {
+  Future<FcmChainDiagnosticResult> diagnoseFcmChain({
+    required String installationId,
+    required String? postTokenSha256,
+  });
+}
+
 class PlatformAdministrationSessionController
     extends ValueNotifier<PlatformAdministrationSessionState> {
   PlatformAdministrationSessionController({bool initiallyValid = true})

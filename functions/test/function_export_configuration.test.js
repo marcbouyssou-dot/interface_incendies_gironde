@@ -73,6 +73,17 @@ test('targeted push test is App Check enforced without secrets', () => {
   assert.equal(endpoint.appCheckEnforced, true);
 });
 
+test('FCM chain diagnostic is App Check enforced without secrets', () => {
+  const endpoint = discoverExport({
+    GCLOUD_PROJECT: 'mobilisation-sante',
+  }, 'diagnoseFcmChain');
+
+  assert.equal(endpoint.callable, true);
+  assert.deepEqual(endpoint.region, ['europe-west1']);
+  assert.equal(endpoint.secrets, undefined);
+  assert.equal(endpoint.appCheckEnforced, true);
+});
+
 test('RPPS verification is callable without secret during discovery', () => {
   const endpoint = discoverExport({
     FUNCTIONS_EMULATOR: 'true',

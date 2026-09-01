@@ -153,6 +153,48 @@ Future<bool> runTracedAdminLocalSubscriptionCheck({
   }
 }
 
+Future<void> runFcmChainMicroDiagnostic({
+  required Future<String?> Function() readLocalFingerprint,
+  required Future<FcmChainDiagnosticResult> Function(String? fingerprint)
+  diagnose,
+  required void Function(String state) trace,
+}) async {
+  var result = const FcmChainDiagnosticResult.indeterminate();
+  try {
+    final fingerprint = await readLocalFingerprint();
+    result = await diagnose(fingerprint);
+  } catch (_) {
+    // A temporary diagnostic must never affect notification hydration.
+  }
+  _emitFcmChainComparison(
+    trace,
+    'POST_TOKEN_VS_FIRESTORE',
+    result.postTokenVsFirestore,
+  );
+  _emitFcmChainComparison(
+    trace,
+    'FIRESTORE_SHA256_VS_DISPATCH_SHA256',
+    result.firestoreSha256VsDispatchSha256,
+  );
+  _emitFcmChainComparison(
+    trace,
+    'INSTALLATION_VS_TARGET_RESOLVED',
+    result.installationVsTargetResolved,
+  );
+}
+
+void _emitFcmChainComparison(
+  void Function(String state) trace,
+  String name,
+  FcmChainComparison comparison,
+) {
+  try {
+    trace('$name: ${comparison.label}');
+  } catch (_) {
+    // Diagnostic output remains best-effort and non-throwing.
+  }
+}
+
 class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({
     super.key,
@@ -306,6 +348,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           _activationFailed = false;
           _hydratingPush = false;
         });
+        _startTemporaryFcmChainDiagnostic(
+          adminService: adminService,
+          installationId: adminInstallationId,
+        );
         return;
       }
       if (permission == PushPermissionState.granted && pushRepository != null) {
@@ -432,6 +478,31 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
   void _traceAdminHydration(String state) {
     emitAdminNotificationHydrationTrace(debugPrint, state);
+  }
+
+  void _startTemporaryFcmChainDiagnostic({
+    required TargetedPushTestService adminService,
+    required String? installationId,
+  }) {
+    if (installationId == null ||
+        adminService is! FcmChainDiagnosticService ||
+        _pushGateway is! LocalMessagingTokenFingerprintReader) {
+      return;
+    }
+    final diagnosticService = adminService as FcmChainDiagnosticService;
+    final fingerprintReader =
+        _pushGateway as LocalMessagingTokenFingerprintReader;
+    unawaited(
+      runFcmChainMicroDiagnostic(
+        readLocalFingerprint:
+            fingerprintReader.readLocalMessagingTokenFingerprint,
+        diagnose: (fingerprint) => diagnosticService.diagnoseFcmChain(
+          installationId: installationId,
+          postTokenSha256: fingerprint,
+        ),
+        trace: debugPrint,
+      ),
+    );
   }
 
   Future<bool> _isCurrentPushHydration(

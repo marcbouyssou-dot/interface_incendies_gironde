@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/operation.dart';
+import 'fcm_chain_diagnostic_transport.dart';
 import 'platform_administration_service.dart';
 
 typedef PlatformCallable =
@@ -13,16 +14,21 @@ class FirebasePlatformAdministrationService
     implements
         PlatformAdministrationService,
         PlatformAdministrationSessionProvider,
-        TargetedPushTestService {
+        TargetedPushTestService,
+        FcmChainDiagnosticService {
   FirebasePlatformAdministrationService({
     FirebaseFunctions? functions,
     FirebaseAuth? auth,
     PlatformCallable? callable,
+    FcmChainDiagnosticTransport? fcmChainDiagnosticTransport,
     String? Function()? currentUserUid,
   }) : assert(functions == null || callable == null),
        _auth = auth,
        _functions = functions,
        _callable = callable,
+       _fcmChainDiagnosticTransport =
+           fcmChainDiagnosticTransport ??
+           invokeFcmChainDiagnosticWithoutMessaging,
        _currentUserUid = currentUserUid {
     if (auth != null) {
       _setSessionFromUser(auth.currentUser);
@@ -38,6 +44,7 @@ class FirebasePlatformAdministrationService
   final FirebaseAuth? _auth;
   final FirebaseFunctions? _functions;
   final PlatformCallable? _callable;
+  final FcmChainDiagnosticTransport _fcmChainDiagnosticTransport;
   final String? Function()? _currentUserUid;
   final PlatformAdministrationSessionController _sessionState =
       PlatformAdministrationSessionController();
@@ -82,6 +89,39 @@ class FirebasePlatformAdministrationService
       return response['available'] == true;
     } on PlatformAdministrationException {
       return false;
+    }
+  }
+
+  @override
+  Future<FcmChainDiagnosticResult> diagnoseFcmChain({
+    required String installationId,
+    required String? postTokenSha256,
+  }) async {
+    _requireCurrentUser();
+    try {
+      final rawResponse = await _fcmChainDiagnosticTransport(
+        auth: _auth,
+        region: region,
+        data: {
+          'installationId': _validInstallationId(installationId),
+          'postTokenSha256': _validOptionalFingerprint(postTokenSha256),
+        },
+      );
+      if (rawResponse is! Map) throw const FormatException();
+      final response = rawResponse;
+      return FcmChainDiagnosticResult(
+        postTokenVsFirestore: FcmChainComparison.parse(
+          response['POST_TOKEN_VS_FIRESTORE'],
+        ),
+        firestoreSha256VsDispatchSha256: FcmChainComparison.parse(
+          response['FIRESTORE_SHA256_VS_DISPATCH_SHA256'],
+        ),
+        installationVsTargetResolved: FcmChainComparison.parse(
+          response['INSTALLATION_VS_TARGET_RESOLVED'],
+        ),
+      );
+    } catch (_) {
+      return const FcmChainDiagnosticResult.indeterminate();
     }
   }
 
@@ -292,6 +332,13 @@ class FirebasePlatformAdministrationService
       );
     }
     return value;
+  }
+
+  String? _validOptionalFingerprint(Object? value) {
+    if (value is String && RegExp(r'^[a-f0-9]{64}$').hasMatch(value)) {
+      return value;
+    }
+    return null;
   }
 
   String _validText(Object? value, {required int maximumLength}) {

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:crypto/crypto.dart';
 import 'package:interface_incendies_gironde/models/app_notification.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
@@ -126,6 +127,136 @@ void main() {
     expect(token, 'private-activation-token');
     expect(getTokenCalls, 1);
   });
+
+  test(
+    'local Messaging diagnostic hashes one record in readonly mode',
+    () async {
+      String? transactionMode;
+      final fingerprint = await readUniqueMessagingTokenFingerprint(
+        databaseExists: () async => true,
+        readRecords: (mode) async {
+          transactionMode = mode;
+          return const [
+            <String, Object?>{'token': 'private-local-token'},
+          ];
+        },
+      );
+
+      expect(transactionMode, 'readonly');
+      expect(
+        fingerprint,
+        sha256.convert(utf8.encode('private-local-token')).toString(),
+      );
+      expect(fingerprint, isNot(contains('private-local-token')));
+    },
+  );
+
+  test('local Messaging diagnostic does not open an absent database', () async {
+    var recordReads = 0;
+    final fingerprint = await readUniqueMessagingTokenFingerprint(
+      databaseExists: () async => false,
+      readRecords: (_) async {
+        recordReads += 1;
+        return const [];
+      },
+    );
+
+    expect(fingerprint, isNull);
+    expect(recordReads, 0);
+  });
+
+  test(
+    'local Messaging diagnostic rejects absent multiple or malformed records',
+    () async {
+      for (final records in <List<Object?>>[
+        const [],
+        const [
+          <String, Object?>{'token': 'one'},
+          <String, Object?>{'token': 'two'},
+        ],
+        const [<String, Object?>{}],
+        const [
+          <String, Object?>{'token': ''},
+        ],
+        const ['unexpected-record'],
+      ]) {
+        expect(
+          await readUniqueMessagingTokenFingerprint(
+            databaseExists: () async => true,
+            readRecords: (mode) async {
+              expect(mode, 'readonly');
+              return records;
+            },
+          ),
+          isNull,
+        );
+      }
+    },
+  );
+
+  test('local Messaging diagnostic timeout stays indeterminate', () async {
+    final pending = Completer<List<Object?>>();
+
+    expect(
+      await readUniqueMessagingTokenFingerprint(
+        databaseExists: () async => true,
+        readRecords: (_) => pending.future,
+        timeout: const Duration(milliseconds: 1),
+      ),
+      isNull,
+    );
+  });
+
+  test('FCM micro-diagnostic outputs only the three comparisons', () async {
+    final traces = <String>[];
+
+    await runFcmChainMicroDiagnostic(
+      readLocalFingerprint: () async =>
+          sha256.convert(utf8.encode('private-local-token')).toString(),
+      diagnose: (fingerprint) async {
+        expect(fingerprint, hasLength(64));
+        return const FcmChainDiagnosticResult(
+          postTokenVsFirestore: FcmChainComparison.identical,
+          firestoreSha256VsDispatchSha256: FcmChainComparison.different,
+          installationVsTargetResolved: FcmChainComparison.indeterminate,
+        );
+      },
+      trace: traces.add,
+    );
+
+    expect(traces, const [
+      'POST_TOKEN_VS_FIRESTORE: IDENTIQUE',
+      'FIRESTORE_SHA256_VS_DISPATCH_SHA256: DIFFÉRENT',
+      'INSTALLATION_VS_TARGET_RESOLVED: INDÉTERMINÉ',
+    ]);
+    expect(traces.join(), isNot(contains('private-local-token')));
+  });
+
+  test(
+    'FCM micro-diagnostic failure stays indeterminate and non-throwing',
+    () async {
+      final traces = <String>[];
+
+      await runFcmChainMicroDiagnostic(
+        readLocalFingerprint: () async => throw StateError('private-error'),
+        diagnose: (_) async => throw StateError('must-not-run'),
+        trace: traces.add,
+      );
+
+      expect(traces, const [
+        'POST_TOKEN_VS_FIRESTORE: INDÉTERMINÉ',
+        'FIRESTORE_SHA256_VS_DISPATCH_SHA256: INDÉTERMINÉ',
+        'INSTALLATION_VS_TARGET_RESOLVED: INDÉTERMINÉ',
+      ]);
+      expect(traces.join(), isNot(contains('private-error')));
+
+      await runFcmChainMicroDiagnostic(
+        readLocalFingerprint: () async => null,
+        diagnose: (_) async => const FcmChainDiagnosticResult.indeterminate(),
+        trace: (_) => throw StateError('unavailable-trace'),
+      );
+    },
+  );
 
   test(
     'admin Firestore subscription read traces a successful result',
@@ -1549,6 +1680,50 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     },
   );
+
+  testWidgets('admin micro-diagnostic stays read-only and outside UI state', (
+    tester,
+  ) async {
+    final traces = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) traces.add(message);
+    };
+    try {
+      final repository = MockCoordinationRepository();
+      seedActiveSubscription(repository);
+      final gateway = _DiagnosticPushGateway(
+        fingerprint: List.filled(64, 'a').join(),
+      );
+      final service = _DiagnosticTargetedPushTestService();
+
+      await pumpCenter(
+        tester,
+        repository: repository,
+        gateway: gateway,
+        targetedPushTestService: service,
+      );
+      await tester.pump();
+
+      expect(service.diagnosticCalls, 1);
+      expect(service.postTokenSha256, gateway.fingerprint);
+      expect(service.diagnosticInstallationId, 'device-test');
+      expect(gateway.fingerprintReads, 1);
+      expect(gateway.tokenRequests, 0);
+      expect(gateway.deleteTokenCalls, 0);
+      expect(gateway.unsubscribeCalls, 0);
+      expect(find.text('Diagnostic administrateur'), findsOneWidget);
+      expect(traces, contains('POST_TOKEN_VS_FIRESTORE: IDENTIQUE'));
+      expect(
+        traces,
+        contains('FIRESTORE_SHA256_VS_DISPATCH_SHA256: IDENTIQUE'),
+      );
+      expect(traces, contains('INSTALLATION_VS_TARGET_RESOLVED: IDENTIQUE'));
+      expect(traces.join(), isNot(contains(gateway.fingerprint)));
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
 
   testWidgets('admin hydration traces identity, Firestore, then preflight', (
     tester,
@@ -3267,6 +3442,43 @@ class _FakeTargetedPushTestService implements TargetedPushTestService {
   Future<void> sendTargetedPushTest({required String installationId}) async {
     installationIds.add(installationId);
     if (error case final error?) throw error;
+  }
+}
+
+class _DiagnosticPushGateway extends _FakePushGateway
+    implements LocalMessagingTokenFingerprintReader {
+  _DiagnosticPushGateway({required this.fingerprint})
+    : super(permission: PushPermissionState.granted);
+
+  final String fingerprint;
+  int fingerprintReads = 0;
+
+  @override
+  Future<String?> readLocalMessagingTokenFingerprint() async {
+    fingerprintReads += 1;
+    return fingerprint;
+  }
+}
+
+class _DiagnosticTargetedPushTestService extends _FakeTargetedPushTestService
+    implements FcmChainDiagnosticService {
+  int diagnosticCalls = 0;
+  String? diagnosticInstallationId;
+  String? postTokenSha256;
+
+  @override
+  Future<FcmChainDiagnosticResult> diagnoseFcmChain({
+    required String installationId,
+    required String? postTokenSha256,
+  }) async {
+    diagnosticCalls += 1;
+    diagnosticInstallationId = installationId;
+    this.postTokenSha256 = postTokenSha256;
+    return const FcmChainDiagnosticResult(
+      postTokenVsFirestore: FcmChainComparison.identical,
+      firestoreSha256VsDispatchSha256: FcmChainComparison.identical,
+      installationVsTargetResolved: FcmChainComparison.identical,
+    );
   }
 }
 

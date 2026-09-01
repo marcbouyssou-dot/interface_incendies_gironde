@@ -112,6 +112,11 @@ import {
   targetedPushTestServices,
   TargetedPushTestError,
 } from './targeted_push_test.js';
+import {
+  diagnoseFcmChain as diagnoseFcmChainRequest,
+  fcmChainDiagnosticServices,
+  FcmChainDiagnosticError,
+} from './fcm_chain_diagnostic.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -379,6 +384,16 @@ export const sendTargetedPushTest = onCall(
         firestore: getFirestore(),
         messaging: getMessaging(),
       }),
+    })),
+);
+
+export const diagnoseFcmChain = onCall(
+  platformCallableOptions,
+  async (request) => fcmChainDiagnosticCallable(() =>
+    diagnoseFcmChainRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: fcmChainDiagnosticServices({firestore: getFirestore()}),
     })),
 );
 
@@ -1482,6 +1497,17 @@ async function targetedPushTestCallable(action) {
       'internal',
       'La notification de test n’a pas pu être envoyée.',
     );
+  }
+}
+
+async function fcmChainDiagnosticCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof FcmChainDiagnosticError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    throw new HttpsError('internal', 'Le diagnostic FCM a échoué.');
   }
 }
 

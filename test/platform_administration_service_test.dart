@@ -154,6 +154,81 @@ void main() {
     });
   });
 
+  test(
+    'FCM chain diagnostic sends only fingerprints and parses allowlisted states',
+    () async {
+      final calls = <({String name, Map<String, Object?> data})>[];
+      var ordinaryCallableCalls = 0;
+      final fingerprint = List.filled(64, 'a').join();
+      final service = FirebasePlatformAdministrationService(
+        currentUserUid: () => 'platform-admin',
+        callable: (_, _) async {
+          ordinaryCallableCalls += 1;
+          throw StateError('ordinary Functions transport must not be used');
+        },
+        fcmChainDiagnosticTransport:
+            ({required auth, required region, required data}) async {
+              expect(auth, isNull);
+              expect(region, FirebasePlatformAdministrationService.region);
+              calls.add((name: 'diagnoseFcmChain', data: Map.of(data)));
+              return {
+                'POST_TOKEN_VS_FIRESTORE': 'IDENTIQUE',
+                'FIRESTORE_SHA256_VS_DISPATCH_SHA256': 'DIFFÉRENT',
+                'INSTALLATION_VS_TARGET_RESOLVED': 'unexpected',
+              };
+            },
+      );
+
+      expect(ordinaryCallableCalls, 0);
+      final result = await service.diagnoseFcmChain(
+        installationId: 'current-device',
+        postTokenSha256: fingerprint,
+      );
+
+      expect(calls.single.name, 'diagnoseFcmChain');
+      expect(calls.single.data, {
+        'installationId': 'current-device',
+        'postTokenSha256': fingerprint,
+      });
+      expect(result.postTokenVsFirestore, FcmChainComparison.identical);
+      expect(
+        result.firestoreSha256VsDispatchSha256,
+        FcmChainComparison.different,
+      );
+      expect(
+        result.installationVsTargetResolved,
+        FcmChainComparison.indeterminate,
+      );
+    },
+  );
+
+  test(
+    'FCM chain diagnostic failure cannot affect administration state',
+    () async {
+      final service = FirebasePlatformAdministrationService(
+        currentUserUid: () => 'platform-admin',
+        fcmChainDiagnosticTransport:
+            ({required auth, required region, required data}) async =>
+                throw StateError('private-backend-error'),
+      );
+
+      final result = await service.diagnoseFcmChain(
+        installationId: 'current-device',
+        postTokenSha256: 'invalid',
+      );
+
+      expect(result.postTokenVsFirestore, FcmChainComparison.indeterminate);
+      expect(
+        result.firestoreSha256VsDispatchSha256,
+        FcmChainComparison.indeterminate,
+      );
+      expect(
+        result.installationVsTargetResolved,
+        FcmChainComparison.indeterminate,
+      );
+    },
+  );
+
   test('callable failures remain technical and readable', () async {
     final unavailable = FirebasePlatformAdministrationService(
       callable: (name, data) => throw FirebaseFunctionsException(

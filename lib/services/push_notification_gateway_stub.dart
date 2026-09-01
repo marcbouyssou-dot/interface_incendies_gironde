@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 import '../models/app_notification.dart';
 
 enum PushPermissionState { unsupported, prompt, granted, denied, misconfigured }
@@ -744,6 +746,38 @@ abstract interface class PushNotificationGateway {
 /// current installation as stale because FCM rejected its registration token.
 abstract interface class PushStaleRecoveryGateway {
   Future<PushSubscriptionRegistration?> recoverStaleRegistration();
+}
+
+/// Temporary read-only diagnostic capability for the Web Messaging record.
+///
+/// It exposes only a one-way fingerprint and stays separate from functional
+/// Push operations so diagnostics cannot alter the token lifecycle.
+/// The fingerprint represents the registration POST token only when the
+/// controlled recipe has independently established a fresh successful POST
+/// and no later Messaging DELETE/POST before this read.
+abstract interface class LocalMessagingTokenFingerprintReader {
+  Future<String?> readLocalMessagingTokenFingerprint();
+}
+
+Future<String?> readUniqueMessagingTokenFingerprint({
+  required Future<bool> Function() databaseExists,
+  required Future<List<Object?>> Function(String mode) readRecords,
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  try {
+    if (!await databaseExists().timeout(timeout)) {
+      return null;
+    }
+    final records = await readRecords('readonly').timeout(timeout);
+    if (records.length != 1) return null;
+    final record = records.single;
+    if (record is! Map) return null;
+    final token = record['token'];
+    if (token is! String || token.isEmpty) return null;
+    return sha256.convert(utf8.encode(token)).toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 PushNotificationGateway createPushNotificationGateway() =>

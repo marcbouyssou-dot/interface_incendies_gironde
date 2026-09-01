@@ -7,6 +7,7 @@ import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:web/web.dart' as web;
 
 import '../models/app_notification.dart';
 import 'push_installation_id.dart';
@@ -16,6 +17,7 @@ export 'push_notification_gateway_stub.dart'
     show
         PushActivationResult,
         PushActivationTraceState,
+        LocalMessagingTokenFingerprintReader,
         LocalMessagingWorkerCandidate,
         LocalSubscriptionTraceState,
         PushNotificationGateway,
@@ -34,6 +36,7 @@ export 'push_notification_gateway_stub.dart'
         isExpectedFirebaseMessagingWorkerScope,
         isExpectedFirebaseMessagingWorkerScript,
         runInstrumentedLocalSubscriptionCheck,
+        readUniqueMessagingTokenFingerprint,
         runTracedLocalBrowserRead,
         runTracedPushActivationTokenRequest,
         runTracedPushUnsubscribeCall,
@@ -45,6 +48,15 @@ export 'push_notification_gateway_stub.dart'
 
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_PUSH_VAPID_KEY');
 const _installationKey = 'mobsante.push.installation.v1';
+const _firebaseMessagingDatabaseName = 'firebase-messaging-database';
+const _firebaseMessagingStoreName = 'firebase-messaging-store';
+
+extension type _FirebaseMessagingRecord._(JSObject _) implements JSObject {
+  external String? get token;
+}
+
+@JS('Array.isArray')
+external bool _isJsArray(JSAny? value);
 
 extension type _BadgeNavigator._(JSObject _) implements JSObject {
   external JSPromise<JSAny?> setAppBadge(JSNumber count);
@@ -81,7 +93,10 @@ PushNotificationGateway createPushNotificationGateway() =>
     FirebaseWebPushNotificationGateway.instance;
 
 class FirebaseWebPushNotificationGateway
-    implements PushNotificationGateway, PushStaleRecoveryGateway {
+    implements
+        PushNotificationGateway,
+        PushStaleRecoveryGateway,
+        LocalMessagingTokenFingerprintReader {
   FirebaseWebPushNotificationGateway._();
 
   static final instance = FirebaseWebPushNotificationGateway._();
@@ -112,6 +127,13 @@ class FirebaseWebPushNotificationGateway
               platform: 'web',
             ),
           );
+
+  @override
+  Future<String?> readLocalMessagingTokenFingerprint() =>
+      readUniqueMessagingTokenFingerprint(
+        databaseExists: _firebaseMessagingDatabaseExists,
+        readRecords: _readFirebaseMessagingRecords,
+      );
 
   @override
   Future<PushPermissionState> permissionState() async {
@@ -475,4 +497,81 @@ class FirebaseWebPushNotificationGateway
     AuthorizationStatus.denied => PushPermissionState.denied,
     AuthorizationStatus.notDetermined => PushPermissionState.prompt,
   };
+}
+
+Future<bool> _firebaseMessagingDatabaseExists() async {
+  final databases = (await web.window.indexedDB.databases().toDart).toDart;
+  return databases.any(
+    (database) => database.name == _firebaseMessagingDatabaseName,
+  );
+}
+
+Future<List<Object?>> _readFirebaseMessagingRecords(String mode) async {
+  if (mode != 'readonly') throw ArgumentError.value(mode, 'mode');
+  web.IDBDatabase? database;
+  try {
+    final openRequest = web.window.indexedDB.open(
+      _firebaseMessagingDatabaseName,
+    );
+    openRequest.onupgradeneeded = ((web.Event _) {
+      openRequest.transaction?.abort();
+    }).toJS;
+    final openResult = await _indexedDbRequestResult(
+      openRequest,
+      onLateSuccess: (result) {
+        if (result != null) (result as web.IDBDatabase).close();
+      },
+    );
+    if (openResult == null) return const [];
+    database = openResult as web.IDBDatabase;
+    if (!database.objectStoreNames.contains(_firebaseMessagingStoreName)) {
+      return const [];
+    }
+    final transaction = database.transaction(
+      _firebaseMessagingStoreName.toJS,
+      'readonly',
+    );
+    final store = transaction.objectStore(_firebaseMessagingStoreName);
+    final result = await _indexedDbRequestResult(store.getAll());
+    if (!_isJsArray(result)) return const [];
+    final records = result as JSArray<JSAny?>;
+    return records.toDart
+        .map<Object?>((value) {
+          if (value == null || !value.typeofEquals('object')) return null;
+          final record = _FirebaseMessagingRecord._(value as JSObject);
+          return <String, Object?>{'token': record.token};
+        })
+        .toList(growable: false);
+  } finally {
+    database?.close();
+  }
+}
+
+Future<JSAny?> _indexedDbRequestResult(
+  web.IDBRequest request, {
+  void Function(JSAny? result)? onLateSuccess,
+}) {
+  final completer = Completer<JSAny?>();
+  final timeout = Timer(const Duration(seconds: 5), () {
+    if (!completer.isCompleted) {
+      completer.completeError(
+        TimeoutException('IndexedDB diagnostic read timed out'),
+      );
+    }
+  });
+  request.onsuccess = ((web.Event _) {
+    if (completer.isCompleted) {
+      onLateSuccess?.call(request.result);
+      return;
+    }
+    timeout.cancel();
+    completer.complete(request.result);
+  }).toJS;
+  request.onerror = ((web.Event _) {
+    if (!completer.isCompleted) {
+      timeout.cancel();
+      completer.completeError(StateError('IndexedDB diagnostic read failed'));
+    }
+  }).toJS;
+  return completer.future;
 }
