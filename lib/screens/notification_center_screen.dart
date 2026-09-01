@@ -24,6 +24,15 @@ abstract final class AdminNotificationHydrationTraceState {
       'FIRESTORE_SUBSCRIPTION_READ_FAILED';
   static const firestoreSubscriptionReadTimeout =
       'FIRESTORE_SUBSCRIPTION_READ_TIMEOUT';
+  static const identityRevalidationOk = 'ADMIN_IDENTITY_REVALIDATION_OK';
+  static const identityRevalidationFailed =
+      'ADMIN_IDENTITY_REVALIDATION_FAILED';
+  static const localSubscriptionCheckStarted =
+      'LOCAL_SUBSCRIPTION_CHECK_STARTED';
+  static const localSubscriptionCheckOk = 'LOCAL_SUBSCRIPTION_CHECK_OK';
+  static const localSubscriptionCheckFailed = 'LOCAL_SUBSCRIPTION_CHECK_FAILED';
+  static const localSubscriptionCheckTimeout =
+      'LOCAL_SUBSCRIPTION_CHECK_TIMEOUT';
   static const preflightStarted = 'ADMIN_PREFLIGHT_STARTED';
   static const preflightOk = 'ADMIN_PREFLIGHT_OK';
   static const preflightFailed = 'ADMIN_PREFLIGHT_FAILED';
@@ -101,6 +110,46 @@ Future<bool> runTracedAdminPreflight({
       AdminNotificationHydrationTraceState.preflightFailed,
     );
     rethrow;
+  }
+}
+
+Future<bool> runTracedAdminLocalSubscriptionCheck({
+  required Future<bool> Function() check,
+  required void Function(String state) trace,
+  Duration observationDelay = const Duration(seconds: 15),
+}) async {
+  emitAdminNotificationHydrationTrace(
+    trace,
+    AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+  );
+  var completed = false;
+  final observer = Timer(observationDelay, () {
+    if (!completed) {
+      emitAdminNotificationHydrationTrace(
+        trace,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckTimeout,
+      );
+    }
+  });
+  try {
+    final result = await check();
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      result
+          ? AdminNotificationHydrationTraceState.localSubscriptionCheckOk
+          : AdminNotificationHydrationTraceState.localSubscriptionCheckFailed,
+    );
+    return result;
+  } catch (_) {
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.localSubscriptionCheckFailed,
+    );
+    rethrow;
+  } finally {
+    observer.cancel();
   }
 }
 
@@ -208,18 +257,28 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
             trace: _traceAdminHydration,
           );
         }
-        if (!await _isCurrentPushHydration(
+        final identityStillCurrent = await _isCurrentPushHydration(
           repository,
           identityRepository,
           ownerIdentity,
-        )) {
+        );
+        _traceAdminHydration(
+          identityStillCurrent
+              ? AdminNotificationHydrationTraceState.identityRevalidationOk
+              : AdminNotificationHydrationTraceState.identityRevalidationFailed,
+        );
+        if (!identityStillCurrent) {
           _finishCancelledPushHydration(repository, permission);
           return;
         }
         final localReady =
             adminInstallationId != null &&
-            permission == PushPermissionState.granted &&
-            await _pushGateway.hasUsableLocalSubscription();
+                permission == PushPermissionState.granted
+            ? await runTracedAdminLocalSubscriptionCheck(
+                check: _pushGateway.hasUsableLocalSubscription,
+                trace: _traceAdminHydration,
+              )
+            : false;
         final targetResolvable = localReady
             ? await runTracedAdminPreflight(
                 preflight: () => adminService.canSendTargetedPushTest(

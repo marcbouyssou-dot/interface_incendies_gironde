@@ -240,8 +240,105 @@ void main() {
     ]);
   });
 
+  test('admin local subscription check traces OK', () async {
+    final traces = <String>[];
+
+    final result = await runTracedAdminLocalSubscriptionCheck(
+      check: () async => true,
+      trace: traces.add,
+    );
+
+    expect(result, isTrue);
+    expect(traces, [
+      AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+      AdminNotificationHydrationTraceState.localSubscriptionCheckOk,
+    ]);
+  });
+
+  test('admin local subscription check traces FAILED', () async {
+    final traces = <String>[];
+
+    final result = await runTracedAdminLocalSubscriptionCheck(
+      check: () async => false,
+      trace: traces.add,
+    );
+
+    expect(result, isFalse);
+    expect(traces, [
+      AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+      AdminNotificationHydrationTraceState.localSubscriptionCheckFailed,
+    ]);
+  });
+
+  test(
+    'admin local subscription exception stays failed and non-sensitive',
+    () async {
+      const sensitiveError = 'private-worker-endpoint-vapid-error';
+      final traces = <String>[];
+
+      await expectLater(
+        runTracedAdminLocalSubscriptionCheck(
+          check: () async => throw StateError(sensitiveError),
+          trace: traces.add,
+        ),
+        throwsStateError,
+      );
+
+      expect(traces, [
+        AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckFailed,
+      ]);
+      expect(traces.where((state) => state.contains('private')), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'admin local subscription timeout observes without changing the check',
+    (tester) async {
+      final traces = <String>[];
+      final completer = Completer<bool>();
+      var completed = false;
+      final check =
+          runTracedAdminLocalSubscriptionCheck(
+            check: () => completer.future,
+            trace: traces.add,
+          ).then((result) {
+            completed = true;
+            return result;
+          });
+
+      await tester.pump(const Duration(seconds: 14));
+      expect(completed, isFalse);
+      expect(
+        traces,
+        isNot(
+          contains(
+            AdminNotificationHydrationTraceState.localSubscriptionCheckTimeout,
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(completed, isFalse);
+      expect(traces, [
+        AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckTimeout,
+      ]);
+
+      completer.complete(true);
+      await tester.pump();
+      expect(await check, isTrue);
+      expect(traces, [
+        AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckTimeout,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckOk,
+      ]);
+    },
+  );
+
   test('admin trace sink failures do not affect reads or preflight', () async {
     var readCalls = 0;
+    var localCheckCalls = 0;
     var preflightCalls = 0;
     void failingTrace(String _) => throw StateError('trace-sink-unavailable');
 
@@ -249,6 +346,13 @@ void main() {
       read: () async {
         readCalls += 1;
         return PushSubscriptionState.active;
+      },
+      trace: failingTrace,
+    );
+    final localReady = await runTracedAdminLocalSubscriptionCheck(
+      check: () async {
+        localCheckCalls += 1;
+        return true;
       },
       trace: failingTrace,
     );
@@ -261,8 +365,10 @@ void main() {
     );
 
     expect(state, PushSubscriptionState.active);
+    expect(localReady, isTrue);
     expect(targetAvailable, isTrue);
     expect(readCalls, 1);
+    expect(localCheckCalls, 1);
     expect(preflightCalls, 1);
   });
 
@@ -906,10 +1012,57 @@ void main() {
         AdminNotificationHydrationTraceState.identityReady,
         AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
         AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
+        AdminNotificationHydrationTraceState.identityRevalidationOk,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckOk,
         AdminNotificationHydrationTraceState.preflightStarted,
         AdminNotificationHydrationTraceState.preflightOk,
       ]);
       expect(traces.where((state) => state.contains(sensitiveUid)), isEmpty);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('admin hydration traces a failed identity revalidation', (
+    tester,
+  ) async {
+    const initialUid = 'private-admin-before';
+    const replacementUid = 'private-admin-after';
+    final traces = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) traces.add(message);
+    };
+    try {
+      final repository = _IdentityChangingAfterReadPushRepository(
+        administrativeUid: initialUid,
+        replacementUid: replacementUid,
+      );
+      seedActiveSubscription(repository);
+      final service = _FakeTargetedPushTestService();
+
+      await pumpCenter(
+        tester,
+        repository: repository,
+        gateway: _FakePushGateway(permission: PushPermissionState.granted),
+        targetedPushTestService: service,
+      );
+
+      expect(traces, [
+        AdminNotificationHydrationTraceState.identityReady,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
+        AdminNotificationHydrationTraceState.identityRevalidationFailed,
+      ]);
+      expect(service.availabilityChecks, isEmpty);
+      expect(
+        traces.where(
+          (state) =>
+              state.contains(initialUid) || state.contains(replacementUid),
+        ),
+        isEmpty,
+      );
     } finally {
       debugPrint = previousDebugPrint;
     }
@@ -2509,4 +2662,23 @@ class _IdentityAwarePushRepository extends _FlakyPushRepository
 
   @override
   Stream<String?> watchAdministrativeUid() => Stream.value(administrativeUid);
+}
+
+class _IdentityChangingAfterReadPushRepository
+    extends _IdentityAwarePushRepository {
+  _IdentityChangingAfterReadPushRepository({
+    required String administrativeUid,
+    required this.replacementUid,
+  }) : super(failuresBeforeSuccess: 0, administrativeUid: administrativeUid);
+
+  final String replacementUid;
+
+  @override
+  Future<PushSubscriptionState> readPushSubscriptionState(
+    String installationId,
+  ) async {
+    final state = await super.readPushSubscriptionState(installationId);
+    administrativeUid = replacementUid;
+    return state;
+  }
 }
