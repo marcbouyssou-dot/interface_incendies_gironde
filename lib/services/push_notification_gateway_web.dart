@@ -20,10 +20,15 @@ export 'push_notification_gateway_stub.dart'
         PushPermissionState,
         PushRecoveryTraceState,
         PushRenewalTraceState,
+        PushSubscriptionAfterFailure,
         PushStaleRecoveryGateway,
+        PushUnsubscribeErrorClass,
+        PushUnsubscribeErrorInfo,
         isExpectedFirebaseMessagingServiceWorker,
+        runTracedPushUnsubscribeCall,
         runTracedStalePushRecovery,
-        resolveWebPushPermissionState;
+        resolveWebPushPermissionState,
+        tracePushUnsubscribePrecheck;
 
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_PUSH_VAPID_KEY');
 const _installationKey = 'mobsante.push.installation.v1';
@@ -35,6 +40,29 @@ extension type _BadgeNavigator._(JSObject _) implements JSObject {
 
 @JS('navigator')
 external _BadgeNavigator get _badgeNavigator;
+
+@JS('Error')
+external JSFunction get _javaScriptErrorConstructor;
+
+PushUnsubscribeErrorInfo classifyWebPushUnsubscribeError(Object error) {
+  if (error is html.DomException) {
+    return PushUnsubscribeErrorInfo(
+      name: error.name,
+      errorClass: PushUnsubscribeErrorClass.domException,
+    );
+  }
+  if (error is Error ||
+      (error as JSAny?).instanceof(_javaScriptErrorConstructor)) {
+    return const PushUnsubscribeErrorInfo(
+      name: 'Other',
+      errorClass: PushUnsubscribeErrorClass.error,
+    );
+  }
+  return const PushUnsubscribeErrorInfo(
+    name: 'Other',
+    errorClass: PushUnsubscribeErrorClass.other,
+  );
+}
 
 PushNotificationGateway createPushNotificationGateway() =>
     FirebaseWebPushNotificationGateway.instance;
@@ -242,7 +270,7 @@ class FirebaseWebPushNotificationGateway
       return null;
     }
     final token = await runTracedStalePushRecovery(
-      unsubscribe: _unsubscribeCurrentPushSubscription,
+      unsubscribe: () => _unsubscribeCurrentPushSubscription(trace: debugPrint),
       getToken: () => FirebaseMessaging.instance.getToken(vapidKey: _vapidKey),
       trace: debugPrint,
     );
@@ -256,10 +284,21 @@ class FirebaseWebPushNotificationGateway
     return registration;
   }
 
-  Future<bool> _unsubscribeCurrentPushSubscription() async {
+  Future<bool> _unsubscribeCurrentPushSubscription({
+    required void Function(String state) trace,
+  }) async {
     final serviceWorkers = html.window.navigator.serviceWorker;
-    if (serviceWorkers == null) return false;
-    final registrations = await serviceWorkers.getRegistrations();
+    if (serviceWorkers == null) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      return false;
+    }
+    late final List<dynamic> registrations;
+    try {
+      registrations = await serviceWorkers.getRegistrations();
+    } catch (error, stackTrace) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
     final messagingRegistrations = <html.ServiceWorkerRegistration>[];
     for (final candidate in registrations) {
       if (candidate is! html.ServiceWorkerRegistration) continue;
@@ -274,16 +313,47 @@ class FirebaseWebPushNotificationGateway
         messagingRegistrations.add(candidate);
       }
     }
-    if (messagingRegistrations.length != 1) return false;
-    final pushManager = messagingRegistrations.single.pushManager;
-    if (pushManager == null) return false;
-    final dynamic subscription = await pushManager.getSubscription();
-    if (subscription == null) return true;
-    if (subscription is! html.PushSubscription ||
-        !_hasExpectedVapidKey(subscription)) {
+    if (messagingRegistrations.length != 1) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
       return false;
     }
-    return subscription.unsubscribe();
+    final pushManager = messagingRegistrations.single.pushManager;
+    if (pushManager == null) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      return false;
+    }
+    late final dynamic subscription;
+    try {
+      subscription = await pushManager.getSubscription();
+    } catch (error, stackTrace) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    if (subscription == null) {
+      tracePushUnsubscribePrecheck(passed: true, trace: trace);
+      return true;
+    }
+    if (subscription is! html.PushSubscription ||
+        !_hasExpectedVapidKey(subscription)) {
+      tracePushUnsubscribePrecheck(
+        passed: false,
+        trace: trace,
+        failureState: PushSubscriptionAfterFailure.present,
+      );
+      return false;
+    }
+    tracePushUnsubscribePrecheck(passed: true, trace: trace);
+    return runTracedPushUnsubscribeCall(
+      unsubscribe: subscription.unsubscribe,
+      inspectSubscriptionAfterFailure: () async {
+        final dynamic current = await pushManager.getSubscription();
+        return current == null
+            ? PushSubscriptionAfterFailure.absent
+            : PushSubscriptionAfterFailure.present;
+      },
+      classifyError: classifyWebPushUnsubscribeError,
+      trace: trace,
+    );
   }
 
   bool _hasExpectedVapidKey(html.PushSubscription subscription) {

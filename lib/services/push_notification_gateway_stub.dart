@@ -37,6 +37,11 @@ abstract final class PushRecoveryTraceState {
   static const unsubscribeStarted = 'UNSUBSCRIBE_STARTED';
   static const unsubscribeOk = 'UNSUBSCRIBE_OK';
   static const unsubscribeFailed = 'UNSUBSCRIBE_FAILED';
+  static const unsubscribePrecheckOk = 'UNSUBSCRIBE_PRECHECK_OK';
+  static const unsubscribePrecheckFailed = 'UNSUBSCRIBE_PRECHECK_FAILED';
+  static const unsubscribeCallStarted = 'UNSUBSCRIBE_CALL_STARTED';
+  static const unsubscribeResultTrue = 'UNSUBSCRIBE_RESULT_TRUE';
+  static const unsubscribeResultFalse = 'UNSUBSCRIBE_RESULT_FALSE';
   static const getTokenStarted = 'GET_TOKEN_STARTED';
   static const getTokenOk = 'GET_TOKEN_OK';
   static const getTokenFailed = 'GET_TOKEN_FAILED';
@@ -51,6 +56,11 @@ abstract final class PushRecoveryTraceState {
     unsubscribeStarted,
     unsubscribeOk,
     unsubscribeFailed,
+    unsubscribePrecheckOk,
+    unsubscribePrecheckFailed,
+    unsubscribeCallStarted,
+    unsubscribeResultTrue,
+    unsubscribeResultFalse,
     getTokenStarted,
     getTokenOk,
     getTokenFailed,
@@ -60,6 +70,153 @@ abstract final class PushRecoveryTraceState {
     recoveryReady,
     recoveryFailed,
   };
+
+  static const _allowedErrorNames = <String>{
+    'AbortError',
+    'InvalidStateError',
+    'NetworkError',
+    'NotAllowedError',
+    'NotFoundError',
+    'NotSupportedError',
+    'OperationError',
+    'QuotaExceededError',
+    'SecurityError',
+    'TypeError',
+    'UnknownError',
+    'Other',
+  };
+
+  static String unsubscribeErrorName(String name) {
+    final safeName = _allowedErrorNames.contains(name) ? name : 'Other';
+    return 'UNSUBSCRIBE_ERROR_NAME: $safeName';
+  }
+
+  static String unsubscribeErrorClass(PushUnsubscribeErrorClass errorClass) =>
+      'UNSUBSCRIBE_ERROR_CLASS: ${errorClass.label}';
+
+  static String subscriptionAfterFailure(PushSubscriptionAfterFailure state) =>
+      'SUBSCRIPTION_AFTER_FAILURE: ${state.label}';
+}
+
+enum PushUnsubscribeErrorClass {
+  domException('DOMException'),
+  error('Error'),
+  other('Other');
+
+  const PushUnsubscribeErrorClass(this.label);
+  final String label;
+}
+
+enum PushSubscriptionAfterFailure {
+  present('PRESENT'),
+  absent('ABSENT'),
+  indeterminate('INDETERMINATE');
+
+  const PushSubscriptionAfterFailure(this.label);
+  final String label;
+}
+
+class PushUnsubscribeErrorInfo {
+  const PushUnsubscribeErrorInfo({
+    required this.name,
+    required this.errorClass,
+  });
+
+  final String name;
+  final PushUnsubscribeErrorClass errorClass;
+}
+
+void tracePushUnsubscribePrecheck({
+  required bool passed,
+  required void Function(String state) trace,
+  PushSubscriptionAfterFailure failureState =
+      PushSubscriptionAfterFailure.indeterminate,
+}) {
+  _emitPushRecoveryTrace(
+    trace,
+    passed
+        ? PushRecoveryTraceState.unsubscribePrecheckOk
+        : PushRecoveryTraceState.unsubscribePrecheckFailed,
+  );
+  if (!passed) {
+    _emitPushRecoveryTrace(
+      trace,
+      PushRecoveryTraceState.subscriptionAfterFailure(failureState),
+    );
+  }
+}
+
+Future<bool> runTracedPushUnsubscribeCall({
+  required Future<bool> Function() unsubscribe,
+  required Future<PushSubscriptionAfterFailure> Function()
+  inspectSubscriptionAfterFailure,
+  required PushUnsubscribeErrorInfo Function(Object error) classifyError,
+  required void Function(String state) trace,
+}) async {
+  _emitPushRecoveryTrace(trace, PushRecoveryTraceState.unsubscribeCallStarted);
+  try {
+    final result = await unsubscribe();
+    _emitPushRecoveryTrace(
+      trace,
+      result
+          ? PushRecoveryTraceState.unsubscribeResultTrue
+          : PushRecoveryTraceState.unsubscribeResultFalse,
+    );
+    if (!result) {
+      await _traceSubscriptionAfterFailure(
+        inspectSubscriptionAfterFailure,
+        trace,
+      );
+    }
+    return result;
+  } catch (error, stackTrace) {
+    PushUnsubscribeErrorInfo errorInfo;
+    try {
+      errorInfo = classifyError(error);
+    } catch (_) {
+      errorInfo = const PushUnsubscribeErrorInfo(
+        name: 'Other',
+        errorClass: PushUnsubscribeErrorClass.other,
+      );
+    }
+    _emitPushRecoveryTrace(
+      trace,
+      PushRecoveryTraceState.unsubscribeErrorName(errorInfo.name),
+    );
+    _emitPushRecoveryTrace(
+      trace,
+      PushRecoveryTraceState.unsubscribeErrorClass(errorInfo.errorClass),
+    );
+    await _traceSubscriptionAfterFailure(
+      inspectSubscriptionAfterFailure,
+      trace,
+    );
+    Error.throwWithStackTrace(error, stackTrace);
+  }
+}
+
+Future<void> _traceSubscriptionAfterFailure(
+  Future<PushSubscriptionAfterFailure> Function() inspect,
+  void Function(String state) trace,
+) async {
+  var state = PushSubscriptionAfterFailure.indeterminate;
+  try {
+    state = await inspect();
+  } catch (_) {
+    // The read-only diagnostic is best-effort.
+  }
+  _emitPushRecoveryTrace(
+    trace,
+    PushRecoveryTraceState.subscriptionAfterFailure(state),
+  );
+}
+
+void _emitPushRecoveryTrace(void Function(String state) trace, String state) {
+  try {
+    trace(state);
+  } catch (_) {
+    // Diagnostic output must never affect push recovery.
+  }
 }
 
 Future<String?> runTracedStaleTokenRenewal({

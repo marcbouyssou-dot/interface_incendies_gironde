@@ -186,6 +186,243 @@ void main() {
     ]);
   });
 
+  test('unsubscribe instrumentation reports failed precheck', () {
+    final traces = <String>[];
+
+    tracePushUnsubscribePrecheck(passed: false, trace: traces.add);
+
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribePrecheckFailed,
+      PushRecoveryTraceState.subscriptionAfterFailure(
+        PushSubscriptionAfterFailure.indeterminate,
+      ),
+    ]);
+  });
+
+  test('unsubscribe instrumentation reports successful precheck', () {
+    final traces = <String>[];
+
+    tracePushUnsubscribePrecheck(passed: true, trace: traces.add);
+
+    expect(traces, [PushRecoveryTraceState.unsubscribePrecheckOk]);
+  });
+
+  test('unsubscribe instrumentation reports a true result', () async {
+    final traces = <String>[];
+    var inspections = 0;
+
+    final result = await runTracedPushUnsubscribeCall(
+      unsubscribe: () async => true,
+      inspectSubscriptionAfterFailure: () async {
+        inspections += 1;
+        return PushSubscriptionAfterFailure.present;
+      },
+      classifyError: _classifyTestUnsubscribeError,
+      trace: traces.add,
+    );
+
+    expect(result, isTrue);
+    expect(inspections, 0);
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribeCallStarted,
+      PushRecoveryTraceState.unsubscribeResultTrue,
+    ]);
+  });
+
+  test('unsubscribe instrumentation reports false and present', () async {
+    final traces = <String>[];
+
+    final result = await runTracedPushUnsubscribeCall(
+      unsubscribe: () async => false,
+      inspectSubscriptionAfterFailure: () async =>
+          PushSubscriptionAfterFailure.present,
+      classifyError: _classifyTestUnsubscribeError,
+      trace: traces.add,
+    );
+
+    expect(result, isFalse);
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribeCallStarted,
+      PushRecoveryTraceState.unsubscribeResultFalse,
+      PushRecoveryTraceState.subscriptionAfterFailure(
+        PushSubscriptionAfterFailure.present,
+      ),
+    ]);
+  });
+
+  test('unsubscribe instrumentation reports DOMException safely', () async {
+    final traces = <String>[];
+
+    await expectLater(
+      runTracedPushUnsubscribeCall(
+        unsubscribe: () async => throw const _TestDomException(),
+        inspectSubscriptionAfterFailure: () async =>
+            PushSubscriptionAfterFailure.absent,
+        classifyError: _classifyTestUnsubscribeError,
+        trace: traces.add,
+      ),
+      throwsA(isA<_TestDomException>()),
+    );
+
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribeCallStarted,
+      PushRecoveryTraceState.unsubscribeErrorName('AbortError'),
+      PushRecoveryTraceState.unsubscribeErrorClass(
+        PushUnsubscribeErrorClass.domException,
+      ),
+      PushRecoveryTraceState.subscriptionAfterFailure(
+        PushSubscriptionAfterFailure.absent,
+      ),
+    ]);
+  });
+
+  test('unsubscribe instrumentation reports Error safely', () async {
+    final traces = <String>[];
+
+    await expectLater(
+      runTracedPushUnsubscribeCall(
+        unsubscribe: () async => throw StateError('private-error-message'),
+        inspectSubscriptionAfterFailure: () async =>
+            PushSubscriptionAfterFailure.present,
+        classifyError: _classifyTestUnsubscribeError,
+        trace: traces.add,
+      ),
+      throwsStateError,
+    );
+
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribeCallStarted,
+      PushRecoveryTraceState.unsubscribeErrorName('Other'),
+      PushRecoveryTraceState.unsubscribeErrorClass(
+        PushUnsubscribeErrorClass.error,
+      ),
+      PushRecoveryTraceState.subscriptionAfterFailure(
+        PushSubscriptionAfterFailure.present,
+      ),
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('unsubscribe instrumentation reports Other safely', () async {
+    final traces = <String>[];
+
+    await expectLater(
+      runTracedPushUnsubscribeCall(
+        unsubscribe: () async => throw 'private-other-error',
+        inspectSubscriptionAfterFailure: () async =>
+            PushSubscriptionAfterFailure.indeterminate,
+        classifyError: _classifyTestUnsubscribeError,
+        trace: traces.add,
+      ),
+      throwsA('private-other-error'),
+    );
+
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribeCallStarted,
+      PushRecoveryTraceState.unsubscribeErrorName('Other'),
+      PushRecoveryTraceState.unsubscribeErrorClass(
+        PushUnsubscribeErrorClass.other,
+      ),
+      PushRecoveryTraceState.subscriptionAfterFailure(
+        PushSubscriptionAfterFailure.indeterminate,
+      ),
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('unsubscribe instrumentation preserves original error and stack when '
+      'inspection also fails', () async {
+    final originalError = StateError('private-original-error');
+    StackTrace? originalStack;
+    Object? caughtError;
+    StackTrace? caughtStack;
+
+    try {
+      await runTracedPushUnsubscribeCall(
+        unsubscribe: () async {
+          try {
+            throw originalError;
+          } catch (_, stackTrace) {
+            originalStack = stackTrace;
+            rethrow;
+          }
+        },
+        inspectSubscriptionAfterFailure: () async =>
+            throw StateError('private-inspection-error'),
+        classifyError: _classifyTestUnsubscribeError,
+        trace: (_) {},
+      );
+    } catch (error, stackTrace) {
+      caughtError = error;
+      caughtStack = stackTrace;
+    }
+
+    expect(identical(caughtError, originalError), isTrue);
+    expect(caughtStack.toString(), originalStack.toString());
+  });
+
+  test(
+    'unsubscribe instrumentation reports indeterminate inspection',
+    () async {
+      final traces = <String>[];
+
+      final result = await runTracedPushUnsubscribeCall(
+        unsubscribe: () async => false,
+        inspectSubscriptionAfterFailure: () async =>
+            throw StateError('private-inspection-error'),
+        classifyError: _classifyTestUnsubscribeError,
+        trace: traces.add,
+      );
+
+      expect(result, isFalse);
+      expect(traces, [
+        PushRecoveryTraceState.unsubscribeCallStarted,
+        PushRecoveryTraceState.unsubscribeResultFalse,
+        PushRecoveryTraceState.subscriptionAfterFailure(
+          PushSubscriptionAfterFailure.indeterminate,
+        ),
+      ]);
+      expect(traces.where((state) => state.contains('private')), isEmpty);
+    },
+  );
+
+  test('unsubscribe instrumentation allowlists error names', () {
+    expect(
+      PushRecoveryTraceState.unsubscribeErrorName('AbortError'),
+      'UNSUBSCRIBE_ERROR_NAME: AbortError',
+    );
+    expect(
+      PushRecoveryTraceState.unsubscribeErrorName('private-error-name'),
+      'UNSUBSCRIBE_ERROR_NAME: Other',
+    );
+  });
+
+  test('unsubscribe trace sink failure has no functional effect', () async {
+    var unsubscribeCalls = 0;
+    var inspectionCalls = 0;
+
+    tracePushUnsubscribePrecheck(
+      passed: true,
+      trace: (_) => throw StateError('unavailable-trace-sink'),
+    );
+    final result = await runTracedPushUnsubscribeCall(
+      unsubscribe: () async {
+        unsubscribeCalls += 1;
+        return false;
+      },
+      inspectSubscriptionAfterFailure: () async {
+        inspectionCalls += 1;
+        return PushSubscriptionAfterFailure.present;
+      },
+      classifyError: _classifyTestUnsubscribeError,
+      trace: (_) => throw StateError('unavailable-trace-sink'),
+    );
+
+    expect(result, isFalse);
+    expect(unsubscribeCalls, 1);
+    expect(inspectionCalls, 1);
+  });
+
   test('stale push recovery reports a single getToken failure', () async {
     final traces = <String>[];
     var getTokenCalls = 0;
@@ -1336,6 +1573,29 @@ void main() {
     expect(find.byTooltip('Marquer comme lue'), findsOneWidget);
     handle.dispose();
   });
+}
+
+class _TestDomException {
+  const _TestDomException();
+}
+
+PushUnsubscribeErrorInfo _classifyTestUnsubscribeError(Object error) {
+  if (error is _TestDomException) {
+    return const PushUnsubscribeErrorInfo(
+      name: 'AbortError',
+      errorClass: PushUnsubscribeErrorClass.domException,
+    );
+  }
+  if (error is Error) {
+    return const PushUnsubscribeErrorInfo(
+      name: 'Other',
+      errorClass: PushUnsubscribeErrorClass.error,
+    );
+  }
+  return const PushUnsubscribeErrorInfo(
+    name: 'private-name-that-must-be-filtered',
+    errorClass: PushUnsubscribeErrorClass.other,
+  );
 }
 
 class _NotificationNavigationHost extends StatelessWidget {
