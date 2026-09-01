@@ -124,37 +124,41 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
             persisted = await _persist(registration, repository: repository);
           }
         } else if (subscriptionState == PushSubscriptionState.stale) {
-          _traceStaleRenewal(PushRenewalTraceState.staleRenewalStarted);
+          _tracePushRecovery(PushRecoveryTraceState.recoveryStarted);
           try {
-            final registration = await _pushGateway.renewRegistration();
+            final recoveryGateway = _pushGateway is PushStaleRecoveryGateway
+                ? _pushGateway as PushStaleRecoveryGateway
+                : null;
+            final registration = await recoveryGateway
+                ?.recoverStaleRegistration();
             final current = await _isCurrentPushHydration(
               repository,
               identityRepository,
               ownerIdentity,
             );
             if (!current) {
-              _traceStaleRenewal(PushRenewalTraceState.staleRenewalFailed);
+              _tracePushRecovery(PushRecoveryTraceState.recoveryFailed);
               _finishCancelledPushHydration(repository, permission);
               return;
             }
             if (registration != null &&
                 registration.installationId == _pushGateway.installationId) {
-              _traceStaleRenewal(PushRenewalTraceState.persistStarted);
+              _tracePushRecovery(PushRecoveryTraceState.persistStarted);
               persisted = await _persist(registration, repository: repository);
-              _traceStaleRenewal(
+              _tracePushRecovery(
                 persisted
-                    ? PushRenewalTraceState.persistOk
-                    : PushRenewalTraceState.persistFailed,
+                    ? PushRecoveryTraceState.persistOk
+                    : PushRecoveryTraceState.persistFailed,
               );
               if (persisted) subscriptionState = PushSubscriptionState.active;
             }
-            _traceStaleRenewal(
+            _tracePushRecovery(
               persisted
-                  ? PushRenewalTraceState.staleRenewalReady
-                  : PushRenewalTraceState.staleRenewalFailed,
+                  ? PushRecoveryTraceState.recoveryReady
+                  : PushRecoveryTraceState.recoveryFailed,
             );
           } catch (_) {
-            _traceStaleRenewal(PushRenewalTraceState.staleRenewalFailed);
+            _tracePushRecovery(PushRecoveryTraceState.recoveryFailed);
             rethrow;
           }
         }
@@ -193,7 +197,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     });
   }
 
-  void _traceStaleRenewal(String state) {
+  void _tracePushRecovery(String state) {
     try {
       debugPrint(state);
     } catch (_) {
@@ -228,42 +232,45 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
   Future<void> _activate() async {
     if (_activating) return;
-    final staleRenewal =
+    final staleRecovery =
         _permission == PushPermissionState.granted &&
         _subscriptionState == PushSubscriptionState.stale;
-    if (staleRenewal) {
-      _traceStaleRenewal(PushRenewalTraceState.staleRenewalStarted);
+    if (staleRecovery) {
+      _tracePushRecovery(PushRecoveryTraceState.recoveryStarted);
     }
     setState(() {
       _activating = true;
       _activationFailed = false;
     });
     try {
-      final result = staleRenewal
+      final recoveryGateway = _pushGateway is PushStaleRecoveryGateway
+          ? _pushGateway as PushStaleRecoveryGateway
+          : null;
+      final result = staleRecovery
           ? PushActivationResult(
               PushPermissionState.granted,
-              registration: await _pushGateway.renewRegistration(),
+              registration: await recoveryGateway?.recoverStaleRegistration(),
             )
           : await _pushGateway.activate();
       var persisted = false;
       if (result.registration case final registration?) {
-        if (staleRenewal) {
-          _traceStaleRenewal(PushRenewalTraceState.persistStarted);
+        if (staleRecovery) {
+          _tracePushRecovery(PushRecoveryTraceState.persistStarted);
         }
         persisted = await _persist(registration);
-        if (staleRenewal) {
-          _traceStaleRenewal(
+        if (staleRecovery) {
+          _tracePushRecovery(
             persisted
-                ? PushRenewalTraceState.persistOk
-                : PushRenewalTraceState.persistFailed,
+                ? PushRecoveryTraceState.persistOk
+                : PushRecoveryTraceState.persistFailed,
           );
         }
       }
-      if (staleRenewal) {
-        _traceStaleRenewal(
+      if (staleRecovery) {
+        _tracePushRecovery(
           persisted
-              ? PushRenewalTraceState.staleRenewalReady
-              : PushRenewalTraceState.staleRenewalFailed,
+              ? PushRecoveryTraceState.recoveryReady
+              : PushRecoveryTraceState.recoveryFailed,
         );
       }
       if (mounted) {
@@ -277,8 +284,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         });
       }
     } catch (_) {
-      if (staleRenewal) {
-        _traceStaleRenewal(PushRenewalTraceState.staleRenewalFailed);
+      if (staleRecovery) {
+        _tracePushRecovery(PushRecoveryTraceState.recoveryFailed);
       }
       if (mounted) {
         setState(() {

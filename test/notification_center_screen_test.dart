@@ -133,6 +133,127 @@ void main() {
     expect(getTokenCalls, 1);
   });
 
+  test(
+    'stale push recovery unsubscribes before requesting one token',
+    () async {
+      final traces = <String>[];
+      var unsubscribeCalls = 0;
+      var getTokenCalls = 0;
+
+      final token = await runTracedStalePushRecovery(
+        unsubscribe: () async {
+          unsubscribeCalls += 1;
+          return true;
+        },
+        getToken: () async {
+          getTokenCalls += 1;
+          return 'private-recovered-token';
+        },
+        trace: traces.add,
+      );
+
+      expect(token, 'private-recovered-token');
+      expect(unsubscribeCalls, 1);
+      expect(getTokenCalls, 1);
+      expect(traces, [
+        PushRecoveryTraceState.unsubscribeStarted,
+        PushRecoveryTraceState.unsubscribeOk,
+        PushRecoveryTraceState.getTokenStarted,
+        PushRecoveryTraceState.getTokenOk,
+      ]);
+      expect(traces.where((state) => state.contains('private')), isEmpty);
+    },
+  );
+
+  test('stale push recovery stops when unsubscribe fails', () async {
+    final traces = <String>[];
+    var getTokenCalls = 0;
+
+    final token = await runTracedStalePushRecovery(
+      unsubscribe: () async => false,
+      getToken: () async {
+        getTokenCalls += 1;
+        return 'must-not-be-created';
+      },
+      trace: traces.add,
+    );
+
+    expect(token, isNull);
+    expect(getTokenCalls, 0);
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribeStarted,
+      PushRecoveryTraceState.unsubscribeFailed,
+    ]);
+  });
+
+  test('stale push recovery reports a single getToken failure', () async {
+    final traces = <String>[];
+    var getTokenCalls = 0;
+
+    await expectLater(
+      runTracedStalePushRecovery(
+        unsubscribe: () async => true,
+        getToken: () async {
+          getTokenCalls += 1;
+          throw StateError('private-get-error');
+        },
+        trace: traces.add,
+      ),
+      throwsStateError,
+    );
+
+    expect(getTokenCalls, 1);
+    expect(traces, [
+      PushRecoveryTraceState.unsubscribeStarted,
+      PushRecoveryTraceState.unsubscribeOk,
+      PushRecoveryTraceState.getTokenStarted,
+      PushRecoveryTraceState.getTokenFailed,
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test(
+    'Firebase messaging worker matcher accepts only the production shape',
+    () {
+      expect(
+        isExpectedFirebaseMessagingServiceWorker(
+          origin: 'https://mobsante.netlify.app',
+          scope:
+              'https://mobsante.netlify.app/firebase-cloud-messaging-push-scope',
+          scriptUrl: 'https://mobsante.netlify.app/firebase-messaging-sw.js',
+          state: 'activated',
+        ),
+        isTrue,
+      );
+      expect(
+        isExpectedFirebaseMessagingServiceWorker(
+          origin: 'https://mobsante.netlify.app',
+          scope: 'https://mobsante.netlify.app/',
+          scriptUrl: 'https://mobsante.netlify.app/flutter_service_worker.js',
+          state: 'activated',
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test('concurrent stale recovery calls share one browser attempt', () async {
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      renewedToken: 'renewed-token',
+    );
+
+    final first = gateway.recoverStaleRegistration();
+    final second = gateway.recoverStaleRegistration();
+
+    expect(identical(first, second), isTrue);
+    await Future.wait([first, second]);
+    expect(gateway.recoveryCalls, 1);
+    expect(gateway.unsubscribeCalls, 1);
+    expect(gateway.tokenRequests, 1);
+    expect(gateway.deleteTokenCalls, 0);
+  });
+
   test('forced renewal invalidates a pending reconciliation result', () async {
     final completer = Completer<PushSubscriptionRegistration?>();
     final gateway = _FakePushGateway(
@@ -427,6 +548,7 @@ void main() {
       expect(gateway.permissionStateCalls, 1);
       expect(gateway.activationCalls, 0);
       expect(gateway.reconciliationCalls, 1);
+      expect(gateway.recoveryCalls, 0);
       expect(gateway.renewalCalls, 0);
       expect(gateway.tokenRequests, 1);
       expect(repository.pushSubscriptions['device-test']?.token, 'token-test');
@@ -621,7 +743,7 @@ void main() {
   });
 
   testWidgets(
-    'stale subscription renews its token without permission request or new installation',
+    'stale subscription recovers without deleteToken or permission request',
     (tester) async {
       final logs = <String>[];
       final previousDebugPrint = debugPrint;
@@ -652,27 +774,126 @@ void main() {
           repository.pushSubscriptions['device-test']?.token,
           'renewed-token',
         );
+        expect(
+          repository.pushSubscriptionStates['device-test'],
+          PushSubscriptionState.active,
+        );
         expect(repository.pushSubscriptions.keys, ['device-test']);
         expect(gateway.permissionStateCalls, 1);
         expect(gateway.activationCalls, 0);
         expect(gateway.tokenRequests, 1);
-        expect(gateway.renewalCalls, 1);
+        expect(gateway.recoveryCalls, 1);
+        expect(gateway.unsubscribeCalls, 1);
+        expect(gateway.deleteTokenCalls, 0);
+        expect(gateway.renewalCalls, 0);
         expect(gateway.reconciliationCalls, 0);
         expect(logs, [
-          PushRenewalTraceState.staleRenewalStarted,
-          PushRenewalTraceState.deleteTokenStarted,
-          PushRenewalTraceState.deleteTokenOk,
-          PushRenewalTraceState.getTokenStarted,
-          PushRenewalTraceState.getTokenOk,
-          PushRenewalTraceState.persistStarted,
-          PushRenewalTraceState.persistOk,
-          PushRenewalTraceState.staleRenewalReady,
+          PushRecoveryTraceState.recoveryStarted,
+          PushRecoveryTraceState.unsubscribeStarted,
+          PushRecoveryTraceState.unsubscribeOk,
+          PushRecoveryTraceState.getTokenStarted,
+          PushRecoveryTraceState.getTokenOk,
+          PushRecoveryTraceState.persistStarted,
+          PushRecoveryTraceState.persistOk,
+          PushRecoveryTraceState.recoveryReady,
         ]);
       } finally {
         debugPrint = previousDebugPrint;
       }
     },
   );
+
+  testWidgets('unsubscribe failure stops stale recovery before getToken', (
+    tester,
+  ) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = MockCoordinationRepository();
+      repository.pushSubscriptions['device-test'] =
+          const PushSubscriptionRegistration(
+            installationId: 'device-test',
+            token: 'stale-token',
+            platform: 'web',
+          );
+      repository.pushSubscriptionStates['device-test'] =
+          PushSubscriptionState.stale;
+      final gateway = _FakePushGateway(
+        permission: PushPermissionState.granted,
+        renewedToken: 'must-not-be-created',
+        unsubscribeSucceeds: false,
+      );
+
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      expect(find.text('Activation incomplète'), findsOneWidget);
+      expect(gateway.unsubscribeCalls, 1);
+      expect(gateway.tokenRequests, 0);
+      expect(gateway.deleteTokenCalls, 0);
+      expect(
+        repository.pushSubscriptionStates['device-test'],
+        PushSubscriptionState.stale,
+      );
+      expect(logs, [
+        PushRecoveryTraceState.recoveryStarted,
+        PushRecoveryTraceState.unsubscribeStarted,
+        PushRecoveryTraceState.unsubscribeFailed,
+        PushRecoveryTraceState.recoveryFailed,
+      ]);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
+
+  testWidgets('getToken failure leaves recovered subscription stale', (
+    tester,
+  ) async {
+    final logs = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    try {
+      final repository = MockCoordinationRepository();
+      repository.pushSubscriptions['device-test'] =
+          const PushSubscriptionRegistration(
+            installationId: 'device-test',
+            token: 'stale-token',
+            platform: 'web',
+          );
+      repository.pushSubscriptionStates['device-test'] =
+          PushSubscriptionState.stale;
+      final gateway = _FakePushGateway(
+        permission: PushPermissionState.granted,
+        recoveryGetTokenThrows: true,
+      );
+
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      expect(find.text('Activation incomplète'), findsOneWidget);
+      expect(gateway.unsubscribeCalls, 1);
+      expect(gateway.tokenRequests, 1);
+      expect(gateway.deleteTokenCalls, 0);
+      expect(
+        repository.pushSubscriptionStates['device-test'],
+        PushSubscriptionState.stale,
+      );
+      expect(logs, [
+        PushRecoveryTraceState.recoveryStarted,
+        PushRecoveryTraceState.unsubscribeStarted,
+        PushRecoveryTraceState.unsubscribeOk,
+        PushRecoveryTraceState.getTokenStarted,
+        PushRecoveryTraceState.getTokenFailed,
+        PushRecoveryTraceState.recoveryFailed,
+      ]);
+      expect(logs.where((message) => message.contains('private')), isEmpty);
+    } finally {
+      debugPrint = previousDebugPrint;
+    }
+  });
 
   testWidgets('failed stale persistence traces failure without leaking data', (
     tester,
@@ -695,15 +916,24 @@ void main() {
       await pumpCenter(tester, repository: repository, gateway: gateway);
 
       expect(find.text('Activation incomplète'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        repository.pushSubscriptionStates['device-test'],
+        PushSubscriptionState.stale,
+      );
+      expect(repository.registrationCalls, 1);
+      expect(gateway.recoveryCalls, 1);
+      expect(gateway.unsubscribeCalls, 1);
+      expect(gateway.tokenRequests, 1);
       expect(logs, [
-        PushRenewalTraceState.staleRenewalStarted,
-        PushRenewalTraceState.deleteTokenStarted,
-        PushRenewalTraceState.deleteTokenOk,
-        PushRenewalTraceState.getTokenStarted,
-        PushRenewalTraceState.getTokenOk,
-        PushRenewalTraceState.persistStarted,
-        PushRenewalTraceState.persistFailed,
-        PushRenewalTraceState.staleRenewalFailed,
+        PushRecoveryTraceState.recoveryStarted,
+        PushRecoveryTraceState.unsubscribeStarted,
+        PushRecoveryTraceState.unsubscribeOk,
+        PushRecoveryTraceState.getTokenStarted,
+        PushRecoveryTraceState.getTokenOk,
+        PushRecoveryTraceState.persistStarted,
+        PushRecoveryTraceState.persistFailed,
+        PushRecoveryTraceState.recoveryFailed,
       ]);
       expect(
         logs.where((message) => message.contains('private-renewed-token')),
@@ -714,7 +944,7 @@ void main() {
     }
   });
 
-  testWidgets('stale renewal retry never requests permission', (tester) async {
+  testWidgets('failed stale recovery has no automatic retry', (tester) async {
     final logs = <String>[];
     final previousDebugPrint = debugPrint;
     debugPrint = (message, {wrapWidth}) {
@@ -735,31 +965,22 @@ void main() {
       await pumpCenter(tester, repository: repository, gateway: gateway);
       expect(find.text('Activation incomplète'), findsOneWidget);
       expect(gateway.activationCalls, 0);
-      expect(gateway.renewalCalls, 1);
-
-      gateway.renewedToken = 'renewed-after-retry';
-      await tester.tap(find.byKey(const Key('activate-notifications')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Notifications activées'), findsOneWidget);
+      expect(gateway.recoveryCalls, 1);
+      expect(gateway.unsubscribeCalls, 1);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Activation incomplète'), findsOneWidget);
       expect(gateway.activationCalls, 0);
-      expect(gateway.renewalCalls, 2);
-      expect(gateway.tokenRequests, 2);
+      expect(gateway.recoveryCalls, 1);
+      expect(gateway.unsubscribeCalls, 1);
+      expect(gateway.tokenRequests, 1);
+      expect(gateway.deleteTokenCalls, 0);
       expect(logs, [
-        PushRenewalTraceState.staleRenewalStarted,
-        PushRenewalTraceState.deleteTokenStarted,
-        PushRenewalTraceState.deleteTokenOk,
-        PushRenewalTraceState.getTokenStarted,
-        PushRenewalTraceState.getTokenFailed,
-        PushRenewalTraceState.staleRenewalFailed,
-        PushRenewalTraceState.staleRenewalStarted,
-        PushRenewalTraceState.deleteTokenStarted,
-        PushRenewalTraceState.deleteTokenOk,
-        PushRenewalTraceState.getTokenStarted,
-        PushRenewalTraceState.getTokenOk,
-        PushRenewalTraceState.persistStarted,
-        PushRenewalTraceState.persistOk,
-        PushRenewalTraceState.staleRenewalReady,
+        PushRecoveryTraceState.recoveryStarted,
+        PushRecoveryTraceState.unsubscribeStarted,
+        PushRecoveryTraceState.unsubscribeOk,
+        PushRecoveryTraceState.getTokenStarted,
+        PushRecoveryTraceState.getTokenFailed,
+        PushRecoveryTraceState.recoveryFailed,
       ]);
     } finally {
       debugPrint = previousDebugPrint;
@@ -790,7 +1011,8 @@ void main() {
         repository.pushSubscriptions['device-test']?.token,
         'renewed-token',
       );
-      expect(gateway.renewalCalls, 1);
+      expect(gateway.recoveryCalls, 1);
+      expect(gateway.deleteTokenCalls, 0);
     } finally {
       debugPrint = previousDebugPrint;
     }
@@ -1137,7 +1359,8 @@ class _NotificationNavigationHost extends StatelessWidget {
   );
 }
 
-class _FakePushGateway implements PushNotificationGateway {
+class _FakePushGateway
+    implements PushNotificationGateway, PushStaleRecoveryGateway {
   _FakePushGateway({
     this.permission = PushPermissionState.prompt,
     this.activationState = PushPermissionState.granted,
@@ -1147,6 +1370,8 @@ class _FakePushGateway implements PushNotificationGateway {
     this.reconciliationThrows = false,
     this.reconciliationFuture,
     this.activationFuture,
+    this.unsubscribeSucceeds = true,
+    this.recoveryGetTokenThrows = false,
   });
 
   PushPermissionState permission;
@@ -1157,14 +1382,20 @@ class _FakePushGateway implements PushNotificationGateway {
   final bool reconciliationThrows;
   final Future<PushSubscriptionRegistration?>? reconciliationFuture;
   final Future<PushSubscriptionRegistration?>? activationFuture;
+  final bool unsubscribeSucceeds;
+  final bool recoveryGetTokenThrows;
   int activationCalls = 0;
   int reconciliationCalls = 0;
   int renewalCalls = 0;
+  int recoveryCalls = 0;
+  int unsubscribeCalls = 0;
+  int deleteTokenCalls = 0;
   int permissionStateCalls = 0;
   int tokenRequests = 0;
   int lastBadge = 0;
   Future<PushSubscriptionRegistration?>? _sessionReconciliation;
   Future<PushSubscriptionRegistration?>? _forcedRenewal;
+  Future<PushSubscriptionRegistration?>? _staleRecovery;
   int _registrationGeneration = 0;
 
   @override
@@ -1274,7 +1505,7 @@ class _FakePushGateway implements PushNotificationGateway {
     }
     renewalCalls += 1;
     final refreshedToken = await runTracedStaleTokenRenewal(
-      deleteToken: () async {},
+      deleteToken: () async => deleteTokenCalls += 1,
       getToken: () async {
         tokenRequests += 1;
         return renewedToken;
@@ -1285,6 +1516,46 @@ class _FakePushGateway implements PushNotificationGateway {
     final registration = PushSubscriptionRegistration(
       installationId: installationId,
       token: refreshedToken,
+      platform: 'web',
+    );
+    _sessionReconciliation = Future.value(registration);
+    return registration;
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> recoverStaleRegistration() {
+    final staleRecovery = _staleRecovery;
+    if (staleRecovery != null) return staleRecovery;
+    late final Future<PushSubscriptionRegistration?> guardedRecovery;
+    guardedRecovery = _recoverStaleRegistration().whenComplete(() {
+      if (identical(_staleRecovery, guardedRecovery)) {
+        _staleRecovery = null;
+      }
+    });
+    _staleRecovery = guardedRecovery;
+    return guardedRecovery;
+  }
+
+  Future<PushSubscriptionRegistration?> _recoverStaleRegistration() async {
+    recoveryCalls += 1;
+    final recoveredToken = await runTracedStalePushRecovery(
+      unsubscribe: () async {
+        unsubscribeCalls += 1;
+        return unsubscribeSucceeds;
+      },
+      getToken: () async {
+        tokenRequests += 1;
+        if (recoveryGetTokenThrows) {
+          throw StateError('private-get-error');
+        }
+        return renewedToken;
+      },
+      trace: debugPrint,
+    );
+    if (recoveredToken == null) return null;
+    final registration = PushSubscriptionRegistration(
+      installationId: installationId,
+      token: recoveredToken,
       platform: 'web',
     );
     _sessionReconciliation = Future.value(registration);

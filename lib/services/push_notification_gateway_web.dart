@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:js_interop';
 import 'dart:math';
@@ -17,7 +18,11 @@ export 'push_notification_gateway_stub.dart'
         PushActivationResult,
         PushNotificationGateway,
         PushPermissionState,
+        PushRecoveryTraceState,
         PushRenewalTraceState,
+        PushStaleRecoveryGateway,
+        isExpectedFirebaseMessagingServiceWorker,
+        runTracedStalePushRecovery,
         resolveWebPushPermissionState;
 
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_PUSH_VAPID_KEY');
@@ -34,7 +39,8 @@ external _BadgeNavigator get _badgeNavigator;
 PushNotificationGateway createPushNotificationGateway() =>
     FirebaseWebPushNotificationGateway.instance;
 
-class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
+class FirebaseWebPushNotificationGateway
+    implements PushNotificationGateway, PushStaleRecoveryGateway {
   FirebaseWebPushNotificationGateway._();
 
   static final instance = FirebaseWebPushNotificationGateway._();
@@ -42,6 +48,7 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
   Future<void> _operationTail = Future.value();
   Future<PushSubscriptionRegistration?>? _sessionReconciliation;
   Future<PushSubscriptionRegistration?>? _forcedRenewal;
+  Future<PushSubscriptionRegistration?>? _staleRecovery;
   int _registrationGeneration = 0;
 
   @override
@@ -206,6 +213,90 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
     );
     _sessionReconciliation = Future.value(registration);
     return registration;
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> recoverStaleRegistration() {
+    final staleRecovery = _staleRecovery;
+    if (staleRecovery != null) return staleRecovery;
+    _registrationGeneration += 1;
+    _sessionReconciliation = null;
+    late final Future<PushSubscriptionRegistration?> guardedRecovery;
+    guardedRecovery = _enqueueRegistration(_recoverStaleRegistration)
+        .whenComplete(() {
+          if (identical(_staleRecovery, guardedRecovery)) {
+            _staleRecovery = null;
+          }
+        });
+    _staleRecovery = guardedRecovery;
+    return guardedRecovery;
+  }
+
+  Future<PushSubscriptionRegistration?> _recoverStaleRegistration() async {
+    if (!await FirebaseMessaging.instance.isSupported() ||
+        _vapidKey.trim().isEmpty) {
+      return null;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (_map(settings.authorizationStatus) != PushPermissionState.granted) {
+      return null;
+    }
+    final token = await runTracedStalePushRecovery(
+      unsubscribe: _unsubscribeCurrentPushSubscription,
+      getToken: () => FirebaseMessaging.instance.getToken(vapidKey: _vapidKey),
+      trace: debugPrint,
+    );
+    if (token == null) return null;
+    final registration = PushSubscriptionRegistration(
+      installationId: _installationId(),
+      token: token,
+      platform: 'web',
+    );
+    _sessionReconciliation = Future.value(registration);
+    return registration;
+  }
+
+  Future<bool> _unsubscribeCurrentPushSubscription() async {
+    final serviceWorkers = html.window.navigator.serviceWorker;
+    if (serviceWorkers == null) return false;
+    final registrations = await serviceWorkers.getRegistrations();
+    final messagingRegistrations = <html.ServiceWorkerRegistration>[];
+    for (final candidate in registrations) {
+      if (candidate is! html.ServiceWorkerRegistration) continue;
+      final active = candidate.active;
+      if (active == null) continue;
+      if (isExpectedFirebaseMessagingServiceWorker(
+        origin: html.window.location.origin,
+        scope: candidate.scope ?? '',
+        scriptUrl: active.scriptUrl ?? '',
+        state: active.state ?? '',
+      )) {
+        messagingRegistrations.add(candidate);
+      }
+    }
+    if (messagingRegistrations.length != 1) return false;
+    final pushManager = messagingRegistrations.single.pushManager;
+    if (pushManager == null) return false;
+    final dynamic subscription = await pushManager.getSubscription();
+    if (subscription == null) return true;
+    if (subscription is! html.PushSubscription ||
+        !_hasExpectedVapidKey(subscription)) {
+      return false;
+    }
+    return subscription.unsubscribe();
+  }
+
+  bool _hasExpectedVapidKey(html.PushSubscription subscription) {
+    try {
+      final applicationServerKey = subscription.options?.applicationServerKey;
+      if (applicationServerKey == null) return false;
+      return listEquals(
+        applicationServerKey.asUint8List(),
+        base64Url.decode(_vapidKey),
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
