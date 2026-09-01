@@ -128,7 +128,7 @@ void main() {
     expect(getTokenCalls, 1);
   });
 
-  test('getToken and persist input comparison stays in memory', () {
+  test('getToken and persist input comparison stores enums only', () {
     PushTokenChainDiagnosticSession.startActivation();
     PushTokenChainDiagnosticSession.recordGetToken('private-token-a');
     PushTokenChainDiagnosticSession.recordPersistInput('private-token-a');
@@ -142,6 +142,190 @@ void main() {
     expect(
       PushTokenChainDiagnosticSession.snapshot().getTokenVsPersistInput,
       TokenChainComparison.different,
+    );
+  });
+
+  test(
+    'diagnostic enums survive Professional to Administrator switch',
+    () async {
+      final storage = _InMemoryTokenChainDiagnosticStore();
+      final store = storage.store;
+      PushTokenChainDiagnosticSession.startActivation(store: store);
+      PushTokenChainDiagnosticSession.recordGetToken('private-token');
+      PushTokenChainDiagnosticSession.recordPersistInput(
+        'private-token',
+        store: store,
+      );
+      await verifyPersistedPushTokenForDiagnostic(
+        readFirestoreToken: () async => 'private-token',
+        store: store,
+      );
+
+      PushTokenChainDiagnosticSession.discardVolatileStateForTesting();
+      final snapshot = PushTokenChainDiagnosticSession.consumeSnapshot(
+        store: store,
+      );
+
+      expect(snapshot.getTokenVsPersistInput, TokenChainComparison.identical);
+      expect(
+        snapshot.persistInputVsFirestoreAfterCommit,
+        TokenChainComparison.identical,
+      );
+      expect(storage.value, isNull);
+    },
+  );
+
+  test('new activation clears enums from the preceding activation', () async {
+    final storage = _InMemoryTokenChainDiagnosticStore();
+    final store = storage.store;
+    PushTokenChainDiagnosticSession.startActivation(store: store);
+    PushTokenChainDiagnosticSession.recordGetToken('private-token');
+    PushTokenChainDiagnosticSession.recordPersistInput(
+      'private-token',
+      store: store,
+    );
+    await verifyPersistedPushTokenForDiagnostic(
+      readFirestoreToken: () async => 'private-token',
+      store: store,
+    );
+
+    PushTokenChainDiagnosticSession.startActivation(store: store);
+    PushTokenChainDiagnosticSession.discardVolatileStateForTesting();
+    final snapshot = PushTokenChainDiagnosticSession.consumeSnapshot(
+      store: store,
+    );
+
+    expect(snapshot.getTokenVsPersistInput, TokenChainComparison.indeterminate);
+    expect(
+      snapshot.persistInputVsFirestoreAfterCommit,
+      TokenChainComparison.indeterminate,
+    );
+  });
+
+  test('late verification cannot overwrite a newer activation', () async {
+    final storage = _InMemoryTokenChainDiagnosticStore();
+    final store = storage.store;
+    final oldRead = Completer<Object?>();
+    PushTokenChainDiagnosticSession.startActivation(store: store);
+    PushTokenChainDiagnosticSession.recordGetToken('same-private-token');
+    PushTokenChainDiagnosticSession.recordPersistInput(
+      'same-private-token',
+      store: store,
+    );
+    final oldVerification = verifyPersistedPushTokenForDiagnostic(
+      readFirestoreToken: () => oldRead.future,
+      store: store,
+    );
+
+    PushTokenChainDiagnosticSession.startActivation(store: store);
+    PushTokenChainDiagnosticSession.recordGetToken('same-private-token');
+    PushTokenChainDiagnosticSession.recordPersistInput(
+      'same-private-token',
+      store: store,
+    );
+    await verifyPersistedPushTokenForDiagnostic(
+      readFirestoreToken: () async => 'same-private-token',
+      store: store,
+    );
+    oldRead.complete('different-old-firestore-token');
+    await oldVerification;
+
+    PushTokenChainDiagnosticSession.discardVolatileStateForTesting();
+    final snapshot = PushTokenChainDiagnosticSession.consumeSnapshot(
+      store: store,
+    );
+    expect(snapshot.getTokenVsPersistInput, TokenChainComparison.identical);
+    expect(
+      snapshot.persistInputVsFirestoreAfterCommit,
+      TokenChainComparison.identical,
+    );
+  });
+
+  test('diagnostic consumption clears session enums', () {
+    final storage = _InMemoryTokenChainDiagnosticStore();
+    final store = storage.store;
+    PushTokenChainDiagnosticSession.startActivation(store: store);
+    PushTokenChainDiagnosticSession.recordGetToken('private-token');
+    PushTokenChainDiagnosticSession.recordPersistInput(
+      'private-token',
+      store: store,
+    );
+
+    expect(
+      PushTokenChainDiagnosticSession.consumeSnapshot(
+        store: store,
+      ).getTokenVsPersistInput,
+      TokenChainComparison.identical,
+    );
+    expect(storage.value, isNull);
+    expect(
+      PushTokenChainDiagnosticSession.consumeSnapshot(
+        store: store,
+      ).getTokenVsPersistInput,
+      TokenChainComparison.indeterminate,
+    );
+  });
+
+  test(
+    'session storage never receives token hash or identifier data',
+    () async {
+      const token = 'private-token-that-must-never-be-stored';
+      final storage = _InMemoryTokenChainDiagnosticStore();
+      final store = storage.store;
+      PushTokenChainDiagnosticSession.startActivation(store: store);
+      PushTokenChainDiagnosticSession.recordGetToken(token);
+      PushTokenChainDiagnosticSession.recordPersistInput(token, store: store);
+      await verifyPersistedPushTokenForDiagnostic(
+        readFirestoreToken: () async => token,
+        store: store,
+      );
+
+      expect(storage.writes, isNotEmpty);
+      for (final encoded in storage.writes) {
+        expect(encoded, isNot(contains(token)));
+        expect(encoded, isNot(matches(RegExp(r'[a-f0-9]{64}'))));
+        expect(jsonDecode(encoded), {
+          'getTokenVsPersistInput': 'IDENTIQUE',
+          'persistInputVsFirestoreAfterCommit': anyOf(
+            'IDENTIQUE',
+            'INDÉTERMINÉ',
+          ),
+        });
+      }
+    },
+  );
+
+  test('unavailable session storage has no business effect', () async {
+    final store = PushTokenChainDiagnosticStore(
+      read: () => throw StateError('unavailable'),
+      write: (_) => throw StateError('unavailable'),
+      clear: () => throw StateError('unavailable'),
+    );
+
+    expect(
+      () => PushTokenChainDiagnosticSession.startActivation(store: store),
+      returnsNormally,
+    );
+    PushTokenChainDiagnosticSession.recordGetToken('private-token');
+    expect(
+      () => PushTokenChainDiagnosticSession.recordPersistInput(
+        'private-token',
+        store: store,
+      ),
+      returnsNormally,
+    );
+    await expectLater(
+      verifyPersistedPushTokenForDiagnostic(
+        readFirestoreToken: () async => 'private-token',
+        store: store,
+      ),
+      completes,
+    );
+    expect(
+      PushTokenChainDiagnosticSession.consumeSnapshot(
+        store: store,
+      ).getTokenVsPersistInput,
+      TokenChainComparison.identical,
     );
   });
 
@@ -3513,6 +3697,21 @@ class _DiagnosticTargetedPushTestService extends _FakeTargetedPushTestService
           ActiveSubscriptionsForInstallation.one,
     );
   }
+}
+
+class _InMemoryTokenChainDiagnosticStore {
+  String? value;
+  final List<String> writes = [];
+
+  late final PushTokenChainDiagnosticStore store =
+      PushTokenChainDiagnosticStore(
+        read: () => value,
+        write: (nextValue) {
+          value = nextValue;
+          writes.add(nextValue);
+        },
+        clear: () => value = null,
+      );
 }
 
 class _ActivationTracePushRepository extends MockCoordinationRepository

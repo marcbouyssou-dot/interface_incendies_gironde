@@ -519,7 +519,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     unawaited(() async {
       await PushTokenChainDiagnosticSession.refreshFirestoreVerification();
       await runFcmChainMicroDiagnostic(
-        snapshot: PushTokenChainDiagnosticSession.snapshot(),
+        snapshot: PushTokenChainDiagnosticSession.consumeSnapshot(),
         diagnose:
             ({
               required getTokenVsPersistInput,

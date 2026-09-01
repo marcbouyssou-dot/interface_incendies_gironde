@@ -186,6 +186,7 @@ class FirebaseWebPushNotificationGateway
 
   @override
   Future<PushActivationResult> activate() async {
+    PushTokenChainDiagnosticSession.startActivation();
     if (!await FirebaseMessaging.instance.isSupported()) {
       return const PushActivationResult(PushPermissionState.unsupported);
     }
@@ -207,7 +208,6 @@ class FirebaseWebPushNotificationGateway
     }
     _registrationGeneration += 1;
     final generation = _registrationGeneration;
-    PushTokenChainDiagnosticSession.startActivation();
     late final Future<PushSubscriptionRegistration?> activation;
     activation = _enqueueRegistration(() async {
       final token = await runTracedPushActivationTokenRequest(
