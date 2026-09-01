@@ -9,6 +9,7 @@ import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../services/push_notification_gateway.dart';
 import '../services/platform_administration_service.dart';
+import '../services/push_token_chain_diagnostic.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
@@ -154,34 +155,61 @@ Future<bool> runTracedAdminLocalSubscriptionCheck({
 }
 
 Future<void> runFcmChainMicroDiagnostic({
-  required Future<String?> Function() readLocalFingerprint,
-  required Future<FcmChainDiagnosticResult> Function(String? fingerprint)
+  required PushTokenChainDiagnosticSnapshot snapshot,
+  required Future<FcmChainDiagnosticResult> Function({
+    required FcmChainComparison getTokenVsPersistInput,
+    required FcmChainComparison persistInputVsFirestoreAfterCommit,
+  })
   diagnose,
   required void Function(String state) trace,
 }) async {
   var result = const FcmChainDiagnosticResult.indeterminate();
   try {
-    final fingerprint = await readLocalFingerprint();
-    result = await diagnose(fingerprint);
+    result = await diagnose(
+      getTokenVsPersistInput: _asFcmComparison(snapshot.getTokenVsPersistInput),
+      persistInputVsFirestoreAfterCommit: _asFcmComparison(
+        snapshot.persistInputVsFirestoreAfterCommit,
+      ),
+    );
   } catch (_) {
     // A temporary diagnostic must never affect notification hydration.
   }
   _emitFcmChainComparison(
     trace,
-    'POST_TOKEN_VS_FIRESTORE',
-    result.postTokenVsFirestore,
+    'GETTOKEN_VS_PERSIST_INPUT',
+    result.getTokenVsPersistInput,
   );
   _emitFcmChainComparison(
     trace,
-    'FIRESTORE_SHA256_VS_DISPATCH_SHA256',
-    result.firestoreSha256VsDispatchSha256,
+    'PERSIST_INPUT_VS_FIRESTORE',
+    result.persistInputVsFirestore,
   );
   _emitFcmChainComparison(
     trace,
-    'INSTALLATION_VS_TARGET_RESOLVED',
-    result.installationVsTargetResolved,
+    'FIRESTORE_VS_PREFLIGHT_TARGET',
+    result.firestoreVsPreflightTarget,
   );
+  _emitFcmChainComparison(
+    trace,
+    'PREFLIGHT_TARGET_VS_SEND_TARGET',
+    result.preflightTargetVsSendTarget,
+  );
+  try {
+    trace(
+      'ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION: '
+      '${result.activeSubscriptionsForInstallation.label}',
+    );
+  } catch (_) {
+    // Diagnostic output remains best-effort and non-throwing.
+  }
 }
+
+FcmChainComparison _asFcmComparison(TokenChainComparison comparison) =>
+    switch (comparison) {
+      TokenChainComparison.identical => FcmChainComparison.identical,
+      TokenChainComparison.different => FcmChainComparison.different,
+      TokenChainComparison.indeterminate => FcmChainComparison.indeterminate,
+    };
 
 void _emitFcmChainComparison(
   void Function(String state) trace,
@@ -484,25 +512,27 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     required TargetedPushTestService adminService,
     required String? installationId,
   }) {
-    if (installationId == null ||
-        adminService is! FcmChainDiagnosticService ||
-        _pushGateway is! LocalMessagingTokenFingerprintReader) {
+    if (installationId == null || adminService is! FcmChainDiagnosticService) {
       return;
     }
     final diagnosticService = adminService as FcmChainDiagnosticService;
-    final fingerprintReader =
-        _pushGateway as LocalMessagingTokenFingerprintReader;
-    unawaited(
-      runFcmChainMicroDiagnostic(
-        readLocalFingerprint:
-            fingerprintReader.readLocalMessagingTokenFingerprint,
-        diagnose: (fingerprint) => diagnosticService.diagnoseFcmChain(
-          installationId: installationId,
-          postTokenSha256: fingerprint,
-        ),
+    unawaited(() async {
+      await PushTokenChainDiagnosticSession.refreshFirestoreVerification();
+      await runFcmChainMicroDiagnostic(
+        snapshot: PushTokenChainDiagnosticSession.snapshot(),
+        diagnose:
+            ({
+              required getTokenVsPersistInput,
+              required persistInputVsFirestoreAfterCommit,
+            }) => diagnosticService.diagnoseFcmChain(
+              installationId: installationId,
+              getTokenVsPersistInput: getTokenVsPersistInput,
+              persistInputVsFirestoreAfterCommit:
+                  persistInputVsFirestoreAfterCommit,
+            ),
         trace: debugPrint,
-      ),
-    );
+      );
+    }());
   }
 
   Future<bool> _isCurrentPushHydration(
@@ -633,6 +663,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Future<bool> _persistActivation(
     PushSubscriptionRegistration registration,
   ) async {
+    PushTokenChainDiagnosticSession.recordPersistInput(registration.token);
     try {
       final repository = _repository!;
       final activationRepository =

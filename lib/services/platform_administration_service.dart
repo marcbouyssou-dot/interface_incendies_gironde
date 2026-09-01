@@ -31,27 +31,53 @@ enum FcmChainComparison {
   };
 }
 
+enum ActiveSubscriptionsForInstallation {
+  zero('0'),
+  one('1'),
+  multiple('>1'),
+  indeterminate('INDÉTERMINÉ');
+
+  const ActiveSubscriptionsForInstallation(this.label);
+  final String label;
+
+  static ActiveSubscriptionsForInstallation parse(Object? value) =>
+      switch (value) {
+        '0' => zero,
+        '1' => one,
+        '>1' => multiple,
+        _ => indeterminate,
+      };
+}
+
 class FcmChainDiagnosticResult {
   const FcmChainDiagnosticResult({
-    required this.postTokenVsFirestore,
-    required this.firestoreSha256VsDispatchSha256,
-    required this.installationVsTargetResolved,
+    required this.getTokenVsPersistInput,
+    required this.persistInputVsFirestore,
+    required this.firestoreVsPreflightTarget,
+    required this.preflightTargetVsSendTarget,
+    required this.activeSubscriptionsForInstallation,
   });
 
   const FcmChainDiagnosticResult.indeterminate()
-    : postTokenVsFirestore = FcmChainComparison.indeterminate,
-      firestoreSha256VsDispatchSha256 = FcmChainComparison.indeterminate,
-      installationVsTargetResolved = FcmChainComparison.indeterminate;
+    : getTokenVsPersistInput = FcmChainComparison.indeterminate,
+      persistInputVsFirestore = FcmChainComparison.indeterminate,
+      firestoreVsPreflightTarget = FcmChainComparison.indeterminate,
+      preflightTargetVsSendTarget = FcmChainComparison.indeterminate,
+      activeSubscriptionsForInstallation =
+          ActiveSubscriptionsForInstallation.indeterminate;
 
-  final FcmChainComparison postTokenVsFirestore;
-  final FcmChainComparison firestoreSha256VsDispatchSha256;
-  final FcmChainComparison installationVsTargetResolved;
+  final FcmChainComparison getTokenVsPersistInput;
+  final FcmChainComparison persistInputVsFirestore;
+  final FcmChainComparison firestoreVsPreflightTarget;
+  final FcmChainComparison preflightTargetVsSendTarget;
+  final ActiveSubscriptionsForInstallation activeSubscriptionsForInstallation;
 }
 
 abstract interface class FcmChainDiagnosticService {
   Future<FcmChainDiagnosticResult> diagnoseFcmChain({
     required String installationId,
-    required String? postTokenSha256,
+    required FcmChainComparison getTokenVsPersistInput,
+    required FcmChainComparison persistInputVsFirestoreAfterCommit,
   });
 }
 

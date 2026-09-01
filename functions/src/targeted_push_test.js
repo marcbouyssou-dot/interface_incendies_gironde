@@ -255,7 +255,7 @@ function requireServices(services) {
   }
 }
 
-async function resolveActiveWebSubscription({
+export async function resolveActiveWebSubscription({
   transaction,
   firestore,
   callerUid,

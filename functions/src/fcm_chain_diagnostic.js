@@ -1,12 +1,15 @@
-import {createHash} from 'node:crypto';
-
 import {isPlatformAdministrator} from './platform_administration.js';
+import {resolveActiveWebSubscription} from './targeted_push_test.js';
 
 const IDENTICAL = 'IDENTIQUE';
 const DIFFERENT = 'DIFFÉRENT';
 const INDETERMINATE = 'INDÉTERMINÉ';
-const REQUIRED_FIELDS = Object.freeze(['installationId', 'postTokenSha256']);
-const FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/;
+const COMPARISONS = new Set([IDENTICAL, DIFFERENT, INDETERMINATE]);
+const REQUIRED_FIELDS = Object.freeze([
+  'getTokenVsPersistInput',
+  'installationId',
+  'persistInputVsFirestoreAfterCommit',
+]);
 
 export class FcmChainDiagnosticError extends Error {
   constructor(code, message, options = {}) {
@@ -28,13 +31,51 @@ export async function diagnoseFcmChain({callerUid, data, services}) {
     );
   }
 
-  const state = await services.read(request.installationId);
-  return compareFcmChain({
-    installationId: request.installationId,
-    postTokenSha256: request.postTokenSha256,
-    subscriptions: state.subscriptions,
-    dispatch: state.dispatch,
-  });
+  const result = indeterminateResult();
+  result.GETTOKEN_VS_PERSIST_INPUT = request.getTokenVsPersistInput;
+  let activeSubscriptions;
+  try {
+    activeSubscriptions = await services.readActive(request.installationId);
+  } catch (_) {
+    return result;
+  }
+  if (!Array.isArray(activeSubscriptions)) return result;
+  if (activeSubscriptions.length === 0) {
+    result.ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION = '0';
+    return result;
+  }
+  if (activeSubscriptions.length > 1) {
+    result.ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION = '>1';
+    return result;
+  }
+
+  const firestoreTarget = targetFromCandidate(activeSubscriptions[0]);
+  if (firestoreTarget == null) return result;
+  result.ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION = '1';
+  result.PERSIST_INPUT_VS_FIRESTORE =
+    request.persistInputVsFirestoreAfterCommit;
+
+  try {
+    const preflightTarget = await services.resolve({
+      callerUid,
+      installationId: request.installationId,
+    });
+    result.FIRESTORE_VS_PREFLIGHT_TARGET = compareTargets(
+        firestoreTarget,
+        preflightTarget,
+    );
+    const sendTarget = await services.resolve({
+      callerUid,
+      installationId: request.installationId,
+    });
+    result.PREFLIGHT_TARGET_VS_SEND_TARGET = compareTargets(
+        preflightTarget,
+        sendTarget,
+    );
+  } catch (_) {
+    // Any resolver ambiguity stays indeterminate and never triggers a write.
+  }
+  return result;
 }
 
 export function fcmChainDiagnosticServices({firestore}) {
@@ -48,81 +89,71 @@ export function fcmChainDiagnosticServices({firestore}) {
           : null,
       });
     },
-    async read(installationId) {
+    async readActive(installationId) {
       const subscriptions = await firestore.collection('pushSubscriptions')
           .where('installationId', '==', installationId).get();
-      const dispatch = await firestore.collection('pushTestDispatches')
-          .doc(installationDispatchId(installationId)).get();
-      return {
-        subscriptions: subscriptions.docs.map((snapshot) => ({
-          id: snapshot.id,
-          value: snapshot.data(),
-        })),
-        dispatch: dispatch.exists ? dispatch.data() : null,
-      };
+      return subscriptions.docs
+          .map((snapshot) => ({id: snapshot.id, value: snapshot.data()}))
+          .filter(({value}) =>
+            value?.platform === 'web' && value?.active === true,
+          );
+    },
+    resolve({callerUid, installationId}) {
+      return firestore.runTransaction((transaction) =>
+        resolveActiveWebSubscription({
+          transaction,
+          firestore,
+          callerUid,
+          installationId,
+        }),
+      );
     },
   };
 }
 
-export function compareFcmChain({
-  installationId,
-  postTokenSha256,
-  subscriptions,
-  dispatch,
-}) {
-  const result = indeterminateResult();
-  if (!Array.isArray(subscriptions)) return result;
-  const candidates = subscriptions.filter(({value}) =>
-    value?.platform === 'web',
-  );
-  if (candidates.length !== 1) return result;
-
-  const candidate = candidates[0];
+function targetFromCandidate(candidate) {
+  const id = candidate?.id;
   const token = candidate?.value?.token;
   const uid = candidate?.value?.uid;
-  const storedInstallationId = candidate?.value?.installationId;
-  const subscriptionId = candidate?.id;
+  const installationId = candidate?.value?.installationId;
   if (
+    typeof id !== 'string' ||
+    id === '' ||
     typeof token !== 'string' ||
     token === '' ||
     typeof uid !== 'string' ||
     uid === '' ||
-    typeof storedInstallationId !== 'string' ||
-    storedInstallationId === '' ||
-    typeof subscriptionId !== 'string' ||
-    subscriptionId === ''
+    typeof installationId !== 'string' ||
+    installationId === '' ||
+    id !== `${uid}_${installationId}`
   ) {
-    return result;
+    return null;
   }
+  return {id, token};
+}
 
-  const firestoreFingerprint = fingerprint(token);
-  if (FINGERPRINT_PATTERN.test(postTokenSha256 ?? '')) {
-    result.POST_TOKEN_VS_FIRESTORE = postTokenSha256 === firestoreFingerprint
-      ? IDENTICAL
-      : DIFFERENT;
-  }
+function compareTargets(left, right) {
+  const leftTarget = normalizeTarget(left);
+  const rightTarget = normalizeTarget(right);
+  if (leftTarget == null || rightTarget == null) return INDETERMINATE;
+  return leftTarget.id === rightTarget.id &&
+    leftTarget.token === rightTarget.token
+    ? IDENTICAL
+    : DIFFERENT;
+}
 
-  const dispatchFingerprint = dispatch?.tokenFingerprint;
-  if (FINGERPRINT_PATTERN.test(dispatchFingerprint ?? '')) {
-    result.FIRESTORE_SHA256_VS_DISPATCH_SHA256 =
-      dispatchFingerprint === firestoreFingerprint ? IDENTICAL : DIFFERENT;
-  }
-
-  const expectedSubscriptionId = `${uid}_${installationId}`;
-  const dispatchSubscriptionId = dispatch?.subscriptionId;
+function normalizeTarget(value) {
+  const id = value?.subscriptionId ?? value?.id;
+  const token = value?.token;
   if (
-    storedInstallationId !== installationId ||
-    subscriptionId !== expectedSubscriptionId ||
-    (typeof dispatchSubscriptionId === 'string' &&
-      dispatchSubscriptionId !== subscriptionId)
+    typeof id !== 'string' ||
+    id === '' ||
+    typeof token !== 'string' ||
+    token === ''
   ) {
-    result.INSTALLATION_VS_TARGET_RESOLVED = DIFFERENT;
-  } else if (dispatch == null) {
-    result.INSTALLATION_VS_TARGET_RESOLVED = INDETERMINATE;
-  } else if (typeof dispatchSubscriptionId === 'string') {
-    result.INSTALLATION_VS_TARGET_RESOLVED = IDENTICAL;
+    return null;
   }
-  return result;
+  return {id, token};
 }
 
 function validateRequest(data) {
@@ -139,15 +170,18 @@ function validateRequest(data) {
   ) {
     throw invalidArgument();
   }
-  const postTokenSha256 = data.postTokenSha256;
   if (
-    postTokenSha256 !== null &&
-    (typeof postTokenSha256 !== 'string' ||
-      !FINGERPRINT_PATTERN.test(postTokenSha256))
+    !COMPARISONS.has(data.getTokenVsPersistInput) ||
+    !COMPARISONS.has(data.persistInputVsFirestoreAfterCommit)
   ) {
     throw invalidArgument();
   }
-  return {installationId, postTokenSha256};
+  return {
+    installationId,
+    getTokenVsPersistInput: data.getTokenVsPersistInput,
+    persistInputVsFirestoreAfterCommit:
+      data.persistInputVsFirestoreAfterCommit,
+  };
 }
 
 function requireCaller(callerUid) {
@@ -163,7 +197,8 @@ function requireServices(services) {
   if (
     !services ||
     typeof services.isPlatformAdministrator !== 'function' ||
-    typeof services.read !== 'function'
+    typeof services.readActive !== 'function' ||
+    typeof services.resolve !== 'function'
   ) {
     throw new FcmChainDiagnosticError(
       'internal',
@@ -174,18 +209,12 @@ function requireServices(services) {
 
 function indeterminateResult() {
   return {
-    POST_TOKEN_VS_FIRESTORE: INDETERMINATE,
-    FIRESTORE_SHA256_VS_DISPATCH_SHA256: INDETERMINATE,
-    INSTALLATION_VS_TARGET_RESOLVED: INDETERMINATE,
+    GETTOKEN_VS_PERSIST_INPUT: INDETERMINATE,
+    PERSIST_INPUT_VS_FIRESTORE: INDETERMINATE,
+    FIRESTORE_VS_PREFLIGHT_TARGET: INDETERMINATE,
+    PREFLIGHT_TARGET_VS_SEND_TARGET: INDETERMINATE,
+    ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION: INDETERMINATE,
   };
-}
-
-function fingerprint(value) {
-  return createHash('sha256').update(value).digest('hex');
-}
-
-function installationDispatchId(installationId) {
-  return `installation-${fingerprint(installationId)}`;
 }
 
 function invalidArgument() {

@@ -95,7 +95,8 @@ class FirebasePlatformAdministrationService
   @override
   Future<FcmChainDiagnosticResult> diagnoseFcmChain({
     required String installationId,
-    required String? postTokenSha256,
+    required FcmChainComparison getTokenVsPersistInput,
+    required FcmChainComparison persistInputVsFirestoreAfterCommit,
   }) async {
     _requireCurrentUser();
     try {
@@ -104,21 +105,30 @@ class FirebasePlatformAdministrationService
         region: region,
         data: {
           'installationId': _validInstallationId(installationId),
-          'postTokenSha256': _validOptionalFingerprint(postTokenSha256),
+          'getTokenVsPersistInput': getTokenVsPersistInput.label,
+          'persistInputVsFirestoreAfterCommit':
+              persistInputVsFirestoreAfterCommit.label,
         },
       );
       if (rawResponse is! Map) throw const FormatException();
       final response = rawResponse;
       return FcmChainDiagnosticResult(
-        postTokenVsFirestore: FcmChainComparison.parse(
-          response['POST_TOKEN_VS_FIRESTORE'],
+        getTokenVsPersistInput: FcmChainComparison.parse(
+          response['GETTOKEN_VS_PERSIST_INPUT'],
         ),
-        firestoreSha256VsDispatchSha256: FcmChainComparison.parse(
-          response['FIRESTORE_SHA256_VS_DISPATCH_SHA256'],
+        persistInputVsFirestore: FcmChainComparison.parse(
+          response['PERSIST_INPUT_VS_FIRESTORE'],
         ),
-        installationVsTargetResolved: FcmChainComparison.parse(
-          response['INSTALLATION_VS_TARGET_RESOLVED'],
+        firestoreVsPreflightTarget: FcmChainComparison.parse(
+          response['FIRESTORE_VS_PREFLIGHT_TARGET'],
         ),
+        preflightTargetVsSendTarget: FcmChainComparison.parse(
+          response['PREFLIGHT_TARGET_VS_SEND_TARGET'],
+        ),
+        activeSubscriptionsForInstallation:
+            ActiveSubscriptionsForInstallation.parse(
+              response['ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION'],
+            ),
       );
     } catch (_) {
       return const FcmChainDiagnosticResult.indeterminate();
@@ -332,13 +342,6 @@ class FirebasePlatformAdministrationService
       );
     }
     return value;
-  }
-
-  String? _validOptionalFingerprint(Object? value) {
-    if (value is String && RegExp(r'^[a-f0-9]{64}$').hasMatch(value)) {
-      return value;
-    }
-    return null;
   }
 
   String _validText(Object? value, {required int maximumLength}) {

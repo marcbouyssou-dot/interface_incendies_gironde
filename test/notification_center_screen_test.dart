@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:crypto/crypto.dart';
 import 'package:interface_incendies_gironde/models/app_notification.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
@@ -13,6 +12,7 @@ import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/notification_center_screen.dart';
 import 'package:interface_incendies_gironde/services/push_notification_gateway.dart';
 import 'package:interface_incendies_gironde/services/platform_administration_service.dart';
+import 'package:interface_incendies_gironde/services/push_token_chain_diagnostic.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 
 void main() {
@@ -128,108 +128,125 @@ void main() {
     expect(getTokenCalls, 1);
   });
 
-  test(
-    'local Messaging diagnostic hashes one record in readonly mode',
-    () async {
-      String? transactionMode;
-      final fingerprint = await readUniqueMessagingTokenFingerprint(
-        databaseExists: () async => true,
-        readRecords: (mode) async {
-          transactionMode = mode;
-          return const [
-            <String, Object?>{'token': 'private-local-token'},
-          ];
-        },
-      );
+  test('getToken and persist input comparison stays in memory', () {
+    PushTokenChainDiagnosticSession.startActivation();
+    PushTokenChainDiagnosticSession.recordGetToken('private-token-a');
+    PushTokenChainDiagnosticSession.recordPersistInput('private-token-a');
 
-      expect(transactionMode, 'readonly');
-      expect(
-        fingerprint,
-        sha256.convert(utf8.encode('private-local-token')).toString(),
-      );
-      expect(fingerprint, isNot(contains('private-local-token')));
-    },
-  );
+    final identical = PushTokenChainDiagnosticSession.snapshot();
+    expect(identical.getTokenVsPersistInput, TokenChainComparison.identical);
 
-  test('local Messaging diagnostic does not open an absent database', () async {
-    var recordReads = 0;
-    final fingerprint = await readUniqueMessagingTokenFingerprint(
-      databaseExists: () async => false,
-      readRecords: (_) async {
-        recordReads += 1;
-        return const [];
-      },
-    );
-
-    expect(fingerprint, isNull);
-    expect(recordReads, 0);
-  });
-
-  test(
-    'local Messaging diagnostic rejects absent multiple or malformed records',
-    () async {
-      for (final records in <List<Object?>>[
-        const [],
-        const [
-          <String, Object?>{'token': 'one'},
-          <String, Object?>{'token': 'two'},
-        ],
-        const [<String, Object?>{}],
-        const [
-          <String, Object?>{'token': ''},
-        ],
-        const ['unexpected-record'],
-      ]) {
-        expect(
-          await readUniqueMessagingTokenFingerprint(
-            databaseExists: () async => true,
-            readRecords: (mode) async {
-              expect(mode, 'readonly');
-              return records;
-            },
-          ),
-          isNull,
-        );
-      }
-    },
-  );
-
-  test('local Messaging diagnostic timeout stays indeterminate', () async {
-    final pending = Completer<List<Object?>>();
-
+    PushTokenChainDiagnosticSession.startActivation();
+    PushTokenChainDiagnosticSession.recordGetToken('private-token-a');
+    PushTokenChainDiagnosticSession.recordPersistInput('private-token-b');
     expect(
-      await readUniqueMessagingTokenFingerprint(
-        databaseExists: () async => true,
-        readRecords: (_) => pending.future,
-        timeout: const Duration(milliseconds: 1),
-      ),
-      isNull,
+      PushTokenChainDiagnosticSession.snapshot().getTokenVsPersistInput,
+      TokenChainComparison.different,
     );
   });
 
-  test('FCM micro-diagnostic outputs only the three comparisons', () async {
+  test('post-commit read compares exact persisted value', () async {
+    PushTokenChainDiagnosticSession.startActivation();
+    PushTokenChainDiagnosticSession.recordGetToken('private-token');
+    PushTokenChainDiagnosticSession.recordPersistInput('private-token');
+
+    var firestoreToken = 'private-token';
+    await verifyPersistedPushTokenForDiagnostic(
+      readFirestoreToken: () async => firestoreToken,
+    );
+    expect(
+      PushTokenChainDiagnosticSession.snapshot()
+          .persistInputVsFirestoreAfterCommit,
+      TokenChainComparison.identical,
+    );
+
+    firestoreToken = 'overwritten-token';
+    await PushTokenChainDiagnosticSession.refreshFirestoreVerification();
+    expect(
+      PushTokenChainDiagnosticSession.snapshot()
+          .persistInputVsFirestoreAfterCommit,
+      TokenChainComparison.different,
+    );
+  });
+
+  test('diagnostic read failure has no functional effect', () async {
+    PushTokenChainDiagnosticSession.startActivation();
+    PushTokenChainDiagnosticSession.recordGetToken('private-token');
+    PushTokenChainDiagnosticSession.recordPersistInput('private-token');
+
+    await expectLater(
+      verifyPersistedPushTokenForDiagnostic(
+        readFirestoreToken: () async => throw StateError('private-error'),
+      ),
+      completes,
+    );
+    expect(
+      PushTokenChainDiagnosticSession.snapshot()
+          .persistInputVsFirestoreAfterCommit,
+      TokenChainComparison.indeterminate,
+    );
+  });
+
+  test(
+    'pending diagnostic read times out without a functional effect',
+    () async {
+      PushTokenChainDiagnosticSession.startActivation();
+      PushTokenChainDiagnosticSession.recordGetToken('private-token');
+      PushTokenChainDiagnosticSession.recordPersistInput('private-token');
+      final pending = Completer<Object?>();
+
+      await expectLater(
+        verifyPersistedPushTokenForDiagnostic(
+          readFirestoreToken: () => pending.future,
+          timeout: const Duration(milliseconds: 1),
+        ),
+        completes,
+      );
+      expect(
+        PushTokenChainDiagnosticSession.snapshot()
+            .persistInputVsFirestoreAfterCommit,
+        TokenChainComparison.indeterminate,
+      );
+    },
+  );
+
+  test('FCM micro-diagnostic outputs only the five states', () async {
     final traces = <String>[];
 
     await runFcmChainMicroDiagnostic(
-      readLocalFingerprint: () async =>
-          sha256.convert(utf8.encode('private-local-token')).toString(),
-      diagnose: (fingerprint) async {
-        expect(fingerprint, hasLength(64));
-        return const FcmChainDiagnosticResult(
-          postTokenVsFirestore: FcmChainComparison.identical,
-          firestoreSha256VsDispatchSha256: FcmChainComparison.different,
-          installationVsTargetResolved: FcmChainComparison.indeterminate,
-        );
-      },
+      snapshot: const PushTokenChainDiagnosticSnapshot(
+        getTokenVsPersistInput: TokenChainComparison.identical,
+        persistInputVsFirestoreAfterCommit: TokenChainComparison.different,
+      ),
+      diagnose:
+          ({
+            required getTokenVsPersistInput,
+            required persistInputVsFirestoreAfterCommit,
+          }) async {
+            expect(getTokenVsPersistInput, FcmChainComparison.identical);
+            expect(
+              persistInputVsFirestoreAfterCommit,
+              FcmChainComparison.different,
+            );
+            return const FcmChainDiagnosticResult(
+              getTokenVsPersistInput: FcmChainComparison.identical,
+              persistInputVsFirestore: FcmChainComparison.different,
+              firestoreVsPreflightTarget: FcmChainComparison.identical,
+              preflightTargetVsSendTarget: FcmChainComparison.indeterminate,
+              activeSubscriptionsForInstallation:
+                  ActiveSubscriptionsForInstallation.one,
+            );
+          },
       trace: traces.add,
     );
 
     expect(traces, const [
-      'POST_TOKEN_VS_FIRESTORE: IDENTIQUE',
-      'FIRESTORE_SHA256_VS_DISPATCH_SHA256: DIFFÉRENT',
-      'INSTALLATION_VS_TARGET_RESOLVED: INDÉTERMINÉ',
+      'GETTOKEN_VS_PERSIST_INPUT: IDENTIQUE',
+      'PERSIST_INPUT_VS_FIRESTORE: DIFFÉRENT',
+      'FIRESTORE_VS_PREFLIGHT_TARGET: IDENTIQUE',
+      'PREFLIGHT_TARGET_VS_SEND_TARGET: INDÉTERMINÉ',
+      'ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION: 1',
     ]);
-    expect(traces.join(), isNot(contains('private-local-token')));
   });
 
   test(
@@ -238,21 +255,39 @@ void main() {
       final traces = <String>[];
 
       await runFcmChainMicroDiagnostic(
-        readLocalFingerprint: () async => throw StateError('private-error'),
-        diagnose: (_) async => throw StateError('must-not-run'),
+        snapshot: const PushTokenChainDiagnosticSnapshot(
+          getTokenVsPersistInput: TokenChainComparison.indeterminate,
+          persistInputVsFirestoreAfterCommit:
+              TokenChainComparison.indeterminate,
+        ),
+        diagnose:
+            ({
+              required getTokenVsPersistInput,
+              required persistInputVsFirestoreAfterCommit,
+            }) async => throw StateError('private-error'),
         trace: traces.add,
       );
 
       expect(traces, const [
-        'POST_TOKEN_VS_FIRESTORE: INDÉTERMINÉ',
-        'FIRESTORE_SHA256_VS_DISPATCH_SHA256: INDÉTERMINÉ',
-        'INSTALLATION_VS_TARGET_RESOLVED: INDÉTERMINÉ',
+        'GETTOKEN_VS_PERSIST_INPUT: INDÉTERMINÉ',
+        'PERSIST_INPUT_VS_FIRESTORE: INDÉTERMINÉ',
+        'FIRESTORE_VS_PREFLIGHT_TARGET: INDÉTERMINÉ',
+        'PREFLIGHT_TARGET_VS_SEND_TARGET: INDÉTERMINÉ',
+        'ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION: INDÉTERMINÉ',
       ]);
       expect(traces.join(), isNot(contains('private-error')));
 
       await runFcmChainMicroDiagnostic(
-        readLocalFingerprint: () async => null,
-        diagnose: (_) async => const FcmChainDiagnosticResult.indeterminate(),
+        snapshot: const PushTokenChainDiagnosticSnapshot(
+          getTokenVsPersistInput: TokenChainComparison.indeterminate,
+          persistInputVsFirestoreAfterCommit:
+              TokenChainComparison.indeterminate,
+        ),
+        diagnose:
+            ({
+              required getTokenVsPersistInput,
+              required persistInputVsFirestoreAfterCommit,
+            }) async => const FcmChainDiagnosticResult.indeterminate(),
         trace: (_) => throw StateError('unavailable-trace'),
       );
     },
@@ -1692,9 +1727,13 @@ void main() {
     try {
       final repository = MockCoordinationRepository();
       seedActiveSubscription(repository);
-      final gateway = _DiagnosticPushGateway(
-        fingerprint: List.filled(64, 'a').join(),
+      PushTokenChainDiagnosticSession.startActivation();
+      PushTokenChainDiagnosticSession.recordGetToken('private-token');
+      PushTokenChainDiagnosticSession.recordPersistInput('private-token');
+      await verifyPersistedPushTokenForDiagnostic(
+        readFirestoreToken: () async => 'private-token',
       );
+      final gateway = _FakePushGateway(permission: PushPermissionState.granted);
       final service = _DiagnosticTargetedPushTestService();
 
       await pumpCenter(
@@ -1706,20 +1745,22 @@ void main() {
       await tester.pump();
 
       expect(service.diagnosticCalls, 1);
-      expect(service.postTokenSha256, gateway.fingerprint);
       expect(service.diagnosticInstallationId, 'device-test');
-      expect(gateway.fingerprintReads, 1);
+      expect(service.getTokenVsPersistInput, FcmChainComparison.identical);
+      expect(
+        service.persistInputVsFirestoreAfterCommit,
+        FcmChainComparison.identical,
+      );
       expect(gateway.tokenRequests, 0);
       expect(gateway.deleteTokenCalls, 0);
       expect(gateway.unsubscribeCalls, 0);
       expect(find.text('Diagnostic administrateur'), findsOneWidget);
-      expect(traces, contains('POST_TOKEN_VS_FIRESTORE: IDENTIQUE'));
-      expect(
-        traces,
-        contains('FIRESTORE_SHA256_VS_DISPATCH_SHA256: IDENTIQUE'),
-      );
-      expect(traces, contains('INSTALLATION_VS_TARGET_RESOLVED: IDENTIQUE'));
-      expect(traces.join(), isNot(contains(gateway.fingerprint)));
+      expect(traces, contains('GETTOKEN_VS_PERSIST_INPUT: IDENTIQUE'));
+      expect(traces, contains('PERSIST_INPUT_VS_FIRESTORE: IDENTIQUE'));
+      expect(traces, contains('FIRESTORE_VS_PREFLIGHT_TARGET: IDENTIQUE'));
+      expect(traces, contains('PREFLIGHT_TARGET_VS_SEND_TARGET: IDENTIQUE'));
+      expect(traces, contains('ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION: 1'));
+      expect(traces.join(), isNot(contains('private-token')));
     } finally {
       debugPrint = previousDebugPrint;
     }
@@ -3445,39 +3486,31 @@ class _FakeTargetedPushTestService implements TargetedPushTestService {
   }
 }
 
-class _DiagnosticPushGateway extends _FakePushGateway
-    implements LocalMessagingTokenFingerprintReader {
-  _DiagnosticPushGateway({required this.fingerprint})
-    : super(permission: PushPermissionState.granted);
-
-  final String fingerprint;
-  int fingerprintReads = 0;
-
-  @override
-  Future<String?> readLocalMessagingTokenFingerprint() async {
-    fingerprintReads += 1;
-    return fingerprint;
-  }
-}
-
 class _DiagnosticTargetedPushTestService extends _FakeTargetedPushTestService
     implements FcmChainDiagnosticService {
   int diagnosticCalls = 0;
   String? diagnosticInstallationId;
-  String? postTokenSha256;
+  FcmChainComparison? getTokenVsPersistInput;
+  FcmChainComparison? persistInputVsFirestoreAfterCommit;
 
   @override
   Future<FcmChainDiagnosticResult> diagnoseFcmChain({
     required String installationId,
-    required String? postTokenSha256,
+    required FcmChainComparison getTokenVsPersistInput,
+    required FcmChainComparison persistInputVsFirestoreAfterCommit,
   }) async {
     diagnosticCalls += 1;
     diagnosticInstallationId = installationId;
-    this.postTokenSha256 = postTokenSha256;
+    this.getTokenVsPersistInput = getTokenVsPersistInput;
+    this.persistInputVsFirestoreAfterCommit =
+        persistInputVsFirestoreAfterCommit;
     return const FcmChainDiagnosticResult(
-      postTokenVsFirestore: FcmChainComparison.identical,
-      firestoreSha256VsDispatchSha256: FcmChainComparison.identical,
-      installationVsTargetResolved: FcmChainComparison.identical,
+      getTokenVsPersistInput: FcmChainComparison.identical,
+      persistInputVsFirestore: FcmChainComparison.identical,
+      firestoreVsPreflightTarget: FcmChainComparison.identical,
+      preflightTargetVsSendTarget: FcmChainComparison.identical,
+      activeSubscriptionsForInstallation:
+          ActiveSubscriptionsForInstallation.one,
     );
   }
 }

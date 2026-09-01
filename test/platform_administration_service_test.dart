@@ -155,11 +155,10 @@ void main() {
   });
 
   test(
-    'FCM chain diagnostic sends only fingerprints and parses allowlisted states',
+    'FCM chain diagnostic sends only enums and parses allowlisted states',
     () async {
       final calls = <({String name, Map<String, Object?> data})>[];
       var ordinaryCallableCalls = 0;
-      final fingerprint = List.filled(64, 'a').join();
       final service = FirebasePlatformAdministrationService(
         currentUserUid: () => 'platform-admin',
         callable: (_, _) async {
@@ -172,9 +171,11 @@ void main() {
               expect(region, FirebasePlatformAdministrationService.region);
               calls.add((name: 'diagnoseFcmChain', data: Map.of(data)));
               return {
-                'POST_TOKEN_VS_FIRESTORE': 'IDENTIQUE',
-                'FIRESTORE_SHA256_VS_DISPATCH_SHA256': 'DIFFÉRENT',
-                'INSTALLATION_VS_TARGET_RESOLVED': 'unexpected',
+                'GETTOKEN_VS_PERSIST_INPUT': 'IDENTIQUE',
+                'PERSIST_INPUT_VS_FIRESTORE': 'DIFFÉRENT',
+                'FIRESTORE_VS_PREFLIGHT_TARGET': 'unexpected',
+                'PREFLIGHT_TARGET_VS_SEND_TARGET': 'IDENTIQUE',
+                'ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION': '1',
               };
             },
       );
@@ -182,22 +183,26 @@ void main() {
       expect(ordinaryCallableCalls, 0);
       final result = await service.diagnoseFcmChain(
         installationId: 'current-device',
-        postTokenSha256: fingerprint,
+        getTokenVsPersistInput: FcmChainComparison.identical,
+        persistInputVsFirestoreAfterCommit: FcmChainComparison.different,
       );
 
       expect(calls.single.name, 'diagnoseFcmChain');
       expect(calls.single.data, {
         'installationId': 'current-device',
-        'postTokenSha256': fingerprint,
+        'getTokenVsPersistInput': 'IDENTIQUE',
+        'persistInputVsFirestoreAfterCommit': 'DIFFÉRENT',
       });
-      expect(result.postTokenVsFirestore, FcmChainComparison.identical);
+      expect(result.getTokenVsPersistInput, FcmChainComparison.identical);
+      expect(result.persistInputVsFirestore, FcmChainComparison.different);
       expect(
-        result.firestoreSha256VsDispatchSha256,
-        FcmChainComparison.different,
-      );
-      expect(
-        result.installationVsTargetResolved,
+        result.firestoreVsPreflightTarget,
         FcmChainComparison.indeterminate,
+      );
+      expect(result.preflightTargetVsSendTarget, FcmChainComparison.identical);
+      expect(
+        result.activeSubscriptionsForInstallation,
+        ActiveSubscriptionsForInstallation.one,
       );
     },
   );
@@ -214,17 +219,23 @@ void main() {
 
       final result = await service.diagnoseFcmChain(
         installationId: 'current-device',
-        postTokenSha256: 'invalid',
+        getTokenVsPersistInput: FcmChainComparison.indeterminate,
+        persistInputVsFirestoreAfterCommit: FcmChainComparison.indeterminate,
       );
 
-      expect(result.postTokenVsFirestore, FcmChainComparison.indeterminate);
+      expect(result.getTokenVsPersistInput, FcmChainComparison.indeterminate);
+      expect(result.persistInputVsFirestore, FcmChainComparison.indeterminate);
       expect(
-        result.firestoreSha256VsDispatchSha256,
+        result.firestoreVsPreflightTarget,
         FcmChainComparison.indeterminate,
       );
       expect(
-        result.installationVsTargetResolved,
+        result.preflightTargetVsSendTarget,
         FcmChainComparison.indeterminate,
+      );
+      expect(
+        result.activeSubscriptionsForInstallation,
+        ActiveSubscriptionsForInstallation.indeterminate,
       );
     },
   );

@@ -22,6 +22,7 @@ import '../services/current_mobilization_provider.dart';
 import '../services/firebase_platform_administration_service.dart';
 import '../services/operational_context_provider.dart';
 import '../services/platform_administration_service.dart';
+import '../services/push_token_chain_diagnostic.dart';
 import '../utils/switch_latest.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
@@ -2136,6 +2137,16 @@ class FirestoreCoordinationRepository
         'updatedAt': now,
       }, SetOptions(merge: true));
     });
+    if (onTokenCompared != null) {
+      unawaited(
+        verifyPersistedPushTokenForDiagnostic(
+          readFirestoreToken: () async {
+            final snapshot = await reference.get();
+            return snapshot.data()?['token'];
+          },
+        ),
+      );
+    }
     if (onTokenCompared case final callback?) {
       try {
         callback(tokenChanged ?? true);
