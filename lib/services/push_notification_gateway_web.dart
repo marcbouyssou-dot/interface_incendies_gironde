@@ -17,6 +17,8 @@ export 'push_notification_gateway_stub.dart'
     show
         PushActivationResult,
         PushActivationTraceState,
+        LocalMessagingWorkerCandidate,
+        LocalSubscriptionTraceState,
         PushNotificationGateway,
         PushPermissionState,
         PushRecoveryTraceState,
@@ -27,11 +29,18 @@ export 'push_notification_gateway_stub.dart'
         PushUnsubscribeErrorInfo,
         emitPushActivationPermission,
         emitPushActivationTrace,
+        emitLocalSubscriptionTrace,
         isExpectedFirebaseMessagingServiceWorker,
+        isExpectedFirebaseMessagingWorkerScope,
+        isExpectedFirebaseMessagingWorkerScript,
+        runInstrumentedLocalSubscriptionCheck,
+        runTracedLocalBrowserRead,
         runTracedPushActivationTokenRequest,
         runTracedPushUnsubscribeCall,
         runTracedStalePushRecovery,
         resolveWebPushPermissionState,
+        traceLocalSubscriptionException,
+        traceLocalSubscriptionGuard,
         tracePushUnsubscribePrecheck;
 
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_PUSH_VAPID_KEY');
@@ -122,38 +131,58 @@ class FirebaseWebPushNotificationGateway
   }
 
   @override
-  Future<bool> hasUsableLocalSubscription() async {
-    if (_vapidKey.trim().isEmpty || html.Notification.permission != 'granted') {
-      return false;
-    }
-    final serviceWorkers = html.window.navigator.serviceWorker;
-    if (serviceWorkers == null) return false;
-    try {
-      final registrations = await serviceWorkers.getRegistrations();
-      final messagingRegistrations = <html.ServiceWorkerRegistration>[];
-      for (final candidate in registrations) {
-        if (candidate is! html.ServiceWorkerRegistration) continue;
-        final active = candidate.active;
-        if (active == null) continue;
-        if (isExpectedFirebaseMessagingServiceWorker(
-          origin: html.window.location.origin,
-          scope: candidate.scope ?? '',
-          scriptUrl: active.scriptUrl ?? '',
-          state: active.state ?? '',
-        )) {
-          messagingRegistrations.add(candidate);
-        }
-      }
-      if (messagingRegistrations.length != 1) return false;
-      final pushManager = messagingRegistrations.single.pushManager;
-      if (pushManager == null) return false;
-      final dynamic subscription = await pushManager.getSubscription();
-      return subscription is html.PushSubscription &&
-          _hasExpectedVapidKey(subscription);
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> hasUsableLocalSubscription() =>
+      runInstrumentedLocalSubscriptionCheck(
+        hasVapidConfig: () => _vapidKey.trim().isNotEmpty,
+        permissionGranted: () => html.Notification.permission == 'granted',
+        serviceWorkerApi: () => html.window.navigator.serviceWorker,
+        getRegistrations: (serviceWorkers) => serviceWorkers.getRegistrations(),
+        inspectRegistration: (rawCandidate) {
+          if (rawCandidate is! html.ServiceWorkerRegistration) return null;
+          final active = rawCandidate.active;
+          if (active == null) {
+            return LocalMessagingWorkerCandidate(
+              registration: rawCandidate,
+              active: false,
+              scriptOk: false,
+              scopeOk: false,
+              matches: false,
+            );
+          }
+          final origin = html.window.location.origin;
+          final scope = rawCandidate.scope ?? '';
+          final scriptUrl = active.scriptUrl ?? '';
+          final state = active.state ?? '';
+          return LocalMessagingWorkerCandidate(
+            registration: rawCandidate,
+            active: state == 'activated',
+            scriptOk: isExpectedFirebaseMessagingWorkerScript(
+              origin: origin,
+              scriptUrl: scriptUrl,
+            ),
+            scopeOk: isExpectedFirebaseMessagingWorkerScope(
+              origin: origin,
+              scope: scope,
+            ),
+            matches: isExpectedFirebaseMessagingServiceWorker(
+              origin: origin,
+              scope: scope,
+              scriptUrl: scriptUrl,
+              state: state,
+            ),
+          );
+        },
+        getPushManager: (registration) => registration.pushManager,
+        getSubscription: (pushManager) => pushManager.getSubscription(),
+        asPushSubscription: (candidate) =>
+            candidate is html.PushSubscription ? candidate : null,
+        applicationServerKeyPresent: (subscription) =>
+            subscription.options?.applicationServerKey != null,
+        vapidMatches: _hasExpectedVapidKey,
+        classifyError: (error) =>
+            classifyWebPushUnsubscribeError(error).errorClass,
+        trace: debugPrint,
+      );
 
   @override
   Future<PushActivationResult> activate() async {

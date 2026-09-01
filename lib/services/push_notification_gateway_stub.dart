@@ -2,6 +2,289 @@ import '../models/app_notification.dart';
 
 enum PushPermissionState { unsupported, prompt, granted, denied, misconfigured }
 
+abstract final class LocalSubscriptionTraceState {
+  static const vapidConfigPresent = 'LOCAL_VAPID_CONFIG_PRESENT';
+  static const vapidConfigAbsent = 'LOCAL_VAPID_CONFIG_ABSENT';
+  static const permissionGranted = 'LOCAL_PERMISSION_GRANTED';
+  static const permissionFailed = 'LOCAL_PERMISSION_FAILED';
+  static const serviceWorkerApiAvailable = 'LOCAL_SW_API_AVAILABLE';
+  static const serviceWorkerApiFailed = 'LOCAL_SW_API_FAILED';
+  static const registrationsOk = 'LOCAL_REGISTRATIONS_OK';
+  static const registrationsFailed = 'LOCAL_REGISTRATIONS_FAILED';
+  static const registrationTypeOk = 'LOCAL_REGISTRATION_TYPE_OK';
+  static const registrationTypeFailed = 'LOCAL_REGISTRATION_TYPE_FAILED';
+  static const workerActive = 'LOCAL_WORKER_ACTIVE';
+  static const workerActiveFailed = 'LOCAL_WORKER_FAILED';
+  static const workerScriptOk = 'LOCAL_WORKER_SCRIPT_OK';
+  static const workerScriptFailed = 'LOCAL_WORKER_SCRIPT_FAILED';
+  static const workerScopeOk = 'LOCAL_WORKER_SCOPE_OK';
+  static const workerScopeFailed = 'LOCAL_WORKER_SCOPE_FAILED';
+  static const messagingWorkerCount0 = 'LOCAL_MESSAGING_WORKER_COUNT_0';
+  static const messagingWorkerCount1 = 'LOCAL_MESSAGING_WORKER_COUNT_1';
+  static const messagingWorkerCountMultiple =
+      'LOCAL_MESSAGING_WORKER_COUNT_MULTIPLE';
+  static const pushManagerAvailable = 'LOCAL_PUSH_MANAGER_AVAILABLE';
+  static const pushManagerFailed = 'LOCAL_PUSH_MANAGER_FAILED';
+  static const getSubscriptionOk = 'LOCAL_GET_SUBSCRIPTION_OK';
+  static const getSubscriptionFailed = 'LOCAL_GET_SUBSCRIPTION_FAILED';
+  static const subscriptionPresent = 'LOCAL_SUBSCRIPTION_PRESENT';
+  static const subscriptionAbsent = 'LOCAL_SUBSCRIPTION_ABSENT';
+  static const subscriptionTypeOk = 'LOCAL_SUBSCRIPTION_TYPE_OK';
+  static const subscriptionTypeFailed = 'LOCAL_SUBSCRIPTION_TYPE_FAILED';
+  static const applicationServerKeyPresent =
+      'LOCAL_APPLICATION_SERVER_KEY_PRESENT';
+  static const applicationServerKeyAbsent =
+      'LOCAL_APPLICATION_SERVER_KEY_ABSENT';
+  static const vapidMatch = 'LOCAL_VAPID_MATCH';
+  static const vapidMismatch = 'LOCAL_VAPID_MISMATCH';
+
+  static String messagingWorkerCount(int count) => count == 0
+      ? messagingWorkerCount0
+      : count == 1
+      ? messagingWorkerCount1
+      : messagingWorkerCountMultiple;
+
+  static String exceptionClass(PushUnsubscribeErrorClass errorClass) =>
+      'LOCAL_SUBSCRIPTION_EXCEPTION_CLASS: ${errorClass.label}';
+}
+
+void emitLocalSubscriptionTrace(
+  void Function(String state) trace,
+  String state,
+) {
+  try {
+    trace(state);
+  } catch (_) {
+    // Diagnostic output must never affect local subscription checks.
+  }
+}
+
+void traceLocalSubscriptionGuard({
+  required bool passed,
+  required String successState,
+  required String failureState,
+  required void Function(String state) trace,
+}) {
+  emitLocalSubscriptionTrace(trace, passed ? successState : failureState);
+}
+
+Future<T> runTracedLocalBrowserRead<T>({
+  required Future<T> Function() read,
+  required String successState,
+  required String failureState,
+  required void Function(String state) trace,
+}) async {
+  try {
+    final result = await read();
+    emitLocalSubscriptionTrace(trace, successState);
+    return result;
+  } catch (_) {
+    emitLocalSubscriptionTrace(trace, failureState);
+    rethrow;
+  }
+}
+
+void traceLocalSubscriptionException({
+  required Object error,
+  required PushUnsubscribeErrorClass Function(Object error) classifyError,
+  required void Function(String state) trace,
+}) {
+  PushUnsubscribeErrorClass errorClass;
+  try {
+    errorClass = classifyError(error);
+  } catch (_) {
+    errorClass = PushUnsubscribeErrorClass.other;
+  }
+  emitLocalSubscriptionTrace(
+    trace,
+    LocalSubscriptionTraceState.exceptionClass(errorClass),
+  );
+}
+
+class LocalMessagingWorkerCandidate<T> {
+  const LocalMessagingWorkerCandidate({
+    required this.registration,
+    required this.active,
+    required this.scriptOk,
+    required this.scopeOk,
+    required this.matches,
+  });
+
+  final T registration;
+  final bool active;
+  final bool scriptOk;
+  final bool scopeOk;
+  final bool matches;
+}
+
+Future<bool> runInstrumentedLocalSubscriptionCheck<
+  ServiceWorkerApi,
+  Registration,
+  PushManager,
+  PushSubscription
+>({
+  required bool Function() hasVapidConfig,
+  required bool Function() permissionGranted,
+  required ServiceWorkerApi? Function() serviceWorkerApi,
+  required Future<Iterable<Object?>> Function(ServiceWorkerApi api)
+  getRegistrations,
+  required LocalMessagingWorkerCandidate<Registration>? Function(
+    Object? candidate,
+  )
+  inspectRegistration,
+  required PushManager? Function(Registration registration) getPushManager,
+  required Future<Object?> Function(PushManager manager) getSubscription,
+  required PushSubscription? Function(Object? candidate) asPushSubscription,
+  required bool Function(PushSubscription subscription)
+  applicationServerKeyPresent,
+  required bool Function(PushSubscription subscription) vapidMatches,
+  required PushUnsubscribeErrorClass Function(Object error) classifyError,
+  required void Function(String state) trace,
+}) async {
+  final vapidConfigured = hasVapidConfig();
+  traceLocalSubscriptionGuard(
+    passed: vapidConfigured,
+    successState: LocalSubscriptionTraceState.vapidConfigPresent,
+    failureState: LocalSubscriptionTraceState.vapidConfigAbsent,
+    trace: trace,
+  );
+  if (!vapidConfigured) return false;
+
+  final hasPermission = permissionGranted();
+  traceLocalSubscriptionGuard(
+    passed: hasPermission,
+    successState: LocalSubscriptionTraceState.permissionGranted,
+    failureState: LocalSubscriptionTraceState.permissionFailed,
+    trace: trace,
+  );
+  if (!hasPermission) return false;
+
+  final serviceWorkers = serviceWorkerApi();
+  traceLocalSubscriptionGuard(
+    passed: serviceWorkers != null,
+    successState: LocalSubscriptionTraceState.serviceWorkerApiAvailable,
+    failureState: LocalSubscriptionTraceState.serviceWorkerApiFailed,
+    trace: trace,
+  );
+  if (serviceWorkers == null) return false;
+
+  try {
+    final registrations = await runTracedLocalBrowserRead(
+      read: () => getRegistrations(serviceWorkers),
+      successState: LocalSubscriptionTraceState.registrationsOk,
+      failureState: LocalSubscriptionTraceState.registrationsFailed,
+      trace: trace,
+    );
+    final typedCandidates = <LocalMessagingWorkerCandidate<Registration>>[];
+    for (final rawCandidate in registrations) {
+      final candidate = inspectRegistration(rawCandidate);
+      if (candidate != null) typedCandidates.add(candidate);
+    }
+    traceLocalSubscriptionGuard(
+      passed: typedCandidates.isNotEmpty,
+      successState: LocalSubscriptionTraceState.registrationTypeOk,
+      failureState: LocalSubscriptionTraceState.registrationTypeFailed,
+      trace: trace,
+    );
+
+    final activeCandidates = typedCandidates
+        .where((candidate) => candidate.active)
+        .toList(growable: false);
+    traceLocalSubscriptionGuard(
+      passed: activeCandidates.isNotEmpty,
+      successState: LocalSubscriptionTraceState.workerActive,
+      failureState: LocalSubscriptionTraceState.workerActiveFailed,
+      trace: trace,
+    );
+
+    final scriptCandidates = activeCandidates
+        .where((candidate) => candidate.scriptOk)
+        .toList(growable: false);
+    traceLocalSubscriptionGuard(
+      passed: scriptCandidates.isNotEmpty,
+      successState: LocalSubscriptionTraceState.workerScriptOk,
+      failureState: LocalSubscriptionTraceState.workerScriptFailed,
+      trace: trace,
+    );
+
+    final scopeCandidates = scriptCandidates
+        .where((candidate) => candidate.scopeOk)
+        .toList(growable: false);
+    traceLocalSubscriptionGuard(
+      passed: scopeCandidates.isNotEmpty,
+      successState: LocalSubscriptionTraceState.workerScopeOk,
+      failureState: LocalSubscriptionTraceState.workerScopeFailed,
+      trace: trace,
+    );
+
+    final messagingWorkers = typedCandidates
+        .where((candidate) => candidate.matches)
+        .toList(growable: false);
+    emitLocalSubscriptionTrace(
+      trace,
+      LocalSubscriptionTraceState.messagingWorkerCount(messagingWorkers.length),
+    );
+    if (messagingWorkers.length != 1) return false;
+
+    final pushManager = getPushManager(messagingWorkers.single.registration);
+    traceLocalSubscriptionGuard(
+      passed: pushManager != null,
+      successState: LocalSubscriptionTraceState.pushManagerAvailable,
+      failureState: LocalSubscriptionTraceState.pushManagerFailed,
+      trace: trace,
+    );
+    if (pushManager == null) return false;
+
+    final rawSubscription = await runTracedLocalBrowserRead(
+      read: () => getSubscription(pushManager),
+      successState: LocalSubscriptionTraceState.getSubscriptionOk,
+      failureState: LocalSubscriptionTraceState.getSubscriptionFailed,
+      trace: trace,
+    );
+    traceLocalSubscriptionGuard(
+      passed: rawSubscription != null,
+      successState: LocalSubscriptionTraceState.subscriptionPresent,
+      failureState: LocalSubscriptionTraceState.subscriptionAbsent,
+      trace: trace,
+    );
+    if (rawSubscription == null) return false;
+
+    final subscription = asPushSubscription(rawSubscription);
+    traceLocalSubscriptionGuard(
+      passed: subscription != null,
+      successState: LocalSubscriptionTraceState.subscriptionTypeOk,
+      failureState: LocalSubscriptionTraceState.subscriptionTypeFailed,
+      trace: trace,
+    );
+    if (subscription == null) return false;
+
+    final hasApplicationServerKey = applicationServerKeyPresent(subscription);
+    traceLocalSubscriptionGuard(
+      passed: hasApplicationServerKey,
+      successState: LocalSubscriptionTraceState.applicationServerKeyPresent,
+      failureState: LocalSubscriptionTraceState.applicationServerKeyAbsent,
+      trace: trace,
+    );
+    if (!hasApplicationServerKey) return false;
+
+    final matchesVapid = vapidMatches(subscription);
+    traceLocalSubscriptionGuard(
+      passed: matchesVapid,
+      successState: LocalSubscriptionTraceState.vapidMatch,
+      failureState: LocalSubscriptionTraceState.vapidMismatch,
+      trace: trace,
+    );
+    return matchesVapid;
+  } catch (error) {
+    traceLocalSubscriptionException(
+      error: error,
+      classifyError: classifyError,
+      trace: trace,
+    );
+    return false;
+  }
+}
+
 abstract final class PushActivationTraceState {
   static const activationStarted = 'ACTIVATION_STARTED';
   static const permissionGranted = 'PERMISSION_GRANTED';
@@ -384,6 +667,29 @@ bool isExpectedFirebaseMessagingServiceWorker({
       scopePath == '/firebase-cloud-messaging-push-scope' &&
       scriptUri.path == '/firebase-messaging-sw.js' &&
       state == 'activated';
+}
+
+bool isExpectedFirebaseMessagingWorkerScope({
+  required String origin,
+  required String scope,
+}) {
+  final scopeUri = Uri.tryParse(scope);
+  if (scopeUri == null) return false;
+  final scopePath = scopeUri.path.endsWith('/')
+      ? scopeUri.path.substring(0, scopeUri.path.length - 1)
+      : scopeUri.path;
+  return scopeUri.origin == origin &&
+      scopePath == '/firebase-cloud-messaging-push-scope';
+}
+
+bool isExpectedFirebaseMessagingWorkerScript({
+  required String origin,
+  required String scriptUrl,
+}) {
+  final scriptUri = Uri.tryParse(scriptUrl);
+  return scriptUri != null &&
+      scriptUri.origin == origin &&
+      scriptUri.path == '/firebase-messaging-sw.js';
 }
 
 PushPermissionState resolveWebPushPermissionState({

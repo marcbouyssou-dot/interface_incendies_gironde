@@ -44,4 +44,35 @@ void main() {
     expect(info.name, 'Other');
     expect(info.errorClass, PushUnsubscribeErrorClass.other);
   });
+
+  test('local subscription exception traces DOMException Error and Other', () {
+    final traces = <String>[];
+    final errors = <Object>[
+      _NativeDomException('private-message'.toJS, 'AbortError'.toJS),
+      _NativeJavaScriptError('private-message'.toJS),
+      JSObject(),
+    ];
+
+    for (final error in errors) {
+      traceLocalSubscriptionException(
+        error: error,
+        classifyError: (error) =>
+            classifyWebPushUnsubscribeError(error).errorClass,
+        trace: traces.add,
+      );
+    }
+
+    expect(traces, [
+      LocalSubscriptionTraceState.exceptionClass(
+        PushUnsubscribeErrorClass.domException,
+      ),
+      LocalSubscriptionTraceState.exceptionClass(
+        PushUnsubscribeErrorClass.error,
+      ),
+      LocalSubscriptionTraceState.exceptionClass(
+        PushUnsubscribeErrorClass.other,
+      ),
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
 }

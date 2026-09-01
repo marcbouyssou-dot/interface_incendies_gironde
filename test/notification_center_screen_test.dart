@@ -773,30 +773,524 @@ void main() {
     expect(traces.where((state) => state.contains('private')), isEmpty);
   });
 
-  test(
-    'Firebase messaging worker matcher accepts only the production shape',
-    () {
+  test('Firebase messaging worker matcher accepts only the production shape', () {
+    const origin = 'https://mobsante.netlify.app';
+    const scope = '$origin/firebase-cloud-messaging-push-scope';
+    const script = '$origin/firebase-messaging-sw.js';
+    expect(
+      isExpectedFirebaseMessagingServiceWorker(
+        origin: origin,
+        scope: scope,
+        scriptUrl: script,
+        state: 'activated',
+      ),
+      isTrue,
+    );
+
+    final falseCases = <({String scope, String script, String state})>[
+      (scope: '$origin/', script: script, state: 'activated'),
+      (
+        scope: scope,
+        script: '$origin/flutter_service_worker.js',
+        state: 'activated',
+      ),
+      (
+        scope:
+            'https://deploy-preview-1--mobsante.netlify.app/firebase-cloud-messaging-push-scope',
+        script: script,
+        state: 'activated',
+      ),
+      (
+        scope: scope,
+        script:
+            'https://deploy-preview-1--mobsante.netlify.app/firebase-messaging-sw.js',
+        state: 'activated',
+      ),
+      (scope: scope, script: script, state: 'installing'),
+    ];
+    for (final candidate in falseCases) {
       expect(
         isExpectedFirebaseMessagingServiceWorker(
-          origin: 'https://mobsante.netlify.app',
-          scope:
-              'https://mobsante.netlify.app/firebase-cloud-messaging-push-scope',
-          scriptUrl: 'https://mobsante.netlify.app/firebase-messaging-sw.js',
-          state: 'activated',
-        ),
-        isTrue,
-      );
-      expect(
-        isExpectedFirebaseMessagingServiceWorker(
-          origin: 'https://mobsante.netlify.app',
-          scope: 'https://mobsante.netlify.app/',
-          scriptUrl: 'https://mobsante.netlify.app/flutter_service_worker.js',
-          state: 'activated',
+          origin: origin,
+          scope: candidate.scope,
+          scriptUrl: candidate.script,
+          state: candidate.state,
         ),
         isFalse,
       );
+    }
+    expect(
+      () => isExpectedFirebaseMessagingServiceWorker(
+        origin: origin,
+        scope: 'not a URL',
+        scriptUrl: script,
+        state: 'activated',
+      ),
+      throwsStateError,
+    );
+    expect(
+      () => isExpectedFirebaseMessagingServiceWorker(
+        origin: origin,
+        scope: scope,
+        scriptUrl: 'not a URL',
+        state: 'activated',
+      ),
+      throwsStateError,
+    );
+  });
+
+  test('local subscription instrumentation covers every boolean guard', () {
+    final traces = <String>[];
+    final guards = <({String success, String failure})>[
+      (
+        success: LocalSubscriptionTraceState.vapidConfigPresent,
+        failure: LocalSubscriptionTraceState.vapidConfigAbsent,
+      ),
+      (
+        success: LocalSubscriptionTraceState.permissionGranted,
+        failure: LocalSubscriptionTraceState.permissionFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.serviceWorkerApiAvailable,
+        failure: LocalSubscriptionTraceState.serviceWorkerApiFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.registrationTypeOk,
+        failure: LocalSubscriptionTraceState.registrationTypeFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.workerActive,
+        failure: LocalSubscriptionTraceState.workerActiveFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.workerScriptOk,
+        failure: LocalSubscriptionTraceState.workerScriptFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.workerScopeOk,
+        failure: LocalSubscriptionTraceState.workerScopeFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.pushManagerAvailable,
+        failure: LocalSubscriptionTraceState.pushManagerFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.subscriptionPresent,
+        failure: LocalSubscriptionTraceState.subscriptionAbsent,
+      ),
+      (
+        success: LocalSubscriptionTraceState.subscriptionTypeOk,
+        failure: LocalSubscriptionTraceState.subscriptionTypeFailed,
+      ),
+      (
+        success: LocalSubscriptionTraceState.applicationServerKeyPresent,
+        failure: LocalSubscriptionTraceState.applicationServerKeyAbsent,
+      ),
+      (
+        success: LocalSubscriptionTraceState.vapidMatch,
+        failure: LocalSubscriptionTraceState.vapidMismatch,
+      ),
+    ];
+
+    for (final guard in guards) {
+      traceLocalSubscriptionGuard(
+        passed: true,
+        successState: guard.success,
+        failureState: guard.failure,
+        trace: traces.add,
+      );
+      traceLocalSubscriptionGuard(
+        passed: false,
+        successState: guard.success,
+        failureState: guard.failure,
+        trace: traces.add,
+      );
+    }
+
+    expect(traces, [
+      for (final guard in guards) ...[guard.success, guard.failure],
+    ]);
+  });
+
+  test('local messaging worker count is categorical only', () {
+    expect(
+      LocalSubscriptionTraceState.messagingWorkerCount(0),
+      LocalSubscriptionTraceState.messagingWorkerCount0,
+    );
+    expect(
+      LocalSubscriptionTraceState.messagingWorkerCount(1),
+      LocalSubscriptionTraceState.messagingWorkerCount1,
+    );
+    expect(
+      LocalSubscriptionTraceState.messagingWorkerCount(2),
+      LocalSubscriptionTraceState.messagingWorkerCountMultiple,
+    );
+  });
+
+  test(
+    'instrumented local subscription path succeeds with one API call',
+    () async {
+      final harness = _LocalSubscriptionProbeHarness();
+
+      final result = await harness.run();
+
+      expect(result, isTrue);
+      expect(harness.getRegistrationsCalls, 1);
+      expect(harness.getSubscriptionCalls, 1);
+      expect(harness.traces, [
+        LocalSubscriptionTraceState.vapidConfigPresent,
+        LocalSubscriptionTraceState.permissionGranted,
+        LocalSubscriptionTraceState.serviceWorkerApiAvailable,
+        LocalSubscriptionTraceState.registrationsOk,
+        LocalSubscriptionTraceState.registrationTypeOk,
+        LocalSubscriptionTraceState.workerActive,
+        LocalSubscriptionTraceState.workerScriptOk,
+        LocalSubscriptionTraceState.workerScopeOk,
+        LocalSubscriptionTraceState.messagingWorkerCount1,
+        LocalSubscriptionTraceState.pushManagerAvailable,
+        LocalSubscriptionTraceState.getSubscriptionOk,
+        LocalSubscriptionTraceState.subscriptionPresent,
+        LocalSubscriptionTraceState.subscriptionTypeOk,
+        LocalSubscriptionTraceState.applicationServerKeyPresent,
+        LocalSubscriptionTraceState.vapidMatch,
+      ]);
     },
   );
+
+  test(
+    'instrumented local subscription path covers every false guard',
+    () async {
+      final scenarios =
+          <
+            ({
+              String name,
+              void Function(_LocalSubscriptionProbeHarness harness) configure,
+              String expected,
+            })
+          >[
+            (
+              name: 'VAPID absent',
+              configure: (harness) => harness.vapidConfigured = false,
+              expected: LocalSubscriptionTraceState.vapidConfigAbsent,
+            ),
+            (
+              name: 'permission failed',
+              configure: (harness) => harness.permissionGranted = false,
+              expected: LocalSubscriptionTraceState.permissionFailed,
+            ),
+            (
+              name: 'service worker API absent',
+              configure: (harness) => harness.serviceWorkerApiAvailable = false,
+              expected: LocalSubscriptionTraceState.serviceWorkerApiFailed,
+            ),
+            (
+              name: 'registration type invalid',
+              configure: (harness) => harness.registrations = [Object()],
+              expected: LocalSubscriptionTraceState.registrationTypeFailed,
+            ),
+            (
+              name: 'worker absent',
+              configure: (harness) => harness.registrations = [
+                const _ProbeRegistration(
+                  active: false,
+                  scriptOk: false,
+                  scopeOk: false,
+                  matches: false,
+                ),
+              ],
+              expected: LocalSubscriptionTraceState.workerActiveFailed,
+            ),
+            (
+              name: 'worker state invalid',
+              configure: (harness) => harness.registrations = [
+                const _ProbeRegistration(
+                  active: false,
+                  scriptOk: true,
+                  scopeOk: true,
+                  matches: false,
+                ),
+              ],
+              expected: LocalSubscriptionTraceState.workerActiveFailed,
+            ),
+            (
+              name: 'worker script invalid or cross-origin',
+              configure: (harness) => harness.registrations = [
+                const _ProbeRegistration(
+                  active: true,
+                  scriptOk: false,
+                  scopeOk: true,
+                  matches: false,
+                ),
+              ],
+              expected: LocalSubscriptionTraceState.workerScriptFailed,
+            ),
+            (
+              name: 'worker scope invalid or cross-origin',
+              configure: (harness) => harness.registrations = [
+                const _ProbeRegistration(
+                  active: true,
+                  scriptOk: true,
+                  scopeOk: false,
+                  matches: false,
+                ),
+              ],
+              expected: LocalSubscriptionTraceState.workerScopeFailed,
+            ),
+            (
+              name: 'zero matching worker',
+              configure: (harness) => harness.registrations = [
+                const _ProbeRegistration(
+                  active: true,
+                  scriptOk: true,
+                  scopeOk: true,
+                  matches: false,
+                ),
+              ],
+              expected: LocalSubscriptionTraceState.messagingWorkerCount0,
+            ),
+            (
+              name: 'multiple matching workers',
+              configure: (harness) => harness.registrations = const [
+                _ProbeRegistration(),
+                _ProbeRegistration(),
+              ],
+              expected:
+                  LocalSubscriptionTraceState.messagingWorkerCountMultiple,
+            ),
+            (
+              name: 'push manager absent',
+              configure: (harness) => harness.registrations = const [
+                _ProbeRegistration(pushManagerAvailable: false),
+              ],
+              expected: LocalSubscriptionTraceState.pushManagerFailed,
+            ),
+            (
+              name: 'subscription absent',
+              configure: (harness) => harness.subscription = null,
+              expected: LocalSubscriptionTraceState.subscriptionAbsent,
+            ),
+            (
+              name: 'subscription type invalid',
+              configure: (harness) => harness.subscription = Object(),
+              expected: LocalSubscriptionTraceState.subscriptionTypeFailed,
+            ),
+            (
+              name: 'application server key absent',
+              configure: (harness) => harness.subscription =
+                  const _ProbeSubscription(applicationServerKeyPresent: false),
+              expected: LocalSubscriptionTraceState.applicationServerKeyAbsent,
+            ),
+            (
+              name: 'VAPID mismatch',
+              configure: (harness) => harness.subscription =
+                  const _ProbeSubscription(vapidMatches: false),
+              expected: LocalSubscriptionTraceState.vapidMismatch,
+            ),
+          ];
+
+      for (final scenario in scenarios) {
+        final harness = _LocalSubscriptionProbeHarness();
+        scenario.configure(harness);
+
+        expect(await harness.run(), isFalse, reason: scenario.name);
+        expect(
+          harness.traces,
+          contains(scenario.expected),
+          reason: scenario.name,
+        );
+        expect(harness.getRegistrationsCalls, lessThanOrEqualTo(1));
+        expect(harness.getSubscriptionCalls, lessThanOrEqualTo(1));
+      }
+    },
+  );
+
+  test('worker guard diagnostics stay correlated to one candidate', () async {
+    final harness = _LocalSubscriptionProbeHarness()
+      ..registrations = const [
+        _ProbeRegistration(
+          active: true,
+          scriptOk: false,
+          scopeOk: true,
+          matches: false,
+        ),
+        _ProbeRegistration(
+          active: false,
+          scriptOk: true,
+          scopeOk: true,
+          matches: false,
+        ),
+      ];
+
+    expect(await harness.run(), isFalse);
+    expect(
+      harness.traces,
+      contains(LocalSubscriptionTraceState.workerScriptFailed),
+    );
+    expect(
+      harness.traces,
+      contains(LocalSubscriptionTraceState.workerScopeFailed),
+    );
+    expect(
+      harness.traces,
+      contains(LocalSubscriptionTraceState.messagingWorkerCount0),
+    );
+  });
+
+  test(
+    'instrumented browser exceptions are classified without retry',
+    () async {
+      final scenarios =
+          <({Object error, PushUnsubscribeErrorClass errorClass})>[
+            (
+              error: const _ProbeDomException(),
+              errorClass: PushUnsubscribeErrorClass.domException,
+            ),
+            (
+              error: StateError('private-error-message'),
+              errorClass: PushUnsubscribeErrorClass.error,
+            ),
+            (
+              error: const _ProbeOtherException(),
+              errorClass: PushUnsubscribeErrorClass.other,
+            ),
+          ];
+
+      for (final scenario in scenarios) {
+        final registrationsHarness = _LocalSubscriptionProbeHarness()
+          ..getRegistrationsError = scenario.error;
+        expect(await registrationsHarness.run(), isFalse);
+        expect(registrationsHarness.getRegistrationsCalls, 1);
+        expect(registrationsHarness.getSubscriptionCalls, 0);
+        expect(
+          registrationsHarness.traces,
+          contains(LocalSubscriptionTraceState.registrationsFailed),
+        );
+        expect(
+          registrationsHarness.traces,
+          contains(
+            LocalSubscriptionTraceState.exceptionClass(scenario.errorClass),
+          ),
+        );
+
+        final subscriptionHarness = _LocalSubscriptionProbeHarness()
+          ..getSubscriptionError = scenario.error;
+        expect(await subscriptionHarness.run(), isFalse);
+        expect(subscriptionHarness.getRegistrationsCalls, 1);
+        expect(subscriptionHarness.getSubscriptionCalls, 1);
+        expect(
+          subscriptionHarness.traces,
+          contains(LocalSubscriptionTraceState.getSubscriptionFailed),
+        );
+        expect(
+          subscriptionHarness.traces,
+          contains(
+            LocalSubscriptionTraceState.exceptionClass(scenario.errorClass),
+          ),
+        );
+        expect(
+          subscriptionHarness.traces.where(
+            (state) => state.contains('private-error-message'),
+          ),
+          isEmpty,
+        );
+      }
+    },
+  );
+
+  test('local browser reads call each existing API exactly once', () async {
+    var getRegistrationsCalls = 0;
+    var getSubscriptionCalls = 0;
+    final traces = <String>[];
+
+    await runTracedLocalBrowserRead(
+      read: () async {
+        getRegistrationsCalls += 1;
+        return const <Object>[];
+      },
+      successState: LocalSubscriptionTraceState.registrationsOk,
+      failureState: LocalSubscriptionTraceState.registrationsFailed,
+      trace: traces.add,
+    );
+    await runTracedLocalBrowserRead<Object?>(
+      read: () async {
+        getSubscriptionCalls += 1;
+        return null;
+      },
+      successState: LocalSubscriptionTraceState.getSubscriptionOk,
+      failureState: LocalSubscriptionTraceState.getSubscriptionFailed,
+      trace: traces.add,
+    );
+
+    expect(getRegistrationsCalls, 1);
+    expect(getSubscriptionCalls, 1);
+    expect(traces, [
+      LocalSubscriptionTraceState.registrationsOk,
+      LocalSubscriptionTraceState.getSubscriptionOk,
+    ]);
+  });
+
+  test('failed local browser read stays single and leaks no error', () async {
+    const sensitiveError = 'private-endpoint-token-vapid-fid';
+    var calls = 0;
+    final traces = <String>[];
+
+    await expectLater(
+      runTracedLocalBrowserRead<void>(
+        read: () async {
+          calls += 1;
+          throw StateError(sensitiveError);
+        },
+        successState: LocalSubscriptionTraceState.getSubscriptionOk,
+        failureState: LocalSubscriptionTraceState.getSubscriptionFailed,
+        trace: traces.add,
+      ),
+      throwsStateError,
+    );
+
+    expect(calls, 1);
+    expect(traces, [LocalSubscriptionTraceState.getSubscriptionFailed]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('local subscription exception classes are allowlisted only', () {
+    final traces = <String>[];
+    for (final errorClass in PushUnsubscribeErrorClass.values) {
+      traceLocalSubscriptionException(
+        error: StateError('private-error'),
+        classifyError: (_) => errorClass,
+        trace: traces.add,
+      );
+    }
+
+    expect(traces, [
+      LocalSubscriptionTraceState.exceptionClass(
+        PushUnsubscribeErrorClass.domException,
+      ),
+      LocalSubscriptionTraceState.exceptionClass(
+        PushUnsubscribeErrorClass.error,
+      ),
+      LocalSubscriptionTraceState.exceptionClass(
+        PushUnsubscribeErrorClass.other,
+      ),
+    ]);
+    expect(traces.where((state) => state.contains('private')), isEmpty);
+  });
+
+  test('local trace sink failures have no effect on browser reads', () async {
+    var calls = 0;
+    final result = await runTracedLocalBrowserRead(
+      read: () async {
+        calls += 1;
+        return true;
+      },
+      successState: LocalSubscriptionTraceState.registrationsOk,
+      failureState: LocalSubscriptionTraceState.registrationsFailed,
+      trace: (_) => throw StateError('trace unavailable'),
+    );
+
+    expect(result, isTrue);
+    expect(calls, 1);
+  });
 
   test('concurrent stale recovery calls share one browser attempt', () async {
     final gateway = _FakePushGateway(
@@ -2273,6 +2767,108 @@ void main() {
     expect(find.byTooltip('Marquer comme lue'), findsOneWidget);
     handle.dispose();
   });
+}
+
+class _ProbeServiceWorkerApi {}
+
+class _ProbePushManager {}
+
+class _ProbeDomException implements Exception {
+  const _ProbeDomException();
+}
+
+class _ProbeOtherException implements Exception {
+  const _ProbeOtherException();
+}
+
+class _ProbeRegistration {
+  const _ProbeRegistration({
+    this.active = true,
+    this.scriptOk = true,
+    this.scopeOk = true,
+    this.matches = true,
+    this.pushManagerAvailable = true,
+  });
+
+  final bool active;
+  final bool scriptOk;
+  final bool scopeOk;
+  final bool matches;
+  final bool pushManagerAvailable;
+}
+
+class _ProbeSubscription {
+  const _ProbeSubscription({
+    this.applicationServerKeyPresent = true,
+    this.vapidMatches = true,
+  });
+
+  final bool applicationServerKeyPresent;
+  final bool vapidMatches;
+}
+
+class _LocalSubscriptionProbeHarness {
+  bool vapidConfigured = true;
+  bool permissionGranted = true;
+  bool serviceWorkerApiAvailable = true;
+  List<Object?> registrations = const [_ProbeRegistration()];
+  Object? getRegistrationsError;
+  Object? getSubscriptionError;
+  Object? subscription = const _ProbeSubscription();
+  int getRegistrationsCalls = 0;
+  int getSubscriptionCalls = 0;
+  final List<String> traces = [];
+  final _ProbeServiceWorkerApi _api = _ProbeServiceWorkerApi();
+  final _ProbePushManager _manager = _ProbePushManager();
+
+  Future<bool> run() =>
+      runInstrumentedLocalSubscriptionCheck<
+        _ProbeServiceWorkerApi,
+        _ProbeRegistration,
+        _ProbePushManager,
+        _ProbeSubscription
+      >(
+        hasVapidConfig: () => vapidConfigured,
+        permissionGranted: () => permissionGranted,
+        serviceWorkerApi: () => serviceWorkerApiAvailable ? _api : null,
+        getRegistrations: (_) async {
+          getRegistrationsCalls += 1;
+          final error = getRegistrationsError;
+          if (error != null) throw error;
+          return registrations;
+        },
+        inspectRegistration: (candidate) {
+          if (candidate is! _ProbeRegistration) return null;
+          return LocalMessagingWorkerCandidate<_ProbeRegistration>(
+            registration: candidate,
+            active: candidate.active,
+            scriptOk: candidate.scriptOk,
+            scopeOk: candidate.scopeOk,
+            matches: candidate.matches,
+          );
+        },
+        getPushManager: (registration) =>
+            registration.pushManagerAvailable ? _manager : null,
+        getSubscription: (_) async {
+          getSubscriptionCalls += 1;
+          final error = getSubscriptionError;
+          if (error != null) throw error;
+          return subscription;
+        },
+        asPushSubscription: (candidate) =>
+            candidate is _ProbeSubscription ? candidate : null,
+        applicationServerKeyPresent: (candidate) =>
+            candidate.applicationServerKeyPresent,
+        vapidMatches: (candidate) => candidate.vapidMatches,
+        classifyError: (error) {
+          if (error is _ProbeDomException) {
+            return PushUnsubscribeErrorClass.domException;
+          }
+          if (error is Error) return PushUnsubscribeErrorClass.error;
+          return PushUnsubscribeErrorClass.other;
+        },
+        trace: traces.add,
+      );
 }
 
 class _TestDomException {
