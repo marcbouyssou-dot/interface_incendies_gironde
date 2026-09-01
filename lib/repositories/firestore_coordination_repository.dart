@@ -2144,6 +2144,12 @@ class FirestoreCoordinationRepository
             final snapshot = await reference.get();
             return snapshot.data()?['token'];
           },
+        ).then(
+          (stored) => emitPushTokenChainLifecycleTrace(
+            debugPrint,
+            PushTokenChainLifecycleTraceState.persistCompareStored,
+            value: stored,
+          ),
         ),
       );
     }

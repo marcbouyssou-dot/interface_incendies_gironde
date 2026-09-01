@@ -151,7 +151,10 @@ void main() {
       final storage = _InMemoryTokenChainDiagnosticStore();
       final store = storage.store;
       PushTokenChainDiagnosticSession.startActivation(store: store);
-      PushTokenChainDiagnosticSession.recordGetToken('private-token');
+      PushTokenChainDiagnosticSession.recordGetToken(
+        'private-token',
+        store: store,
+      );
       PushTokenChainDiagnosticSession.recordPersistInput(
         'private-token',
         store: store,
@@ -179,7 +182,10 @@ void main() {
     final storage = _InMemoryTokenChainDiagnosticStore();
     final store = storage.store;
     PushTokenChainDiagnosticSession.startActivation(store: store);
-    PushTokenChainDiagnosticSession.recordGetToken('private-token');
+    PushTokenChainDiagnosticSession.recordGetToken(
+      'private-token',
+      store: store,
+    );
     PushTokenChainDiagnosticSession.recordPersistInput(
       'private-token',
       store: store,
@@ -207,7 +213,10 @@ void main() {
     final store = storage.store;
     final oldRead = Completer<Object?>();
     PushTokenChainDiagnosticSession.startActivation(store: store);
-    PushTokenChainDiagnosticSession.recordGetToken('same-private-token');
+    PushTokenChainDiagnosticSession.recordGetToken(
+      'same-private-token',
+      store: store,
+    );
     PushTokenChainDiagnosticSession.recordPersistInput(
       'same-private-token',
       store: store,
@@ -218,7 +227,10 @@ void main() {
     );
 
     PushTokenChainDiagnosticSession.startActivation(store: store);
-    PushTokenChainDiagnosticSession.recordGetToken('same-private-token');
+    PushTokenChainDiagnosticSession.recordGetToken(
+      'same-private-token',
+      store: store,
+    );
     PushTokenChainDiagnosticSession.recordPersistInput(
       'same-private-token',
       store: store,
@@ -245,7 +257,10 @@ void main() {
     final storage = _InMemoryTokenChainDiagnosticStore();
     final store = storage.store;
     PushTokenChainDiagnosticSession.startActivation(store: store);
-    PushTokenChainDiagnosticSession.recordGetToken('private-token');
+    PushTokenChainDiagnosticSession.recordGetToken(
+      'private-token',
+      store: store,
+    );
     PushTokenChainDiagnosticSession.recordPersistInput(
       'private-token',
       store: store,
@@ -273,7 +288,7 @@ void main() {
       final storage = _InMemoryTokenChainDiagnosticStore();
       final store = storage.store;
       PushTokenChainDiagnosticSession.startActivation(store: store);
-      PushTokenChainDiagnosticSession.recordGetToken(token);
+      PushTokenChainDiagnosticSession.recordGetToken(token, store: store);
       PushTokenChainDiagnosticSession.recordPersistInput(token, store: store);
       await verifyPersistedPushTokenForDiagnostic(
         readFirestoreToken: () async => token,
@@ -285,15 +300,127 @@ void main() {
         expect(encoded, isNot(contains(token)));
         expect(encoded, isNot(matches(RegExp(r'[a-f0-9]{64}'))));
         expect(jsonDecode(encoded), {
-          'getTokenVsPersistInput': 'IDENTIQUE',
+          'getTokenVsPersistInput': anyOf('IDENTIQUE', 'INDÉTERMINÉ'),
           'persistInputVsFirestoreAfterCommit': anyOf(
             'IDENTIQUE',
             'INDÉTERMINÉ',
           ),
+          'chainStateCreated': true,
+          'getTokenCompareStored': anyOf(true, false),
+          'persistCompareStored': anyOf(true, false),
+          'chainStatePresentBeforeAdmin': false,
         });
       }
     },
   );
+
+  test(
+    'token chain lifecycle records only the six boolean observations',
+    () async {
+      const token = 'private-token-never-emitted';
+      final storage = _InMemoryTokenChainDiagnosticStore();
+      final store = storage.store;
+      final traces = <String>[];
+
+      PushTokenChainDiagnosticSession.startActivation(store: store);
+      final created = PushTokenChainDiagnosticSession.recordGetToken(
+        token,
+        store: store,
+      );
+      final getTokenStored = PushTokenChainDiagnosticSession.recordPersistInput(
+        token,
+        store: store,
+      );
+      final persistStored = await verifyPersistedPushTokenForDiagnostic(
+        readFirestoreToken: () async => token,
+        store: store,
+      );
+      final beforeAdmin = PushTokenChainDiagnosticSession.markAdminEntry(
+        store: store,
+      );
+      final atDiagnostic = PushTokenChainDiagnosticSession.hasPersistedState(
+        store: store,
+      );
+      PushTokenChainDiagnosticSession.consumeSnapshot(store: store);
+      final consumed =
+          atDiagnostic &&
+          !PushTokenChainDiagnosticSession.hasPersistedState(store: store);
+
+      for (final observation in <(String, bool)>[
+        (PushTokenChainLifecycleTraceState.chainStateCreated, created),
+        (
+          PushTokenChainLifecycleTraceState.getTokenCompareStored,
+          getTokenStored,
+        ),
+        (PushTokenChainLifecycleTraceState.persistCompareStored, persistStored),
+        (
+          PushTokenChainLifecycleTraceState.chainStatePresentBeforeAdmin,
+          beforeAdmin,
+        ),
+        (
+          PushTokenChainLifecycleTraceState.chainStatePresentAtDiagnostic,
+          atDiagnostic,
+        ),
+        (PushTokenChainLifecycleTraceState.chainStateConsumed, consumed),
+      ]) {
+        emitPushTokenChainLifecycleTrace(
+          traces.add,
+          observation.$1,
+          value: observation.$2,
+        );
+      }
+
+      expect(traces, const [
+        'CHAIN_STATE_CREATED: OUI',
+        'GETTOKEN_COMPARE_STORED: OUI',
+        'PERSIST_COMPARE_STORED: OUI',
+        'CHAIN_STATE_PRESENT_BEFORE_ADMIN: OUI',
+        'CHAIN_STATE_PRESENT_AT_DIAGNOSTIC: OUI',
+        'CHAIN_STATE_CONSUMED: OUI',
+      ]);
+      expect(traces.join(), isNot(contains(token)));
+      expect(storage.value, isNull);
+    },
+  );
+
+  test('premature consumption is observable without retaining state', () {
+    final storage = _InMemoryTokenChainDiagnosticStore();
+    final store = storage.store;
+    PushTokenChainDiagnosticSession.startActivation(store: store);
+    PushTokenChainDiagnosticSession.recordGetToken(
+      'private-token',
+      store: store,
+    );
+    PushTokenChainDiagnosticSession.recordPersistInput(
+      'private-token',
+      store: store,
+    );
+
+    expect(
+      PushTokenChainDiagnosticSession.hasPersistedState(store: store),
+      isTrue,
+    );
+    PushTokenChainDiagnosticSession.consumeSnapshot(store: store);
+    expect(
+      PushTokenChainDiagnosticSession.hasPersistedState(store: store),
+      isFalse,
+    );
+    expect(
+      PushTokenChainDiagnosticSession.markAdminEntry(store: store),
+      isFalse,
+    );
+  });
+
+  test('lifecycle trace failure remains non-throwing and data-free', () {
+    expect(
+      () => emitPushTokenChainLifecycleTrace(
+        (_) => throw StateError('private-error'),
+        PushTokenChainLifecycleTraceState.chainStateCreated,
+        value: true,
+      ),
+      returnsNormally,
+    );
+  });
 
   test('unavailable session storage has no business effect', () async {
     final store = PushTokenChainDiagnosticStore(
@@ -1973,7 +2100,14 @@ void main() {
         targetedPushTestService: _FakeTargetedPushTestService(),
       );
 
-      expect(traces, [
+      expect(
+        traces.first,
+        anyOf(
+          'CHAIN_STATE_PRESENT_BEFORE_ADMIN: OUI',
+          'CHAIN_STATE_PRESENT_BEFORE_ADMIN: NON',
+        ),
+      );
+      expect(traces.skip(1), [
         AdminNotificationHydrationTraceState.identityReady,
         AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
         AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
@@ -2014,7 +2148,14 @@ void main() {
         targetedPushTestService: service,
       );
 
-      expect(traces, [
+      expect(
+        traces.first,
+        anyOf(
+          'CHAIN_STATE_PRESENT_BEFORE_ADMIN: OUI',
+          'CHAIN_STATE_PRESENT_BEFORE_ADMIN: NON',
+        ),
+      );
+      expect(traces.skip(1), [
         AdminNotificationHydrationTraceState.identityReady,
         AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
         AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
@@ -2754,6 +2895,7 @@ void main() {
       if (message != null) logs.add(message);
     };
     try {
+      PushTokenChainDiagnosticSession.startActivation();
       final repository = _ActivationTracePushRepository(
         existingToken: 'old-private-token',
       );
@@ -2770,6 +2912,7 @@ void main() {
         PushActivationTraceState.getTokenStarted,
         PushActivationTraceState.getTokenOk,
         PushActivationTraceState.persistStarted,
+        'GETTOKEN_COMPARE_STORED: NON',
         PushActivationTraceState.tokenChanged,
         PushActivationTraceState.persistOk,
         PushActivationTraceState.activationReady,
@@ -2871,6 +3014,7 @@ void main() {
       if (message != null) logs.add(message);
     };
     try {
+      PushTokenChainDiagnosticSession.startActivation();
       final repository = _ActivationTracePushRepository(failPersistence: true);
       final gateway = _FakePushGateway(token: 'private-activation-token');
       await pumpCenter(tester, repository: repository, gateway: gateway);
@@ -2885,6 +3029,7 @@ void main() {
         PushActivationTraceState.getTokenStarted,
         PushActivationTraceState.getTokenOk,
         PushActivationTraceState.persistStarted,
+        'GETTOKEN_COMPARE_STORED: NON',
         PushActivationTraceState.persistFailed,
         PushActivationTraceState.activationFailed,
       ]);

@@ -19,6 +19,29 @@ enum TokenChainComparison {
   };
 }
 
+abstract final class PushTokenChainLifecycleTraceState {
+  static const chainStateCreated = 'CHAIN_STATE_CREATED';
+  static const getTokenCompareStored = 'GETTOKEN_COMPARE_STORED';
+  static const persistCompareStored = 'PERSIST_COMPARE_STORED';
+  static const chainStatePresentBeforeAdmin =
+      'CHAIN_STATE_PRESENT_BEFORE_ADMIN';
+  static const chainStatePresentAtDiagnostic =
+      'CHAIN_STATE_PRESENT_AT_DIAGNOSTIC';
+  static const chainStateConsumed = 'CHAIN_STATE_CONSUMED';
+}
+
+void emitPushTokenChainLifecycleTrace(
+  void Function(String state) trace,
+  String state, {
+  required bool value,
+}) {
+  try {
+    trace('$state: ${value ? 'OUI' : 'NON'}');
+  } catch (_) {
+    // Temporary diagnostics must never affect notification behavior.
+  }
+}
+
 class PushTokenChainDiagnosticStore {
   const PushTokenChainDiagnosticStore({
     required this.read,
@@ -41,11 +64,25 @@ class PushTokenChainDiagnosticSnapshot {
   final TokenChainComparison persistInputVsFirestoreAfterCommit;
 }
 
+class PushTokenChainDiagnosticLifecycleSnapshot {
+  const PushTokenChainDiagnosticLifecycleSnapshot({
+    required this.chainStateCreated,
+    required this.getTokenCompareStored,
+    required this.persistCompareStored,
+    required this.chainStatePresentBeforeAdmin,
+  });
+
+  final bool chainStateCreated;
+  final bool getTokenCompareStored;
+  final bool persistCompareStored;
+  final bool chainStatePresentBeforeAdmin;
+}
+
 /// Temporary evidence for the controlled activation run.
 ///
 /// Raw values and their fingerprints stay process-memory-only. Only the two
-/// allowlisted comparison enums may cross a process restart through session
-/// storage.
+/// allowlisted comparison enums and four lifecycle booleans may cross a
+/// process restart through session storage.
 abstract final class PushTokenChainDiagnosticSession {
   static final PushTokenChainDiagnosticStore _defaultStore =
       PushTokenChainDiagnosticStore(
@@ -59,6 +96,10 @@ abstract final class PushTokenChainDiagnosticSession {
       TokenChainComparison.indeterminate;
   static TokenChainComparison _persistInputVsFirestoreAfterCommit =
       TokenChainComparison.indeterminate;
+  static bool _chainStateCreated = false;
+  static bool _getTokenCompareStored = false;
+  static bool _persistCompareStored = false;
+  static bool _chainStatePresentBeforeAdmin = false;
   static Future<Object?> Function()? _readFirestoreToken;
   static int _generation = 0;
   static int? _verificationGeneration;
@@ -73,15 +114,23 @@ abstract final class PushTokenChainDiagnosticSession {
     }
   }
 
-  static void recordGetToken(String token) {
+  static bool recordGetToken(
+    String token, {
+    PushTokenChainDiagnosticStore? store,
+  }) {
+    final diagnosticStore = store ?? _defaultStore;
     try {
       _getTokenSha256 = _fingerprint(token);
     } catch (_) {
       _getTokenSha256 = null;
     }
+    _chainStateCreated = true;
+    _persistComparisonEnums(diagnosticStore);
+    final persisted = _readPersistedState(diagnosticStore);
+    return persisted.valid && persisted.lifecycle.chainStateCreated;
   }
 
-  static void recordPersistInput(
+  static bool recordPersistInput(
     String token, {
     PushTokenChainDiagnosticStore? store,
   }) {
@@ -97,14 +146,21 @@ abstract final class PushTokenChainDiagnosticSession {
           : TokenChainComparison.different;
       _persistInputVsFirestoreAfterCommit = TokenChainComparison.indeterminate;
       _readFirestoreToken = null;
+      _getTokenCompareStored =
+          _getTokenVsPersistInput != TokenChainComparison.indeterminate;
+      _persistCompareStored = false;
       _persistComparisonEnums(diagnosticStore);
     } catch (_) {
       _persistInputSha256 = null;
       _getTokenVsPersistInput = TokenChainComparison.indeterminate;
       _persistInputVsFirestoreAfterCommit = TokenChainComparison.indeterminate;
       _readFirestoreToken = null;
+      _getTokenCompareStored = false;
+      _persistCompareStored = false;
       _persistComparisonEnums(diagnosticStore);
     }
+    final persisted = _readPersistedState(diagnosticStore);
+    return persisted.valid && persisted.lifecycle.getTokenCompareStored;
   }
 
   static Future<void> configureFirestoreVerification(
@@ -140,15 +196,41 @@ abstract final class PushTokenChainDiagnosticSession {
                 ? TokenChainComparison.identical
                 : TokenChainComparison.different
           : TokenChainComparison.indeterminate;
+      _persistCompareStored =
+          _persistInputVsFirestoreAfterCommit !=
+          TokenChainComparison.indeterminate;
       _persistComparisonEnums(store ?? _defaultStore);
     } catch (_) {
       if (_generation == verificationGeneration &&
           _persistInputSha256 == expected) {
         _persistInputVsFirestoreAfterCommit =
             TokenChainComparison.indeterminate;
+        _persistCompareStored = false;
         _persistComparisonEnums(store ?? _defaultStore);
       }
     }
+  }
+
+  static bool markAdminEntry({PushTokenChainDiagnosticStore? store}) {
+    final diagnosticStore = store ?? _defaultStore;
+    final persisted = _readPersistedState(diagnosticStore);
+    if (!persisted.valid) return false;
+    _restorePersistedEnumsAndLifecycle(persisted);
+    _chainStatePresentBeforeAdmin = true;
+    _persistComparisonEnums(diagnosticStore);
+    return _readPersistedState(
+      diagnosticStore,
+    ).lifecycle.chainStatePresentBeforeAdmin;
+  }
+
+  static bool hasPersistedState({PushTokenChainDiagnosticStore? store}) =>
+      _readPersistedState(store ?? _defaultStore).valid;
+
+  static PushTokenChainDiagnosticLifecycleSnapshot lifecycleSnapshot({
+    PushTokenChainDiagnosticStore? store,
+  }) {
+    final persisted = _readPersistedState(store ?? _defaultStore);
+    return persisted.lifecycle;
   }
 
   static PushTokenChainDiagnosticSnapshot snapshot() {
@@ -169,7 +251,7 @@ abstract final class PushTokenChainDiagnosticSession {
     PushTokenChainDiagnosticStore? store,
   }) {
     final diagnosticStore = store ?? _defaultStore;
-    final persisted = _readPersistedSnapshot(diagnosticStore);
+    final persisted = _readPersistedState(diagnosticStore).snapshot;
     final current = snapshot();
     final result = PushTokenChainDiagnosticSnapshot(
       getTokenVsPersistInput:
@@ -204,6 +286,10 @@ abstract final class PushTokenChainDiagnosticSession {
           'getTokenVsPersistInput': _getTokenVsPersistInput.label,
           'persistInputVsFirestoreAfterCommit':
               _persistInputVsFirestoreAfterCommit.label,
+          'chainStateCreated': _chainStateCreated,
+          'getTokenCompareStored': _getTokenCompareStored,
+          'persistCompareStored': _persistCompareStored,
+          'chainStatePresentBeforeAdmin': _chainStatePresentBeforeAdmin,
         }),
       );
     } catch (_) {
@@ -211,30 +297,57 @@ abstract final class PushTokenChainDiagnosticSession {
     }
   }
 
-  static PushTokenChainDiagnosticSnapshot _readPersistedSnapshot(
+  static _PersistedTokenChainDiagnosticState _readPersistedState(
     PushTokenChainDiagnosticStore store,
   ) {
     try {
       final encoded = store.read();
-      if (encoded == null) return _indeterminateSnapshot;
+      if (encoded == null) return _invalidPersistedState;
       final decoded = jsonDecode(encoded);
       if (decoded is! Map ||
-          decoded.length != 2 ||
+          decoded.length != 6 ||
           !decoded.containsKey('getTokenVsPersistInput') ||
-          !decoded.containsKey('persistInputVsFirestoreAfterCommit')) {
-        return _indeterminateSnapshot;
+          !decoded.containsKey('persistInputVsFirestoreAfterCommit') ||
+          decoded['chainStateCreated'] is! bool ||
+          decoded['getTokenCompareStored'] is! bool ||
+          decoded['persistCompareStored'] is! bool ||
+          decoded['chainStatePresentBeforeAdmin'] is! bool) {
+        return _invalidPersistedState;
       }
-      return PushTokenChainDiagnosticSnapshot(
-        getTokenVsPersistInput: TokenChainComparison.parse(
-          decoded['getTokenVsPersistInput'],
+      return _PersistedTokenChainDiagnosticState(
+        valid: true,
+        snapshot: PushTokenChainDiagnosticSnapshot(
+          getTokenVsPersistInput: TokenChainComparison.parse(
+            decoded['getTokenVsPersistInput'],
+          ),
+          persistInputVsFirestoreAfterCommit: TokenChainComparison.parse(
+            decoded['persistInputVsFirestoreAfterCommit'],
+          ),
         ),
-        persistInputVsFirestoreAfterCommit: TokenChainComparison.parse(
-          decoded['persistInputVsFirestoreAfterCommit'],
+        lifecycle: PushTokenChainDiagnosticLifecycleSnapshot(
+          chainStateCreated: decoded['chainStateCreated'] as bool,
+          getTokenCompareStored: decoded['getTokenCompareStored'] as bool,
+          persistCompareStored: decoded['persistCompareStored'] as bool,
+          chainStatePresentBeforeAdmin:
+              decoded['chainStatePresentBeforeAdmin'] as bool,
         ),
       );
     } catch (_) {
-      return _indeterminateSnapshot;
+      return _invalidPersistedState;
     }
+  }
+
+  static void _restorePersistedEnumsAndLifecycle(
+    _PersistedTokenChainDiagnosticState persisted,
+  ) {
+    _getTokenVsPersistInput = persisted.snapshot.getTokenVsPersistInput;
+    _persistInputVsFirestoreAfterCommit =
+        persisted.snapshot.persistInputVsFirestoreAfterCommit;
+    _chainStateCreated = persisted.lifecycle.chainStateCreated;
+    _getTokenCompareStored = persisted.lifecycle.getTokenCompareStored;
+    _persistCompareStored = persisted.lifecycle.persistCompareStored;
+    _chainStatePresentBeforeAdmin =
+        persisted.lifecycle.chainStatePresentBeforeAdmin;
   }
 
   static void _resetVolatileState() {
@@ -242,6 +355,10 @@ abstract final class PushTokenChainDiagnosticSession {
     _persistInputSha256 = null;
     _getTokenVsPersistInput = TokenChainComparison.indeterminate;
     _persistInputVsFirestoreAfterCommit = TokenChainComparison.indeterminate;
+    _chainStateCreated = false;
+    _getTokenCompareStored = false;
+    _persistCompareStored = false;
+    _chainStatePresentBeforeAdmin = false;
     _readFirestoreToken = null;
     _verificationGeneration = null;
   }
@@ -251,11 +368,37 @@ abstract final class PushTokenChainDiagnosticSession {
     persistInputVsFirestoreAfterCommit: TokenChainComparison.indeterminate,
   );
 
+  static const _indeterminateLifecycle =
+      PushTokenChainDiagnosticLifecycleSnapshot(
+        chainStateCreated: false,
+        getTokenCompareStored: false,
+        persistCompareStored: false,
+        chainStatePresentBeforeAdmin: false,
+      );
+
+  static const _invalidPersistedState = _PersistedTokenChainDiagnosticState(
+    valid: false,
+    snapshot: _indeterminateSnapshot,
+    lifecycle: _indeterminateLifecycle,
+  );
+
   static String _fingerprint(String token) =>
       sha256.convert(utf8.encode(token)).toString();
 }
 
-Future<void> verifyPersistedPushTokenForDiagnostic({
+class _PersistedTokenChainDiagnosticState {
+  const _PersistedTokenChainDiagnosticState({
+    required this.valid,
+    required this.snapshot,
+    required this.lifecycle,
+  });
+
+  final bool valid;
+  final PushTokenChainDiagnosticSnapshot snapshot;
+  final PushTokenChainDiagnosticLifecycleSnapshot lifecycle;
+}
+
+Future<bool> verifyPersistedPushTokenForDiagnostic({
   required Future<Object?> Function() readFirestoreToken,
   Duration timeout = const Duration(seconds: 15),
   PushTokenChainDiagnosticStore? store,
@@ -266,7 +409,11 @@ Future<void> verifyPersistedPushTokenForDiagnostic({
       timeout: timeout,
       store: store,
     );
+    return PushTokenChainDiagnosticSession.lifecycleSnapshot(
+      store: store,
+    ).persistCompareStored;
   } catch (_) {
     // Diagnostic state must never affect committed persistence.
+    return false;
   }
 }

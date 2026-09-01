@@ -216,7 +216,14 @@ class FirebaseWebPushNotificationGateway
         trace: debugPrint,
       );
       if (token == null || token.isEmpty) return null;
-      PushTokenChainDiagnosticSession.recordGetToken(token);
+      final chainStateCreated = PushTokenChainDiagnosticSession.recordGetToken(
+        token,
+      );
+      emitPushTokenChainLifecycleTrace(
+        debugPrint,
+        PushTokenChainLifecycleTraceState.chainStateCreated,
+        value: chainStateCreated,
+      );
       final registration = PushSubscriptionRegistration(
         installationId: _installationId(),
         token: token,

@@ -307,6 +307,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           ? repository as PushSubscriptionReadRepository
           : null;
       if (widget.targetedPushTestService case final adminService?) {
+        emitPushTokenChainLifecycleTrace(
+          debugPrint,
+          PushTokenChainLifecycleTraceState.chainStatePresentBeforeAdmin,
+          value: PushTokenChainDiagnosticSession.markAdminEntry(),
+        );
         final identityRepository =
             repository is AdministrativeIdentityReadRepository
             ? repository as AdministrativeIdentityReadRepository
@@ -517,9 +522,24 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     }
     final diagnosticService = adminService as FcmChainDiagnosticService;
     unawaited(() async {
+      final presentAtDiagnostic =
+          PushTokenChainDiagnosticSession.hasPersistedState();
+      emitPushTokenChainLifecycleTrace(
+        debugPrint,
+        PushTokenChainLifecycleTraceState.chainStatePresentAtDiagnostic,
+        value: presentAtDiagnostic,
+      );
       await PushTokenChainDiagnosticSession.refreshFirestoreVerification();
+      final snapshot = PushTokenChainDiagnosticSession.consumeSnapshot();
+      emitPushTokenChainLifecycleTrace(
+        debugPrint,
+        PushTokenChainLifecycleTraceState.chainStateConsumed,
+        value:
+            presentAtDiagnostic &&
+            !PushTokenChainDiagnosticSession.hasPersistedState(),
+      );
       await runFcmChainMicroDiagnostic(
-        snapshot: PushTokenChainDiagnosticSession.consumeSnapshot(),
+        snapshot: snapshot,
         diagnose:
             ({
               required getTokenVsPersistInput,
@@ -663,7 +683,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Future<bool> _persistActivation(
     PushSubscriptionRegistration registration,
   ) async {
-    PushTokenChainDiagnosticSession.recordPersistInput(registration.token);
+    final getTokenCompareStored =
+        PushTokenChainDiagnosticSession.recordPersistInput(registration.token);
+    emitPushTokenChainLifecycleTrace(
+      debugPrint,
+      PushTokenChainLifecycleTraceState.getTokenCompareStored,
+      value: getTokenCompareStored,
+    );
     try {
       final repository = _repository!;
       final activationRepository =
