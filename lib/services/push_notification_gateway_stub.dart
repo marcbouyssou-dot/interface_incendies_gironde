@@ -404,7 +404,9 @@ class PushActivationResult {
 
 abstract interface class PushNotificationGateway {
   String get installationId;
+  String? get existingInstallationId;
   Future<PushPermissionState> permissionState();
+  Future<bool> hasUsableLocalSubscription();
   Future<PushActivationResult> activate();
   Future<PushSubscriptionRegistration?> reconcileRegistration();
   Future<PushSubscriptionRegistration?> renewRegistration();
@@ -430,12 +432,18 @@ class UnsupportedPushNotificationGateway implements PushNotificationGateway {
   String get installationId => '';
 
   @override
+  String? get existingInstallationId => null;
+
+  @override
   Future<PushActivationResult> activate() async =>
       const PushActivationResult(PushPermissionState.unsupported);
 
   @override
   Future<PushPermissionState> permissionState() async =>
       PushPermissionState.unsupported;
+
+  @override
+  Future<bool> hasUsableLocalSubscription() async => false;
 
   @override
   Future<PushSubscriptionRegistration?> reconcileRegistration() async => null;

@@ -11,6 +11,8 @@ abstract interface class PlatformAdministrationSessionProvider {
 }
 
 abstract interface class TargetedPushTestService {
+  Future<bool> canSendTargetedPushTest({required String installationId});
+
   Future<void> sendTargetedPushTest({required String installationId});
 }
 

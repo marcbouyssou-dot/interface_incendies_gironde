@@ -42,6 +42,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   bool _hydratingPush = true;
   PushSubscriptionState _subscriptionState = PushSubscriptionState.absent;
   bool _subscriptionPersisted = false;
+  bool _localInstallationReady = false;
+  bool _adminTargetResolvable = false;
+  String? _adminInstallationId;
   bool _activationFailed = false;
   bool _consentDeferred = false;
   bool _sendingPushTest = false;
@@ -61,21 +64,27 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     if (identical(repository, _repository)) return;
     _repository = repository;
     _hydratingPush = true;
+    _localInstallationReady = false;
+    _adminTargetResolvable = false;
+    _adminInstallationId = null;
     _notifications = repository.watchNotifications();
     _preferences = repository.watchNotificationPreferences();
     unawaited(_hydratePushSubscription(repository));
     unawaited(_registrationSubscription?.cancel());
-    _registrationSubscription = _pushGateway.registrationUpdates.listen(
-      (registration) => unawaited(_persistRefreshedRegistration(registration)),
-      onError: (Object _, StackTrace _) {
-        if (mounted) {
-          setState(() {
-            _subscriptionPersisted = false;
-            _activationFailed = true;
-          });
-        }
-      },
-    );
+    if (widget.targetedPushTestService == null) {
+      _registrationSubscription = _pushGateway.registrationUpdates.listen(
+        (registration) =>
+            unawaited(_persistRefreshedRegistration(registration)),
+        onError: (Object _, StackTrace _) {
+          if (mounted) {
+            setState(() {
+              _subscriptionPersisted = false;
+              _activationFailed = true;
+            });
+          }
+        },
+      );
+    }
   }
 
   Future<void> _hydratePushSubscription(
@@ -89,6 +98,60 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       final pushRepository = repository is PushSubscriptionReadRepository
           ? repository as PushSubscriptionReadRepository
           : null;
+      if (widget.targetedPushTestService case final adminService?) {
+        final identityRepository =
+            repository is AdministrativeIdentityReadRepository
+            ? repository as AdministrativeIdentityReadRepository
+            : null;
+        final ownerIdentity = identityRepository == null
+            ? null
+            : await identityRepository.watchAdministrativeUid().first;
+        final adminInstallationId = _pushGateway.existingInstallationId;
+        if (permission == PushPermissionState.granted &&
+            pushRepository != null &&
+            adminInstallationId != null) {
+          subscriptionState = await pushRepository.readPushSubscriptionState(
+            adminInstallationId,
+          );
+        }
+        if (!await _isCurrentPushHydration(
+          repository,
+          identityRepository,
+          ownerIdentity,
+        )) {
+          _finishCancelledPushHydration(repository, permission);
+          return;
+        }
+        final localReady =
+            adminInstallationId != null &&
+            permission == PushPermissionState.granted &&
+            await _pushGateway.hasUsableLocalSubscription();
+        final targetResolvable =
+            localReady &&
+            await adminService.canSendTargetedPushTest(
+              installationId: adminInstallationId,
+            );
+        if (!await _isCurrentPushHydration(
+          repository,
+          identityRepository,
+          ownerIdentity,
+        )) {
+          _finishCancelledPushHydration(repository, permission);
+          return;
+        }
+        setState(() {
+          _permission = permission;
+          _subscriptionState = subscriptionState;
+          _subscriptionPersisted =
+              subscriptionState == PushSubscriptionState.active;
+          _localInstallationReady = localReady;
+          _adminTargetResolvable = targetResolvable;
+          _adminInstallationId = adminInstallationId;
+          _activationFailed = false;
+          _hydratingPush = false;
+        });
+        return;
+      }
       if (permission == PushPermissionState.granted && pushRepository != null) {
         final identityRepository =
             repository is AdministrativeIdentityReadRepository
@@ -177,6 +240,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         _permission = permission;
         _subscriptionState = subscriptionState;
         _subscriptionPersisted = false;
+        _localInstallationReady = false;
+        _adminTargetResolvable = false;
+        _adminInstallationId = null;
         _activationFailed = permission == PushPermissionState.granted;
         _hydratingPush = false;
       });
@@ -192,6 +258,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       _permission = permission;
       _subscriptionState = PushSubscriptionState.absent;
       _subscriptionPersisted = false;
+      _localInstallationReady = false;
+      _adminTargetResolvable = false;
+      _adminInstallationId = null;
       _activationFailed = permission == PushPermissionState.granted;
       _hydratingPush = false;
     });
@@ -376,7 +445,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
   Future<void> _sendPushTest() async {
     final service = widget.targetedPushTestService;
-    if (service == null || !_subscriptionPersisted || _sendingPushTest) return;
+    final adminInstallationId = _adminInstallationId;
+    if (service == null ||
+        adminInstallationId == null ||
+        !_localInstallationReady ||
+        !_adminTargetResolvable ||
+        _hydratingPush ||
+        _sendingPushTest) {
+      return;
+    }
     setState(() => _sendingPushTest = true);
     try {
       final confirmed = await showV5Confirmation(
@@ -393,9 +470,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         confirmKey: const Key('confirm-targeted-push-test'),
       );
       if (confirmed != true || !mounted) return;
-      await service.sendTargetedPushTest(
-        installationId: _pushGateway.installationId,
-      );
+      await service.sendTargetedPushTest(installationId: adminInstallationId);
       if (!mounted) return;
       V5Toast.show(
         context,
@@ -476,7 +551,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 ],
               ),
               const SizedBox(height: V5Spacing.lg),
-              if (!_consentDeferred) ...[
+              if (widget.targetedPushTestService == null &&
+                  !_consentDeferred) ...[
                 _ConsentCard(
                   permission: _permission,
                   activating: _activating || _hydratingPush,
@@ -499,7 +575,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
               if (widget.targetedPushTestService != null) ...[
                 const SizedBox(height: V5Spacing.lg),
                 _AdminPushTestCard(
-                  subscriptionActive: _subscriptionPersisted,
+                  localInstallationReady: _localInstallationReady,
+                  currentIdentityActive: _subscriptionPersisted,
+                  targetResolvable: _adminTargetResolvable,
+                  checking: _hydratingPush,
                   sending: _sendingPushTest,
                   onSend: _sendPushTest,
                 ),
@@ -575,12 +654,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
 class _AdminPushTestCard extends StatelessWidget {
   const _AdminPushTestCard({
-    required this.subscriptionActive,
+    required this.localInstallationReady,
+    required this.currentIdentityActive,
+    required this.targetResolvable,
+    required this.checking,
     required this.sending,
     required this.onSend,
   });
 
-  final bool subscriptionActive;
+  final bool localInstallationReady;
+  final bool currentIdentityActive;
+  final bool targetResolvable;
+  final bool checking;
   final bool sending;
   final VoidCallback onSend;
 
@@ -592,9 +677,25 @@ class _AdminPushTestCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          subscriptionActive
-              ? 'Vérifiez la réception Push sur cette installation.'
-              : 'Un abonnement Push actif est requis sur cette installation.',
+          localInstallationReady
+              ? 'Abonnement local valide sur cette installation.'
+              : 'Aucun abonnement local valide sur cette installation.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: V5Spacing.xs),
+        Text(
+          currentIdentityActive
+              ? 'Identité courante associée à cet abonnement.'
+              : 'Identité courante distincte de l’abonnement de l’installation.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: V5Spacing.xs),
+        Text(
+          checking
+              ? 'Vérification de la cible administrateur…'
+              : targetResolvable
+              ? 'Une cible administrateur ACTIVE a été résolue.'
+              : 'Aucune cible administrateur unique et ACTIVE n’est disponible.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: V5Spacing.sm),
@@ -603,7 +704,13 @@ class _AdminPushTestCard extends StatelessWidget {
           label: sending ? 'Envoi en cours…' : 'Envoyer une notification test',
           icon: Icons.notification_add_outlined,
           tone: V5ButtonTone.secondary,
-          onPressed: subscriptionActive && !sending ? onSend : null,
+          onPressed:
+              localInstallationReady &&
+                  targetResolvable &&
+                  !checking &&
+                  !sending
+              ? onSend
+              : null,
         ),
       ],
     ),

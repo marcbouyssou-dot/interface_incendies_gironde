@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -11,13 +12,15 @@ const ADMIN_UID = 'platform-admin';
 const OWNER_UID = 'professional-a';
 const INSTALLATION_ID = 'device-a';
 const SUBSCRIPTION_ID = `${OWNER_UID}_${INSTALLATION_ID}`;
+const DISPATCH_ID = `installation-${createHash('sha256')
+    .update(INSTALLATION_ID).digest('hex')}`;
 const TOKEN = 'private-fcm-token';
 const NOW = new Date('2026-08-26T08:00:00.000Z');
 
 function request(overrides = {}) {
   return {
     confirmation: 'SEND_ONE_TEST_PUSH',
-    subscriptionId: SUBSCRIPTION_ID,
+    installationId: INSTALLATION_ID,
     ...overrides,
   };
 }
@@ -81,7 +84,7 @@ test('unauthenticated caller is refused before every service call', async () => 
 });
 
 test('non platform administrator is refused without sending', async () => {
-  const {messages, services} = harness({administrator: false});
+  const {firestore, messages, services} = harness({administrator: false});
   await assertCode(
     () => sendTargetedPushTest({
       callerUid: ADMIN_UID,
@@ -91,13 +94,14 @@ test('non platform administrator is refused without sending', async () => {
     'permission-denied',
   );
   assert.equal(messages.length, 0);
+  assert.equal(firestore.queryReads, 0);
 });
 
 test('authorized administrator sends fixed payload then records success', async () => {
   const {firestore, messages, services} = harness({
     send: async ({firestore}) => {
       assert.equal(
-        firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
+        firestore.data(`pushTestDispatches/${DISPATCH_ID}`).status,
         'pending',
       );
       return 'projects/demo/messages/test-message';
@@ -109,7 +113,7 @@ test('authorized administrator sends fixed payload then records success', async 
     services,
   });
 
-  assert.deepEqual(result, {sent: true, subscriptionId: SUBSCRIPTION_ID});
+  assert.deepEqual(result, {sent: true});
   assert.equal(messages.length, 1);
   assert.deepEqual(messages[0], {
     token: TOKEN,
@@ -123,8 +127,17 @@ test('authorized administrator sends fixed payload then records success', async 
   assert.equal(JSON.stringify(result).includes(TOKEN), false);
   assert.deepEqual(firestore.writtenCollections(), ['pushTestDispatches']);
   assert.equal(
-    firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
+    firestore.data(`pushTestDispatches/${DISPATCH_ID}`).status,
     'success',
+  );
+  assert.equal(
+    firestore.data(`pushTestDispatches/${DISPATCH_ID}`).subscriptionId,
+    SUBSCRIPTION_ID,
+  );
+  assert.equal(
+    JSON.stringify(firestore.data(`pushTestDispatches/${DISPATCH_ID}`))
+        .includes(TOKEN),
+    false,
   );
 });
 
@@ -141,7 +154,7 @@ test('invalid FCM token marks both dispatch failed and subscription stale', asyn
     services,
   }));
 
-  const dispatch = firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`);
+  const dispatch = firestore.data(`pushTestDispatches/${DISPATCH_ID}`);
   const subscription = firestore.data(`pushSubscriptions/${SUBSCRIPTION_ID}`);
   assert.equal(dispatch.status, 'failed');
   assert.equal(
@@ -217,11 +230,11 @@ test('a genuinely renewed token can retry a failed send once', async () => {
     services,
   });
 
-  assert.deepEqual(result, {sent: true, subscriptionId: SUBSCRIPTION_ID});
+  assert.deepEqual(result, {sent: true});
   assert.equal(messages.length, 2);
   assert.equal(messages[1].token, 'renewed-private-fcm-token');
   assert.equal(
-    firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
+    firestore.data(`pushTestDispatches/${DISPATCH_ID}`).status,
     'success',
   );
 });
@@ -243,7 +256,7 @@ test('other FCM errors do not mark the subscription stale', async () => {
   assert.equal(subscription.active, true);
   assert.equal(subscription.disabledReason, undefined);
   assert.equal(
-    firestore.data(`pushTestDispatches/${SUBSCRIPTION_ID}`).status,
+    firestore.data(`pushTestDispatches/${DISPATCH_ID}`).status,
     'failed',
   );
 });
@@ -291,8 +304,29 @@ test('absent subscription returns a controlled error', async () => {
   assert.equal(messages.length, 0);
 });
 
-test('inactive subscription returns a controlled error', async () => {
-  const {messages, services} = harness({subscription: {active: false}});
+test('read-only check resolves one active Web subscription without writes', async () => {
+  const {firestore, messages, services} = harness();
+  const result = await sendTargetedPushTest({
+    callerUid: ADMIN_UID,
+    data: request({confirmation: 'CHECK_TEST_PUSH'}),
+    services,
+  });
+
+  assert.deepEqual(result, {available: true});
+  assert.deepEqual(firestore.writtenCollections(), []);
+  assert.equal(messages.length, 0);
+});
+
+test('two active Web subscriptions fail closed without sending or writes', async () => {
+  const {firestore, messages, services} = harness();
+  firestore.seed(`pushSubscriptions/another-owner_${INSTALLATION_ID}`, {
+    uid: 'another-owner',
+    installationId: INSTALLATION_ID,
+    token: 'another-private-token',
+    platform: 'web',
+    active: true,
+  });
+
   await assertCode(
     () => sendTargetedPushTest({
       callerUid: ADMIN_UID,
@@ -302,14 +336,34 @@ test('inactive subscription returns a controlled error', async () => {
     'failed-precondition',
   );
   assert.equal(messages.length, 0);
+  assert.deepEqual(firestore.writtenCollections(), []);
 });
 
-test('explicit confirmation and exact scalar document id are required', async () => {
+test('a stale subscription is refused without sending', async () => {
+  const {firestore, messages, services} = harness({
+    subscription: {active: false},
+  });
+  await assertCode(
+    () => sendTargetedPushTest({
+      callerUid: ADMIN_UID,
+      data: request(),
+      services,
+    }),
+    'not-found',
+  );
+  assert.equal(messages.length, 0);
+  assert.deepEqual(firestore.writtenCollections(), []);
+});
+
+test('explicit confirmation and exact scalar installation id are required', async () => {
   const {services} = harness();
   for (const data of [
     request({confirmation: 'yes'}),
-    request({subscriptionId: ['one', 'two']}),
-    request({subscriptionId: 'collection/document'}),
+    request({installationId: ['one', 'two']}),
+    request({installationId: 'collection/document'}),
+    request({installationId: ` ${INSTALLATION_ID}`}),
+    request({installationId: 'x'.repeat(161)}),
+    {...request(), subscriptionId: SUBSCRIPTION_ID},
     {...request(), title: 'arbitrary'},
   ]) {
     await assertCode(
@@ -337,10 +391,79 @@ test('one-shot claim prevents repeated sends to the same installation', async ()
   assert.equal(messages.length, 1);
 });
 
+test('one-shot survives an owner document change on the same installation', async () => {
+  const {firestore, messages, services} = harness();
+  await sendTargetedPushTest({
+    callerUid: ADMIN_UID,
+    data: request(),
+    services,
+  });
+  firestore.seed(`pushSubscriptions/${SUBSCRIPTION_ID}`, {
+    uid: OWNER_UID,
+    installationId: INSTALLATION_ID,
+    token: TOKEN,
+    platform: 'web',
+    active: false,
+  });
+  firestore.seed(`pushSubscriptions/another-owner_${INSTALLATION_ID}`, {
+    uid: 'another-owner',
+    installationId: INSTALLATION_ID,
+    token: TOKEN,
+    platform: 'web',
+    active: true,
+  });
+
+  await assertCode(
+    () => sendTargetedPushTest({
+      callerUid: ADMIN_UID,
+      data: request(),
+      services,
+    }),
+    'resource-exhausted',
+  );
+  assert.equal(messages.length, 1);
+});
+
+test('legacy successful dispatch blocks a new owner on the installation', async () => {
+  const {firestore, messages, services} = harness();
+  firestore.seed(`pushSubscriptions/${SUBSCRIPTION_ID}`, {
+    uid: OWNER_UID,
+    installationId: INSTALLATION_ID,
+    token: TOKEN,
+    platform: 'web',
+    active: false,
+  });
+  firestore.seed(`pushSubscriptions/another-owner_${INSTALLATION_ID}`, {
+    uid: 'another-owner',
+    installationId: INSTALLATION_ID,
+    token: TOKEN,
+    platform: 'web',
+    active: true,
+  });
+  firestore.seed(`pushTestDispatches/${SUBSCRIPTION_ID}`, {
+    dispatchId: SUBSCRIPTION_ID,
+    subscriptionId: SUBSCRIPTION_ID,
+    status: 'success',
+    tokenFingerprint: createHash('sha256').update(TOKEN).digest('hex'),
+  });
+
+  await assertCode(
+    () => sendTargetedPushTest({
+      callerUid: ADMIN_UID,
+      data: request(),
+      services,
+    }),
+    'resource-exhausted',
+  );
+  assert.equal(messages.length, 0);
+  assert.equal(firestore.data(`pushTestDispatches/${DISPATCH_ID}`), undefined);
+});
+
 class MemoryFirestore {
   constructor() {
     this.documents = new Map();
     this.writes = [];
+    this.queryReads = 0;
   }
 
   seed(path, value) {
@@ -357,9 +480,7 @@ class MemoryFirestore {
   }
 
   collection(name) {
-    return {
-      doc: (id) => new MemoryReference(this, `${name}/${id}`),
-    };
+    return new MemoryCollection(this, name);
   }
 
   async runTransaction(action) {
@@ -368,6 +489,47 @@ class MemoryFirestore {
       create: (reference, value) => reference.create(value),
       update: (reference, value) => reference.update(value),
     });
+  }
+}
+
+class MemoryCollection {
+  constructor(firestore, name, filters = []) {
+    this.firestore = firestore;
+    this.name = name;
+    this.filters = filters;
+  }
+
+  doc(id) {
+    return new MemoryReference(this.firestore, `${this.name}/${id}`);
+  }
+
+  where(field, operator, expected) {
+    assert.equal(operator, '==');
+    return new MemoryCollection(this.firestore, this.name, [
+      ...this.filters,
+      {field, expected},
+    ]);
+  }
+
+  async get() {
+    this.firestore.queryReads += 1;
+    const prefix = `${this.name}/`;
+    const docs = [];
+    for (const [path, value] of this.firestore.documents) {
+      if (!path.startsWith(prefix) || path.slice(prefix.length).includes('/')) {
+        continue;
+      }
+      if (!this.filters.every(({field, expected}) => value?.[field] === expected)) {
+        continue;
+      }
+      const id = path.slice(prefix.length);
+      docs.push({
+        id,
+        ref: new MemoryReference(this.firestore, path),
+        data: () => structuredClone(value),
+      });
+    }
+    return {docs};
   }
 }
 

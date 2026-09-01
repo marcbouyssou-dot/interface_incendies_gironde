@@ -110,14 +110,14 @@ void main() {
   });
 
   test(
-    'targeted push test derives the only target from the current session',
+    'targeted push test sends only the current installation identifier',
     () async {
       final calls = <({String name, Map<String, Object?> data})>[];
       final service = FirebasePlatformAdministrationService(
         currentUserUid: () => 'platform-admin',
         callable: (name, data) async {
           calls.add((name: name, data: Map.of(data)));
-          return {'sent': true, 'subscriptionId': data['subscriptionId']};
+          return {'sent': true};
         },
       );
 
@@ -126,12 +126,33 @@ void main() {
       expect(calls, hasLength(1));
       expect(calls.single.name, 'sendTargetedPushTest');
       expect(calls.single.data, {
-        'subscriptionId': 'platform-admin_current-device',
+        'installationId': 'current-device',
         'confirmation': 'SEND_ONE_TEST_PUSH',
       });
       expect(calls.single.data.keys, hasLength(2));
+      expect(calls.single.data.toString(), isNot(contains('platform-admin')));
     },
   );
+
+  test('targeted push availability uses the read-only confirmation', () async {
+    final calls = <({String name, Map<String, Object?> data})>[];
+    final service = FirebasePlatformAdministrationService(
+      currentUserUid: () => 'platform-admin',
+      callable: (name, data) async {
+        calls.add((name: name, data: Map.of(data)));
+        return {'available': true};
+      },
+    );
+
+    expect(
+      await service.canSendTargetedPushTest(installationId: 'current-device'),
+      isTrue,
+    );
+    expect(calls.single.data, {
+      'installationId': 'current-device',
+      'confirmation': 'CHECK_TEST_PUSH',
+    });
+  });
 
   test('callable failures remain technical and readable', () async {
     final unavailable = FirebasePlatformAdministrationService(

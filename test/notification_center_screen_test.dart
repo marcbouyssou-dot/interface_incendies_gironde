@@ -738,10 +738,40 @@ void main() {
     },
   );
 
-  testWidgets('missing subscription disables the admin test control', (
+  testWidgets('admin can target this device without an identity subscription', (
     tester,
   ) async {
+    final repository = MockCoordinationRepository();
     final service = _FakeTargetedPushTestService();
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: _FakePushGateway(permission: PushPermissionState.granted),
+      targetedPushTestService: service,
+    );
+
+    final button = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('send-targeted-push-test')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(button.onPressed, isNotNull);
+    expect(
+      find.text(
+        'Identité courante distincte de l’abonnement de l’installation.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('activate-notifications')), findsNothing);
+    expect(repository.pushSubscriptions, isEmpty);
+    expect(service.installationIds, isEmpty);
+  });
+
+  testWidgets('unresolved backend target disables the admin test control', (
+    tester,
+  ) async {
+    final service = _FakeTargetedPushTestService(available: false);
     await pumpCenter(
       tester,
       repository: MockCoordinationRepository(),
@@ -756,8 +786,7 @@ void main() {
       ),
     );
     expect(button.onPressed, isNull);
-    expect(find.textContaining('abonnement Push actif'), findsOneWidget);
-    expect(service.installationIds, isEmpty);
+    expect(find.textContaining('Aucune cible administrateur'), findsOneWidget);
   });
 
   testWidgets('cancelled confirmation never calls the targeted push service', (
@@ -869,16 +898,45 @@ void main() {
     },
   );
 
+  testWidgets('failed active reconciliation remains incomplete', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      reconciliationSucceeds: false,
+    );
+
+    await pumpCenter(tester, repository: repository, gateway: gateway);
+
+    expect(find.text('Activation incomplète'), findsOneWidget);
+    expect(gateway.reconciliationCalls, 1);
+  });
+
+  testWidgets('active reconciliation exception remains incomplete', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository();
+    seedActiveSubscription(repository);
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      reconciliationThrows: true,
+    );
+
+    await pumpCenter(tester, repository: repository, gateway: gateway);
+
+    expect(find.text('Activation incomplète'), findsOneWidget);
+    expect(gateway.reconciliationCalls, 1);
+  });
+
   testWidgets(
-    'failed active reconciliation stays unusable and disables admin test',
+    'admin diagnostic never reconciles or persists the current identity',
     (tester) async {
       final repository = MockCoordinationRepository();
       seedActiveSubscription(repository);
-      final gateway = _FakePushGateway(
-        permission: PushPermissionState.granted,
-        reconciliationSucceeds: false,
-      );
-      final service = _FakeTargetedPushTestService();
+      final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+      final service = _FakeTargetedPushTestService(available: false);
 
       await pumpCenter(
         tester,
@@ -887,9 +945,10 @@ void main() {
         targetedPushTestService: service,
       );
 
-      expect(find.text('Activation incomplète'), findsOneWidget);
-      expect(gateway.reconciliationCalls, 1);
+      expect(find.text('Activation incomplète'), findsNothing);
+      expect(gateway.reconciliationCalls, 0);
       expect(gateway.renewalCalls, 0);
+      expect(gateway.registrationStreamAccesses, 0);
       final button = tester.widget<CupertinoButton>(
         find.descendant(
           of: find.byKey(const Key('send-targeted-push-test')),
@@ -901,12 +960,14 @@ void main() {
     },
   );
 
-  testWidgets('reconciliation exception stays unusable', (tester) async {
+  testWidgets('invalid local subscription disables the admin test', (
+    tester,
+  ) async {
     final repository = MockCoordinationRepository();
     seedActiveSubscription(repository);
     final gateway = _FakePushGateway(
       permission: PushPermissionState.granted,
-      reconciliationThrows: true,
+      localSubscriptionReady: false,
     );
     final service = _FakeTargetedPushTestService();
 
@@ -917,7 +978,11 @@ void main() {
       targetedPushTestService: service,
     );
 
-    expect(find.text('Activation incomplète'), findsOneWidget);
+    expect(
+      find.textContaining('Aucun abonnement local valide'),
+      findsOneWidget,
+    );
+    expect(service.availabilityChecks, isEmpty);
     final button = tester.widget<CupertinoButton>(
       find.descendant(
         of: find.byKey(const Key('send-targeted-push-test')),
@@ -928,17 +993,40 @@ void main() {
     expect(service.installationIds, isEmpty);
   });
 
-  testWidgets('admin test stays disabled until reconciled token is persisted', (
+  testWidgets('admin diagnostic never creates a missing installation id', (
+    tester,
+  ) async {
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.granted,
+      existingId: null,
+    );
+    final service = _FakeTargetedPushTestService();
+
+    await pumpCenter(
+      tester,
+      repository: MockCoordinationRepository(),
+      gateway: gateway,
+      targetedPushTestService: service,
+    );
+
+    expect(gateway.installationIdAccesses, 0);
+    expect(service.availabilityChecks, isEmpty);
+    expect(
+      find.textContaining('Aucun abonnement local valide'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('admin test stays disabled until backend target is resolved', (
     tester,
   ) async {
     final repository = MockCoordinationRepository();
     seedActiveSubscription(repository);
-    final completer = Completer<PushSubscriptionRegistration?>();
-    final gateway = _FakePushGateway(
-      permission: PushPermissionState.granted,
-      reconciliationFuture: completer.future,
+    final completer = Completer<bool>();
+    final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+    final service = _FakeTargetedPushTestService(
+      availabilityFuture: completer.future,
     );
-    final service = _FakeTargetedPushTestService();
 
     await pumpCenter(
       tester,
@@ -957,19 +1045,14 @@ void main() {
     );
     expect(button.onPressed, isNull);
 
-    completer.complete(
-      const PushSubscriptionRegistration(
-        installationId: 'device-test',
-        token: 'reconciled-token',
-        platform: 'web',
-      ),
-    );
+    completer.complete(true);
     await tester.pumpAndSettle();
 
     expect(
       repository.pushSubscriptions['device-test']?.token,
-      'reconciled-token',
+      'persisted-token',
     );
+    expect(gateway.reconciliationCalls, 0);
     button = tester.widget<CupertinoButton>(
       find.descendant(
         of: find.byKey(const Key('send-targeted-push-test')),
@@ -977,6 +1060,41 @@ void main() {
       ),
     );
     expect(button.onPressed, isNotNull);
+    expect(service.installationIds, isEmpty);
+  });
+
+  testWidgets('admin identity change cancels pending target resolution', (
+    tester,
+  ) async {
+    final repository = _IdentityAwarePushRepository(
+      failuresBeforeSuccess: 0,
+      administrativeUid: 'admin-a',
+    );
+    seedActiveSubscription(repository);
+    final completer = Completer<bool>();
+    final service = _FakeTargetedPushTestService(
+      availabilityFuture: completer.future,
+    );
+
+    await pumpCenter(
+      tester,
+      repository: repository,
+      gateway: _FakePushGateway(permission: PushPermissionState.granted),
+      targetedPushTestService: service,
+      settle: false,
+    );
+    await tester.pump();
+    repository.administrativeUid = 'admin-b';
+    completer.complete(true);
+    await tester.pumpAndSettle();
+
+    final button = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('send-targeted-push-test')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(button.onPressed, isNull);
     expect(service.installationIds, isEmpty);
   });
 
@@ -1885,6 +2003,8 @@ class _FakePushGateway
     this.unsubscribeSucceeds = true,
     this.recoveryGetTokenThrows = false,
     this.activationGetTokenThrows = false,
+    this.localSubscriptionReady = true,
+    this.existingId = 'device-test',
   });
 
   PushPermissionState permission;
@@ -1898,6 +2018,8 @@ class _FakePushGateway
   final bool unsubscribeSucceeds;
   final bool recoveryGetTokenThrows;
   final bool activationGetTokenThrows;
+  final bool localSubscriptionReady;
+  final String? existingId;
   int activationCalls = 0;
   int reconciliationCalls = 0;
   int renewalCalls = 0;
@@ -1905,19 +2027,29 @@ class _FakePushGateway
   int unsubscribeCalls = 0;
   int deleteTokenCalls = 0;
   int permissionStateCalls = 0;
+  int registrationStreamAccesses = 0;
   int tokenRequests = 0;
   int lastBadge = 0;
+  int installationIdAccesses = 0;
   Future<PushSubscriptionRegistration?>? _sessionReconciliation;
   Future<PushSubscriptionRegistration?>? _forcedRenewal;
   Future<PushSubscriptionRegistration?>? _staleRecovery;
   int _registrationGeneration = 0;
 
   @override
-  String get installationId => 'device-test';
+  String get installationId {
+    installationIdAccesses += 1;
+    return 'device-test';
+  }
 
   @override
-  Stream<PushSubscriptionRegistration> get registrationUpdates =>
-      const Stream.empty();
+  String? get existingInstallationId => existingId;
+
+  @override
+  Stream<PushSubscriptionRegistration> get registrationUpdates {
+    registrationStreamAccesses += 1;
+    return const Stream.empty();
+  }
 
   @override
   Future<PushActivationResult> activate() async {
@@ -1994,6 +2126,9 @@ class _FakePushGateway
     permissionStateCalls += 1;
     return permission;
   }
+
+  @override
+  Future<bool> hasUsableLocalSubscription() async => localSubscriptionReady;
 
   @override
   Future<PushSubscriptionRegistration?> reconcileRegistration() {
@@ -2113,10 +2248,23 @@ class _FakePushGateway
 }
 
 class _FakeTargetedPushTestService implements TargetedPushTestService {
-  _FakeTargetedPushTestService({this.error});
+  _FakeTargetedPushTestService({
+    this.error,
+    this.available = true,
+    this.availabilityFuture,
+  });
 
   final Object? error;
+  final bool available;
+  final Future<bool>? availabilityFuture;
   final List<String> installationIds = [];
+  final List<String> availabilityChecks = [];
+
+  @override
+  Future<bool> canSendTargetedPushTest({required String installationId}) async {
+    availabilityChecks.add(installationId);
+    return availabilityFuture == null ? available : await availabilityFuture!;
+  }
 
   @override
   Future<void> sendTargetedPushTest({required String installationId}) async {

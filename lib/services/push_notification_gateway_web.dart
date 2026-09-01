@@ -87,6 +87,12 @@ class FirebaseWebPushNotificationGateway
   String get installationId => _installationId();
 
   @override
+  String? get existingInstallationId {
+    final value = html.window.localStorage[_installationKey];
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  @override
   Stream<PushSubscriptionRegistration> get registrationUpdates =>
       FirebaseMessaging.instance.onTokenRefresh
           .where((token) => token.isNotEmpty)
@@ -113,6 +119,40 @@ class FirebaseWebPushNotificationGateway
       vapidKey: _vapidKey,
       permission: _map(settings.authorizationStatus),
     );
+  }
+
+  @override
+  Future<bool> hasUsableLocalSubscription() async {
+    if (_vapidKey.trim().isEmpty || html.Notification.permission != 'granted') {
+      return false;
+    }
+    final serviceWorkers = html.window.navigator.serviceWorker;
+    if (serviceWorkers == null) return false;
+    try {
+      final registrations = await serviceWorkers.getRegistrations();
+      final messagingRegistrations = <html.ServiceWorkerRegistration>[];
+      for (final candidate in registrations) {
+        if (candidate is! html.ServiceWorkerRegistration) continue;
+        final active = candidate.active;
+        if (active == null) continue;
+        if (isExpectedFirebaseMessagingServiceWorker(
+          origin: html.window.location.origin,
+          scope: candidate.scope ?? '',
+          scriptUrl: active.scriptUrl ?? '',
+          state: active.state ?? '',
+        )) {
+          messagingRegistrations.add(candidate);
+        }
+      }
+      if (messagingRegistrations.length != 1) return false;
+      final pushManager = messagingRegistrations.single.pushManager;
+      if (pushManager == null) return false;
+      final dynamic subscription = await pushManager.getSubscription();
+      return subscription is html.PushSubscription &&
+          _hasExpectedVapidKey(subscription);
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

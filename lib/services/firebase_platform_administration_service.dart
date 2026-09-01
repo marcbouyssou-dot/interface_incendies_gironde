@@ -64,6 +64,28 @@ class FirebasePlatformAdministrationService
 
   @override
   Future<void> sendTargetedPushTest({required String installationId}) {
+    _requireCurrentUser();
+    return _invoke('sendTargetedPushTest', {
+      'installationId': _validInstallationId(installationId),
+      'confirmation': 'SEND_ONE_TEST_PUSH',
+    });
+  }
+
+  @override
+  Future<bool> canSendTargetedPushTest({required String installationId}) async {
+    _requireCurrentUser();
+    try {
+      final response = await _invokeForMap('sendTargetedPushTest', {
+        'installationId': _validInstallationId(installationId),
+        'confirmation': 'CHECK_TEST_PUSH',
+      });
+      return response['available'] == true;
+    } on PlatformAdministrationException {
+      return false;
+    }
+  }
+
+  void _requireCurrentUser() {
     final user = _auth?.currentUser;
     final uid =
         _currentUserUid?.call() ??
@@ -74,11 +96,6 @@ class FirebasePlatformAdministrationService
         'Votre session a expiré. Reconnectez-vous.',
       );
     }
-    final currentInstallationId = _validInstallationId(installationId);
-    return _invoke('sendTargetedPushTest', {
-      'subscriptionId': '${uid}_$currentInstallationId',
-      'confirmation': 'SEND_ONE_TEST_PUSH',
-    });
   }
 
   @override
@@ -204,6 +221,13 @@ class FirebasePlatformAdministrationService
       _invoke(functionName, {'mobilizationId': _validId(mobilizationId)});
 
   Future<void> _invoke(String functionName, Map<String, Object?> data) async {
+    await _invokeForMap(functionName, data);
+  }
+
+  Future<Map<Object?, Object?>> _invokeForMap(
+    String functionName,
+    Map<String, Object?> data,
+  ) async {
     if (_sessionState.value == PlatformAdministrationSessionState.expired) {
       throw const PlatformAdministrationException(
         'Votre session a expiré. Reconnectez-vous.',
@@ -218,6 +242,7 @@ class FirebasePlatformAdministrationService
                     .call<Object?>(data))
                 .data;
       if (response is! Map) throw const FormatException();
+      return response;
     } on PlatformAdministrationException {
       rethrow;
     } on FirebaseFunctionsException catch (error) {
@@ -259,7 +284,7 @@ class FirebasePlatformAdministrationService
   String _validInstallationId(Object? value) {
     if (value is! String ||
         value.isEmpty ||
-        value.length > 200 ||
+        value.length > 160 ||
         value.trim() != value ||
         value.contains('/')) {
       throw const PlatformAdministrationException(
