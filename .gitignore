@@ -12,6 +12,10 @@
 .swiftpm/
 migrate_working_dir/
 
+# AI CLI local config -- found to contain a live bearer token for a local
+# MCP server (Obsidian plugin), never committed, never should be.
+.codex/
+
 # IntelliJ related
 *.iml
 *.ipr
