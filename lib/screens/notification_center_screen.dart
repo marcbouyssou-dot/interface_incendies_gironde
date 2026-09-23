@@ -301,9 +301,9 @@ class _ConsentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final unavailable =
-        permission == PushPermissionState.unsupported ||
-        permission == PushPermissionState.misconfigured;
+    final unsupported = permission == PushPermissionState.unsupported;
+    final misconfigured = permission == PushPermissionState.misconfigured;
+    final unavailable = unsupported || misconfigured;
     final activated =
         permission == PushPermissionState.granted && subscriptionPersisted;
     final incomplete =
@@ -336,8 +336,12 @@ class _ConsentCard extends StatelessWidget {
             Text(
               incomplete
                   ? 'L’abonnement n’a pas pu être enregistré. Réessayez.'
-                  : unavailable
-                  ? 'Cet appareil ne permet pas encore les notifications.'
+                  : unsupported
+                  ? 'Ce navigateur ne prend pas en charge les notifications. '
+                        'Sur iPhone, installez MobSanté sur l’écran d’accueil.'
+                  : misconfigured
+                  ? 'Les notifications sont temporairement indisponibles : '
+                        'la configuration Push est incomplète.'
                   : permission == PushPermissionState.denied
                   ? 'La permission est refusée. MobSanté reste utilisable.'
                   : 'Vous gardez le contrôle et pourrez les désactiver.',

@@ -11,6 +11,39 @@ import 'package:interface_incendies_gironde/theme/app_theme.dart';
 void main() {
   final now = DateTime(2026, 8, 15, 12);
 
+  test('missing VAPID configuration is reported as misconfigured', () {
+    expect(
+      resolveWebPushPermissionState(
+        isSupported: true,
+        vapidKey: '  ',
+        permission: PushPermissionState.prompt,
+      ),
+      PushPermissionState.misconfigured,
+    );
+  });
+
+  test('unsupported environment takes precedence over configuration', () {
+    expect(
+      resolveWebPushPermissionState(
+        isSupported: false,
+        vapidKey: '',
+        permission: PushPermissionState.prompt,
+      ),
+      PushPermissionState.unsupported,
+    );
+  });
+
+  test('supported and configured environment remains activable', () {
+    expect(
+      resolveWebPushPermissionState(
+        isSupported: true,
+        vapidKey: 'public-vapid-key',
+        permission: PushPermissionState.prompt,
+      ),
+      PushPermissionState.prompt,
+    );
+  });
+
   AppNotification notification({
     String id = 'notification-a',
     String missionId = 'mission-merignac',
@@ -72,11 +105,13 @@ void main() {
     await pumpCenter(tester, repository: repository, gateway: gateway);
 
     expect(gateway.activationCalls, 0);
+    expect(gateway.tokenRequests, 0);
     expect(find.text('Aucune notification'), findsOneWidget);
     await tester.tap(find.byKey(const Key('activate-notifications')));
     await tester.pump();
 
     expect(gateway.activationCalls, 1);
+    expect(gateway.tokenRequests, 1);
     expect(repository.pushSubscriptions.keys, contains('device-test'));
     expect(find.text('Notifications activées'), findsOneWidget);
   });
@@ -175,7 +210,8 @@ void main() {
       repository: MockCoordinationRepository(),
       gateway: gateway,
     );
-    expect(find.textContaining('ne permet pas encore'), findsOneWidget);
+    expect(find.textContaining('ne prend pas en charge'), findsOneWidget);
+    expect(find.textContaining('écran d’accueil'), findsOneWidget);
     final button = tester.widget<CupertinoButton>(
       find.descendant(
         of: find.byKey(const Key('activate-notifications')),
@@ -184,6 +220,34 @@ void main() {
     );
     expect(button.onPressed, isNull);
     expect(gateway.activationCalls, 0);
+  });
+
+  testWidgets('misconfigured push is distinct and cannot be activated', (
+    tester,
+  ) async {
+    final gateway = _FakePushGateway(
+      permission: PushPermissionState.misconfigured,
+    );
+    await pumpCenter(
+      tester,
+      repository: MockCoordinationRepository(),
+      gateway: gateway,
+    );
+
+    expect(
+      find.textContaining('configuration Push est incomplète'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('ne prend pas en charge'), findsNothing);
+    final button = tester.widget<CupertinoButton>(
+      find.descendant(
+        of: find.byKey(const Key('activate-notifications')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(button.onPressed, isNull);
+    expect(gateway.activationCalls, 0);
+    expect(gateway.tokenRequests, 0);
   });
 
   testWidgets('unread badge and read/unread controls stay synchronized', (
@@ -313,6 +377,7 @@ class _FakePushGateway implements PushNotificationGateway {
   final PushPermissionState activationState;
   final String token;
   int activationCalls = 0;
+  int tokenRequests = 0;
   int lastBadge = 0;
 
   @override
@@ -323,6 +388,7 @@ class _FakePushGateway implements PushNotificationGateway {
   Future<PushActivationResult> activate() async {
     activationCalls += 1;
     permission = activationState;
+    if (activationState == PushPermissionState.granted) tokenRequests += 1;
     return PushActivationResult(
       activationState,
       registration: activationState == PushPermissionState.granted

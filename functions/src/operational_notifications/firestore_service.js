@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {FieldValue, Timestamp} from 'firebase-admin/firestore';
 
+import {captureDiffusionSnapshot} from '../diffusions/diffusion_snapshot.js';
 import {
   isCriticalEvent,
   isQuietHour,
@@ -65,6 +66,12 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
   const recipients = recipientsForEvent({
     event, mission, roles, assignments, volunteers, engagements, preferences,
     recentNotifications, now: now.getTime(),
+  });
+  await captureDiffusionSnapshot({
+    firestore,
+    event,
+    recipients,
+    createdAt: Timestamp.fromDate(now),
   });
   if (recipients.length === 0) return {notifications: 0, pushes: 0};
   const solicitationContext = await deriveSolicitationOrganizationContext({

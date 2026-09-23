@@ -2,6 +2,16 @@ import '../models/app_notification.dart';
 
 enum PushPermissionState { unsupported, prompt, granted, denied, misconfigured }
 
+PushPermissionState resolveWebPushPermissionState({
+  required bool isSupported,
+  required String vapidKey,
+  required PushPermissionState permission,
+}) {
+  if (!isSupported) return PushPermissionState.unsupported;
+  if (vapidKey.trim().isEmpty) return PushPermissionState.misconfigured;
+  return permission;
+}
+
 class PushActivationResult {
   const PushActivationResult(this.state, {this.registration});
   final PushPermissionState state;
