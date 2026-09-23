@@ -5,6 +5,8 @@ import 'config/app_identity.dart';
 import 'dev/role_preview.dart';
 import 'perspective/cross_role_perspective.dart';
 import 'repositories/coordination_repository.dart';
+import 'repositories/diffusion_read_repository.dart';
+import 'repositories/diffusion_read_repository_scope.dart';
 import 'repositories/admin_invitation_repository_scope.dart';
 import 'repositories/mock_coordination_repository.dart';
 import 'repositories/location_administration_repository_scope.dart';
@@ -29,6 +31,7 @@ class FireCoordinationApp extends StatelessWidget {
     this.organizationReadRepository,
     this.organizationContextController,
     this.initialNotificationId,
+    this.diffusionReadRepository,
   });
 
   final CoordinationRepository? repository;
@@ -38,6 +41,7 @@ class FireCoordinationApp extends StatelessWidget {
   final OrganizationReadRepository? organizationReadRepository;
   final OrganizationContextController? organizationContextController;
   final String? initialNotificationId;
+  final DiffusionReadRepository? diffusionReadRepository;
 
   /// Explicit regression harness for screens removed from the live V5 shell.
   final bool useLegacyCoordinatorShellForTesting;
@@ -87,7 +91,10 @@ class FireCoordinationApp extends StatelessWidget {
                       theme: AppTheme.light,
                       darkTheme: AppTheme.dark,
                       themeMode: ThemeMode.system,
-                      builder: AppTheme.systemSurface,
+                      builder: (context, child) => DiffusionReadRepositoryScope(
+                        repository: diffusionReadRepository,
+                        child: AppTheme.systemSurface(context, child),
+                      ),
                       home: AppShell(
                         initialIndex: initialTab,
                         platformRuntime: resolvedPlatformRuntime,

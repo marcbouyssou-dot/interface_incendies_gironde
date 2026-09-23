@@ -9,6 +9,7 @@ import 'app.dart';
 import 'config/app_identity.dart';
 import 'firebase_bootstrap.dart';
 import 'repositories/coordination_repository.dart';
+import 'repositories/diffusion_read_repository.dart';
 import 'repositories/firestore_coordination_repository.dart';
 import 'repositories/firestore_platform_read_repository.dart';
 import 'services/current_mobilization_provider.dart';
@@ -58,6 +59,7 @@ class FirebaseStartupGate extends StatefulWidget {
 class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   late Future<CoordinationRepository> _startup;
   late final Completer<void> _splashVisualReady;
+  DiffusionReadRepository? _diffusionReadRepository;
   bool _errorRevealScheduled = false;
 
   @override
@@ -115,6 +117,9 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     final managerApp = await responsibleAppFuture;
     final responsibleAuth = FirebaseAuth.instanceFor(app: managerApp);
     final responsibleFirestore = FirebaseFirestore.instanceFor(app: managerApp);
+    _diffusionReadRepository = FirestoreDiffusionReadRepository.withFirestore(
+      responsibleFirestore,
+    );
     const enableLocationSeed = bool.fromEnvironment(
       'ENABLE_LOCATION_SEED',
       defaultValue: false,
@@ -180,6 +185,7 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
             initialTab: widget.initialTab,
             professionalVerificationService:
                 FirebaseProfessionalVerificationService(),
+            diffusionReadRepository: _diffusionReadRepository,
             initialNotificationId: widget.initialNotificationId,
           );
         }
