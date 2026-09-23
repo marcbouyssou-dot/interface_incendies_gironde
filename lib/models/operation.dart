@@ -1,4 +1,5 @@
 import 'operational_scope.dart';
+import 'organization_visibility.dart';
 
 enum OperationType {
   emergency,
@@ -74,6 +75,7 @@ class Operation {
     this.endAt,
     this.coordinatorUid,
     this.ownerOrganizationId,
+    this.visibility,
   });
 
   factory Operation.fromMap(Map<String, Object?> data) {
@@ -105,6 +107,7 @@ class Operation {
       endAt: endAt,
       coordinatorUid: _optionalOperationUid(data, 'coordinatorUid'),
       ownerOrganizationId: _optionalOrganizationId(data, 'ownerOrganizationId'),
+      visibility: _optionalOperationVisibility(data, 'visibility'),
       scopeRefs: scopeRefs,
       createdBy: _requiredOperationText(data, 'createdBy'),
       createdAt: _requiredOperationValue<DateTime>(data, 'createdAt'),
@@ -123,6 +126,14 @@ class Operation {
   final DateTime? endAt;
   final String? coordinatorUid;
   final String? ownerOrganizationId;
+
+  /// Visibilité effective choisie pour cette opération.
+  ///
+  /// Une valeur absente est réservée à la compatibilité additive RC3 et doit
+  /// être résolue par le service de visibilité central. Le défaut porté par
+  /// l'organisation sert à initialiser une nouvelle opération ; il ne modifie
+  /// jamais rétroactivement une valeur explicite déjà enregistrée.
+  final OrganizationVisibility? visibility;
   final List<OperationalScopeRef> scopeRefs;
   final String createdBy;
   final DateTime createdAt;
@@ -140,6 +151,7 @@ class Operation {
     'endAt': endAt,
     if (coordinatorUid != null) 'coordinatorUid': coordinatorUid,
     if (ownerOrganizationId != null) 'ownerOrganizationId': ownerOrganizationId,
+    if (visibility != null) 'visibility': visibility!.serializedValue,
     'scopeRefs': scopeRefs.map((ref) => ref.serializedValue).toList(),
     'createdBy': createdBy,
     'createdAt': createdAt,
@@ -203,4 +215,12 @@ String? _optionalOrganizationId(Map<String, Object?> data, String key) {
     throw const FormatException('Opération invalide.');
   }
   return value;
+}
+
+OrganizationVisibility? _optionalOperationVisibility(
+  Map<String, Object?> data,
+  String key,
+) {
+  final value = data[key];
+  return value == null ? null : organizationVisibilityFromValue(value);
 }

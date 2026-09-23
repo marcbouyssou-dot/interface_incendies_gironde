@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import '../models/operation.dart';
 import '../models/organization_context.dart';
+import '../models/organization_role.dart';
 import '../services/legacy_organization_resolver.dart';
 import '../services/organization_context_read_policy.dart';
+import '../services/operation_visibility_resolver.dart';
 import '../utils/switch_latest.dart';
 import '../utils/value_listenable_stream.dart';
 import 'operation_read_repository.dart';
@@ -20,13 +22,17 @@ class OrganizationScopedOperationReadRepository
     required OperationReadRepository delegate,
     required ValueListenable<OrganizationContext?> context,
     LegacyOrganizationResolver resolver = const LegacyOrganizationResolver(),
+    OperationVisibilityResolver visibilityResolver =
+        const OperationVisibilityResolver(),
   }) : _delegate = delegate,
        _context = context,
-       _resolver = resolver;
+       _resolver = resolver,
+       _visibilityResolver = visibilityResolver;
 
   final OperationReadRepository _delegate;
   final ValueListenable<OrganizationContext?> _context;
   final LegacyOrganizationResolver _resolver;
+  final OperationVisibilityResolver _visibilityResolver;
 
   @override
   Stream<List<Operation>> watchOperations({Set<OperationStatus>? statuses}) =>
@@ -44,9 +50,11 @@ class OrganizationScopedOperationReadRepository
             .map(
               (operations) => List<Operation>.unmodifiable(
                 operations.where(
-                  (operation) =>
-                      _resolver.resolveOperationOrganizationId(operation) ==
-                      organizationId,
+                  (operation) => _canReadOperation(
+                    operation: operation,
+                    context: context!,
+                    organizationId: organizationId,
+                  ),
                 ),
               ),
             );
@@ -65,10 +73,32 @@ class OrganizationScopedOperationReadRepository
         }
         return _delegate.watchOperation(operationId).map((operation) {
           if (operation == null) return null;
-          return _resolver.resolveOperationOrganizationId(operation) ==
-                  organizationId
+          return _canReadOperation(
+                operation: operation,
+                context: context!,
+                organizationId: organizationId,
+              )
               ? operation
               : null;
         });
       });
+
+  bool _canReadOperation({
+    required Operation operation,
+    required OrganizationContext context,
+    required String organizationId,
+  }) {
+    final ownerId = _resolver.resolveOperationOrganizationId(operation);
+    if (ownerId == organizationId) return true;
+    if (!context.hasRole(OrganizationRole.professional)) return false;
+
+    // Une opération externe sans visibilité explicite reste fermée : le défaut
+    // de son organisation ne doit jamais être deviné ni élargir implicitement
+    // l'accès. Le seul fallback externe autorisé est le legacy centralisé.
+    if (operation.visibility == null &&
+        ownerId != LegacyOrganizationResolver.legacyOrganizationId) {
+      return false;
+    }
+    return _visibilityResolver.isPlatformDiscoverable(operation: operation);
+  }
 }

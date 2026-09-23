@@ -95,19 +95,26 @@ class OrganizationScopedMissionReadRepository
     if (locationIds.isEmpty) {
       return Stream<List<CoordinationNeed>>.value(const []);
     }
+    final platformRepository = _platformRepository;
+    final missionRepository = _delegate;
+    if (platformRepository is! ResponsibleMobilizationReadRepository ||
+        missionRepository is! MobilizationLocationMissionReadRepository) {
+      return Stream<List<CoordinationNeed>>.error(
+        StateError('Lecture Responsable bornée indisponible.'),
+      );
+    }
+    final responsiblePlatformRepository =
+        platformRepository as ResponsibleMobilizationReadRepository;
+    final scopedMissionRepository =
+        missionRepository as MobilizationLocationMissionReadRepository;
     return switchLatest(
-      _platformRepository.watchMobilizations(),
+      responsiblePlatformRepository.watchResponsibleActiveMobilizations(),
       (mobilizations) =>
-          _watchMissionsForAccessibleMobilizations(
-            mobilizations.map((mobilization) => mobilization.id).toSet(),
-          ).map(
-            (missions) => List<CoordinationNeed>.unmodifiable(
-              missions.where(
-                (mission) =>
-                    mission.locationId != null &&
-                    locationIds.contains(mission.locationId),
-              ),
-            ),
+          scopedMissionRepository.watchMissionsForMobilizationsAndLocations(
+            mobilizationIds: mobilizations
+                .map((mobilization) => mobilization.id)
+                .toSet(),
+            locationIds: locationIds,
           ),
     );
   }

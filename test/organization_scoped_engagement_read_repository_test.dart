@@ -121,24 +121,60 @@ void main() {
     );
 
     test(
-      'one mission team uses targeted access and one delegate read',
+      'Bassens manager uses targeted access and the role-aware team read',
       () async {
-        final fixture = _Fixture()..selectLegacy();
+        final fixture = _Fixture()..selectBassensManager();
         addTearDown(fixture.dispose);
 
-        await fixture.repository
+        final engagements = await fixture.repository
             .watchMissionEngagements('mission-gironde')
             .first;
 
+        expect(engagements.map((item) => item.volunteerId), [
+          'volunteer-gironde',
+          'volunteer-pending',
+          'volunteer-standby',
+          'volunteer-cancelled',
+        ]);
         expect(fixture.missionDataSource.listReads, 0);
         expect(fixture.missionDataSource.targetedReads, 1);
         expect(fixture.engagementDataSource.reads, 1);
-        expect(fixture.engagementDataSource.legacyReads, 0);
+        expect(fixture.engagementDataSource.roleAwareReads, 1);
+        expect(fixture.engagementDataSource.authorizedReads, 0);
         expect(fixture.engagementDataSource.requestedMissionIds, [
           'mission-gironde',
         ]);
       },
     );
+
+    test(
+      'Bassens manager receives an empty team without over-reading',
+      () async {
+        final fixture = _Fixture()..selectBassensManager();
+        addTearDown(fixture.dispose);
+
+        expect(await fixture.volunteerIds('mission-bassens-empty'), isEmpty);
+        expect(fixture.missionDataSource.listReads, 0);
+        expect(fixture.missionDataSource.targetedReads, 1);
+        expect(fixture.engagementDataSource.roleAwareReads, 1);
+        expect(fixture.engagementDataSource.authorizedReads, 0);
+        expect(fixture.engagementDataSource.requestedMissionIds, [
+          'mission-bassens-empty',
+        ]);
+      },
+    );
+
+    test('Bassens manager starts no team read for another site', () async {
+      final fixture = _Fixture()..selectBassensManager();
+      addTearDown(fixture.dispose);
+
+      expect(await fixture.volunteerIds('mission-other-site'), isEmpty);
+      expect(fixture.missionDataSource.listReads, 0);
+      expect(fixture.missionDataSource.targetedReads, 1);
+      expect(fixture.engagementDataSource.reads, 0);
+      expect(fixture.engagementDataSource.roleAwareReads, 0);
+      expect(fixture.engagementDataSource.authorizedReads, 0);
+    });
 
     test(
       'N mission teams create no subscription to the global mission list',
@@ -206,6 +242,7 @@ class _Fixture {
   late final OrganizationScopedEngagementReadRepository repository;
 
   void selectLegacy() => scope.value = _Scope.legacy;
+  void selectBassensManager() => scope.value = _Scope.legacy;
   void selectTestOrganization() => scope.value = _Scope.test;
   void selectGlobalAdmin() => scope.value = _Scope.global;
   void selectTestAdmin() => scope.value = _Scope.test;
@@ -248,7 +285,8 @@ class _ScopedMissionRepository
         final isAccessible =
             mission != null &&
             switch (scope.value) {
-              _Scope.legacy => mission.id != 'mission-test',
+              _Scope.legacy =>
+                mission.locationId == 'bordeauxmetropole-bassens',
               _Scope.test => mission.id == 'mission-test',
               _Scope.global => true,
               _Scope.absent || _Scope.inactive => false,
@@ -270,7 +308,8 @@ class _ScopedMissionRepository
         missions
             .where((mission) {
               return switch (scope.value) {
-                _Scope.legacy => mission.id != 'mission-test',
+                _Scope.legacy =>
+                  mission.locationId == 'bordeauxmetropole-bassens',
                 _Scope.test => mission.id == 'mission-test',
                 _Scope.global => true,
                 _Scope.absent || _Scope.inactive => false,
@@ -305,19 +344,23 @@ class _EngagementRepository
   final List<EngagementInfo> engagements;
   final List<String> requestedMissionIds = [];
   int reads = 0;
-  int legacyReads = 0;
+  int roleAwareReads = 0;
+  int authorizedReads = 0;
   bool injectCrossMissionResult = false;
 
   @override
   Stream<List<EngagementInfo>> watchMissionEngagements(String missionId) {
-    legacyReads++;
+    roleAwareReads++;
     return _watch(missionId);
   }
 
   @override
   Stream<List<EngagementInfo>> watchAuthorizedMissionEngagements(
     String missionId,
-  ) => _watch(missionId);
+  ) {
+    authorizedReads++;
+    return _watch(missionId);
+  }
 
   Stream<List<EngagementInfo>> _watch(String missionId) {
     reads++;
@@ -333,9 +376,23 @@ class _EngagementRepository
 }
 
 List<CoordinationNeed> _missions() => [
-  _mission('mission-gironde', 'mobilization-gironde'),
-  _mission('mission-test', 'mobilization-test'),
-  _mission('mission-legacy', 'mobilization-legacy'),
+  _mission(
+    'mission-gironde',
+    'mobilization-gironde',
+    'bordeauxmetropole-bassens',
+  ),
+  _mission('mission-test', 'mobilization-test', 'test-site'),
+  _mission(
+    'mission-legacy',
+    'mobilization-legacy',
+    'bordeauxmetropole-bassens',
+  ),
+  _mission(
+    'mission-bassens-empty',
+    'mobilization-gironde',
+    'bordeauxmetropole-bassens',
+  ),
+  _mission('mission-other-site', 'mobilization-gironde', 'other-site'),
 ];
 
 List<EngagementInfo> _engagements() => const [
@@ -375,7 +432,11 @@ List<EngagementInfo> _engagements() => const [
   ),
 ];
 
-CoordinationNeed _mission(String id, String mobilizationId) => CoordinationNeed(
+CoordinationNeed _mission(
+  String id,
+  String mobilizationId,
+  String locationId,
+) => CoordinationNeed(
   id: id,
   place: id,
   group: TerritorialGroup.bordeauxMetropole,
@@ -387,6 +448,7 @@ CoordinationNeed _mission(String id, String mobilizationId) => CoordinationNeed(
   registeredPodiatrists: 0,
   equipment: const [],
   mobilizationId: mobilizationId,
+  locationId: locationId,
 );
 
 Future<void> _flushStreams() async {

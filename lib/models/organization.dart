@@ -68,7 +68,10 @@ class Organization {
   /// Nature institutionnelle de l'organisation.
   final OrganizationCategory category;
 
-  /// Politique de visibilité proposée par défaut aux nouvelles ressources.
+  /// Politique proposée lors de la création d'une nouvelle opération.
+  ///
+  /// Cette valeur doit être copiée comme visibilité effective de l'opération.
+  /// Sa modification ne change jamais rétroactivement les opérations existantes.
   final OrganizationVisibility defaultVisibility;
 
   /// Indique si l'organisation peut encore être utilisée opérationnellement.

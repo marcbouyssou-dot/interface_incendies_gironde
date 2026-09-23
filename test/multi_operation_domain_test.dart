@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/operation.dart';
+import 'package:interface_incendies_gironde/models/organization_visibility.dart';
 import 'package:interface_incendies_gironde/repositories/firestore_platform_read_repository.dart';
 import 'package:interface_incendies_gironde/services/accessible_mobilizations_provider.dart';
 
@@ -41,6 +42,27 @@ void main() {
 
     expect(operation.coordinatorUid, 'coordinateur-principal');
     expect(operation.toMap()['coordinatorUid'], 'coordinateur-principal');
+  });
+
+  test('operation visibility is optional and serializes when explicit', () {
+    final legacy = Operation.fromMap(_operationData('legacy'));
+    final platform = Operation.fromMap({
+      ..._operationData('platform'),
+      'visibility': 'platform',
+      'schemaVersion': 4,
+    });
+
+    expect(legacy.visibility, isNull);
+    expect(legacy.toMap(), isNot(contains('visibility')));
+    expect(platform.visibility, OrganizationVisibility.platform);
+    expect(platform.toMap()['visibility'], 'platform');
+    expect(
+      () => Operation.fromMap({
+        ..._operationData('invalid'),
+        'visibility': 'worldwide',
+      }),
+      throwsFormatException,
+    );
   });
 
   test('operation refuses a malformed coordinator identifier', () {

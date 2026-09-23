@@ -2,7 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/operation.dart';
 import 'package:interface_incendies_gironde/models/organization_context.dart';
+import 'package:interface_incendies_gironde/models/organization.dart';
+import 'package:interface_incendies_gironde/models/organization_category.dart';
+import 'package:interface_incendies_gironde/models/organization_membership.dart';
 import 'package:interface_incendies_gironde/models/organization_role.dart';
+import 'package:interface_incendies_gironde/models/organization_visibility.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_scoped_operation_read_repository.dart';
 import 'package:interface_incendies_gironde/services/legacy_organization_resolver.dart';
@@ -217,6 +221,63 @@ void main() {
         expect(delegate.lastStatuses, const {OperationStatus.draft});
       },
     );
+
+    test(
+      'professional membership discovers only external platform operations',
+      () async {
+        final organization = _organization('organization-a');
+        final membership = _membership(organization.id);
+        final context = ValueNotifier<OrganizationContext?>(
+          OrganizationContext.selected(
+            uid: membership.uid,
+            organization: organization,
+            membership: membership,
+            effectiveRoles: const {OrganizationRole.professional},
+          ),
+        );
+        addTearDown(context.dispose);
+        final repository = OrganizationScopedOperationReadRepository(
+          delegate: _OperationRepository([
+            _operation(
+              id: 'own-private',
+              ownerOrganizationId: organization.id,
+              visibility: OrganizationVisibility.organizationPrivate,
+            ),
+            _operation(
+              id: 'external-platform',
+              ownerOrganizationId: 'organization-b',
+              visibility: OrganizationVisibility.platform,
+            ),
+            _operation(
+              id: 'external-shared',
+              ownerOrganizationId: 'organization-b',
+              visibility: OrganizationVisibility.shared,
+            ),
+            _operation(
+              id: 'external-public',
+              ownerOrganizationId: 'organization-b',
+              visibility: OrganizationVisibility.publicAccess,
+            ),
+            _operation(
+              id: 'external-missing',
+              ownerOrganizationId: 'organization-b',
+            ),
+          ]),
+          context: context,
+        );
+
+        final operations = await repository.watchOperations().first;
+
+        expect(operations.map((operation) => operation.id), [
+          'own-private',
+          'external-platform',
+        ]);
+        expect(
+          await repository.watchOperation('external-shared').first,
+          isNull,
+        );
+      },
+    );
   });
 }
 
@@ -260,6 +321,7 @@ List<Operation> _operations() => [
 Operation _operation({
   required String id,
   String? ownerOrganizationId,
+  OrganizationVisibility? visibility,
   OperationStatus status = OperationStatus.active,
 }) => Operation.fromMap({
   'id': id,
@@ -270,6 +332,7 @@ Operation _operation({
   'startAt': DateTime.utc(2026, 8, 21),
   'endAt': null,
   'ownerOrganizationId': ?ownerOrganizationId,
+  'visibility': ?visibility?.serializedValue,
   'scopeRefs': <Object?>['territories/gironde'],
   'createdBy': 'admin',
   'createdAt': DateTime.utc(2026, 8, 21),
@@ -277,6 +340,28 @@ Operation _operation({
   'updatedAt': DateTime.utc(2026, 8, 21),
   'schemaVersion': ownerOrganizationId == null ? 1 : 3,
 });
+
+Organization _organization(String id) => Organization(
+  id: id,
+  name: 'Organisation $id',
+  category: OrganizationCategory.cpts,
+  defaultVisibility: OrganizationVisibility.organizationPrivate,
+  active: true,
+  createdAt: DateTime.utc(2026, 8, 21),
+  updatedAt: DateTime.utc(2026, 8, 21),
+  schemaVersion: 1,
+);
+
+OrganizationMembership _membership(String organizationId) =>
+    OrganizationMembership(
+      organizationId: organizationId,
+      uid: 'professional-a',
+      roles: const {OrganizationRole.professional},
+      active: true,
+      createdAt: DateTime.utc(2026, 8, 21),
+      updatedAt: DateTime.utc(2026, 8, 21),
+      schemaVersion: 1,
+    );
 
 OrganizationContext _legacyContext(OrganizationRole role) =>
     OrganizationContext.selected(

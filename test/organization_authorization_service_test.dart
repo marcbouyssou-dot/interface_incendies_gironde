@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/models/organization_membership.dart';
 import 'package:interface_incendies_gironde/models/organization_role.dart';
@@ -6,6 +9,72 @@ import 'package:interface_incendies_gironde/services/organization_authorization_
 
 void main() {
   const service = OrganizationAuthorizationService();
+
+  group('canonical Dart ↔ Functions authorization contract', () {
+    final contract = _loadAuthorizationContract();
+    final roleOrder = (contract['roles'] as List).cast<String>();
+    final permissionOrder = (contract['permissions'] as List).cast<String>();
+
+    test('catalogues force the shared matrix to evolve with the engines', () {
+      expect(
+        OrganizationRole.values.map((role) => role.serializedValue),
+        roleOrder,
+      );
+      expect(
+        OrganizationPermission.values.map(_permissionValue),
+        permissionOrder,
+      );
+      expect(
+        contract['legacyOrganizationId'],
+        LegacyOrganizationResolver.legacyOrganizationId,
+      );
+    });
+
+    for (final scenario
+        in (contract['scenarios'] as List).cast<Map<String, Object?>>()) {
+      test('shared scenario: ${scenario['id']}', () {
+        final input = (scenario['input'] as Map).cast<String, Object?>();
+        if (scenario['expectedError'] == 'invalid_identity') {
+          expect(
+            () => _resolveContractScenario(service, input),
+            throwsFormatException,
+          );
+          return;
+        }
+
+        final authorization = _resolveContractScenario(service, input);
+        final actualRoles =
+            authorization.roles
+                .map((role) => role.serializedValue)
+                .toList(growable: false)
+              ..sort(
+                (left, right) =>
+                    roleOrder.indexOf(left).compareTo(roleOrder.indexOf(right)),
+              );
+        final allowedPermissions = OrganizationPermission.values
+            .where(authorization.allows)
+            .map(_permissionValue)
+            .toList(growable: false);
+
+        expect(
+          <String, Object?>{
+            'hasActiveMembership': authorization.hasActiveMembership,
+            'usesLegacyFallback': authorization.usesLegacyFallback,
+            'isPlatformAdministrator': authorization.isPlatformAdministrator,
+            'isOrganizationAdmin': authorization.isOrganizationAdmin,
+            'isCoordinator': authorization.isCoordinator,
+            'isSiteManager': authorization.isSiteManager,
+            'isProfessional': authorization.isProfessional,
+            'hasOrganizationAccess': authorization.hasOrganizationAccess,
+            'roles': actualRoles,
+            'allowedPermissions': allowedPermissions,
+          },
+          (scenario['expected'] as Map).cast<String, Object?>(),
+          reason: scenario['description'] as String,
+        );
+      });
+    }
+  });
 
   test(
     'active organization admin is scoped to its membership organization',
@@ -183,3 +252,65 @@ OrganizationMembership _membership({
   updatedAt: DateTime.utc(2026, 8, 21),
   schemaVersion: 1,
 );
+
+Map<String, Object?> _loadAuthorizationContract() =>
+    (jsonDecode(
+              File(
+                'contracts/organization_authorization_matrix.json',
+              ).readAsStringSync(),
+            )
+            as Map)
+        .cast<String, Object?>();
+
+OrganizationAuthorization _resolveContractScenario(
+  OrganizationAuthorizationService service,
+  Map<String, Object?> input,
+) {
+  final rawMembership = input['membership'];
+  final membership = rawMembership == null
+      ? null
+      : _contractMembership((rawMembership as Map).cast<String, Object?>());
+  final rawLegacyAccess = input['legacyAccess'];
+  final legacyAccess = rawLegacyAccess == null
+      ? null
+      : (rawLegacyAccess as Map).cast<String, Object?>();
+  return service.resolve(
+    organizationId: input['organizationId']! as String,
+    uid: input['uid']! as String,
+    membership: membership,
+    legacyRoleValues: legacyAccess?['active'] == true
+        ? (legacyAccess!['roles'] as List).cast<String>()
+        : const [],
+    isLegacyOrganization:
+        input['organizationId'] ==
+        LegacyOrganizationResolver.legacyOrganizationId,
+    isPlatformAdministrator: input['platformAdministrator']! as bool,
+  );
+}
+
+OrganizationMembership _contractMembership(Map<String, Object?> data) =>
+    OrganizationMembership(
+      organizationId: data['organizationId']! as String,
+      uid: data['uid']! as String,
+      roles: (data['roles'] as List).map(organizationRoleFromValue),
+      locationIds: (data['locationIds'] as List).cast<String>(),
+      active: data['active']! as bool,
+      createdAt: DateTime.utc(2026, 8, 21),
+      updatedAt: DateTime.utc(2026, 8, 21),
+      schemaVersion: data['schemaVersion']! as int,
+    );
+
+String _permissionValue(OrganizationPermission permission) =>
+    switch (permission) {
+      OrganizationPermission.readOrganization => 'read_organization',
+      OrganizationPermission.readOperations => 'read_operations',
+      OrganizationPermission.manageOperations => 'manage_operations',
+      OrganizationPermission.manageCoordinators => 'manage_coordinators',
+      OrganizationPermission.manageSiteManagers => 'manage_site_managers',
+      OrganizationPermission.manageSites => 'manage_sites',
+      OrganizationPermission.viewActors => 'view_actors',
+      OrganizationPermission.viewStatistics => 'view_statistics',
+      OrganizationPermission.viewHistory => 'view_history',
+      OrganizationPermission.exportData => 'export_data',
+      OrganizationPermission.manageInvitations => 'manage_invitations',
+    };

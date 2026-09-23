@@ -706,6 +706,36 @@ async function cancelMission(uid, changes = {}) {
   });
 }
 
+async function seedJob0048CancellationMission(uid, overrides = {}) {
+  const locationId = overrides.locationId ?? 'bordeauxmetropole-bassens';
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, `locations/${locationId}`), {
+      id: locationId,
+      name: locationId === 'bordeauxmetropole-bassens'
+        ? 'Bassens'
+        : locationId,
+      group: 'bordeauxmetropole',
+      type: 'sdisStation',
+      isActive: true,
+    });
+    await setDoc(doc(admin, 'missions/mission-a'), genericMission({
+      id: 'mission-a',
+      locationId,
+      locationName: locationId === 'bordeauxmetropole-bassens'
+        ? 'Bassens'
+        : locationId,
+      requiredByProfession: {
+        ...emptyQuotas(),
+        physician: 3,
+      },
+      priority: 'urgent',
+      createdBy: uid,
+      ...overrides,
+    }));
+  });
+}
+
 test('locations: public read allowed, all writes denied', async () => {
   await seed();
   assert.equal((await assertSucceeds(getDoc(doc(db(), 'locations/site-a')))).exists(), true);
@@ -800,6 +830,151 @@ test('missions: public active read and anonymous create denied', async () => {
   await seed();
   await assertSucceeds(getDoc(doc(db(), 'missions/mission-a')));
   await assertFails(setDoc(doc(db(), 'missions/new'), mission({id: 'new'})));
+});
+
+test('JOB-0066: ended need stays readable without a client update path', async () => {
+  await seed({mission: false});
+  const endedAt = Timestamp.fromMillis(Date.now() - 1000);
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'missions/mission-ended'), mission({
+      id: 'mission-ended',
+      startAt: Timestamp.fromMillis(endedAt.toMillis() - 3600000),
+      endAt: endedAt,
+      details: 'Historique conservé',
+    }));
+  });
+
+  await assertSucceeds(getDoc(doc(db(), 'missions/mission-ended')));
+  await assertSucceeds(getDoc(doc(db('manager'), 'missions/mission-ended')));
+  await assertFails(updateDoc(doc(db('coord'), 'missions/mission-ended'), {
+    details: 'Altération historique',
+    updatedAt: serverTimestamp(),
+  }));
+
+  await env.withSecurityRulesDisabled(async (context) => {
+    const stored = await getDoc(doc(
+      context.firestore(),
+      'missions/mission-ended',
+    ));
+    assert.equal(stored.data().details, 'Historique conservé');
+  });
+});
+
+test('JOB-0036: responsible reads only its managed need diffusion', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'missions/mission-b'), mission({
+      id: 'mission-b',
+      locationId: 'site-b',
+      locationName: 'Site B',
+    }));
+    for (const needId of ['mission-a', 'mission-b']) {
+      const diffusionId = `diffusion-${needId}`;
+      await setDoc(doc(admin, `diffusions/${diffusionId}`), {
+        id: diffusionId,
+        needId,
+        organizationId: 'legacy-gironde',
+        mobilizationId: activeMobilizationId,
+        createdBy: 'coord',
+        createdAt: Timestamp.now(),
+        status: 'READY',
+      });
+      await setDoc(doc(admin, `diffusionSnapshots/${diffusionId}`), {
+        diffusionId,
+        needId,
+        createdAt: Timestamp.now(),
+        populationCount: 2,
+        criteriaSnapshot: {},
+      });
+    }
+  });
+
+  const managerDb = db('manager');
+  for (const collectionName of ['diffusions', 'diffusionSnapshots']) {
+    await assertSucceeds(getDoc(doc(
+      managerDb,
+      `${collectionName}/diffusion-mission-a`,
+    )));
+    await assertFails(getDoc(doc(
+      managerDb,
+      `${collectionName}/diffusion-mission-b`,
+    )));
+    await assertFails(getDoc(doc(
+      db(),
+      `${collectionName}/diffusion-mission-a`,
+    )));
+    await assertFails(getDocs(collection(managerDb, collectionName)));
+  }
+  await assertFails(updateDoc(
+    doc(managerDb, 'diffusions/diffusion-mission-a'),
+    {status: 'CANCELLED'},
+  ));
+  await assertFails(deleteDoc(doc(
+    managerDb,
+    'diffusionSnapshots/diffusion-mission-a',
+  )));
+  await assertFails(setDoc(doc(managerDb, 'diffusions/forged'), {
+    id: 'forged',
+    needId: 'mission-a',
+  }));
+});
+
+test('JOB-0036: canonical membership scopes diffusion reads by site', async () => {
+  await seedMultiOrganizationCore();
+  await seedOrganizationRoleScope({
+    uid: 'organization-manager-a',
+    organizationId: 'organization-a',
+    roles: ['site_manager'],
+    locationIds: ['site-rc43d-a'],
+  });
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    for (const needId of [
+      'mission-rc43d-a',
+      'mission-rc43d-a-other',
+      'mission-rc43d-b',
+    ]) {
+      const diffusionId = `diffusion-${needId}`;
+      await setDoc(doc(admin, `diffusions/${diffusionId}`), {
+        id: diffusionId,
+        needId,
+        createdAt: Timestamp.now(),
+        status: 'READY',
+      });
+      await setDoc(doc(admin, `diffusionSnapshots/${diffusionId}`), {
+        diffusionId,
+        needId,
+        createdAt: Timestamp.now(),
+        populationCount: 1,
+      });
+    }
+    await setDoc(doc(admin, 'diffusions/mismatched-id'), {
+      id: 'another-id',
+      needId: 'mission-rc43d-a',
+    });
+    await setDoc(doc(admin, 'diffusionSnapshots/mismatched-id'), {
+      diffusionId: 'another-id',
+      needId: 'mission-rc43d-a',
+    });
+  });
+
+  const managerDb = db('organization-manager-a');
+  for (const collectionName of ['diffusions', 'diffusionSnapshots']) {
+    await assertSucceeds(getDoc(doc(
+      managerDb,
+      `${collectionName}/diffusion-mission-rc43d-a`,
+    )));
+    await assertFails(getDoc(doc(
+      managerDb,
+      `${collectionName}/diffusion-mission-rc43d-a-other`,
+    )));
+    await assertFails(getDoc(doc(
+      managerDb,
+      `${collectionName}/diffusion-mission-rc43d-b`,
+    )));
+    await assertFails(getDoc(doc(managerDb, `${collectionName}/mismatched-id`)));
+  }
 });
 
 test('notifications: owner can read and toggle readAt only', async () => {
@@ -2249,6 +2424,170 @@ test('mission cancellation: unauthorized, quota mutation and reactivation denied
   }));
 });
 
+test('JOB-0048: V2 Bassens manager cancels an owned need below the expression limit', async () => {
+  const uid = 'job-0048-bassens-manager';
+  await seed({mission: false});
+  await seedRole(
+    uid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await seedJob0048CancellationMission(uid);
+
+  await assertSucceeds(cancelMission(uid));
+});
+
+test('JOB-0048: cancellation keeps site, organization, identity and payload boundaries', async () => {
+  const outsideSiteUid = 'job-0048-outside-site';
+  await seed({mission: false});
+  await seedRole(outsideSiteUid, v2Role(['site_manager'], ['site-b']));
+  await seedJob0048CancellationMission(outsideSiteUid);
+  await assertFails(cancelMission(outsideSiteUid));
+
+  const otherOrganizationUid = 'job-0048-other-organization';
+  await seed({mission: false});
+  await seedRole(
+    otherOrganizationUid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/legacy-gironde_${otherOrganizationUid}`,
+      ),
+      organizationMembership('legacy-gironde', otherOrganizationUid, {
+        roles: ['site_manager'],
+        locationIds: ['bordeauxmetropole-bassens'],
+        active: false,
+      }),
+    );
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/organization-a_${otherOrganizationUid}`,
+      ),
+      organizationMembership('organization-a', otherOrganizationUid, {
+        roles: ['site_manager'],
+        locationIds: ['bordeauxmetropole-bassens'],
+      }),
+    );
+  });
+  await seedJob0048CancellationMission(otherOrganizationUid);
+  await assertFails(cancelMission(otherOrganizationUid));
+
+  const professionalUid = 'job-0048-professional';
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), `volunteers/${professionalUid}`),
+      volunteer(professionalUid),
+    );
+  });
+  await seedJob0048CancellationMission(professionalUid);
+  await assertFails(cancelMission(professionalUid));
+
+  await seed({mission: false});
+  await seedJob0048CancellationMission('job-0048-anonymous-owner');
+  await assertFails(updateDoc(doc(db(), 'missions/mission-a'), {
+    status: 'cancelled',
+    isActive: false,
+    cancelledAt: serverTimestamp(),
+    cancelledBy: 'job-0048-anonymous-owner',
+    cancellationReason: 'Vent violent',
+    updatedAt: serverTimestamp(),
+  }));
+
+  const invalidPayloadUid = 'job-0048-invalid-payload';
+  await seed({mission: false});
+  await seedRole(
+    invalidPayloadUid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await seedJob0048CancellationMission(invalidPayloadUid);
+  await assertFails(cancelMission(invalidPayloadUid, {requiredMk: 9}));
+
+  const inactiveMobilizationUid = 'job-0048-inactive-mobilization';
+  await seed({mission: false});
+  await seedRole(
+    inactiveMobilizationUid,
+    v2Role(['site_manager'], ['bordeauxmetropole-bassens']),
+  );
+  await seedJob0048CancellationMission(inactiveMobilizationUid);
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(
+      doc(context.firestore(), `mobilizations/${activeMobilizationId}`),
+      {status: 'completed'},
+    );
+  });
+  await assertFails(cancelMission(inactiveMobilizationUid));
+
+  const administratorUid = 'job-0048-platform-administrator';
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), `platformAdministrators/${administratorUid}`),
+      {active: true},
+    );
+  });
+  await seedJob0048CancellationMission(administratorUid);
+  await assertFails(cancelMission(administratorUid));
+});
+
+test('JOB-0048: cumulative V2 role retains coordinator cancellation scope', async () => {
+  const uid = 'job-0048-cumulative';
+  await seed({mission: false});
+  await seedRole(
+    uid,
+    v2Role(['coordinator', 'site_manager'], ['site-a']),
+  );
+  await seedJob0048CancellationMission(uid, {
+    locationId: 'bordeauxmetropole-bassens',
+  });
+
+  await assertSucceeds(cancelMission(uid));
+});
+
+test('JOB-0048: explicit mobilization cancellation stays organization-scoped', async () => {
+  const authorizedUid = 'job-0048-organization-a-manager';
+  const otherOrganizationUid = 'job-0048-organization-b-manager';
+  await seedMultiOrganizationCore();
+  await seedRole(authorizedUid, v2Role(['site_manager'], ['site-a']));
+  await seedRole(otherOrganizationUid, v2Role(['site_manager'], ['site-a']));
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(
+      doc(admin, `organizationMemberships/organization-a_${authorizedUid}`),
+      organizationMembership('organization-a', authorizedUid, {
+        roles: ['site_manager'],
+        locationIds: ['site-a'],
+      }),
+    );
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/organization-b_${otherOrganizationUid}`,
+      ),
+      organizationMembership('organization-b', otherOrganizationUid, {
+        roles: ['site_manager'],
+        locationIds: ['site-a'],
+      }),
+    );
+  });
+
+  await seedJob0048CancellationMission(authorizedUid, {
+    mobilizationId: 'mobilization-a',
+    locationId: 'site-a',
+  });
+  await assertSucceeds(cancelMission(authorizedUid));
+
+  await seedJob0048CancellationMission(otherOrganizationUid, {
+    mobilizationId: 'mobilization-a',
+    locationId: 'site-a',
+  });
+  await assertFails(cancelMission(otherOrganizationUid));
+});
+
 test('engagement on a cancelled mission is denied and existing engagement stays', async () => {
   await seed();
   await engage('alice');
@@ -2693,6 +3032,193 @@ test('roles dual-read: valid legacy scopes keep their exact permissions', async 
     createMissionFor('manager-multi', 'legacy-multi', 'site-b'),
   );
   await assertFails(createMissionFor('manager', 'legacy-outside', 'site-b'));
+});
+
+test('JOB-0016: active legacy membership keeps responsible creation scoped', async () => {
+  const uid = 'legacy-canonical-manager';
+  await seed({mission: false});
+  await seedRole(uid, v2Role(['site_manager'], ['site-a']));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(
+        context.firestore(),
+        `organizationMemberships/legacy-gironde_${uid}`,
+      ),
+      organizationMembership('legacy-gironde', uid, {
+        roles: ['site_manager'],
+        locationIds: ['site-a'],
+      }),
+    );
+  });
+
+  await assertSucceeds(setDoc(
+    doc(db(uid), 'missions/legacy-canonical-priority'),
+    mission({
+      id: 'legacy-canonical-priority',
+      priority: 'urgent',
+      createdBy: uid,
+    }),
+  ));
+});
+
+test('JOB-0018: generic responsible creation stays below the expression limit', async () => {
+  const uid = 'job-0018-manager';
+  await seed({mission: false});
+  await seedRole(uid, v2Role(['site_manager'], ['site-a']));
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(
+        context.firestore(),
+        `organizationMemberships/legacy-gironde_${uid}`,
+      ),
+      organizationMembership('legacy-gironde', uid, {
+        roles: ['site_manager'],
+        locationIds: ['site-a'],
+      }),
+    );
+  });
+
+  const payload = genericMission({
+    id: 'job-0018-generic',
+    priority: 'urgent',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    createdBy: uid,
+    requiredByProfession: {
+      ...emptyQuotas(),
+      nurse: 1,
+    },
+  });
+
+  await assertSucceeds(setDoc(
+    doc(db(uid), 'missions/job-0018-generic'),
+    payload,
+  ));
+});
+
+test('JOB-0018: generic creation keeps every security boundary', async () => {
+  const authorizedUid = 'job-0018-authorized';
+  const invalidRoleUid = 'job-0018-invalid-role';
+  const invalidOrganizationUid = 'job-0018-invalid-organization';
+  await seed({mission: false});
+  await seedRole(
+    authorizedUid,
+    v2Role(['site_manager'], ['site-a']),
+  );
+  await seedRole(invalidRoleUid, {
+    role: 'professional',
+    roles: ['professional'],
+    locationIds: [],
+    active: true,
+    schemaVersion: 2,
+  });
+  await seedRole(
+    invalidOrganizationUid,
+    v2Role(['site_manager'], ['site-a']),
+  );
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    for (const uid of [authorizedUid, invalidRoleUid]) {
+      await setDoc(
+        doc(admin, `organizationMemberships/legacy-gironde_${uid}`),
+        organizationMembership('legacy-gironde', uid, {
+          roles: ['site_manager'],
+          locationIds: ['site-a'],
+        }),
+      );
+    }
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/legacy-gironde_${invalidOrganizationUid}`,
+      ),
+      organizationMembership(
+        'legacy-gironde',
+        invalidOrganizationUid,
+        {
+          roles: ['site_manager'],
+          locationIds: ['site-a'],
+          active: false,
+        },
+      ),
+    );
+    await setDoc(
+      doc(
+        admin,
+        `organizationMemberships/organization-a_${invalidOrganizationUid}`,
+      ),
+      organizationMembership('organization-a', invalidOrganizationUid, {
+        roles: ['site_manager'],
+        locationIds: ['site-a'],
+      }),
+    );
+  });
+
+  const payload = genericMission({
+    id: 'job-0018-security',
+    createdBy: authorizedUid,
+    requiredByProfession: {
+      ...emptyQuotas(),
+      nurse: 1,
+    },
+  });
+  const createAsAuthorized = (id, changes = {}) => setDoc(
+    doc(db(authorizedUid), `missions/${id}`),
+    {...payload, id, ...changes},
+  );
+
+  await assertFails(createAsAuthorized(
+    'job-0018-outside-location',
+    {locationId: 'site-b', locationName: 'Site B'},
+  ));
+  await assertFails(setDoc(
+    doc(db(invalidRoleUid), 'missions/job-0018-invalid-role'),
+    {
+      ...payload,
+      id: 'job-0018-invalid-role',
+      createdBy: invalidRoleUid,
+    },
+  ));
+  await assertFails(setDoc(
+    doc(
+      db(invalidOrganizationUid),
+      'missions/job-0018-invalid-organization',
+    ),
+    {
+      ...payload,
+      id: 'job-0018-invalid-organization',
+      createdBy: invalidOrganizationUid,
+    },
+  ));
+  await assertFails(createAsAuthorized(
+    'job-0018-invalid-priority',
+    {priority: 'information'},
+  ));
+  await assertFails(createAsAuthorized(
+    'job-0018-invalid-quota',
+    {
+      requiredByProfession: {
+        ...emptyQuotas(),
+        nurse: -1,
+      },
+    },
+  ));
+  await assertFails(createAsAuthorized(
+    'job-0018-unknown-field',
+    {unexpected: true},
+  ));
+  await assertFails(createAsAuthorized(
+    'job-0018-malformed',
+    {startAt: 'not-a-timestamp'},
+  ));
+  await assertFails(setDoc(
+    doc(db(), 'missions/job-0018-unauthorized'),
+    {
+      ...payload,
+      id: 'job-0018-unauthorized',
+      createdBy: 'anonymous',
+    },
+  ));
 });
 
 test('roles dual-read: invalid and inactive legacy documents deny access', async () => {
@@ -3475,7 +4001,7 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
     professionalMissionCount += professionalMissions.size;
   }
   assert.equal(professionalMissionCount, 3);
-  await assertFails(getDocs(query(
+  await assertSucceeds(getDocs(query(
     collection(db('platform-admin'), 'missions'),
     where('mobilizationId', '==', activeMobilizationId),
     where('isActive', '==', true),
@@ -4099,7 +4625,7 @@ test('RC4.2G: inactive membership is denied and platform admin stays global', as
   await assertSucceeds(getDocs(collection(platformAdminDb, 'mobilizations')));
 
   // RC3.8F.3 remains stricter than the organization boundary for previews.
-  await assertFails(getDoc(doc(platformAdminDb, 'missions/mission-org-a')));
+  await assertSucceeds(getDoc(doc(platformAdminDb, 'missions/mission-org-a')));
   await assertFails(getDoc(doc(
     platformAdminDb,
     'engagements/mission-org-a_professional',
@@ -4130,6 +4656,53 @@ test('RC4.2G: legacy coordinator and responsible retain their RC3 scope', async 
   )));
 });
 
+test('JOB-0069 canReadMissionScope: platform admin reads every organization mission', async () => {
+  await seedMultiOrganizationCore();
+  const platformAdminDb = db('platform-admin');
+
+  await assertSucceeds(getDoc(doc(
+    platformAdminDb,
+    'missions/mission-org-a',
+  )));
+  await assertSucceeds(getDoc(doc(
+    platformAdminDb,
+    'missions/mission-org-b',
+  )));
+});
+
+test('JOB-0069 canReadMissionScope: organization member reads its mission scope', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertSucceeds(getDoc(doc(
+    db('member-b'),
+    'missions/mission-org-b',
+  )));
+});
+
+test('JOB-0069 canReadMissionScope: organization member is denied out of scope', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertFails(getDoc(doc(
+    db('member-b'),
+    'missions/mission-org-a',
+  )));
+});
+
+test('JOB-0069 canReadMissionScope: organization outsider is denied', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertFails(getDoc(doc(
+    db('organization-outsider'),
+    'missions/mission-org-a',
+  )));
+});
+
+test('JOB-0069 canReadMissionScope: unauthenticated mission read is denied', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertFails(getDoc(doc(db(), 'missions/mission-org-a')));
+});
+
 test('RC4.2G: public professional reads and owner engagement rights stay unchanged', async () => {
   await seedMultiOrganizationCore();
   await env.withSecurityRulesDisabled(async (context) => {
@@ -4157,6 +4730,164 @@ test('RC4.2G: public professional reads and owner engagement rights stay unchang
   }
 });
 
+test('RC4.3E: private defaults close discovery but preserve existing ownership', async () => {
+  await seedMultiOrganizationCore();
+  const professionalDb = db('professional');
+
+  for (const mobilizationId of ['mobilization-a', 'mobilization-b']) {
+    await assertFails(getDoc(doc(
+      professionalDb,
+      `mobilizations/${mobilizationId}`,
+    )));
+  }
+  for (const missionId of ['mission-org-a', 'mission-org-b']) {
+    await assertFails(getDoc(doc(db(), `missions/${missionId}`)));
+    await assertSucceeds(getDoc(doc(
+      professionalDb,
+      `engagements/${missionId}_professional`,
+    )));
+  }
+});
+
+test('RC4.3E: platform visibility is inherited by mobilizations and missions', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await updateDoc(doc(admin, 'operations/operation-a'), {
+      visibility: 'platform',
+    });
+  });
+
+  const professionalDb = db('professional');
+  await assertSucceeds(getDoc(doc(
+    professionalDb,
+    'operations/operation-a',
+  )));
+  await assertSucceeds(getDoc(doc(
+    professionalDb,
+    'mobilizations/mobilization-a',
+  )));
+  await assertSucceeds(getDoc(doc(db(), 'missions/mission-org-a')));
+  await assertFails(getDoc(doc(
+    professionalDb,
+    'operations/operation-b',
+  )));
+  await assertFails(getDoc(doc(
+    professionalDb,
+    'mobilizations/mobilization-b',
+  )));
+  await assertFails(getDoc(doc(db(), 'missions/mission-org-b')));
+});
+
+test('RC4.3E: private operation is visible only inside its organization', async () => {
+  await seedMultiOrganizationCore();
+
+  const memberA = db('member-a');
+  const memberB = db('member-b');
+  await assertSucceeds(getDoc(doc(memberA, 'operations/operation-a')));
+  await assertSucceeds(getDoc(doc(memberA, 'mobilizations/mobilization-a')));
+  await assertSucceeds(getDoc(doc(memberA, 'missions/mission-org-a')));
+  await assertFails(getDoc(doc(memberB, 'operations/operation-a')));
+  await assertFails(getDoc(doc(memberB, 'mobilizations/mobilization-a')));
+  await assertFails(getDoc(doc(memberB, 'missions/mission-org-a')));
+});
+
+test('RC4.3E: shared stays owner-only until partner grants exist', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'operations/operation-a'), {
+      visibility: 'shared',
+    });
+  });
+
+  await assertSucceeds(getDoc(doc(db('member-a'), 'operations/operation-a')));
+  await assertFails(getDoc(doc(db('member-b'), 'operations/operation-a')));
+  await assertFails(getDoc(doc(db('professional'), 'operations/operation-a')));
+  await assertFails(getDoc(doc(db(), 'missions/mission-org-a')));
+});
+
+test('RC4.3E: public visibility never opens raw business documents', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'operations/operation-a'), {
+      visibility: 'public',
+    });
+  });
+
+  await assertFails(getDoc(doc(db(), 'operations/operation-a')));
+  await assertFails(getDoc(doc(db(), 'mobilizations/mobilization-a')));
+  await assertFails(getDoc(doc(db(), 'missions/mission-org-a')));
+  await assertFails(getDoc(doc(
+    db(),
+    'engagements/mission-org-a_professional',
+  )));
+  await assertSucceeds(getDoc(doc(db('member-a'), 'operations/operation-a')));
+});
+
+test('RC4.3E: legacy Gironde keeps its RC3 platform behavior', async () => {
+  await seedMultiOrganizationCore();
+
+  await assertSucceeds(getDoc(doc(
+    db('professional'),
+    'operations/operation-legacy',
+  )));
+  await assertSucceeds(getDoc(doc(
+    db('professional'),
+    `mobilizations/${activeMobilizationId}`,
+  )));
+  await assertSucceeds(getDoc(doc(db(), 'missions/mission-legacy')));
+  await assertSucceeds(getDoc(doc(
+    db('legacy-coord'),
+    'missions/mission-legacy',
+  )));
+  await assertSucceeds(getDoc(doc(
+    db('platform-admin'),
+    'missions/mission-legacy',
+  )));
+});
+
+test('RC4.3E: operation visibility never exposes engagement collections', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await updateDoc(doc(admin, 'operations/operation-a'), {
+      visibility: 'platform',
+    });
+    await setDoc(doc(admin, 'volunteers/other-professional'),
+      volunteer('other-professional'));
+  });
+
+  await assertFails(getDoc(doc(
+    db('other-professional'),
+    'engagements/mission-org-a_professional',
+  )));
+  await assertFails(getDocs(query(
+    collection(db('other-professional'), 'engagements'),
+    where('mobilizationId', '==', 'mobilization-a'),
+  )));
+});
+
+test('RC4.3E: platform mission uses its embedded site projection only', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await updateDoc(doc(admin, 'operations/operation-a'), {
+      visibility: 'platform',
+    });
+    await updateDoc(doc(admin, 'locations/site-a'), {
+      managingOrganizationId: 'organization-a',
+    });
+  });
+
+  const missionSnapshot = await assertSucceeds(getDoc(doc(
+    db(),
+    'missions/mission-org-a',
+  )));
+  assert.equal(missionSnapshot.data().locationId, 'site-a');
+  assert.equal(missionSnapshot.data().locationName, 'Site A');
+  await assertFails(getDoc(doc(db(), 'locations/site-a')));
+});
+
 test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', async () => {
   await seedMultiOrganizationCore();
   await env.withSecurityRulesDisabled(async (context) => {
@@ -4175,14 +4906,6 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
       ownerOrganizationId: 'organization-b',
       visibility: 'platform',
     });
-    await setDoc(doc(admin, 'operations/operation-private'), {
-      id: 'operation-private',
-      name: 'Opération privée',
-      type: 'emergency',
-      status: 'active',
-      ownerOrganizationId: 'organization-b',
-      visibility: 'organization_private',
-    });
     await setDoc(doc(admin, 'operations/operation-public'), {
       id: 'operation-public',
       name: 'Opération public réservée',
@@ -4191,18 +4914,18 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
       ownerOrganizationId: 'organization-b',
       visibility: 'public',
     });
-    for (const [mobilizationId, operationId] of [
-      ['mobilization-platform-2', 'operation-platform-2'],
-      ['mobilization-private', 'operation-private'],
-      ['mobilization-public', 'operation-public'],
-    ]) {
-      await setDoc(doc(admin, `mobilizations/${mobilizationId}`), {
-        id: mobilizationId,
-        territoryId: 'gironde',
-        status: 'active',
-        operationId,
-      });
-    }
+    await setDoc(doc(admin, 'mobilizations/mobilization-platform-2'), {
+      id: 'mobilization-platform-2',
+      territoryId: 'gironde',
+      status: 'active',
+      operationId: 'operation-platform-2',
+    });
+    await setDoc(doc(admin, 'mobilizations/mobilization-public'), {
+      id: 'mobilization-public',
+      territoryId: 'gironde',
+      status: 'active',
+      operationId: 'operation-public',
+    });
     await setDoc(doc(admin, 'mobilizations/mobilization-inactive'), {
       id: 'mobilization-inactive',
       territoryId: 'gironde',
@@ -4240,11 +4963,7 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
     ['mobilization-a', 'mobilization-platform-2'],
   );
 
-  for (const operationId of [
-    'operation-b',
-    'operation-private',
-    'operation-public',
-  ]) {
+  for (const operationId of ['operation-b', 'operation-public']) {
     await assertFails(getDocs(query(
       collection(publicDb, 'mobilizations'),
       where('operationId', '==', operationId),

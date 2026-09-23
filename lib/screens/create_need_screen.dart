@@ -5,6 +5,8 @@ import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../repositories/coordination_repository.dart';
+import '../repositories/diffusion_read_repository.dart';
+import '../repositories/diffusion_read_repository_scope.dart';
 import '../repositories/platform_runtime.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
@@ -14,6 +16,7 @@ import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
+import '../widgets/responsible_diffusion_summary.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
@@ -226,8 +229,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     List<ResponsePlace> locations,
   ) {
     if (!_isEditing && _publishedMission != null) {
+      final diffusionRepository = DiffusionReadRepositoryScope.maybeOf(context);
       return _MissionPublishedView(
         mission: _publishedMission!,
+        diffusionRepository: diffusionRepository,
         onViewMission: widget.onViewMission,
         onCreateAnother: _resetForm,
       );
@@ -1457,11 +1462,13 @@ class _MissionReviewView extends StatelessWidget {
 class _MissionPublishedView extends StatelessWidget {
   const _MissionPublishedView({
     required this.mission,
+    required this.diffusionRepository,
     required this.onViewMission,
     required this.onCreateAnother,
   });
 
   final _PublishedMission mission;
+  final DiffusionReadRepository? diffusionRepository;
   final VoidCallback? onViewMission;
   final VoidCallback onCreateAnother;
 
@@ -1484,7 +1491,19 @@ class _MissionPublishedView extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineLarge,
           ),
           const SizedBox(height: 24),
-          _MissionDraftSummary(draft: draft, status: 'En attente de diffusion'),
+          _MissionDraftSummary(
+            draft: draft,
+            status: diffusionRepository == null
+                ? 'En attente de diffusion'
+                : null,
+          ),
+          if (diffusionRepository case final repository?) ...[
+            const SizedBox(height: 20),
+            ResponsibleDiffusionSummary(
+              needId: mission.id,
+              repository: repository,
+            ),
+          ],
           const SizedBox(height: 20),
           V5Button(
             expanded: true,

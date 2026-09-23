@@ -29,6 +29,7 @@ import 'firestore_admin_invitation_repository.dart';
 import 'firestore_location_mapper.dart';
 import 'firestore_location_administration_repository.dart';
 import 'firestore_mission_mapper.dart';
+import 'mission_cancellation_completion.dart';
 import 'firestore_operation_read_repository.dart';
 import 'firestore_organization_read_repository.dart';
 import 'organization_read_repository.dart';
@@ -239,6 +240,7 @@ class FirestoreCoordinationRepository
         OrganizationEngagementReadDataSource,
         OrganizationLocationReadDataSource,
         MultiMobilizationCoordinationReadRepository,
+        MobilizationLocationMissionReadRepository,
         MultiMobilizationCoordinationMutationRepository,
         PlatformRuntime,
         MultiOperationPlatformRuntime,
@@ -584,6 +586,27 @@ class FirestoreCoordinationRepository
             mobilizationId,
             locationIds: ids,
           ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizationsAndLocations({
+    required Set<String> mobilizationIds,
+    required Set<String> locationIds,
+  }) {
+    final mobilizations = _validatedQueryIds(mobilizationIds, 'mobilisation');
+    final locations = _validatedQueryIds(locationIds, 'lieu', maxCount: 30);
+    if (mobilizations.isEmpty || locations.isEmpty) {
+      return Stream<List<CoordinationNeed>>.value(const []);
+    }
+    return _combineMissionStreams(
+      mobilizations.map(
+        (mobilizationId) => _watchMissionsInMobilization(
+          _responsibleFirestore,
+          mobilizationId,
+          locationIds: locations,
         ),
       ),
     );
@@ -1687,41 +1710,57 @@ class FirestoreCoordinationRepository
         .doc(missionId);
     final roleRef = _responsibleFirestore.collection('roles').doc(user.uid);
     try {
-      await _responsibleFirestore
-          .runTransaction((transaction) async {
-            final missionSnapshot = await transaction.get(missionRef);
-            final roleSnapshot = await transaction.get(roleRef);
-            if (!missionSnapshot.exists) {
-              throw const RepositoryException('Mission introuvable.');
-            }
-            final mission = missionSnapshot.data()!;
-            requireMatchingMobilizationId(mission: mission);
-            if (mission['status'] == 'cancelled' ||
-                mission['isActive'] == false) {
-              throw const RepositoryException(
-                'Cette mission a déjà été annulée.',
+      await awaitMissionCancellationCompletion(
+        write: () =>
+            _responsibleFirestore.runTransaction<void>((transaction) async {
+              final missionSnapshot = await transaction.get(missionRef);
+              final roleSnapshot = await transaction.get(roleRef);
+              if (!missionSnapshot.exists) {
+                throw const RepositoryException('Mission introuvable.');
+              }
+              final mission = missionSnapshot.data()!;
+              requireMatchingMobilizationId(mission: mission);
+              if (mission['status'] == 'cancelled' ||
+                  mission['isActive'] == false) {
+                throw const RepositoryException(
+                  'Cette mission a déjà été annulée.',
+                );
+              }
+              if (!roleSnapshot.exists ||
+                  roleSnapshot.data()?['active'] != true ||
+                  mission['createdBy'] != user.uid) {
+                throw const RepositoryException(
+                  'Seul le responsable ayant créé ce besoin peut l’annuler.',
+                );
+              }
+              final now = FieldValue.serverTimestamp();
+              transaction.update(
+                missionRef,
+                FirestoreMissionMapper.cancellationUpdate(
+                  cancelledBy: user.uid,
+                  reason: reason ?? '',
+                  serverTimestamp: now,
+                ),
               );
-            }
-            if (!roleSnapshot.exists ||
-                roleSnapshot.data()?['active'] != true ||
-                mission['createdBy'] != user.uid) {
-              throw const RepositoryException(
-                'Seul le responsable ayant créé ce besoin peut l’annuler.',
-              );
-            }
-            final now = FieldValue.serverTimestamp();
-            transaction.update(
-              missionRef,
-              FirestoreMissionMapper.cancellationUpdate(
-                cancelledBy: user.uid,
-                reason: reason ?? '',
-                serverTimestamp: now,
-              ),
-            );
-          })
-          .timeout(const Duration(seconds: 15));
+            }),
+        remoteConfirmations: missionRef
+            .snapshots(includeMetadataChanges: true)
+            .map((snapshot) {
+              final mission = snapshot.data();
+              return snapshot.exists &&
+                  !snapshot.metadata.hasPendingWrites &&
+                  !snapshot.metadata.isFromCache &&
+                  mission?['status'] == 'cancelled' &&
+                  mission?['isActive'] == false &&
+                  mission?['cancelledBy'] == user.uid;
+            }),
+      );
     } on RepositoryException {
       rethrow;
+    } on FirebaseException catch (error, stackTrace) {
+      debugPrint('Échec cancelMission (${error.code}) : $error');
+      debugPrintStack(stackTrace: stackTrace);
+      throw RepositoryException(_missionCancellationMessage(error.code));
     } catch (error, stackTrace) {
       debugPrint('Échec cancelMission : $error');
       debugPrintStack(stackTrace: stackTrace);
@@ -2119,6 +2158,14 @@ class FirestoreCoordinationRepository
     'invalid-argument' => 'Les informations de la mission sont invalides.',
     'unauthenticated' => 'Vous devez vous connecter pour modifier une mission.',
     _ => 'La mission n’a pas pu être mise à jour. Réessayez.',
+  };
+
+  static String _missionCancellationMessage(String code) => switch (code) {
+    'permission-denied' => 'Vous n’êtes pas autorisé à annuler ce besoin.',
+    'unauthenticated' => 'Vous devez vous connecter pour annuler ce besoin.',
+    'unavailable' || 'network-request-failed' =>
+      'La connexion est indisponible. Vérifiez votre réseau puis réessayez.',
+    _ => 'L’annulation n’a pas pu être enregistrée. Réessayez.',
   };
 
   static NeedStatus _statusForQuotas(ProfessionQuotas quotas) {

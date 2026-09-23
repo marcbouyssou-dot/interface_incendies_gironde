@@ -1,0 +1,473 @@
+{
+  "schemaVersion": 1,
+  "legacyOrganizationId": "legacy-gironde",
+  "roles": [
+    "organization_admin",
+    "coordinator",
+    "site_manager",
+    "professional"
+  ],
+  "permissions": [
+    "read_organization",
+    "read_operations",
+    "manage_operations",
+    "manage_coordinators",
+    "manage_site_managers",
+    "manage_sites",
+    "view_actors",
+    "view_statistics",
+    "view_history",
+    "export_data",
+    "manage_invitations"
+  ],
+  "comparableOutputs": [
+    "hasActiveMembership",
+    "usesLegacyFallback",
+    "isPlatformAdministrator",
+    "isOrganizationAdmin",
+    "isCoordinator",
+    "isSiteManager",
+    "isProfessional",
+    "hasOrganizationAccess",
+    "roles",
+    "allowedPermissions"
+  ],
+  "layerSpecificConcepts": {
+    "dart": [
+      "OrganizationResponsibleAccessResolver porte le périmètre locationIds des parcours Coordinateur et Responsable en dehors de OrganizationAuthorizationService.",
+      "Le service reçoit des legacyRoleValues déjà validées et actives par la couche d'identité RC3."
+    ],
+    "functions": [
+      "resolveOrganizationAuthorization expose membershipPresent et membershipValid pour le diagnostic interne.",
+      "resolveOrganizationAuthorization conserve locationIds et canReadOrganizationMissionTeam applique le périmètre Site.",
+      "La couche Functions parse le document roles/{uid} brut, y compris active et son schéma."
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "no-user",
+      "description": "Une identité absente est rejetée avant toute décision.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "",
+        "membership": null,
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expectedError": "invalid_identity"
+    },
+    {
+      "id": "membership-absent",
+      "description": "Sans membership ni privilège global, aucun accès organisationnel n'est accordé.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "user-absent",
+        "membership": null,
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": false,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": false,
+        "roles": [],
+        "allowedPermissions": []
+      }
+    },
+    {
+      "id": "membership-inactive",
+      "description": "Une membership inactive ne porte aucun rôle.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "user-inactive",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "user-inactive",
+          "roles": ["professional"],
+          "locationIds": [],
+          "active": false,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": false,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": false,
+        "roles": [],
+        "allowedPermissions": []
+      }
+    },
+    {
+      "id": "active-professional",
+      "description": "Un professionnel actif possède uniquement les lectures organisationnelles communes.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "professional-a",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "professional-a",
+          "roles": ["professional"],
+          "locationIds": [],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": false,
+        "isProfessional": true,
+        "hasOrganizationAccess": true,
+        "roles": ["professional"],
+        "allowedPermissions": ["read_organization", "read_operations"]
+      }
+    },
+    {
+      "id": "coordinator",
+      "description": "Un coordinateur actif est limité aux permissions de lecture communes.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "coordinator-a",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "coordinator-a",
+          "roles": ["coordinator"],
+          "locationIds": [],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": true,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": ["coordinator"],
+        "allowedPermissions": ["read_organization", "read_operations"]
+      }
+    },
+    {
+      "id": "site-manager-with-location-ids",
+      "description": "Un responsable avec un périmètre de Sites cohérent est actif.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "manager-a",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "manager-a",
+          "roles": ["site_manager"],
+          "locationIds": ["site-a", "site-a-2"],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": true,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": ["site_manager"],
+        "allowedPermissions": ["read_organization", "read_operations"]
+      }
+    },
+    {
+      "id": "site-manager-without-location-ids",
+      "description": "Une membership Responsable sans Site est incohérente et échoue fermée.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "manager-invalid",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "manager-invalid",
+          "roles": ["site_manager"],
+          "locationIds": [],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": false,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": false,
+        "roles": [],
+        "allowedPermissions": []
+      }
+    },
+    {
+      "id": "organization-admin",
+      "description": "Un Administrateur d'organisation actif reçoit toutes les permissions organisationnelles canoniques.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "organization-admin-a",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "organization-admin-a",
+          "roles": ["organization_admin"],
+          "locationIds": [],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": true,
+        "isCoordinator": false,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": ["organization_admin"],
+        "allowedPermissions": [
+          "read_organization",
+          "read_operations",
+          "manage_operations",
+          "manage_coordinators",
+          "manage_site_managers",
+          "manage_sites",
+          "view_actors",
+          "view_statistics",
+          "view_history",
+          "export_data",
+          "manage_invitations"
+        ]
+      }
+    },
+    {
+      "id": "organization-admin-and-coordinator",
+      "description": "Les rôles cumulés restent visibles sans transformer le rôle Coordinateur en privilège global.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "admin-coordinator-a",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "admin-coordinator-a",
+          "roles": ["organization_admin", "coordinator"],
+          "locationIds": [],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": true,
+        "isCoordinator": true,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": ["organization_admin", "coordinator"],
+        "allowedPermissions": [
+          "read_organization",
+          "read_operations",
+          "manage_operations",
+          "manage_coordinators",
+          "manage_site_managers",
+          "manage_sites",
+          "view_actors",
+          "view_statistics",
+          "view_history",
+          "export_data",
+          "manage_invitations"
+        ]
+      }
+    },
+    {
+      "id": "same-user-coordinator-in-a",
+      "description": "Le même UID peut être Coordinateur dans A.",
+      "input": {
+        "organizationId": "organization-a",
+        "uid": "multi-organization-user",
+        "membership": {
+          "organizationId": "organization-a",
+          "uid": "multi-organization-user",
+          "roles": ["coordinator"],
+          "locationIds": [],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": true,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": ["coordinator"],
+        "allowedPermissions": ["read_organization", "read_operations"]
+      }
+    },
+    {
+      "id": "same-user-site-manager-in-b",
+      "description": "Le même UID peut être Responsable, et non Coordinateur, dans B.",
+      "input": {
+        "organizationId": "organization-b",
+        "uid": "multi-organization-user",
+        "membership": {
+          "organizationId": "organization-b",
+          "uid": "multi-organization-user",
+          "roles": ["site_manager"],
+          "locationIds": ["site-b"],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": null,
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": true,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": ["site_manager"],
+        "allowedPermissions": ["read_organization", "read_operations"]
+      }
+    },
+    {
+      "id": "platform-admin-global",
+      "description": "Le platform_admin est global sans devenir organization_admin.",
+      "input": {
+        "organizationId": "organization-b",
+        "uid": "platform-admin",
+        "membership": null,
+        "legacyAccess": null,
+        "platformAdministrator": true
+      },
+      "expected": {
+        "hasActiveMembership": false,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": true,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": [],
+        "allowedPermissions": [
+          "read_organization",
+          "read_operations",
+          "manage_operations",
+          "manage_coordinators",
+          "manage_site_managers",
+          "manage_sites",
+          "view_actors",
+          "view_statistics",
+          "view_history",
+          "export_data",
+          "manage_invitations"
+        ]
+      }
+    },
+    {
+      "id": "legacy-gironde-role-fallback",
+      "description": "Un rôle RC3 actif est accepté uniquement dans legacy-gironde en l'absence de membership.",
+      "input": {
+        "organizationId": "legacy-gironde",
+        "uid": "legacy-coordinator",
+        "membership": null,
+        "legacyAccess": {
+          "roles": ["coordinator"],
+          "locationIds": [],
+          "active": true
+        },
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": false,
+        "usesLegacyFallback": true,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": true,
+        "isSiteManager": false,
+        "isProfessional": false,
+        "hasOrganizationAccess": true,
+        "roles": ["coordinator"],
+        "allowedPermissions": ["read_organization", "read_operations"]
+      }
+    },
+    {
+      "id": "explicit-membership-blocks-legacy-fallback",
+      "description": "Une membership RC4 présente est prioritaire et bloque le fallback roles/{uid}.",
+      "input": {
+        "organizationId": "legacy-gironde",
+        "uid": "transition-user",
+        "membership": {
+          "organizationId": "legacy-gironde",
+          "uid": "transition-user",
+          "roles": ["professional"],
+          "locationIds": [],
+          "active": true,
+          "schemaVersion": 1
+        },
+        "legacyAccess": {
+          "roles": ["coordinator"],
+          "locationIds": [],
+          "active": true
+        },
+        "platformAdministrator": false
+      },
+      "expected": {
+        "hasActiveMembership": true,
+        "usesLegacyFallback": false,
+        "isPlatformAdministrator": false,
+        "isOrganizationAdmin": false,
+        "isCoordinator": false,
+        "isSiteManager": false,
+        "isProfessional": true,
+        "hasOrganizationAccess": true,
+        "roles": ["professional"],
+        "allowedPermissions": ["read_organization", "read_operations"]
+      }
+    }
+  ]
+}

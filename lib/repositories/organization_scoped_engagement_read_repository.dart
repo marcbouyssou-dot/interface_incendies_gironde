@@ -29,10 +29,11 @@ class OrganizationScopedEngagementReadRepository
       if (mission == null || mission.id != missionId) {
         return Stream<List<EngagementInfo>>.value(const []);
       }
-      final source = _delegate is OrganizationEngagementReadDataSource
-          ? (_delegate as OrganizationEngagementReadDataSource)
-                .watchAuthorizedMissionEngagements(missionId)
-          : _delegate.watchMissionEngagements(missionId);
+      // La mission est déjà validée dans le contexte organisationnel courant.
+      // Le delegate conserve ensuite son choix de transport selon le rôle :
+      // callable borné à la mission pour un Responsable de site, ou requête
+      // Firestore autorisée pour un Coordinateur.
+      final source = _delegate.watchMissionEngagements(missionId);
       return source.map(
         (engagements) => List<EngagementInfo>.unmodifiable(
           engagements.where((engagement) => engagement.missionId == missionId),

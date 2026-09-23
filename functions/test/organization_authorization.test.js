@@ -1,12 +1,58 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import test from 'node:test';
 
 import {
   canReadOrganizationMissionTeam,
+  LEGACY_ORGANIZATION_ID,
   ORGANIZATION_PERMISSIONS,
+  ORGANIZATION_ROLES,
   readOrganizationAuthorization,
   resolveOrganizationAuthorization,
 } from '../src/organization_authorization.js';
+
+const authorizationContract = JSON.parse(readFileSync(
+  new URL('../../contracts/organization_authorization_matrix.json', import.meta.url),
+  'utf8',
+));
+
+test('canonical catalogues force the shared matrix to evolve with the engines', () => {
+  assert.deepEqual(authorizationContract.roles, ORGANIZATION_ROLES);
+  assert.deepEqual(authorizationContract.permissions, ORGANIZATION_PERMISSIONS);
+  assert.equal(
+    authorizationContract.legacyOrganizationId,
+    LEGACY_ORGANIZATION_ID,
+  );
+});
+
+for (const scenario of authorizationContract.scenarios) {
+  test(`shared scenario: ${scenario.id}`, () => {
+    if (scenario.expectedError === 'invalid_identity') {
+      assert.throws(() => resolveContractScenario(scenario.input), TypeError);
+      return;
+    }
+
+    const authorization = resolveContractScenario(scenario.input);
+    const roleOrder = authorizationContract.roles;
+    const roles = [...authorization.roles].sort(
+      (left, right) => roleOrder.indexOf(left) - roleOrder.indexOf(right),
+    );
+    assert.deepEqual({
+      hasActiveMembership: authorization.hasActiveMembership,
+      usesLegacyFallback: authorization.usesLegacyFallback,
+      isPlatformAdministrator: authorization.isPlatformAdministrator,
+      isOrganizationAdmin: authorization.isOrganizationAdmin,
+      isCoordinator: authorization.isCoordinator,
+      isSiteManager: authorization.isSiteManager,
+      isProfessional: authorization.isProfessional,
+      hasOrganizationAccess: authorization.hasOrganizationAccess,
+      roles,
+      allowedPermissions: ORGANIZATION_PERMISSIONS.filter(
+        authorization.allows,
+      ),
+    }, scenario.expected, scenario.description);
+  });
+}
 
 test('organization admin is active only inside its membership organization', () => {
   const membership = membershipFor('organization-a', 'admin-a', [
@@ -186,6 +232,29 @@ function activeRole(role) {
     role,
     locationIds: role === 'coordinator' ? [] : ['site-a'],
     active: true,
+  };
+}
+
+function resolveContractScenario(input) {
+  return resolveOrganizationAuthorization({
+    organizationId: input.organizationId,
+    uid: input.uid,
+    membership: input.membership,
+    legacyRole: legacyRoleDocument(input.legacyAccess),
+    platformAdministrator: input.platformAdministrator,
+  });
+}
+
+function legacyRoleDocument(access) {
+  if (access === null) return null;
+  return {
+    role: access.roles.includes('coordinator')
+      ? 'coordinator'
+      : 'site_manager',
+    roles: access.roles,
+    locationIds: access.locationIds,
+    active: access.active,
+    schemaVersion: 2,
   };
 }
 

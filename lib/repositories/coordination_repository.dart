@@ -134,6 +134,18 @@ abstract interface class MultiMobilizationCoordinationReadRepository {
   Stream<List<CoordinationNeed>> watchAllActiveMissions();
 }
 
+/// Lecture Responsable bornée simultanément par mobilisation et par site.
+///
+/// Les deux périmètres doivent être portés par la requête serveur : ce contrat
+/// ne permet pas de récupérer une collection plus large puis de la filtrer en
+/// mémoire.
+abstract interface class MobilizationLocationMissionReadRepository {
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizationsAndLocations({
+    required Set<String> mobilizationIds,
+    required Set<String> locationIds,
+  });
+}
+
 /// Mutation explicite dans une mobilisation sélectionnée. Le contrat legacy
 /// [CoordinationRepository.createMission] reste disponible pendant la
 /// transition.

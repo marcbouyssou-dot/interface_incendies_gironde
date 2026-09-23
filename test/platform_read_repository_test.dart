@@ -34,6 +34,33 @@ void main() {
     );
 
     test(
+      'active mobilization reads config and one document without listing',
+      () async {
+        final source = _FakePlatformReadDataSource(
+          config: const {'activeMobilizationId': 'legacy-active'},
+          mobilizations: [
+            _mobilizationDocument(
+              id: 'legacy-active',
+              territoryId: 'gironde',
+              status: 'active',
+              createdAt: createdAt,
+              updatedAt: updatedAt,
+            ),
+          ],
+        );
+        final repository = FirestorePlatformReadRepository(dataSource: source);
+
+        expect(
+          (await repository.watchActiveMobilization().first)?.id,
+          'legacy-active',
+        );
+        expect(source.configReads, 1);
+        expect(source.mobilizationDocumentReads, 1);
+        expect(source.mobilizationListReads, 0);
+      },
+    );
+
+    test(
       'reads several mobilizations and excludes inactive ones by default',
       () async {
         final source = _FakePlatformReadDataSource(
@@ -202,9 +229,13 @@ class _FakePlatformReadDataSource implements PlatformReadDataSource {
 
   String? lastTerritoryId;
   bool? lastIncludeInactive;
+  int configReads = 0;
+  int mobilizationDocumentReads = 0;
+  int mobilizationListReads = 0;
 
   @override
   Stream<PlatformReadDocument?> watchMobilizationDocument(String id) {
+    mobilizationDocumentReads++;
     PlatformReadDocument? result;
     for (final document in mobilizations) {
       if (document.id == id) {
@@ -220,6 +251,7 @@ class _FakePlatformReadDataSource implements PlatformReadDataSource {
     String? territoryId,
     required bool includeInactive,
   }) {
+    mobilizationListReads++;
     lastTerritoryId = territoryId;
     lastIncludeInactive = includeInactive;
     final result = mobilizations
@@ -236,6 +268,7 @@ class _FakePlatformReadDataSource implements PlatformReadDataSource {
 
   @override
   Stream<Map<String, Object?>?> watchPlatformConfigDocument() {
+    configReads++;
     return _openValue(config);
   }
 

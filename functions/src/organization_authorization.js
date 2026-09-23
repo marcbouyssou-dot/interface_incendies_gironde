@@ -88,6 +88,7 @@ export function resolveOrganizationAuthorization({
     isCoordinator: roleSet.has('coordinator'),
     isSiteManager: roleSet.has('site_manager'),
     isProfessional: roleSet.has('professional'),
+    hasOrganizationAccess,
     roles,
     locationIds,
     hasRole: (role) => ORGANIZATION_ROLES.includes(role) && roleSet.has(role),

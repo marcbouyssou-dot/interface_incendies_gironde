@@ -108,6 +108,10 @@ import {
   SolicitationJournalError,
 } from './operational_notifications/solicitation_journal.js';
 
+export {
+  createPublishedNeedDiffusion,
+} from './diffusions/create_published_need_diffusion.js';
+
 if (getApps().length === 0) initializeApp();
 
 const operationalTriggerOptions = Object.freeze({

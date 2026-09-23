@@ -252,6 +252,91 @@ service cloud.firestore {
           == data.registeredByProfession.get('podiatrist', 0);
     }
 
+    function missionCreateQuotaValues(value) {
+      return [
+        value.get('physiotherapist', 0),
+        value.get('podiatrist', 0),
+        value.get('physician', 0),
+        value.get('nurse', 0),
+        value.get('veterinarian', 0),
+        value.get('other_health_professional', 0)
+      ];
+    }
+
+    function validMissionCreateQuotaValues(values) {
+      return values[0] is int
+        && values[1] is int
+        && values[2] is int
+        && values[3] is int
+        && values[4] is int
+        && values[5] is int
+        && values[0] >= 0
+        && values[1] >= 0
+        && values[2] >= 0
+        && values[3] >= 0
+        && values[4] >= 0
+        && values[5] >= 0;
+    }
+
+    function validGenericMissionCreateQuotaData(data) {
+      let required = data.get('requiredByProfession', null);
+      let registered = data.get('registeredByProfession', null);
+      let requiredValues = required is map
+        ? missionCreateQuotaValues(required)
+        : [];
+      let registeredValues = registered is map
+        ? missionCreateQuotaValues(registered)
+        : [];
+      return required is map
+        && registered is map
+        && required.keys().hasOnly([
+          'physiotherapist', 'podiatrist', 'physician', 'nurse',
+          'veterinarian', 'other_health_professional'
+        ])
+        && registered.keys().hasOnly([
+          'physiotherapist', 'podiatrist', 'physician', 'nurse',
+          'veterinarian', 'other_health_professional'
+        ])
+        && validMissionCreateQuotaValues(requiredValues)
+        && validMissionCreateQuotaValues(registeredValues)
+        && registeredValues[0] <= requiredValues[0]
+        && registeredValues[1] <= requiredValues[1]
+        && registeredValues[2] <= requiredValues[2]
+        && registeredValues[3] <= requiredValues[3]
+        && registeredValues[4] <= requiredValues[4]
+        && registeredValues[5] <= requiredValues[5]
+        && data.requiredMk == requiredValues[0]
+        && data.requiredPp == requiredValues[1]
+        && data.registeredMk == registeredValues[0]
+        && data.registeredPp == registeredValues[1]
+        && data.registeredMk == 0
+        && data.registeredPp == 0
+        && registeredValues == [0, 0, 0, 0, 0, 0]
+        && data.requiredMk is int
+        && data.requiredPp is int
+        && data.requiredMk >= 0
+        && data.requiredMk <= 50
+        && data.requiredPp >= 0
+        && data.requiredPp <= 50
+        && requiredValues != [0, 0, 0, 0, 0, 0];
+    }
+
+    function validMissionCreateQuotaData(data) {
+      return !hasGenericQuotas(data)
+        ? (data.registeredMk == 0
+          && data.registeredPp == 0
+          && validGenericQuotaData(data)
+          && totalRegistered(data) == 0
+          && data.requiredMk is int
+          && data.requiredPp is int
+          && data.requiredMk >= 0
+          && data.requiredMk <= 50
+          && data.requiredPp >= 0
+          && data.requiredPp <= 50
+          && totalRequired(data) > 0)
+        : validGenericMissionCreateQuotaData(data);
+    }
+
     function validCounterQuotaData(before, after) {
       return !hasGenericQuotas(after)
         ? (sameRequiredQuotas(before, after)
@@ -818,12 +903,26 @@ service cloud.firestore {
       return hasActiveOrganizationMembership(organizationId);
     }
 
+    // Le chemin canonique borne l'organisation et l'uid. Les memberships sont
+    // non inscriptibles par le client ; le rôle et le lieu restent contrôlés
+    // séparément par canManageMobilizationLocation().
+    function hasActiveLegacyOrganizationMembershipDocument() {
+      return get(organizationMembershipPath(
+        legacyOrganizationId(),
+        request.auth.uid
+      )).data.get('active', false) == true;
+    }
+
     function legacyOrganizationId() {
       return 'legacy-gironde';
     }
 
     function operationPath(operationId) {
       return /databases/$(database)/documents/operations/$(operationId);
+    }
+
+    function organizationPath(organizationId) {
+      return /databases/$(database)/documents/organizations/$(organizationId);
     }
 
     function missionPath(missionId) {
@@ -840,27 +939,51 @@ service cloud.firestore {
       );
     }
 
+    // `defaultVisibility` sert uniquement de compatibilité aux opérations qui
+    // ne portent pas encore leur valeur effective. Les nouvelles opérations
+    // doivent persister `visibility`; une valeur explicite reste prioritaire.
+    function effectiveOperationVisibility(operation) {
+      let organizationId = operationOwnerOrganizationId(operation);
+      let ownerPath = organizationPath(organizationId);
+      return 'visibility' in operation
+        ? operation.visibility
+        : (organizationId == legacyOrganizationId()
+          ? 'platform'
+          : (exists(ownerPath)
+            ? get(ownerPath).data.get(
+                'defaultVisibility',
+                'organization_private'
+              )
+            : 'organization_private'));
+    }
+
+    function hasValidEffectiveOperationVisibility(operation) {
+      return effectiveOperationVisibility(operation) in [
+        'organization_private', 'shared', 'platform', 'public'
+      ];
+    }
+
     function isPublishedOperation(operation) {
       return operation.get('status', '') in [
         'planned', 'active', 'suspended', 'completed'
       ];
     }
 
-    // Une lecture documentaire conserve le legacy Gironde sans visibilité.
-    // Une requête de collection doit en revanche porter `visibility` afin que
-    // les Rules puissent prouver le bornage sans inspecter après lecture.
     function isPlatformDiscoverableOperation(operation) {
       return hasValidOperationOrganization(operation)
-        && isPublishedOperation(operation)
-        && (operation.get('visibility', '__missing__') == 'platform'
-          || (!('visibility' in operation)
-            && operationOwnerOrganizationId(operation)
-              == legacyOrganizationId()));
+        && hasValidEffectiveOperationVisibility(operation)
+        && effectiveOperationVisibility(operation) == 'platform'
+        && isPublishedOperation(operation);
     }
 
+    // Les requêtes publiques de collection doivent porter explicitement la
+    // visibilité dans leurs contraintes. Le fallback legacy/default reste
+    // réservé aux lectures documentaires ciblées : Firestore Rules ne peut
+    // pas transformer une requête globale en filtre parent-aware.
     function isExplicitPlatformDiscoverableOperation(operation) {
       return hasValidOperationOrganization(operation)
-        && operation.get('visibility', '__missing__') == 'platform'
+        && 'visibility' in operation
+        && operation.visibility == 'platform'
         && isPublishedOperation(operation);
     }
 
@@ -954,7 +1077,7 @@ service cloud.firestore {
     }
 
     function isConfiguredLegacyMobilization(mobilizationId, mobilization) {
-      let configPath = /databases/$(database)/documents/platform/config;
+      let configPath = platformConfigPath();
       return isLegacyMobilization(mobilization)
         && exists(configPath)
         && get(configPath).data.get('activeMobilizationId', '')
@@ -1102,7 +1225,8 @@ service cloud.firestore {
 
     function canUseMobilizationOrganizationAsRole(mobilizationId) {
       return (isLegacyMobilizationById(mobilizationId)
-          && !hasOrganizationMembershipDocument(legacyOrganizationId()))
+          && (!hasOrganizationMembershipDocument(legacyOrganizationId())
+            || hasActiveLegacyOrganizationMembershipDocument()))
         || canUseExplicitMobilizationOrganizationAsRole(mobilizationId);
     }
 
@@ -1178,15 +1302,149 @@ service cloud.firestore {
         && canUseMobilizationOrganizationAsRole(mobilizationId);
     }
 
+    function canCreateMissionAtMobilizationLocation(
+      mobilizationId,
+      locationId
+    ) {
+      let currentRolePath = rolePath();
+      let role = isSignedIn() && exists(currentRolePath)
+        ? get(currentRolePath).data
+        : {};
+      let assignmentPath = mobilizationAssignmentPath(
+        mobilizationId,
+        request.auth.uid
+      );
+      let configPath = platformConfigPath();
+      return isSignedIn()
+        && exists(currentRolePath)
+        && isValidRoleDocument(role)
+        && role.active == true
+        && ((hasRole(role, 'coordinator')
+            && ((exists(assignmentPath)
+                && get(assignmentPath).data.uid == request.auth.uid
+                && get(assignmentPath).data.mobilizationId == mobilizationId
+                && get(assignmentPath).data.role == 'coordinator'
+                && get(assignmentPath).data.active == true)
+              || ((!('hasActiveMobilizationAssignments' in role)
+                    || role.hasActiveMobilizationAssignments == false)
+                && exists(configPath)
+                && get(configPath).data.activeMobilizationId
+                  == mobilizationId)))
+          || (hasRole(role, 'site_manager')
+            && locationId in role.locationIds))
+        && canUseMobilizationOrganizationAsRole(mobilizationId);
+    }
+
+    function canResolvedRoleManageMobilizationLocation(
+      role,
+      mobilizationId,
+      locationId
+    ) {
+      let assignmentPath = mobilizationAssignmentPath(
+        mobilizationId,
+        request.auth.uid
+      );
+      let configPath = platformConfigPath();
+      return (hasRole(role, 'coordinator')
+          && ((exists(assignmentPath)
+              && get(assignmentPath).data.uid == request.auth.uid
+              && get(assignmentPath).data.mobilizationId == mobilizationId
+              && get(assignmentPath).data.role == 'coordinator'
+              && get(assignmentPath).data.active == true)
+            || ((!('hasActiveMobilizationAssignments' in role)
+                  || role.hasActiveMobilizationAssignments == false)
+              && exists(configPath)
+              && get(configPath).data.activeMobilizationId
+                == mobilizationId)))
+        || (hasRole(role, 'site_manager')
+          && locationId in role.locationIds);
+    }
+
+    function canUseResolvedLegacyMobilizationOrganizationAsRole() {
+      let membershipPath = organizationMembershipPath(
+        legacyOrganizationId(),
+        request.auth.uid
+      );
+      return !exists(membershipPath)
+        || get(membershipPath).data.get('active', false) == true;
+    }
+
+    function canUseResolvedExplicitMobilizationOrganizationAsRole(
+      mobilization
+    ) {
+      let operationId = mobilization.get('operationId', '__missing__');
+      let operation = get(operationPath(operationId)).data;
+      return hasValidMobilizationOperation(mobilization)
+        && (!('ownerOrganizationId' in operation)
+          || hasActiveCanonicalMembershipDocument(
+            operation.ownerOrganizationId
+          ));
+    }
+
+    function canUseResolvedMobilizationOrganizationAsRole(mobilization) {
+      return (isLegacyMobilization(mobilization)
+          && canUseResolvedLegacyMobilizationOrganizationAsRole())
+        || canUseResolvedExplicitMobilizationOrganizationAsRole(mobilization);
+    }
+
+    // Chemin compact d'annulation : rôle et mobilisation ne sont résolus
+    // qu'une fois, sans modifier les invariants appliqués par les helpers
+    // génériques de gestion.
+    function canCancelMissionAtMobilizationLocation(
+      mobilizationId,
+      locationId
+    ) {
+      let currentRolePath = rolePath();
+      let roleExists = exists(currentRolePath);
+      let role = roleExists ? get(currentRolePath).data : {};
+      let currentMobilizationPath = mobilizationPath(mobilizationId);
+      let mobilizationExists = exists(currentMobilizationPath);
+      let mobilization = mobilizationExists
+        ? get(currentMobilizationPath).data
+        : {};
+      return roleExists
+        && isValidRoleDocument(role)
+        && role.active == true
+        && mobilizationExists
+        && mobilization.status == 'active'
+        && canResolvedRoleManageMobilizationLocation(
+          role,
+          mobilizationId,
+          locationId
+        )
+        && canUseResolvedMobilizationOrganizationAsRole(mobilization);
+    }
+
     function canReadMissionScope(mobilizationId, locationId) {
-      return canReadOrganizationMissionScope(mobilizationId, locationId)
+      let path = mobilizationPath(mobilizationId);
+      let mobilization = mobilizationId is string && exists(path)
+        ? get(path).data
+        : {};
+      return isPlatformAdministrator()
+        || canReadOrganizationMissionScope(mobilizationId, locationId)
         || ((isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
             || (isActiveSiteManager()
               && locationId in currentRole().locationIds))
           && canUseMobilizationOrganizationAsRole(mobilizationId))
+        || (mobilizationId is string
+          && exists(path)
+          && hasMobilizationOrganizationMembership(mobilization))
         || (!isPlatformAdministrator()
           && !hasActiveRole()
           && isPlatformDiscoverableMobilizationById(mobilizationId));
+    }
+
+    function canReadManagedNeed(needId) {
+      let path = missionPath(needId);
+      let need = needId is string && exists(path) ? get(path).data : {};
+      let mobilizationId = need.get('mobilizationId', '');
+      let locationId = need.get('locationId', '');
+      return needId is string
+        && isNonBlankCanonicalText(needId)
+        && exists(path)
+        && isActiveMobilization(mobilizationId)
+        && (canReadOrganizationMissionScope(mobilizationId, locationId)
+          || canManageMobilizationLocation(mobilizationId, locationId));
     }
 
     function validMissionCreate(missionId) {
@@ -1210,17 +1468,7 @@ service cloud.firestore {
           request.resource.data.mobilizationId
         )
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.registeredMk == 0
-        && request.resource.data.registeredPp == 0
-        && validGenericQuotaData(request.resource.data)
-        && totalRegistered(request.resource.data) == 0
-        && request.resource.data.requiredMk is int
-        && request.resource.data.requiredPp is int
-        && request.resource.data.requiredMk >= 0
-        && request.resource.data.requiredMk <= 50
-        && request.resource.data.requiredPp >= 0
-        && request.resource.data.requiredPp <= 50
-        && totalRequired(request.resource.data) > 0
+        && validMissionCreateQuotaData(request.resource.data)
         && request.resource.data.startAt is timestamp
         && request.resource.data.endAt is timestamp
         && request.resource.data.endAt > request.resource.data.startAt
@@ -1231,7 +1479,7 @@ service cloud.firestore {
         && request.resource.data.isActive == true
         && request.resource.data.status == 'critical'
         && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
-        && canManageMobilizationLocation(
+        && canCreateMissionAtMobilizationLocation(
           request.resource.data.mobilizationId,
           request.resource.data.locationId
         );
@@ -1337,9 +1585,9 @@ service cloud.firestore {
     function validMissionCancellation() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isSignedIn()
+        && resource.data.mobilizationId is string
         && resource.data.isActive == true
-        && isActiveMobilization(resource.data.mobilizationId)
-        && canManageMobilizationLocation(
+        && canCancelMissionAtMobilizationLocation(
           resource.data.mobilizationId,
           resource.data.locationId
         )
@@ -1553,8 +1801,22 @@ service cloud.firestore {
         ) && validMissionCounterUpdate(missionId);
       allow update: if !existsAfter(
           engagementPath(missionId, request.auth.uid)
-        ) && (validManagedMissionCounterUpdate() || validMissionCancellation());
+        ) && (request.resource.data.status == 'cancelled'
+          ? validMissionCancellation()
+          : validManagedMissionCounterUpdate());
       allow delete: if false;
+    }
+
+    match /diffusions/{diffusionId} {
+      allow get: if resource.data.get('id', '') == diffusionId
+        && canReadManagedNeed(resource.data.get('needId', ''));
+      allow list, create, update, delete: if false;
+    }
+
+    match /diffusionSnapshots/{diffusionId} {
+      allow get: if resource.data.get('diffusionId', '') == diffusionId
+        && canReadManagedNeed(resource.data.get('needId', ''));
+      allow list, create, update, delete: if false;
     }
 
     match /volunteers/{uid} {
