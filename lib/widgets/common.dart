@@ -1775,9 +1775,9 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
       _error = null;
     });
     try {
-      await RepositoryScope.of(context)
-          .cancelMission(widget.need.id, _reason.text)
-          .timeout(const Duration(seconds: 15));
+      await RepositoryScope.of(
+        context,
+      ).cancelMission(widget.need.id, _reason.text);
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(
