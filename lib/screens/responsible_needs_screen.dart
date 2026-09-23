@@ -5,6 +5,7 @@ import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
+import '../utils/mission_timing.dart';
 import '../widgets/common.dart';
 import '../widgets/responsible_mission_card.dart';
 import '../widgets/professional_page_header.dart';
@@ -176,8 +177,9 @@ class _ResponsibleNeedsContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final now = DateTime.now();
     final filteredNeeds = needs
-        .where((need) => _matchesFilter(need, selectedFilter))
+        .where((need) => _matchesFilter(need, selectedFilter, now: now))
         .toList(growable: false);
     return ColoredBox(
       color: colors.canvas,
@@ -275,12 +277,14 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   final need = filteredNeeds[index];
                   final location = responsePlaceForNeed(need, locations);
                   final locationId = need.locationId ?? location?.id;
+                  final isPast = isMissionPast(need, now: now);
                   final canManage =
                       access != null &&
                       locationId != null &&
                       access!.canManage(locationId) &&
                       need.isActive &&
                       !need.isCancelled;
+                  final canEdit = canManage && !isPast;
                   final canCancel = canManage && need.createdBy == access!.uid;
                   return Center(
                     child: ConstrainedBox(
@@ -288,10 +292,10 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                       child: ResponsibleMissionCard(
                         key: Key('responsible-need-${need.id}'),
                         need: need,
-                        tone: _toneForNeed(need),
-                        statusLabel: _statusForNeed(need),
+                        tone: _toneForNeed(need, now: now),
+                        statusLabel: _statusForNeed(need, now: now),
                         actions: [
-                          if (canManage)
+                          if (canEdit)
                             TextButton(
                               key: Key('responsible-edit-need-${need.id}'),
                               onPressed: editingMissionId == null
@@ -369,8 +373,12 @@ class _FilterChip extends StatelessWidget {
   }
 }
 
-bool _matchesFilter(CoordinationNeed need, _NeedsFilter filter) {
-  final isPast = need.endAt != null && need.endAt!.isBefore(DateTime.now());
+bool _matchesFilter(
+  CoordinationNeed need,
+  _NeedsFilter filter, {
+  DateTime? now,
+}) {
+  final isPast = isMissionPast(need, now: now);
   if (filter == _NeedsFilter.past) return isPast;
   if (isPast) return false;
   return switch (filter) {
@@ -381,8 +389,8 @@ bool _matchesFilter(CoordinationNeed need, _NeedsFilter filter) {
   };
 }
 
-ResponsibleMissionTone _toneForNeed(CoordinationNeed need) {
-  if (need.endAt != null && need.endAt!.isBefore(DateTime.now())) {
+ResponsibleMissionTone _toneForNeed(CoordinationNeed need, {DateTime? now}) {
+  if (isMissionPast(need, now: now)) {
     return ResponsibleMissionTone.past;
   }
   return switch (need.status) {
@@ -392,8 +400,8 @@ ResponsibleMissionTone _toneForNeed(CoordinationNeed need) {
   };
 }
 
-String _statusForNeed(CoordinationNeed need) {
-  if (need.endAt != null && need.endAt!.isBefore(DateTime.now())) {
+String _statusForNeed(CoordinationNeed need, {DateTime? now}) {
+  if (isMissionPast(need, now: now)) {
     return 'Passé';
   }
   return switch (need.status) {

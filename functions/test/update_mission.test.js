@@ -16,6 +16,12 @@ const professions = [
   'veterinarian',
   'other_health_professional',
 ];
+const referenceNow = Date.UTC(2026, 7, 3, 10);
+const activeMissionEnd = Date.UTC(2026, 7, 3, 12);
+
+function timestamp(value) {
+  return Object.freeze({toMillis: () => value});
+}
 
 function quotas(overrides = {}) {
   return Object.fromEntries(
@@ -55,6 +61,7 @@ function mission(overrides = {}) {
     registeredByProfession: quotas({physiotherapist: 1}),
     registeredMk: 1,
     registeredPp: 0,
+    endAt: timestamp(activeMissionEnd),
     isActive: true,
     status: 'toComplete',
     createdAt: 'preserved',
@@ -99,6 +106,7 @@ function mutation(overrides = {}) {
     })),
     serverTimestamp: 'server-time',
     timestampFromMillis: (value) => `timestamp:${value}`,
+    nowMillis: overrides.nowMillis ?? referenceNow,
   });
 }
 
@@ -239,6 +247,91 @@ test('missing mission and inactive destination are refused', () => {
     () => mutation({destination: destination({isOperational: false})}),
     'failed-precondition',
   );
+});
+
+test('future and active-today missions retain their update behavior', () => {
+  const activeToday = mutation({
+    mission: mission({endAt: timestamp(referenceNow + 2 * 60 * 60 * 1000)}),
+    nowMillis: referenceNow,
+  });
+  assert.equal(activeToday.fields.locationId, 'location-b');
+
+  const future = mutation({
+    mission: mission({endAt: timestamp(referenceNow + 24 * 60 * 60 * 1000)}),
+    nowMillis: referenceNow,
+  });
+  assert.equal(future.fields.locationId, 'location-b');
+});
+
+test('ended mission is refused and admin does not gain shared access', () => {
+  const endedMission = mission({endAt: timestamp(referenceNow)});
+  const authorizedRoles = [
+    role(),
+    role({
+      roles: ['site_manager'],
+      locationIds: ['location-a', 'location-b'],
+    }),
+  ];
+
+  for (const callerRole of authorizedRoles) {
+    assertCode(
+      () => mutation({
+        mission: endedMission,
+        callerRole,
+        nowMillis: referenceNow,
+      }),
+      'failed-precondition',
+    );
+  }
+
+  assertCode(
+    () => mutation({
+      mission: endedMission,
+      callerRole: {
+        role: 'admin',
+        roles: ['admin'],
+        locationIds: [],
+        active: true,
+        schemaVersion: 2,
+      },
+      nowMillis: referenceNow,
+    }),
+    'permission-denied',
+  );
+});
+
+test('past rejection preserves legacy mission and historical engagements', () => {
+  const legacyMission = mission({
+    endAt: new Date(referenceNow - 1),
+    registeredByProfession: undefined,
+    registeredMk: 1,
+    registeredPp: 1,
+  });
+  const historicalEngagements = [{
+    mobilizationId: 'mobilization-active',
+    profession: 'mk',
+    status: 'cancelled',
+  }];
+  const missionBefore = {...legacyMission};
+  const engagementsBefore = historicalEngagements.map((value) => ({...value}));
+
+  assertCode(
+    () => missionUpdateMutation({
+      request: validateMissionUpdateRequest(request()),
+      mission: legacyMission,
+      mobilization: {id: 'mobilization-active', status: 'active'},
+      coordinatorAuthorized: true,
+      destination: destination(),
+      callerRole: role(),
+      engagements: historicalEngagements,
+      serverTimestamp: 'server-time',
+      timestampFromMillis: (value) => `timestamp:${value}`,
+      nowMillis: referenceNow,
+    }),
+    'failed-precondition',
+  );
+  assert.deepEqual(legacyMission, missionBefore);
+  assert.deepEqual(historicalEngagements, engagementsBefore);
 });
 
 test('mission update is restricted to the active mobilization', () => {

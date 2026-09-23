@@ -711,6 +711,43 @@ void main() {
     await tester.tap(find.byKey(const Key('confirm-cancel-mission')));
     await tester.pumpAndSettle();
     expect(repository.debugMission('ui-mission')?.isCancelled, isTrue);
+    expect(find.text('Annuler ce besoin ?'), findsNothing);
+    expect(find.text('Annuler ce besoin'), findsNothing);
+    expect(find.text('Le besoin a été annulé.'), findsOneWidget);
+  });
+
+  testWidgets('late mission cancellation success does not show timeout error', (
+    tester,
+  ) async {
+    final repository = _DelayedMissionCancellationRepository(
+      mission: mission(),
+      delay: const Duration(seconds: 16),
+    );
+    await pumpApp(tester, repository);
+    await selectNavigationTab(tester, 2);
+    await tester.scrollUntilVisible(
+      find.text('Annuler ce besoin'),
+      200,
+      scrollable: pageScroll(),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Annuler ce besoin').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-cancel-mission')));
+    await tester.pump();
+
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pumpAndSettle();
+
+    expect(repository.cancelCalls, 1);
+    expect(repository.debugMission('ui-mission')?.isCancelled, isTrue);
+    expect(find.text('Annuler ce besoin ?'), findsNothing);
+    expect(find.text('Annuler ce besoin'), findsNothing);
+    expect(find.text('Le besoin a été annulé.'), findsOneWidget);
+    expect(
+      find.text('L’annulation n’a pas pu être enregistrée. Réessayez.'),
+      findsNothing,
+    );
   });
 
   testWidgets('coordinator confirms an engagement from the situation card', (
@@ -821,5 +858,22 @@ class _EngagementUiRepository extends MockCoordinationRepository {
   }) async {
     createCalls++;
     return completion == null ? result : completion!.future;
+  }
+}
+
+class _DelayedMissionCancellationRepository extends MockCoordinationRepository {
+  _DelayedMissionCancellationRepository({
+    required CoordinationNeed mission,
+    required this.delay,
+  }) : super(initialMissions: [mission], initialLocations: const []);
+
+  final Duration delay;
+  int cancelCalls = 0;
+
+  @override
+  Future<void> cancelMission(String missionId, String? reason) async {
+    cancelCalls++;
+    await Future<void>.delayed(delay);
+    await super.cancelMission(missionId, reason);
   }
 }
