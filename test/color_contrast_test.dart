@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
@@ -108,13 +109,34 @@ void main() {
     await tester.tap(find.byKey(const Key('responsible-create-need')));
     await tester.pumpAndSettle();
 
-    final publish = tester.widget<V5Button>(
-      find.byKey(const Key('publish-mission')),
+    await _chooseDate(tester);
+    await _chooseTime(tester, const Key('mission-start-time'), 8);
+    await _chooseTime(tester, const Key('mission-end-time'), 12);
+    final quotaAdd = find.byKey(const Key('physiotherapist-add'));
+    await tester.ensureVisible(quotaAdd);
+    await tester.pumpAndSettle();
+    await tester.tap(quotaAdd);
+    await tester.pumpAndSettle();
+
+    final reviewButton = find.byKey(const Key('review-mission'));
+    await tester.ensureVisible(reviewButton);
+    await tester.pumpAndSettle();
+    await tester.tap(reviewButton);
+    await tester.pumpAndSettle();
+
+    final publishButton = find.byKey(const Key('publish-mission'));
+    final publishContainer = tester.widget<AnimatedContainer>(
+      find.descendant(
+        of: publishButton,
+        matching: find.byType(AnimatedContainer),
+      ),
     );
-    expect(publish.foregroundColor, Colors.white);
+    final publishDecoration = publishContainer.decoration! as BoxDecoration;
+    final publishLabel = tester.widget<Text>(find.text('Publier le besoin'));
+    expect(publishLabel.style?.color, Colors.white);
     _expectAa(
-      publish.foregroundColor!,
-      publish.backgroundColor!,
+      publishLabel.style!.color!,
+      publishDecoration.color!,
       'publication CTA',
     );
   });
@@ -167,4 +189,30 @@ double _contrastRatio(Color foreground, Color background) {
       ? backgroundLuminance
       : foregroundLuminance;
   return (lightest + 0.05) / (darkest + 0.05);
+}
+
+Future<void> _chooseDate(WidgetTester tester) async {
+  final field = find.byKey(const Key('mission-date'));
+  await tester.ensureVisible(field);
+  await tester.pumpAndSettle();
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  tester
+      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
+      .onDateTimeChanged(DateTime.now().add(const Duration(days: 1)));
+  await tester.tap(find.text('Valider'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseTime(WidgetTester tester, Key fieldKey, int hour) async {
+  final field = find.byKey(fieldKey);
+  await tester.ensureVisible(field);
+  await tester.pumpAndSettle();
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  tester
+      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
+      .onDateTimeChanged(DateTime(2026, 1, 1, hour));
+  await tester.tap(find.text('Valider'));
+  await tester.pumpAndSettle();
 }

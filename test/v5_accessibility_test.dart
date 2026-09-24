@@ -79,8 +79,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('responsible-create-need')));
       await tester.pumpAndSettle();
-      await _scrollIntoView(tester, find.byKey(const Key('publish-mission')));
-      await tester.tap(find.byKey(const Key('publish-mission')));
+      await _scrollIntoView(tester, find.byKey(const Key('review-mission')));
+      await tester.tap(find.byKey(const Key('review-mission')));
       await tester.pumpAndSettle();
 
       final error = tester.getSemantics(

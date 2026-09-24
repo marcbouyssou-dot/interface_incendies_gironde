@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
@@ -226,8 +227,35 @@ void main() {
     await tester.tap(create);
     await tester.pumpAndSettle();
 
+    await _chooseDate(tester);
+    await _chooseTime(tester, const Key('mission-start-time'), 8);
+    await _chooseTime(tester, const Key('mission-end-time'), 12);
+    final quotaAdd = find.byKey(const Key('physiotherapist-add'));
+    await tester.scrollUntilVisible(
+      quotaAdd,
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(quotaAdd);
+    await tester.pumpAndSettle();
+
+    final reviewButton = find.byKey(const Key('review-mission'));
+    await tester.scrollUntilVisible(
+      reviewButton,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(reviewButton);
+    await tester.pumpAndSettle();
+
     final publish = find.byKey(const Key('publish-mission'));
-    await tester.ensureVisible(publish);
+    await tester.scrollUntilVisible(
+      publish,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
 
     expect(tester.getSize(publish).height, greaterThanOrEqualTo(48));
@@ -295,4 +323,30 @@ void main() {
     expect(tester.getSize(save).height, greaterThanOrEqualTo(48));
     expect(tester.takeException(), isNull);
   });
+}
+
+Future<void> _chooseDate(WidgetTester tester) async {
+  final field = find.byKey(const Key('mission-date'));
+  await tester.ensureVisible(field);
+  await tester.pumpAndSettle();
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  tester
+      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
+      .onDateTimeChanged(DateTime.now().add(const Duration(days: 1)));
+  await tester.tap(find.text('Valider'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseTime(WidgetTester tester, Key fieldKey, int hour) async {
+  final field = find.byKey(fieldKey);
+  await tester.ensureVisible(field);
+  await tester.pumpAndSettle();
+  await tester.tap(field);
+  await tester.pumpAndSettle();
+  tester
+      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
+      .onDateTimeChanged(DateTime(2026, 1, 1, hour));
+  await tester.tap(find.text('Valider'));
+  await tester.pumpAndSettle();
 }
