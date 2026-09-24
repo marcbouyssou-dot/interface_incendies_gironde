@@ -50,7 +50,7 @@ class V5Button extends StatelessWidget {
           V5ButtonTone.primary => colors.onAccent,
           V5ButtonTone.secondary => colors.textPrimary,
           V5ButtonTone.tonal => colors.textPrimary,
-          V5ButtonTone.destructive => Colors.white,
+          V5ButtonTone.destructive => Theme.of(context).colorScheme.onError,
         };
     final effectiveBackground = enabled
         ? resolvedBackground
@@ -93,7 +93,11 @@ class V5Button extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (icon != null) ...[
-                  Icon(icon, size: compact ? 17 : 19),
+                  Icon(
+                    icon,
+                    size: compact ? 18 : 20,
+                    color: effectiveForeground,
+                  ),
                   const SizedBox(width: V5Spacing.xs),
                 ],
                 Flexible(
@@ -116,9 +120,10 @@ class V5Button extends StatelessWidget {
         borderRadius: BorderRadius.circular(V5Radius.control),
       ),
       child: CupertinoButton(
-        minimumSize: Size.square(compact ? 44 : 48),
+        minimumSize: Size.square(compact ? 44 : 52),
+        borderRadius: BorderRadius.circular(V5Radius.control),
         padding: EdgeInsets.symmetric(
-          horizontal: compact ? V5Spacing.sm : V5Spacing.md,
+          horizontal: compact ? V5Spacing.sm : V5Spacing.lg,
           vertical: compact ? V5Spacing.xs : V5Spacing.sm,
         ),
         onPressed: enabled ? onPressed : null,
@@ -175,7 +180,9 @@ class V5CheckboxTile extends StatelessWidget {
       label: label,
       child: CupertinoButton(
         minimumSize: const Size.square(44),
-        padding: EdgeInsets.symmetric(vertical: dense ? 4 : 8),
+        padding: EdgeInsets.symmetric(
+          vertical: dense ? V5Spacing.xs : V5Spacing.sm,
+        ),
         alignment: Alignment.centerLeft,
         onPressed: interactive ? () => onChanged?.call(!value) : null,
         child: Row(
@@ -188,15 +195,29 @@ class V5CheckboxTile extends StatelessWidget {
               width: 24,
               height: 24,
               decoration: BoxDecoration(
-                color: value ? colors.accent : colors.surfaceElevated,
+                color: !interactive
+                    ? colors.disabledBackground
+                    : value
+                    ? colors.accent
+                    : colors.surfaceElevated,
                 border: Border.all(
-                  color: value ? colors.accent : colors.outline,
+                  color: !interactive
+                      ? colors.outline
+                      : value
+                      ? colors.accent
+                      : colors.textSecondary,
                   width: 1.5,
                 ),
                 borderRadius: BorderRadius.circular(7),
               ),
               child: value
-                  ? Icon(Icons.check_rounded, size: 17, color: colors.onAccent)
+                  ? Icon(
+                      Icons.check_rounded,
+                      size: 17,
+                      color: interactive
+                          ? colors.onAccent
+                          : colors.disabledForeground,
+                    )
                   : null,
             ),
             const SizedBox(width: V5Spacing.sm),
@@ -255,7 +276,7 @@ class V5SwitchTile extends StatelessWidget {
       label: title,
       child: CupertinoButton(
         minimumSize: const Size(44, 52),
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(vertical: V5Spacing.xs),
         onPressed: onChanged == null ? null : () => onChanged?.call(!value),
         child: Row(
           children: [
@@ -266,8 +287,10 @@ class V5SwitchTile extends StatelessWidget {
                   Text(
                     title,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w700,
+                      color: onChanged == null
+                          ? colors.disabledForeground
+                          : colors.textPrimary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   if (subtitle != null) ...[
@@ -312,6 +335,7 @@ class V5ChoiceChip extends StatelessWidget {
     final colors = context.v5Colors;
     return Semantics(
       selected: selected,
+      enabled: onSelected != null,
       button: true,
       label: label,
       child: AnimatedContainer(
@@ -323,13 +347,14 @@ class V5ChoiceChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(V5Radius.pill),
           border: Border.all(
             color: selected ? colors.accent : colors.outline,
-            width: selected ? 1.5 : 1,
+            width: 1.5,
           ),
         ),
         child: CupertinoButton(
           minimumSize: const Size(44, 44),
+          borderRadius: BorderRadius.circular(V5Radius.pill),
           padding: const EdgeInsets.symmetric(
-            horizontal: V5Spacing.sm,
+            horizontal: V5Spacing.md,
             vertical: V5Spacing.xs,
           ),
           onPressed: onSelected == null
@@ -350,9 +375,11 @@ class V5ChoiceChip extends StatelessWidget {
                 child: Text(
                   label,
                   textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(color: colors.textPrimary),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: selected ? colors.accent : colors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  ),
                 ),
               ),
             ],

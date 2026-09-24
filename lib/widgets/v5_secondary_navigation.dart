@@ -15,7 +15,7 @@ class V5SecondaryNavigationBar extends StatelessWidget
     this.showBack = true,
   });
 
-  static const double toolbarHeight = 54;
+  static const double toolbarHeight = 56;
 
   final String title;
   final List<Widget> actions;
@@ -39,8 +39,11 @@ class V5SecondaryNavigationBar extends StatelessWidget
       value: dark
           ? AppTheme.darkSystemUiOverlayStyle
           : AppTheme.lightSystemUiOverlayStyle,
-      child: ColoredBox(
-        color: colors.canvas,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.canvas,
+          border: Border(bottom: BorderSide(color: colors.outline)),
+        ),
         child: SafeArea(
           bottom: false,
           child: SizedBox(
@@ -52,12 +55,15 @@ class V5SecondaryNavigationBar extends StatelessWidget
                   child: canGoBack ? V5BackButton(onPressed: onBack) : null,
                 ),
                 Expanded(
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: colors.textPrimary,
-                      fontWeight: FontWeight.w800,
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -92,9 +98,9 @@ class V5BackButton extends StatelessWidget {
       label: 'Retour',
       child: CupertinoButton(
         minimumSize: const Size.square(44),
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.all(V5Spacing.xs),
         onPressed: onPressed ?? () => Navigator.maybePop(context),
-        child: Icon(CupertinoIcons.back, size: 25, color: colors.textPrimary),
+        child: Icon(CupertinoIcons.back, size: 22, color: colors.textPrimary),
       ),
     );
   }

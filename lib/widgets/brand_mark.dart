@@ -30,6 +30,7 @@ class BrandMark extends StatelessWidget {
         : Image.asset(
             assetPath!,
             fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
             excludeFromSemantics: true,
           );
     return Semantics(
@@ -40,7 +41,7 @@ class BrandMark extends StatelessWidget {
           key: const Key('brand-logo-slot'),
           dimension: size,
           child: Stack(
-            clipBehavior: Clip.none,
+            clipBehavior: Clip.hardEdge,
             children: [
               Positioned.fill(
                 child: assetPath == null
@@ -60,18 +61,15 @@ class BrandMark extends StatelessWidget {
               ),
               if (assetPath != null && showMobilizationSymbol)
                 Positioned(
-                  top: -size * .08,
-                  right: -size * .06,
-                  width: size * .48,
-                  height: size * .54,
-                  child: Transform.scale(
-                    scale: 1.72,
-                    child: Image.asset(
-                      AppIdentity.mobilizationSymbolAsset,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.high,
-                      excludeFromSemantics: true,
-                    ),
+                  top: 0,
+                  right: 0,
+                  width: size * .5,
+                  height: size * .5,
+                  child: Image.asset(
+                    AppIdentity.mobilizationSymbolAsset,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                    excludeFromSemantics: true,
                   ),
                 ),
             ],

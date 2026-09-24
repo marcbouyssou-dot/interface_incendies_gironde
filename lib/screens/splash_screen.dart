@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/system_theme.dart';
 import '../widgets/brand_mark.dart';
 
@@ -58,12 +59,12 @@ class _SplashScreenState extends State<SplashScreen> {
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              const horizontalPadding = 28.0;
-              final contentHeight = constraints.maxHeight - 40;
+              final contentHeight = (constraints.maxHeight - V5Spacing.xxl * 2)
+                  .clamp(0.0, double.infinity);
               return SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: horizontalPadding,
-                  vertical: 20,
+                  horizontal: V5Spacing.xl,
+                  vertical: V5Spacing.xxl,
                 ),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: contentHeight),
@@ -104,20 +105,20 @@ class _SplashIdentity extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _SplashPictogram(),
-        SizedBox(height: 30),
+        SizedBox(height: V5Spacing.xl),
         Text(
           AppIdentity.productName,
           key: Key('splash-product-name'),
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white,
-            fontSize: 42,
-            height: 1.05,
-            letterSpacing: -1.1,
-            fontWeight: FontWeight.w900,
+            fontSize: 38,
+            height: 1.15,
+            letterSpacing: -0.8,
+            fontWeight: FontWeight.w700,
           ),
         ),
-        SizedBox(height: 10),
+        SizedBox(height: V5Spacing.xs),
         Text(
           AppIdentity.mobilizationSubtitle,
           key: Key('splash-mobilization-subtitle'),
@@ -125,12 +126,11 @@ class _SplashIdentity extends StatelessWidget {
           style: TextStyle(
             color: Color(0xFFD9E3F1),
             fontSize: 20,
-            height: 1.25,
-            letterSpacing: 0.2,
-            fontWeight: FontWeight.w600,
+            height: 1.4,
+            fontWeight: FontWeight.w400,
           ),
         ),
-        SizedBox(height: 58),
+        SizedBox(height: V5Spacing.xxxl),
         _InstitutionalSignature(),
       ],
     );
@@ -142,13 +142,10 @@ class _SplashPictogram extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.square(
-      dimension: 246,
-      child: BrandMark(
-        key: Key('splash-pictogram'),
-        size: 246,
-        onDarkBackground: true,
-      ),
+    return const BrandMark(
+      key: Key('splash-pictogram'),
+      size: 216,
+      onDarkBackground: true,
     );
   }
 }
@@ -158,24 +155,17 @@ class _InstitutionalSignature extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: Container(height: 1, color: Colors.white24)),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            AppIdentity.institutionalSignature,
-            key: Key('splash-institutional-signature'),
-            style: TextStyle(
-              color: Color(0xFF58A5FF),
-              fontSize: 14,
-              letterSpacing: 3.2,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        Expanded(child: Container(height: 1, color: Colors.white24)),
-      ],
+    return const Text(
+      AppIdentity.institutionalSignature,
+      key: Key('splash-institutional-signature'),
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: Color(0xFFD9E3F1),
+        fontSize: 14,
+        height: 1.4,
+        letterSpacing: 1.6,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }
