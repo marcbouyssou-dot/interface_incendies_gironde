@@ -224,26 +224,24 @@ class _ProfileGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          for (var index = 0; index < children.length; index++) ...[
-            children[index],
-            if (index < children.length - 1)
-              Divider(
-                height: 1,
-                thickness: 0.5,
-                indent: V5Spacing.lg,
-                color: colors.outline,
-              ),
+      child: V5Card(
+        padding: EdgeInsets.zero,
+        child: Column(
+          children: [
+            for (var index = 0; index < children.length; index++) ...[
+              children[index],
+              if (index < children.length - 1)
+                Divider(
+                  height: 1,
+                  thickness: 0.5,
+                  indent: V5Spacing.lg,
+                  color: colors.outline,
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

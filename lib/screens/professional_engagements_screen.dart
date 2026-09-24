@@ -284,13 +284,9 @@ class _EngagementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
+    return V5Card(
       padding: const EdgeInsets.fromLTRB(16, 15, 16, 10),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-        boxShadow: V5Elevation.level1(colors),
-      ),
+      boxShadow: V5Elevation.level1(colors),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -303,7 +299,15 @@ class _EngagementCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              _EngagementStatus(status: engagement.status),
+              V5StatusPill(
+                label: engagement.status.label,
+                tone: switch (engagement.status) {
+                  EngagementStatus.confirmed => V5StatusTone.success,
+                  EngagementStatus.pending => V5StatusTone.warning,
+                  EngagementStatus.standby => V5StatusTone.info,
+                  EngagementStatus.cancelled => V5StatusTone.neutral,
+                },
+              ),
             ],
           ),
           const SizedBox(height: V5Spacing.sm),
@@ -372,38 +376,6 @@ class _EngagementLine extends StatelessWidget {
       ),
     ],
   );
-}
-
-class _EngagementStatus extends StatelessWidget {
-  const _EngagementStatus({required this.status});
-
-  final EngagementStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.v5Colors;
-    final (color, background) = switch (status) {
-      EngagementStatus.confirmed => (colors.success, colors.successContainer),
-      EngagementStatus.pending => (colors.warning, colors.warningContainer),
-      EngagementStatus.standby => (colors.info, colors.infoContainer),
-      EngagementStatus.cancelled => (colors.textSecondary, colors.surfaceMuted),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(V5Radius.pill),
-      ),
-      child: Text(
-        status.label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
 }
 
 class _EngagementEmptyState extends StatelessWidget {

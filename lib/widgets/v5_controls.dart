@@ -389,3 +389,84 @@ class V5ChoiceChip extends StatelessWidget {
     );
   }
 }
+
+/// A generic surface-elevated container for card-shaped content, replacing
+/// the `Container(decoration: BoxDecoration(color: colors.surfaceElevated,
+/// borderRadius: BorderRadius.circular(V5Radius.card)))` pattern repeated
+/// ad hoc across screens.
+class V5Card extends StatelessWidget {
+  const V5Card({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(V5Spacing.md),
+    this.color,
+    this.border = false,
+    this.boxShadow,
+    this.radius = V5Radius.card,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Color? color;
+  final bool border;
+  final List<BoxShadow>? boxShadow;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      padding: padding,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: color ?? colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(radius),
+        border: border ? Border.all(color: colors.outline) : null,
+        boxShadow: boxShadow,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Presentation-only tone for [V5StatusPill]. Screens map their own domain
+/// status (mission/engagement/invitation...) onto one of these five
+/// semantic tones — this enum carries no business meaning of its own.
+enum V5StatusTone { success, warning, danger, info, neutral }
+
+/// A small pill-shaped status label, replacing the ad hoc
+/// `Container(padding: ..., decoration: BoxDecoration(color: background,
+/// borderRadius: BorderRadius.circular(V5Radius.pill)))` pattern repeated
+/// across several status/tone widgets.
+class V5StatusPill extends StatelessWidget {
+  const V5StatusPill({super.key, required this.label, required this.tone});
+
+  final String label;
+  final V5StatusTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final (foreground, background) = switch (tone) {
+      V5StatusTone.success => (colors.success, colors.successContainer),
+      V5StatusTone.warning => (colors.warning, colors.warningContainer),
+      V5StatusTone.danger => (colors.danger, colors.dangerContainer),
+      V5StatusTone.info => (colors.info, colors.infoContainer),
+      V5StatusTone.neutral => (colors.textSecondary, colors.surfaceMuted),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(V5Radius.pill),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ).copyWith(color: foreground),
+      ),
+    );
+  }
+}

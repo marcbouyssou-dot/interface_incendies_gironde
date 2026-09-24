@@ -429,56 +429,54 @@ class _NeedsEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
-      key: const Key('responsible-needs-empty'),
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(V5Spacing.xl),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: colors.successContainer,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Icon(Icons.check_rounded, size: 21, color: colors.success),
-          ),
-          const SizedBox(height: V5Spacing.md),
-          Text(
-            filter == _NeedsFilter.past
-                ? 'Aucun besoin passé'
-                : 'Aucun besoin aujourd’hui ou à venir',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: V5Spacing.xs),
-          Text(
-            filter == _NeedsFilter.past
-                ? 'L’historique de votre établissement apparaîtra ici.'
-                : 'Votre planning est couvert pour cette période.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: V5Spacing.lg),
-          OutlinedButton(
-            key: const Key('responsible-needs-empty-create'),
-            onPressed: onCreateNeed,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: colors.accent,
-              minimumSize: const Size(44, 44),
-              side: BorderSide(color: colors.outline),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(V5Radius.control),
+      child: V5Card(
+        key: const Key('responsible-needs-empty'),
+        padding: const EdgeInsets.all(V5Spacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: colors.successContainer,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.check_rounded,
+                size: 21,
+                color: colors.success,
               ),
             ),
-            child: const Text('Créer un besoin'),
-          ),
-        ],
+            const SizedBox(height: V5Spacing.md),
+            Text(
+              filter == _NeedsFilter.past
+                  ? 'Aucun besoin passé'
+                  : 'Aucun besoin aujourd’hui ou à venir',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: V5Spacing.xs),
+            Text(
+              filter == _NeedsFilter.past
+                  ? 'L’historique de votre établissement apparaîtra ici.'
+                  : 'Votre planning est couvert pour cette période.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: V5Spacing.lg),
+            V5Button(
+              key: const Key('responsible-needs-empty-create'),
+              tone: V5ButtonTone.secondary,
+              compact: true,
+              backgroundColor: Colors.transparent,
+              foregroundColor: colors.accent,
+              label: 'Créer un besoin',
+              onPressed: onCreateNeed,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -510,37 +508,35 @@ class _FilteredNeedsEmptyState extends StatelessWidget {
         'L’historique de votre établissement apparaîtra ici.',
       ),
     };
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: V5Spacing.lg,
-        vertical: V5Spacing.md,
-      ),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle_rounded, size: 20, color: colors.success),
-          const SizedBox(width: V5Spacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.w600,
+      child: V5Card(
+        padding: const EdgeInsets.symmetric(
+          horizontal: V5Spacing.lg,
+          vertical: V5Spacing.md,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, size: 20, color: colors.success),
+            const SizedBox(width: V5Spacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: V5Spacing.xxs),
-                Text(message, style: Theme.of(context).textTheme.bodySmall),
-              ],
+                  const SizedBox(height: V5Spacing.xxs),
+                  Text(message, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

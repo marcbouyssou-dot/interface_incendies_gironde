@@ -219,6 +219,51 @@ void main() {
     expect(find.byKey(const Key('open-responsible-access')), findsOneWidget);
   });
 
+  testWidgets('professional engagement card uses the shared V5Card/V5StatusPill', (
+    tester,
+  ) async {
+    const engagement = EngagementInfo(
+      missionId: 'engagement-card-mission',
+      volunteerId: 'mock-volunteer',
+      profession: VolunteerProfession.mk,
+      status: EngagementStatus.confirmed,
+    );
+    final repository = MockCoordinationRepository(
+      initialMissions: const [
+        CoordinationNeed(
+          id: 'engagement-card-mission',
+          locationId: 'site-a',
+          place: 'Site A',
+          group: TerritorialGroup.medoc,
+          date: 'Aujourd’hui',
+          time: '08:00 — 12:00',
+          requiredPhysiotherapists: 1,
+          registeredPhysiotherapists: 0,
+          requiredPodiatrists: 0,
+          registeredPodiatrists: 0,
+          equipment: [],
+          createdBy: 'mock-coordinator',
+        ),
+      ],
+      initialLocations: const [],
+      responsibleAccess: null,
+    );
+    repository.engagements['engagement-card-mission'] = engagement;
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Engagements'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(V5Card), findsOneWidget);
+    final pill = tester.widget<V5StatusPill>(find.byType(V5StatusPill));
+    expect(pill.tone, V5StatusTone.success);
+    expect(pill.label, EngagementStatus.confirmed.label);
+    expect(find.text(EngagementStatus.confirmed.label), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('professional mission empty state repeats its active period', (
     tester,
   ) async {
