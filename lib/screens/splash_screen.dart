@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../config/app_identity.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_theme.dart' show AppTheme;
 import '../theme/v5_foundation.dart';
 import '../utils/system_theme.dart';
 import '../widgets/brand_mark.dart';
@@ -55,7 +55,7 @@ class _SplashScreenState extends State<SplashScreen> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: AppTheme.splashSystemUiOverlayStyle,
       child: Scaffold(
-        backgroundColor: AppColors.navy,
+        backgroundColor: V5Colors.light.brand,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {

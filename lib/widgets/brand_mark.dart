@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
-import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 
 class BrandMark extends StatelessWidget {
   const BrandMark({
@@ -24,7 +24,7 @@ class BrandMark extends StatelessWidget {
     final mark = assetPath == null
         ? Icon(
             Icons.health_and_safety_rounded,
-            color: AppColors.orange,
+            color: V5Colors.light.accent,
             size: size * .56,
           )
         : Image.asset(
@@ -49,7 +49,7 @@ class BrandMark extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: onDarkBackground
                               ? Colors.white.withValues(alpha: .12)
-                              : AppColors.orangeSoft,
+                              : V5Colors.light.warningContainer,
                           shape: BoxShape.circle,
                         ),
                         child: Padding(

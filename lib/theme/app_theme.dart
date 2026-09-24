@@ -4,6 +4,13 @@ import 'package:flutter/services.dart';
 import '../utils/system_theme.dart';
 import 'v5_foundation.dart';
 
+// Legacy palette, superseded by V5Colors (v5_foundation.dart). Most values
+// are bit-identical to a V5Colors.light role (see the AppColors<->V5Colors
+// audit for the full mapping), but AppColors.redSoft and AppColors.border
+// are NOT identical to their nearest V5Colors.light equivalent (danger
+// Container / outline) — do not fold those two into V5Colors without an
+// explicit visual review. AppColors still has live consumers across
+// several screens; do not delete it as part of a routine migration.
 abstract final class AppColors {
   static const navy = Color(0xFF10233E);
   static const navySoft = Color(0xFF1E385B);
