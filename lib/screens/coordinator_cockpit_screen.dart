@@ -316,25 +316,29 @@ class _CockpitContentState extends State<_CockpitContent> {
                       onViewLocation: widget.onViewLocation,
                       height: mapHeight,
                     ),
-                    const SizedBox(height: V5Spacing.xxl),
+                    const SizedBox(height: V5Spacing.xl),
                     _PrioritySection(
                       priorities: filteredCockpit.priorities,
                       filter: _filter,
                       onViewMission: widget.onViewMission,
                     ),
-                    const SizedBox(height: V5Spacing.xxl),
+                    const SizedBox(height: V5Spacing.xl),
                     _AlertsSection(
                       alerts: widget.cockpit.alerts,
                       onViewMission: widget.onViewMission,
                     ),
-                    const SizedBox(height: V5Spacing.xxl),
+                    const SizedBox(height: V5Spacing.xl),
                     _OperationalSummary(cockpit: filteredCockpit),
-                    const SizedBox(height: V5Spacing.xxl),
+                    const SizedBox(height: V5Spacing.xl),
                     _RecentActivitySection(
                       activity: widget.cockpit.recentActivity,
                       onViewMission: widget.onViewMission,
                     ),
-                    const SizedBox(height: V5Spacing.xxl),
+                    SizedBox(
+                      height: widget.cockpit.recentActivity.isEmpty
+                          ? V5Spacing.lg
+                          : V5Spacing.xl,
+                    ),
                     _QuickActions(
                       primaryMission:
                           filteredCockpit.priorities.firstOrNull?.mission,
@@ -681,14 +685,15 @@ class _PriorityCard extends StatelessWidget {
         ),
       ),
     );
-    final action = TextButton(
+    final accent = CoordinatorIdentity.of(context).accent;
+    final action = V5Button(
       key: Key('cockpit-priority-$index-view'),
+      compact: true,
+      icon: Icons.chevron_right_rounded,
+      label: 'Voir la mission',
+      backgroundColor: accent.withValues(alpha: 0.12),
+      foregroundColor: accent,
       onPressed: onViewMission,
-      style: TextButton.styleFrom(
-        foregroundColor: CoordinatorIdentity.of(context).accent,
-        minimumSize: const Size(44, 44),
-      ),
-      child: const Text('Voir la mission'),
     );
     return Container(
       padding: const EdgeInsets.fromLTRB(
@@ -1008,7 +1013,7 @@ class _RecentActivitySection extends StatelessWidget {
           'Activité récente',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
-        const SizedBox(height: V5Spacing.sm),
+        SizedBox(height: activity.isEmpty ? V5Spacing.xs : V5Spacing.sm),
         if (activity.isEmpty)
           Text(
             'Aucune activité récente',

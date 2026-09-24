@@ -480,16 +480,17 @@ class _MapLegend extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: V5Spacing.sm,
-            vertical: V5Spacing.xs,
+            vertical: V5Spacing.xxs,
           ),
           decoration: BoxDecoration(
             color: colors.surfaceElevated.withValues(alpha: 0.94),
             borderRadius: BorderRadius.circular(V5Radius.control),
             border: Border.all(color: colors.outline),
           ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: const Wrap(
+            spacing: V5Spacing.sm,
+            runSpacing: V5Spacing.xxs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: items,
           ),
         ),
@@ -508,6 +509,7 @@ class _LegendItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         DecoratedBox(
           decoration: BoxDecoration(
@@ -519,7 +521,7 @@ class _LegendItem extends StatelessWidget {
           child: const SizedBox.square(dimension: 8),
         ),
         const SizedBox(width: V5Spacing.xxs),
-        Expanded(
+        Flexible(
           child: Text(label, style: Theme.of(context).textTheme.labelSmall),
         ),
       ],
