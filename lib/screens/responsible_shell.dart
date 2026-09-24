@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../dev/role_preview.dart';
 import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../perspective/cross_role_perspective.dart';
@@ -79,38 +80,41 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: const Key('responsible-shell'),
-      backgroundColor: context.v5Colors.canvas,
-      body: Column(
-        children: [
-          if (widget.showPreviewBanner)
-            if (widget.previewLocationId case final locationId?)
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                  child: _ResponsiblePreviewBanner(locationId: locationId),
+    return RolePreviewDebugOverlay(
+      journeyLabel: 'Responsable',
+      child: Scaffold(
+        key: const Key('responsible-shell'),
+        backgroundColor: context.v5Colors.canvas,
+        body: Column(
+          children: [
+            if (widget.showPreviewBanner)
+              if (widget.previewLocationId case final locationId?)
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+                    child: _ResponsiblePreviewBanner(locationId: locationId),
+                  ),
                 ),
-              ),
-          Expanded(
-            child: SafeArea(
-              top: widget.previewLocationId == null,
-              bottom: false,
-              child: NativeTabView(
-                index: _currentIndex,
-                children: List.generate(
-                  _screens.length,
-                  (index) => _screens[index] ?? const SizedBox.shrink(),
+            Expanded(
+              child: SafeArea(
+                top: widget.previewLocationId == null,
+                bottom: false,
+                child: NativeTabView(
+                  index: _currentIndex,
+                  children: List.generate(
+                    _screens.length,
+                    (index) => _screens[index] ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: ResponsibleBottomNavigation(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _selectTab,
+          ],
+        ),
+        bottomNavigationBar: ResponsibleBottomNavigation(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: _selectTab,
+        ),
       ),
     );
   }

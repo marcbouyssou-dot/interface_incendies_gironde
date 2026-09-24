@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../dev/role_preview.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
@@ -99,21 +100,24 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.v5Colors.canvas,
-      body: SafeArea(
-        bottom: false,
-        child: NativeTabView(
-          index: _currentIndex,
-          children: List.generate(
-            _screens.length,
-            (index) => _screens[index] ?? const SizedBox.shrink(),
+    return RolePreviewDebugOverlay(
+      journeyLabel: 'Professionnel',
+      child: Scaffold(
+        backgroundColor: context.v5Colors.canvas,
+        body: SafeArea(
+          bottom: false,
+          child: NativeTabView(
+            index: _currentIndex,
+            children: List.generate(
+              _screens.length,
+              (index) => _screens[index] ?? const SizedBox.shrink(),
+            ),
           ),
         ),
-      ),
-      bottomNavigationBar: V5BottomNavigation(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _selectTab,
+        bottomNavigationBar: V5BottomNavigation(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: _selectTab,
+        ),
       ),
     );
   }

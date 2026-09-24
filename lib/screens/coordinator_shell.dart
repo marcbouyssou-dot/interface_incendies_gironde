@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../dev/role_preview.dart';
 import '../models/need.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
@@ -231,22 +232,25 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: const Key('coordinator-shell'),
-      backgroundColor: context.v5Colors.canvas,
-      body: SafeArea(
-        bottom: false,
-        child: NativeTabView(
-          index: _currentIndex,
-          children: List.generate(
-            _screens.length,
-            (index) => _screens[index] ?? const SizedBox.shrink(),
+    return RolePreviewDebugOverlay(
+      journeyLabel: 'Coordinateur',
+      child: Scaffold(
+        key: const Key('coordinator-shell'),
+        backgroundColor: context.v5Colors.canvas,
+        body: SafeArea(
+          bottom: false,
+          child: NativeTabView(
+            index: _currentIndex,
+            children: List.generate(
+              _screens.length,
+              (index) => _screens[index] ?? const SizedBox.shrink(),
+            ),
           ),
         ),
-      ),
-      bottomNavigationBar: CoordinatorBottomNavigation(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: _selectTab,
+        bottomNavigationBar: CoordinatorBottomNavigation(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: _selectTab,
+        ),
       ),
     );
   }
