@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
 import 'package:interface_incendies_gironde/screens/notification_center_screen.dart';
 import 'package:interface_incendies_gironde/services/push_notification_gateway.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
+import 'package:interface_incendies_gironde/widgets/common.dart' show SectionTitle;
 
 void main() {
   final now = DateTime(2026, 8, 15, 12);
@@ -269,6 +270,24 @@ void main() {
     await tester.pump();
     expect(repository.notifications.single.isRead, false);
   });
+
+  testWidgets(
+    'unread and read sections use the shared SectionTitle component',
+    (tester) async {
+      final repository = MockCoordinationRepository(
+        initialNotifications: [
+          notification(id: 'notification-unread'),
+          notification(id: 'notification-read', readAt: now),
+        ],
+      );
+      final gateway = _FakePushGateway(permission: PushPermissionState.granted);
+      await pumpCenter(tester, repository: repository, gateway: gateway);
+
+      expect(find.widgetWithText(SectionTitle, 'Non lues'), findsOneWidget);
+      expect(find.widgetWithText(SectionTitle, 'Récentes'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('notification opens an authorized existing mission', (
     tester,

@@ -8,6 +8,7 @@ import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
+import '../widgets/common.dart';
 import '../widgets/territory_components.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/professional_page_header.dart';
@@ -210,10 +211,9 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                         criticalProfession: criticalProfession,
                       ),
                       const SizedBox(height: V5Spacing.xxl),
-                      Text(
-                        'Actions rapides',
-                        key: const Key('coordinator-primary-actions'),
-                        style: Theme.of(context).textTheme.titleLarge,
+                      const SectionTitle(
+                        key: Key('coordinator-primary-actions'),
+                        title: 'Actions rapides',
                       ),
                       const SizedBox(height: V5Spacing.sm),
                       _QuickActions(
@@ -223,10 +223,7 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                         onManageLocations: onManageLocations,
                       ),
                       const SizedBox(height: V5Spacing.xxl),
-                      Text(
-                        'À surveiller',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
+                      const SectionTitle(title: 'À surveiller'),
                       const SizedBox(height: V5Spacing.sm),
                       if (attention.isEmpty)
                         const _StableTerritoryState()
@@ -244,10 +241,7 @@ class _CoordinatorOverviewContent extends StatelessWidget {
                             const SizedBox(height: V5Spacing.sm),
                         ],
                       const SizedBox(height: V5Spacing.xxl),
-                      Text(
-                        'Sous contrôle',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
+                      const SectionTitle(title: 'Sous contrôle'),
                       const SizedBox(height: V5Spacing.sm),
                       OperationalSummary(
                         coveredCenters: territory.coveredCenters,
@@ -279,32 +273,29 @@ class _CoordinatorDecisionPriorities extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
-      key: const Key('coordinator-decision-priorities'),
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(V5Spacing.md),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-      ),
-      child: Column(
-        children: [
-          _CoordinatorDecisionLine(
-            key: const Key('coordinator-critical-centers'),
-            icon: Icons.location_city_outlined,
-            label: 'Centres critiques',
-            value: criticalCenters.isEmpty
-                ? 'Aucun centre critique.'
-                : criticalCenters.join(' · '),
-          ),
-          Divider(height: V5Spacing.xl, color: colors.outline),
-          _CoordinatorDecisionLine(
-            key: const Key('coordinator-critical-profession'),
-            icon: Icons.medical_services_outlined,
-            label: 'Profession critique',
-            value: criticalProfession,
-          ),
-        ],
+      child: V5Card(
+        key: const Key('coordinator-decision-priorities'),
+        child: Column(
+          children: [
+            _CoordinatorDecisionLine(
+              key: const Key('coordinator-critical-centers'),
+              icon: Icons.location_city_outlined,
+              label: 'Centres critiques',
+              value: criticalCenters.isEmpty
+                  ? 'Aucun centre critique.'
+                  : criticalCenters.join(' · '),
+            ),
+            Divider(height: V5Spacing.xl, color: colors.outline),
+            _CoordinatorDecisionLine(
+              key: const Key('coordinator-critical-profession'),
+              icon: Icons.medical_services_outlined,
+              label: 'Profession critique',
+              value: criticalProfession,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -357,31 +348,29 @@ class _StableTerritoryState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
-      key: const Key('coordinator-attention-empty'),
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: V5Spacing.lg,
-        vertical: V5Spacing.md,
-      ),
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle_rounded, size: 20, color: colors.success),
-          const SizedBox(width: V5Spacing.sm),
-          Expanded(
-            child: Text(
-              'Aucune zone ne nécessite d’intervention aujourd’hui ou à venir.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.w600,
+      child: V5Card(
+        key: const Key('coordinator-attention-empty'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: V5Spacing.lg,
+          vertical: V5Spacing.md,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_rounded, size: 20, color: colors.success),
+            const SizedBox(width: V5Spacing.sm),
+            Expanded(
+              child: Text(
+                'Aucune zone ne nécessite d’intervention aujourd’hui ou à venir.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -403,12 +392,8 @@ class _QuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return V5Card(
+      padding: EdgeInsets.zero,
       child: Column(
         children: [
           _QuickActionRow(

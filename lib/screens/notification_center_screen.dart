@@ -10,7 +10,7 @@ import '../repositories/repository_scope.dart';
 import '../services/push_notification_gateway.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
-import '../widgets/common.dart';
+import '../widgets/common.dart' show NeedCard, SectionTitle;
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
@@ -227,10 +227,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 )
               else ...[
                 if (unreadNotifications.isNotEmpty) ...[
-                  Text(
-                    'Non lues',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  const SectionTitle(title: 'Non lues'),
                   const SizedBox(height: V5Spacing.sm),
                 ],
                 for (final notification in unreadNotifications)
@@ -244,10 +241,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                   ),
                 if (recentNotifications.isNotEmpty) ...[
                   const SizedBox(height: V5Spacing.lg),
-                  Text(
-                    'Récentes',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                  const SectionTitle(title: 'Récentes'),
                   const SizedBox(height: V5Spacing.sm),
                 ],
                 for (final notification in recentNotifications)
@@ -309,17 +303,13 @@ class _ConsentCard extends StatelessWidget {
     final incomplete =
         activationFailed ||
         (permission == PushPermissionState.granted && !subscriptionPersisted);
-    return Container(
+    return V5Card(
       key: const Key('notification-consent-card'),
-      padding: const EdgeInsets.all(V5Spacing.md),
-      decoration: BoxDecoration(
-        color: activated
-            ? colors.successContainer
-            : incomplete
-            ? colors.warningContainer
-            : colors.infoContainer,
-        borderRadius: BorderRadius.circular(V5Radius.card),
-      ),
+      color: activated
+          ? colors.successContainer
+          : incomplete
+          ? colors.warningContainer
+          : colors.infoContainer,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -380,7 +370,7 @@ class _PreferencesCard extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text('Préférences', style: Theme.of(context).textTheme.titleLarge),
+      const SectionTitle(title: 'Préférences'),
       V5SwitchTile(
         title: 'Missions compatibles',
         value: preferences.compatibleMissions,
