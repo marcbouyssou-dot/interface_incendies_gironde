@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../theme/v5_foundation.dart';
 import '../widgets/common.dart';
 import '../widgets/v5_secondary_navigation.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _PrivacyVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -17,8 +19,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _PrivacyVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: const V5SecondaryNavigationBar(
         title: 'Politique de confidentialité',
       ),
@@ -31,12 +34,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
                   ? 18.0
                   : (constraints.maxWidth - 520) / 2;
               return Material(
-                color: _PrivacyVisuals.background,
+                color: colors.canvas,
                 child: ListView(
                   key: const Key('privacy-policy-screen'),
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    12,
+                    V5Spacing.sm,
                     horizontalPadding,
                     36,
                   ),
@@ -164,7 +167,7 @@ class _PrivacyHeader extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        SizedBox(height: 8),
+        SizedBox(height: V5Spacing.xs),
         Text(
           'Informations relatives aux professionnels utilisant MobSanté.',
           style: TextStyle(
@@ -196,7 +199,7 @@ class _PrivacySection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
-        color: _PrivacyVisuals.surface,
+        color: context.v5Colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _PrivacyVisuals.border),
         boxShadow: const [
@@ -221,7 +224,7 @@ class _PrivacySection extends StatelessWidget {
                 ),
                 child: Icon(icon, color: _PrivacyVisuals.navy, size: 20),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: V5Spacing.sm),
               Expanded(
                 child: Text(
                   title,
@@ -249,7 +252,7 @@ class _PrivacySection extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            if (index < paragraphs.length - 1) const SizedBox(height: 12),
+            if (index < paragraphs.length - 1) const SizedBox(height: V5Spacing.sm),
           ],
         ],
       ),

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../repositories/live_data_scope.dart';
-import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
@@ -15,9 +15,10 @@ import 'development_settings_screen.dart';
 import 'legal_notice_screen.dart';
 import 'location_detail_screen.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _PlacesVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -87,14 +88,14 @@ class _PlacesScreenState extends State<PlacesScreen> {
               ? 18.0
               : (constraints.maxWidth - 520) / 2;
           return Material(
-            color: _PlacesVisuals.background,
+            color: context.v5Colors.canvas,
             child: CustomScrollView(
               key: const PageStorageKey('places'),
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    16,
+                    V5Spacing.md,
                     horizontalPadding,
                     18,
                   ),
@@ -124,11 +125,11 @@ class _PlacesScreenState extends State<PlacesScreen> {
                               )
                             : null,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: V5Spacing.md),
                       Container(
                         padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
                         decoration: BoxDecoration(
-                          color: _PlacesVisuals.surface,
+                          color: context.v5Colors.surface,
                           borderRadius: BorderRadius.circular(15),
                           border: Border.all(color: _PlacesVisuals.border),
                         ),
@@ -154,7 +155,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: V5Spacing.lg),
                       _PlacesResultsHeader(count: visiblePlaces.length),
                       const SizedBox(height: 11),
                     ],
@@ -229,7 +230,7 @@ class _PlacesHeader extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: V5Spacing.xs),
               Text(
                 'Les points d’intervention mobilisés en Gironde.',
                 style: TextStyle(
@@ -242,7 +243,7 @@ class _PlacesHeader extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: 16),
+        SizedBox(width: V5Spacing.md),
         BrandMark(size: 46),
       ],
     );
@@ -263,7 +264,7 @@ class _PlacesInfoLinks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _PlacesVisuals.surface,
+      color: context.v5Colors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15),
         side: const BorderSide(color: _PlacesVisuals.border),
@@ -335,7 +336,7 @@ class _PlacesInfoLink extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, color: _PlacesVisuals.navy, size: 19),
-              const SizedBox(width: 8),
+              const SizedBox(width: V5Spacing.xs),
               Flexible(
                 child: Text(
                   label,
@@ -375,7 +376,7 @@ class _PlacesResultsHeader extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: V5Spacing.xxs),
         Text(
           '$count lieux référencés',
           style: const TextStyle(
@@ -405,9 +406,9 @@ class _PlaceCard extends StatelessWidget {
       ResponsePlaceType.interventionSector => Icons.location_city_outlined,
     };
     return Material(
-      color: _PlacesVisuals.surface,
+      color: context.v5Colors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(V5Radius.card),
         side: const BorderSide(color: _PlacesVisuals.border),
       ),
       clipBehavior: Clip.antiAlias,
@@ -417,7 +418,12 @@ class _PlaceCard extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 132),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 14, 14),
+            padding: const EdgeInsets.fromLTRB(
+              V5Spacing.md,
+              V5Spacing.md,
+              14,
+              14,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -433,7 +439,7 @@ class _PlaceCard extends StatelessWidget {
                       ),
                       child: Icon(icon, color: _PlacesVisuals.navy, size: 22),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: V5Spacing.sm),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,7 +467,7 @@ class _PlaceCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: V5Spacing.xs),
                     const Padding(
                       padding: EdgeInsets.only(top: 2),
                       child: Icon(
@@ -520,8 +526,8 @@ class _PlaceCard extends StatelessWidget {
                 Wrap(
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 12,
-                  runSpacing: 8,
+                  spacing: V5Spacing.sm,
+                  runSpacing: V5Spacing.xs,
                   children: [
                     _ActivityStatus(
                       active: place.isActive,
@@ -564,11 +570,12 @@ class _ActivityStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final color = !operational
-        ? AppColors.orange
+        ? colors.accent
         : active
-        ? AppColors.green
-        : AppColors.textMuted;
+        ? colors.success
+        : colors.textSecondary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

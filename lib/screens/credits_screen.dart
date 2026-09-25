@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
+import '../theme/v5_foundation.dart';
 import '../widgets/common.dart';
 import '../widgets/v5_secondary_navigation.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _CreditsVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -18,8 +20,9 @@ class CreditsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _CreditsVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: const V5SecondaryNavigationBar(title: 'Crédits'),
       body: SafeArea(
         top: false,
@@ -41,12 +44,12 @@ class CreditsScreen extends StatelessWidget {
                 double.infinity,
               );
               return Material(
-                color: _CreditsVisuals.background,
+                color: colors.canvas,
                 child: SingleChildScrollView(
                   key: const Key('credits-screen'),
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    12,
+                    V5Spacing.sm,
                     horizontalPadding,
                     36,
                   ),
@@ -104,7 +107,7 @@ class _CreditsHeader extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: V5Spacing.xs),
         const Text(
           AppIdentity.productSubtitle,
           style: TextStyle(
@@ -174,7 +177,7 @@ class _ThanksCard extends StatelessWidget {
             Row(
               children: [
                 _CreditsIcon(icon: Icons.favorite_outline_rounded, size: 40),
-                SizedBox(width: 12),
+                SizedBox(width: V5Spacing.sm),
                 Expanded(
                   child: Text(
                     'Remerciements',
@@ -223,7 +226,7 @@ class _CreditsIcon extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: _CreditsVisuals.fieldBackground,
-        borderRadius: BorderRadius.circular(size == 40 ? 12 : 20),
+        borderRadius: BorderRadius.circular(size == 40 ? 12 : V5Radius.card),
       ),
       child: Icon(
         icon,
@@ -244,7 +247,7 @@ class _CreditsCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: _CreditsVisuals.surface,
+        color: context.v5Colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _CreditsVisuals.border),
         boxShadow: const [

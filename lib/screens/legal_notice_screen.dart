@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import '../widgets/v5_secondary_navigation.dart';
@@ -8,9 +9,10 @@ import 'credits_screen.dart';
 import 'information_consent_screen.dart';
 import 'privacy_policy_screen.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _LegalVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -22,8 +24,9 @@ class LegalNoticeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _LegalVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: const V5SecondaryNavigationBar(title: 'Mentions légales'),
       body: SafeArea(
         top: false,
@@ -34,12 +37,12 @@ class LegalNoticeScreen extends StatelessWidget {
                   ? 18.0
                   : (constraints.maxWidth - 520) / 2;
               return Material(
-                color: _LegalVisuals.background,
+                color: colors.canvas,
                 child: ListView(
                   key: const Key('legal-notice-screen'),
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    12,
+                    V5Spacing.sm,
                     horizontalPadding,
                     36,
                   ),
@@ -135,7 +138,7 @@ class _LegalSectionHeader extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: V5Spacing.xxs),
         Text(
           title,
           style: const TextStyle(
@@ -217,7 +220,7 @@ class _LegalInformationRow extends StatelessWidget {
             ),
             child: Icon(icon, color: _LegalVisuals.navy, size: 20),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: V5Spacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -326,7 +329,7 @@ class _LegalNavigationRow extends StatelessWidget {
                 ),
                 child: Icon(icon, color: _LegalVisuals.navy, size: 20),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: V5Spacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,7 +358,7 @@ class _LegalNavigationRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: V5Spacing.xs),
               const Icon(
                 Icons.chevron_right_rounded,
                 color: _LegalVisuals.textMuted,
@@ -377,7 +380,7 @@ class _LegalPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: _LegalVisuals.surface,
+      color: context.v5Colors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: const BorderSide(color: _LegalVisuals.border),

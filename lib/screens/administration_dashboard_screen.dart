@@ -4,7 +4,7 @@ import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
-import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
@@ -13,9 +13,10 @@ import 'admin_invitations_screen.dart';
 import 'create_need_screen.dart';
 import 'location_administration_screen.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _AdministrationVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -189,7 +190,7 @@ class _AdministrationDashboard extends StatelessWidget {
               ? 18.0
               : (constraints.maxWidth - 520) / 2;
           return Material(
-            color: _AdministrationVisuals.background,
+            color: context.v5Colors.canvas,
             child: ListView(
               key: const PageStorageKey('administration-dashboard'),
               padding: EdgeInsets.fromLTRB(
@@ -200,7 +201,7 @@ class _AdministrationDashboard extends StatelessWidget {
               ),
               children: [
                 _AdministrationHeader(access: access),
-                const SizedBox(height: 20),
+                const SizedBox(height: V5Spacing.lg),
                 _AdministrationActionCard(
                   key: const Key('administration-create-need'),
                   semanticLabel: 'Créer un besoin',
@@ -305,7 +306,7 @@ class _AdministrationHeader extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: V5Spacing.xs),
               Text(
                 access.isCoordinator
                     ? 'Pilotez les besoins et les accès aux centres.'
@@ -320,7 +321,7 @@ class _AdministrationHeader extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: V5Spacing.md),
         const BrandMark(size: 46),
       ],
     );
@@ -344,7 +345,7 @@ class _AdministrationSectionTitle extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        SizedBox(height: 4),
+        SizedBox(height: V5Spacing.xxs),
         Text(
           'Autres accès',
           style: TextStyle(
@@ -380,7 +381,7 @@ class _ResponsibleScopeCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: _AdministrationVisuals.surface,
+              color: context.v5Colors.surface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _AdministrationVisuals.border),
             ),
@@ -390,7 +391,7 @@ class _ResponsibleScopeCard extends StatelessWidget {
               size: 21,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: V5Spacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,7 +405,7 @@ class _ResponsibleScopeCard extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: V5Spacing.xxs),
                 if (access.isCoordinator)
                   const Text(
                     'Tous les lieux de Gironde',
@@ -464,16 +465,17 @@ class _AdministrationActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = primary ? Colors.white : _AdministrationVisuals.navy;
+    final colors = context.v5Colors;
+    final foreground = primary ? colors.onAccent : _AdministrationVisuals.navy;
     return Semantics(
       button: true,
       label: semanticLabel,
       child: Material(
-        color: primary ? AppColors.orange : _AdministrationVisuals.surface,
+        color: primary ? colors.accent : colors.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(primary ? 18 : 15),
           side: BorderSide(
-            color: primary ? AppColors.orange : _AdministrationVisuals.border,
+            color: primary ? colors.accent : _AdministrationVisuals.border,
           ),
         ),
         clipBehavior: Clip.antiAlias,
@@ -493,9 +495,11 @@ class _AdministrationActionCard extends StatelessWidget {
                     height: primary ? 46 : 42,
                     decoration: BoxDecoration(
                       color: primary
-                          ? Colors.white.withValues(alpha: 0.16)
+                          ? colors.onAccent.withValues(alpha: 0.16)
                           : _AdministrationVisuals.fieldBackground,
-                      borderRadius: BorderRadius.circular(primary ? 14 : 12),
+                      borderRadius: BorderRadius.circular(
+                        primary ? V5Radius.control : 12,
+                      ),
                     ),
                     child: Icon(
                       icon,
@@ -517,12 +521,12 @@ class _AdministrationActionCard extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: V5Spacing.xxs),
                         Text(
                           description,
                           style: TextStyle(
                             color: primary
-                                ? Colors.white.withValues(alpha: 0.86)
+                                ? colors.onAccent.withValues(alpha: 0.86)
                                 : _AdministrationVisuals.textMuted,
                             fontSize: 12,
                             height: 1.25,
@@ -532,12 +536,10 @@ class _AdministrationActionCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: V5Spacing.xs),
                   Icon(
                     Icons.chevron_right_rounded,
-                    color: primary
-                        ? Colors.white
-                        : _AdministrationVisuals.textMuted,
+                    color: primary ? colors.onAccent : _AdministrationVisuals.textMuted,
                   ),
                 ],
               ),
@@ -564,7 +566,12 @@ class _ResponsibleAccessUnavailable extends StatelessWidget {
   Widget build(BuildContext context) {
     return PageContainer(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 42, 20, 32),
+        padding: EdgeInsets.fromLTRB(
+          V5Spacing.lg,
+          42,
+          V5Spacing.lg,
+          V5Spacing.xxl,
+        ),
         children: [
           const PageHeader(
             eyebrow: 'Administration',
@@ -574,15 +581,15 @@ class _ResponsibleAccessUnavailable extends StatelessWidget {
           const SizedBox(height: 22),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(V5Spacing.lg),
               child: Column(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.lock_outline_rounded,
-                    color: AppColors.red,
+                    color: context.v5Colors.danger,
                     size: 34,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: V5Spacing.sm),
                   Text(
                     message,
                     key: const Key('responsible-access-error'),
@@ -594,7 +601,7 @@ class _ResponsibleAccessUnavailable extends StatelessWidget {
                     onPressed: onRetry,
                     label: 'Réessayer',
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: V5Spacing.xs),
                   TextButton(
                     key: const Key('responsible-access-sign-out'),
                     onPressed: onSignOut,
