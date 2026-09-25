@@ -8,20 +8,231 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../services/push_notification_gateway.dart';
+import '../services/platform_administration_service.dart';
+import '../services/push_token_chain_diagnostic.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart' show NeedCard, SectionTitle;
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
+abstract final class AdminNotificationHydrationTraceState {
+  static const identityReady = 'ADMIN_IDENTITY_READY';
+  static const firestoreSubscriptionReadStarted =
+      'FIRESTORE_SUBSCRIPTION_READ_STARTED';
+  static const firestoreSubscriptionReadOk = 'FIRESTORE_SUBSCRIPTION_READ_OK';
+  static const firestoreSubscriptionReadFailed =
+      'FIRESTORE_SUBSCRIPTION_READ_FAILED';
+  static const firestoreSubscriptionReadTimeout =
+      'FIRESTORE_SUBSCRIPTION_READ_TIMEOUT';
+  static const identityRevalidationOk = 'ADMIN_IDENTITY_REVALIDATION_OK';
+  static const identityRevalidationFailed =
+      'ADMIN_IDENTITY_REVALIDATION_FAILED';
+  static const localSubscriptionCheckStarted =
+      'LOCAL_SUBSCRIPTION_CHECK_STARTED';
+  static const localSubscriptionCheckOk = 'LOCAL_SUBSCRIPTION_CHECK_OK';
+  static const localSubscriptionCheckFailed = 'LOCAL_SUBSCRIPTION_CHECK_FAILED';
+  static const localSubscriptionCheckTimeout =
+      'LOCAL_SUBSCRIPTION_CHECK_TIMEOUT';
+  static const preflightStarted = 'ADMIN_PREFLIGHT_STARTED';
+  static const preflightOk = 'ADMIN_PREFLIGHT_OK';
+  static const preflightFailed = 'ADMIN_PREFLIGHT_FAILED';
+}
+
+void emitAdminNotificationHydrationTrace(
+  void Function(String state) trace,
+  String state,
+) {
+  try {
+    trace(state);
+  } catch (_) {
+    // Diagnostic output must never affect notification hydration.
+  }
+}
+
+Future<T> runTracedAdminSubscriptionRead<T>({
+  required Future<T> Function() read,
+  required void Function(String state) trace,
+  Duration observationDelay = const Duration(seconds: 15),
+}) async {
+  emitAdminNotificationHydrationTrace(
+    trace,
+    AdminNotificationHydrationTraceState.firestoreSubscriptionReadStarted,
+  );
+  var completed = false;
+  final observer = Timer(observationDelay, () {
+    if (!completed) {
+      emitAdminNotificationHydrationTrace(
+        trace,
+        AdminNotificationHydrationTraceState.firestoreSubscriptionReadTimeout,
+      );
+    }
+  });
+  try {
+    final result = await read();
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.firestoreSubscriptionReadOk,
+    );
+    return result;
+  } catch (_) {
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.firestoreSubscriptionReadFailed,
+    );
+    rethrow;
+  } finally {
+    observer.cancel();
+  }
+}
+
+Future<bool> runTracedAdminPreflight({
+  required Future<bool> Function() preflight,
+  required void Function(String state) trace,
+}) async {
+  emitAdminNotificationHydrationTrace(
+    trace,
+    AdminNotificationHydrationTraceState.preflightStarted,
+  );
+  try {
+    final result = await preflight();
+    emitAdminNotificationHydrationTrace(
+      trace,
+      result
+          ? AdminNotificationHydrationTraceState.preflightOk
+          : AdminNotificationHydrationTraceState.preflightFailed,
+    );
+    return result;
+  } catch (_) {
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.preflightFailed,
+    );
+    rethrow;
+  }
+}
+
+Future<bool> runTracedAdminLocalSubscriptionCheck({
+  required Future<bool> Function() check,
+  required void Function(String state) trace,
+  Duration observationDelay = const Duration(seconds: 15),
+}) async {
+  emitAdminNotificationHydrationTrace(
+    trace,
+    AdminNotificationHydrationTraceState.localSubscriptionCheckStarted,
+  );
+  var completed = false;
+  final observer = Timer(observationDelay, () {
+    if (!completed) {
+      emitAdminNotificationHydrationTrace(
+        trace,
+        AdminNotificationHydrationTraceState.localSubscriptionCheckTimeout,
+      );
+    }
+  });
+  try {
+    final result = await check();
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      result
+          ? AdminNotificationHydrationTraceState.localSubscriptionCheckOk
+          : AdminNotificationHydrationTraceState.localSubscriptionCheckFailed,
+    );
+    return result;
+  } catch (_) {
+    completed = true;
+    emitAdminNotificationHydrationTrace(
+      trace,
+      AdminNotificationHydrationTraceState.localSubscriptionCheckFailed,
+    );
+    rethrow;
+  } finally {
+    observer.cancel();
+  }
+}
+
+Future<void> runFcmChainMicroDiagnostic({
+  required PushTokenChainDiagnosticSnapshot snapshot,
+  required Future<FcmChainDiagnosticResult> Function({
+    required FcmChainComparison getTokenVsPersistInput,
+    required FcmChainComparison persistInputVsFirestoreAfterCommit,
+  })
+  diagnose,
+  required void Function(String state) trace,
+}) async {
+  var result = const FcmChainDiagnosticResult.indeterminate();
+  try {
+    result = await diagnose(
+      getTokenVsPersistInput: _asFcmComparison(snapshot.getTokenVsPersistInput),
+      persistInputVsFirestoreAfterCommit: _asFcmComparison(
+        snapshot.persistInputVsFirestoreAfterCommit,
+      ),
+    );
+  } catch (_) {
+    // A temporary diagnostic must never affect notification hydration.
+  }
+  _emitFcmChainComparison(
+    trace,
+    'GETTOKEN_VS_PERSIST_INPUT',
+    result.getTokenVsPersistInput,
+  );
+  _emitFcmChainComparison(
+    trace,
+    'PERSIST_INPUT_VS_FIRESTORE',
+    result.persistInputVsFirestore,
+  );
+  _emitFcmChainComparison(
+    trace,
+    'FIRESTORE_VS_PREFLIGHT_TARGET',
+    result.firestoreVsPreflightTarget,
+  );
+  _emitFcmChainComparison(
+    trace,
+    'PREFLIGHT_TARGET_VS_SEND_TARGET',
+    result.preflightTargetVsSendTarget,
+  );
+  try {
+    trace(
+      'ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION: '
+      '${result.activeSubscriptionsForInstallation.label}',
+    );
+  } catch (_) {
+    // Diagnostic output remains best-effort and non-throwing.
+  }
+}
+
+FcmChainComparison _asFcmComparison(TokenChainComparison comparison) =>
+    switch (comparison) {
+      TokenChainComparison.identical => FcmChainComparison.identical,
+      TokenChainComparison.different => FcmChainComparison.different,
+      TokenChainComparison.indeterminate => FcmChainComparison.indeterminate,
+    };
+
+void _emitFcmChainComparison(
+  void Function(String state) trace,
+  String name,
+  FcmChainComparison comparison,
+) {
+  try {
+    trace('$name: ${comparison.label}');
+  } catch (_) {
+    // Diagnostic output remains best-effort and non-throwing.
+  }
+}
+
 class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({
     super.key,
     this.pushGateway,
+    this.targetedPushTestService,
     this.initialNotificationId,
   });
 
   final PushNotificationGateway? pushGateway;
+  final TargetedPushTestService? targetedPushTestService;
   final String? initialNotificationId;
 
   @override
@@ -36,9 +247,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   Stream<NotificationPreferences>? _preferences;
   PushPermissionState? _permission;
   bool _activating = false;
+  bool _hydratingPush = true;
+  PushSubscriptionState _subscriptionState = PushSubscriptionState.absent;
   bool _subscriptionPersisted = false;
+  bool _localInstallationReady = false;
+  bool _adminTargetResolvable = false;
+  String? _adminInstallationId;
   bool _activationFailed = false;
   bool _consentDeferred = false;
+  bool _sendingPushTest = false;
   bool _initialNotificationHandled = false;
   StreamSubscription<PushSubscriptionRegistration>? _registrationSubscription;
 
@@ -46,9 +263,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   void initState() {
     super.initState();
     _pushGateway = widget.pushGateway ?? createPushNotificationGateway();
-    _pushGateway.permissionState().then((value) {
-      if (mounted) setState(() => _permission = value);
-    });
   }
 
   @override
@@ -57,20 +271,307 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     final repository = RepositoryScope.of(context);
     if (identical(repository, _repository)) return;
     _repository = repository;
+    _hydratingPush = true;
+    _localInstallationReady = false;
+    _adminTargetResolvable = false;
+    _adminInstallationId = null;
     _notifications = repository.watchNotifications();
     _preferences = repository.watchNotificationPreferences();
+    unawaited(_hydratePushSubscription(repository));
     unawaited(_registrationSubscription?.cancel());
-    _registrationSubscription = _pushGateway.registrationUpdates.listen(
-      (registration) => unawaited(_persistRefreshedRegistration(registration)),
-      onError: (Object _, StackTrace _) {
-        if (mounted) {
-          setState(() {
-            _subscriptionPersisted = false;
-            _activationFailed = true;
-          });
+    if (widget.targetedPushTestService == null) {
+      _registrationSubscription = _pushGateway.registrationUpdates.listen(
+        (registration) =>
+            unawaited(_persistRefreshedRegistration(registration)),
+        onError: (Object _, StackTrace _) {
+          if (mounted) {
+            setState(() {
+              _subscriptionPersisted = false;
+              _activationFailed = true;
+            });
+          }
+        },
+      );
+    }
+  }
+
+  Future<void> _hydratePushSubscription(
+    CoordinationRepository repository,
+  ) async {
+    PushPermissionState? permission;
+    var subscriptionState = PushSubscriptionState.absent;
+    try {
+      permission = await _pushGateway.permissionState();
+      var persisted = false;
+      final pushRepository = repository is PushSubscriptionReadRepository
+          ? repository as PushSubscriptionReadRepository
+          : null;
+      if (widget.targetedPushTestService case final adminService?) {
+        emitPushTokenChainLifecycleTrace(
+          debugPrint,
+          PushTokenChainLifecycleTraceState.chainStatePresentBeforeAdmin,
+          value: PushTokenChainDiagnosticSession.markAdminEntry(),
+        );
+        final identityRepository =
+            repository is AdministrativeIdentityReadRepository
+            ? repository as AdministrativeIdentityReadRepository
+            : null;
+        final ownerIdentity = identityRepository == null
+            ? null
+            : await identityRepository.watchAdministrativeUid().first;
+        _traceAdminHydration(
+          AdminNotificationHydrationTraceState.identityReady,
+        );
+        final adminInstallationId = _pushGateway.existingInstallationId;
+        if (permission == PushPermissionState.granted &&
+            pushRepository != null &&
+            adminInstallationId != null) {
+          subscriptionState = await runTracedAdminSubscriptionRead(
+            read: () =>
+                pushRepository.readPushSubscriptionState(adminInstallationId),
+            trace: _traceAdminHydration,
+          );
         }
-      },
-    );
+        final identityStillCurrent = await _isCurrentPushHydration(
+          repository,
+          identityRepository,
+          ownerIdentity,
+        );
+        _traceAdminHydration(
+          identityStillCurrent
+              ? AdminNotificationHydrationTraceState.identityRevalidationOk
+              : AdminNotificationHydrationTraceState.identityRevalidationFailed,
+        );
+        if (!identityStillCurrent) {
+          _finishCancelledPushHydration(repository, permission);
+          return;
+        }
+        final localReady =
+            adminInstallationId != null &&
+                permission == PushPermissionState.granted
+            ? await runTracedAdminLocalSubscriptionCheck(
+                check: _pushGateway.hasUsableLocalSubscription,
+                trace: _traceAdminHydration,
+              )
+            : false;
+        final targetResolvable = localReady
+            ? await runTracedAdminPreflight(
+                preflight: () => adminService.canSendTargetedPushTest(
+                  installationId: adminInstallationId,
+                ),
+                trace: _traceAdminHydration,
+              )
+            : false;
+        if (!await _isCurrentPushHydration(
+          repository,
+          identityRepository,
+          ownerIdentity,
+        )) {
+          _finishCancelledPushHydration(repository, permission);
+          return;
+        }
+        setState(() {
+          _permission = permission;
+          _subscriptionState = subscriptionState;
+          _subscriptionPersisted =
+              subscriptionState == PushSubscriptionState.active;
+          _localInstallationReady = localReady;
+          _adminTargetResolvable = targetResolvable;
+          _adminInstallationId = adminInstallationId;
+          _activationFailed = false;
+          _hydratingPush = false;
+        });
+        _startTemporaryFcmChainDiagnostic(
+          adminService: adminService,
+          installationId: adminInstallationId,
+        );
+        return;
+      }
+      if (permission == PushPermissionState.granted && pushRepository != null) {
+        final identityRepository =
+            repository is AdministrativeIdentityReadRepository
+            ? repository as AdministrativeIdentityReadRepository
+            : null;
+        final ownerIdentity = identityRepository == null
+            ? null
+            : await identityRepository.watchAdministrativeUid().first;
+        subscriptionState = await pushRepository.readPushSubscriptionState(
+          _pushGateway.installationId,
+        );
+        if (!await _isCurrentPushHydration(
+          repository,
+          identityRepository,
+          ownerIdentity,
+        )) {
+          _finishCancelledPushHydration(repository, permission);
+          return;
+        }
+        if (subscriptionState == PushSubscriptionState.active) {
+          final registration = await _pushGateway.reconcileRegistration();
+          final current = await _isCurrentPushHydration(
+            repository,
+            identityRepository,
+            ownerIdentity,
+          );
+          if (!current) {
+            _finishCancelledPushHydration(repository, permission);
+            return;
+          }
+          if (registration != null &&
+              registration.installationId == _pushGateway.installationId) {
+            persisted = await _persist(registration, repository: repository);
+          }
+        } else if (subscriptionState == PushSubscriptionState.stale) {
+          _tracePushRecovery(PushRecoveryTraceState.recoveryStarted);
+          try {
+            final recoveryGateway = _pushGateway is PushStaleRecoveryGateway
+                ? _pushGateway as PushStaleRecoveryGateway
+                : null;
+            final registration = await recoveryGateway
+                ?.recoverStaleRegistration();
+            final current = await _isCurrentPushHydration(
+              repository,
+              identityRepository,
+              ownerIdentity,
+            );
+            if (!current) {
+              _tracePushRecovery(PushRecoveryTraceState.recoveryFailed);
+              _finishCancelledPushHydration(repository, permission);
+              return;
+            }
+            if (registration != null &&
+                registration.installationId == _pushGateway.installationId) {
+              _tracePushRecovery(PushRecoveryTraceState.persistStarted);
+              persisted = await _persist(registration, repository: repository);
+              _tracePushRecovery(
+                persisted
+                    ? PushRecoveryTraceState.persistOk
+                    : PushRecoveryTraceState.persistFailed,
+              );
+              if (persisted) subscriptionState = PushSubscriptionState.active;
+            }
+            _tracePushRecovery(
+              persisted
+                  ? PushRecoveryTraceState.recoveryReady
+                  : PushRecoveryTraceState.recoveryFailed,
+            );
+          } catch (_) {
+            _tracePushRecovery(PushRecoveryTraceState.recoveryFailed);
+            rethrow;
+          }
+        }
+      }
+      if (!mounted || !identical(repository, _repository)) return;
+      setState(() {
+        _permission = permission;
+        _subscriptionState = subscriptionState;
+        _subscriptionPersisted = persisted;
+        _activationFailed = false;
+        _hydratingPush = false;
+      });
+    } catch (_) {
+      if (!mounted || !identical(repository, _repository)) return;
+      setState(() {
+        _permission = permission;
+        _subscriptionState = subscriptionState;
+        _subscriptionPersisted = false;
+        _localInstallationReady = false;
+        _adminTargetResolvable = false;
+        _adminInstallationId = null;
+        _activationFailed = permission == PushPermissionState.granted;
+        _hydratingPush = false;
+      });
+    }
+  }
+
+  void _finishCancelledPushHydration(
+    CoordinationRepository repository,
+    PushPermissionState? permission,
+  ) {
+    if (!mounted || !identical(repository, _repository)) return;
+    setState(() {
+      _permission = permission;
+      _subscriptionState = PushSubscriptionState.absent;
+      _subscriptionPersisted = false;
+      _localInstallationReady = false;
+      _adminTargetResolvable = false;
+      _adminInstallationId = null;
+      _activationFailed = permission == PushPermissionState.granted;
+      _hydratingPush = false;
+    });
+  }
+
+  void _tracePushRecovery(String state) {
+    try {
+      debugPrint(state);
+    } catch (_) {
+      // Diagnostic output must never affect notification activation.
+    }
+  }
+
+  void _traceAdminHydration(String state) {
+    emitAdminNotificationHydrationTrace(debugPrint, state);
+  }
+
+  void _startTemporaryFcmChainDiagnostic({
+    required TargetedPushTestService adminService,
+    required String? installationId,
+  }) {
+    if (installationId == null || adminService is! FcmChainDiagnosticService) {
+      return;
+    }
+    final diagnosticService = adminService as FcmChainDiagnosticService;
+    unawaited(() async {
+      final presentAtDiagnostic =
+          PushTokenChainDiagnosticSession.hasPersistedState();
+      emitPushTokenChainLifecycleTrace(
+        debugPrint,
+        PushTokenChainLifecycleTraceState.chainStatePresentAtDiagnostic,
+        value: presentAtDiagnostic,
+      );
+      await PushTokenChainDiagnosticSession.refreshFirestoreVerification();
+      final snapshot = PushTokenChainDiagnosticSession.consumeSnapshot();
+      emitPushTokenChainLifecycleTrace(
+        debugPrint,
+        PushTokenChainLifecycleTraceState.chainStateConsumed,
+        value:
+            presentAtDiagnostic &&
+            !PushTokenChainDiagnosticSession.hasPersistedState(),
+      );
+      await runFcmChainMicroDiagnostic(
+        snapshot: snapshot,
+        diagnose:
+            ({
+              required getTokenVsPersistInput,
+              required persistInputVsFirestoreAfterCommit,
+            }) => diagnosticService.diagnoseFcmChain(
+              installationId: installationId,
+              getTokenVsPersistInput: getTokenVsPersistInput,
+              persistInputVsFirestoreAfterCommit:
+                  persistInputVsFirestoreAfterCommit,
+            ),
+        trace: debugPrint,
+      );
+    }());
+  }
+
+  Future<bool> _isCurrentPushHydration(
+    CoordinationRepository repository,
+    AdministrativeIdentityReadRepository? identityRepository,
+    String? ownerIdentity,
+  ) async {
+    if (!mounted || !identical(repository, _repository)) return false;
+    if (identityRepository == null) return true;
+    try {
+      final currentIdentity = await identityRepository
+          .watchAdministrativeUid()
+          .first;
+      return mounted &&
+          identical(repository, _repository) &&
+          currentIdentity == ownerIdentity;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -81,19 +582,69 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
   Future<void> _activate() async {
     if (_activating) return;
+    final staleRecovery =
+        _permission == PushPermissionState.granted &&
+        _subscriptionState == PushSubscriptionState.stale;
+    if (staleRecovery) {
+      _tracePushRecovery(PushRecoveryTraceState.recoveryStarted);
+    } else {
+      _tracePushActivation(PushActivationTraceState.activationStarted);
+    }
     setState(() {
       _activating = true;
       _activationFailed = false;
     });
     try {
-      final result = await _pushGateway.activate();
+      final recoveryGateway = _pushGateway is PushStaleRecoveryGateway
+          ? _pushGateway as PushStaleRecoveryGateway
+          : null;
+      final result = staleRecovery
+          ? PushActivationResult(
+              PushPermissionState.granted,
+              registration: await recoveryGateway?.recoverStaleRegistration(),
+            )
+          : await _pushGateway.activate();
       var persisted = false;
       if (result.registration case final registration?) {
-        persisted = await _persist(registration);
+        if (staleRecovery) {
+          _tracePushRecovery(PushRecoveryTraceState.persistStarted);
+        } else {
+          _tracePushActivation(PushActivationTraceState.persistStarted);
+        }
+        persisted = staleRecovery
+            ? await _persist(registration)
+            : await _persistActivation(registration);
+        if (staleRecovery) {
+          _tracePushRecovery(
+            persisted
+                ? PushRecoveryTraceState.persistOk
+                : PushRecoveryTraceState.persistFailed,
+          );
+        } else {
+          _tracePushActivation(
+            persisted
+                ? PushActivationTraceState.persistOk
+                : PushActivationTraceState.persistFailed,
+          );
+        }
+      }
+      if (staleRecovery) {
+        _tracePushRecovery(
+          persisted
+              ? PushRecoveryTraceState.recoveryReady
+              : PushRecoveryTraceState.recoveryFailed,
+        );
+      } else {
+        _tracePushActivation(
+          persisted
+              ? PushActivationTraceState.activationReady
+              : PushActivationTraceState.activationFailed,
+        );
       }
       if (mounted) {
         setState(() {
           _permission = result.state;
+          if (persisted) _subscriptionState = PushSubscriptionState.active;
           _subscriptionPersisted =
               result.state == PushPermissionState.granted && persisted;
           _activationFailed =
@@ -101,6 +652,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         });
       }
     } catch (_) {
+      if (staleRecovery) {
+        _tracePushRecovery(PushRecoveryTraceState.recoveryFailed);
+      } else {
+        _tracePushActivation(PushActivationTraceState.activationFailed);
+      }
       if (mounted) {
         setState(() {
           _subscriptionPersisted = false;
@@ -112,13 +668,54 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     }
   }
 
-  Future<bool> _persist(PushSubscriptionRegistration registration) async {
+  Future<bool> _persist(
+    PushSubscriptionRegistration registration, {
+    CoordinationRepository? repository,
+  }) async {
     try {
-      await _repository!.registerPushSubscription(registration);
+      await (repository ?? _repository!).registerPushSubscription(registration);
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  Future<bool> _persistActivation(
+    PushSubscriptionRegistration registration,
+  ) async {
+    final getTokenCompareStored =
+        PushTokenChainDiagnosticSession.recordPersistInput(registration.token);
+    emitPushTokenChainLifecycleTrace(
+      debugPrint,
+      PushTokenChainLifecycleTraceState.getTokenCompareStored,
+      value: getTokenCompareStored,
+    );
+    try {
+      final repository = _repository!;
+      final activationRepository =
+          repository is PushActivationPersistenceRepository
+          ? repository as PushActivationPersistenceRepository
+          : null;
+      if (activationRepository != null) {
+        await activationRepository.registerPushSubscriptionForActivation(
+          registration,
+          onTokenCompared: (tokenChanged) => _tracePushActivation(
+            tokenChanged
+                ? PushActivationTraceState.tokenChanged
+                : PushActivationTraceState.tokenUnchanged,
+          ),
+        );
+      } else {
+        await repository.registerPushSubscription(registration);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _tracePushActivation(String state) {
+    emitPushActivationTrace(debugPrint, state);
   }
 
   Future<void> _persistRefreshedRegistration(
@@ -128,9 +725,59 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     if (!mounted) return;
     setState(() {
       _permission = PushPermissionState.granted;
+      if (persisted) _subscriptionState = PushSubscriptionState.active;
       _subscriptionPersisted = persisted;
       _activationFailed = !persisted;
     });
+  }
+
+  Future<void> _sendPushTest() async {
+    final service = widget.targetedPushTestService;
+    final adminInstallationId = _adminInstallationId;
+    if (service == null ||
+        adminInstallationId == null ||
+        !_localInstallationReady ||
+        !_adminTargetResolvable ||
+        _hydratingPush ||
+        _sendingPushTest) {
+      return;
+    }
+    setState(() => _sendingPushTest = true);
+    try {
+      final confirmed = await showV5Confirmation(
+        context: context,
+        title: 'Envoyer une notification test ?',
+        message:
+            'Une seule notification neutre sera envoyée à cette installation. '
+            'Un test réussi ne pourra pas être répété.',
+        cancelLabel: 'Annuler',
+        confirmLabel: 'Envoyer le test',
+        barrierDismissible: false,
+        icon: Icons.notification_add_outlined,
+        cancelKey: const Key('cancel-targeted-push-test'),
+        confirmKey: const Key('confirm-targeted-push-test'),
+      );
+      if (confirmed != true || !mounted) return;
+      await service.sendTargetedPushTest(installationId: adminInstallationId);
+      if (!mounted) return;
+      V5Toast.show(
+        context,
+        message: 'Notification test envoyée à cette installation.',
+        tone: V5ToastTone.success,
+      );
+    } on PlatformAdministrationException catch (error) {
+      if (!mounted) return;
+      V5Toast.show(context, message: error.message, tone: V5ToastTone.danger);
+    } catch (_) {
+      if (!mounted) return;
+      V5Toast.show(
+        context,
+        message: 'La notification test n’a pas pu être envoyée.',
+        tone: V5ToastTone.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _sendingPushTest = false);
+    }
   }
 
   Future<void> _open(AppNotification notification) async {
@@ -192,10 +839,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 ],
               ),
               const SizedBox(height: V5Spacing.lg),
-              if (!_consentDeferred) ...[
+              if (widget.targetedPushTestService == null &&
+                  !_consentDeferred) ...[
                 _ConsentCard(
                   permission: _permission,
-                  activating: _activating,
+                  activating: _activating || _hydratingPush,
                   subscriptionPersisted: _subscriptionPersisted,
                   activationFailed: _activationFailed,
                   onActivate: _activate,
@@ -212,6 +860,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                   onChanged: _repository!.saveNotificationPreferences,
                 ),
               ),
+              if (widget.targetedPushTestService != null) ...[
+                const SizedBox(height: V5Spacing.lg),
+                _AdminPushTestCard(
+                  localInstallationReady: _localInstallationReady,
+                  currentIdentityActive: _subscriptionPersisted,
+                  targetResolvable: _adminTargetResolvable,
+                  checking: _hydratingPush,
+                  sending: _sendingPushTest,
+                  onSend: _sendPushTest,
+                ),
+              ],
               const SizedBox(height: V5Spacing.xl),
               if (snapshot.connectionState == ConnectionState.waiting)
                 const V5LoadingState(label: 'Chargement des notifications…')
@@ -273,6 +932,71 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       if (mounted) unawaited(_open(notification));
     });
   }
+}
+
+class _AdminPushTestCard extends StatelessWidget {
+  const _AdminPushTestCard({
+    required this.localInstallationReady,
+    required this.currentIdentityActive,
+    required this.targetResolvable,
+    required this.checking,
+    required this.sending,
+    required this.onSend,
+  });
+
+  final bool localInstallationReady;
+  final bool currentIdentityActive;
+  final bool targetResolvable;
+  final bool checking;
+  final bool sending;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) => V5Section(
+    title: 'Diagnostic administrateur',
+    leading: const Icon(Icons.admin_panel_settings_outlined),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          localInstallationReady
+              ? 'Abonnement local valide sur cette installation.'
+              : 'Aucun abonnement local valide sur cette installation.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: V5Spacing.xs),
+        Text(
+          currentIdentityActive
+              ? 'Identité courante associée à cet abonnement.'
+              : 'Identité courante distincte de l’abonnement de l’installation.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: V5Spacing.xs),
+        Text(
+          checking
+              ? 'Vérification de la cible administrateur…'
+              : targetResolvable
+              ? 'Une cible administrateur ACTIVE a été résolue.'
+              : 'Aucune cible administrateur unique et ACTIVE n’est disponible.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: V5Spacing.sm),
+        V5Button(
+          key: const Key('send-targeted-push-test'),
+          label: sending ? 'Envoi en cours…' : 'Envoyer une notification test',
+          icon: Icons.notification_add_outlined,
+          tone: V5ButtonTone.secondary,
+          onPressed:
+              localInstallationReady &&
+                  targetResolvable &&
+                  !checking &&
+                  !sending
+              ? onSend
+              : null,
+        ),
+      ],
+    ),
+  );
 }
 
 class _ConsentCard extends StatelessWidget {

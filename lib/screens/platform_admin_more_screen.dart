@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../services/platform_administration_service.dart';
 import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
+import 'notification_center_screen.dart';
 
 class PlatformAdminMoreScreen extends StatefulWidget {
-  const PlatformAdminMoreScreen({super.key, required this.onSignOut});
+  const PlatformAdminMoreScreen({
+    super.key,
+    required this.onSignOut,
+    required this.administrationService,
+  });
 
   final Future<void> Function() onSignOut;
+  final PlatformAdministrationService administrationService;
 
   @override
   State<PlatformAdminMoreScreen> createState() =>
@@ -19,6 +27,15 @@ class PlatformAdminMoreScreen extends StatefulWidget {
 class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
   bool _confirmationOpen = false;
   bool _signingOut = false;
+
+  void _openNotifications(TargetedPushTestService service) {
+    Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) =>
+            NotificationCenterScreen(targetedPushTestService: service),
+      ),
+    );
+  }
 
   Future<void> _requestSignOut() async {
     if (_confirmationOpen || _signingOut) return;
@@ -102,6 +119,25 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
                   ),
                   const SizedBox(height: V5Spacing.xxl),
                   const PlatformAdminPerspectiveSection(),
+                  if (widget.administrationService
+                      case final TargetedPushTestService pushTestService) ...[
+                    const SizedBox(height: V5Spacing.xxl),
+                    V5Section(
+                      title: 'Diagnostic',
+                      leading: Icon(
+                        Icons.notifications_outlined,
+                        color: accent,
+                      ),
+                      child: V5Button(
+                        key: const Key('platform-admin-notifications'),
+                        expanded: true,
+                        onPressed: () => _openNotifications(pushTestService),
+                        label: 'Notifications',
+                        icon: Icons.notifications_outlined,
+                        tone: V5ButtonTone.secondary,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: V5Spacing.xxl),
                   V5Section(
                     title: 'Session',

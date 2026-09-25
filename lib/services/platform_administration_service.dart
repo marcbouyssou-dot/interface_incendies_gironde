@@ -10,6 +10,77 @@ abstract interface class PlatformAdministrationSessionProvider {
   ValueListenable<PlatformAdministrationSessionState> get sessionState;
 }
 
+abstract interface class TargetedPushTestService {
+  Future<bool> canSendTargetedPushTest({required String installationId});
+
+  Future<void> sendTargetedPushTest({required String installationId});
+}
+
+enum FcmChainComparison {
+  identical('IDENTIQUE'),
+  different('DIFFÉRENT'),
+  indeterminate('INDÉTERMINÉ');
+
+  const FcmChainComparison(this.label);
+  final String label;
+
+  static FcmChainComparison parse(Object? value) => switch (value) {
+    'IDENTIQUE' => identical,
+    'DIFFÉRENT' => different,
+    _ => indeterminate,
+  };
+}
+
+enum ActiveSubscriptionsForInstallation {
+  zero('0'),
+  one('1'),
+  multiple('>1'),
+  indeterminate('INDÉTERMINÉ');
+
+  const ActiveSubscriptionsForInstallation(this.label);
+  final String label;
+
+  static ActiveSubscriptionsForInstallation parse(Object? value) =>
+      switch (value) {
+        '0' => zero,
+        '1' => one,
+        '>1' => multiple,
+        _ => indeterminate,
+      };
+}
+
+class FcmChainDiagnosticResult {
+  const FcmChainDiagnosticResult({
+    required this.getTokenVsPersistInput,
+    required this.persistInputVsFirestore,
+    required this.firestoreVsPreflightTarget,
+    required this.preflightTargetVsSendTarget,
+    required this.activeSubscriptionsForInstallation,
+  });
+
+  const FcmChainDiagnosticResult.indeterminate()
+    : getTokenVsPersistInput = FcmChainComparison.indeterminate,
+      persistInputVsFirestore = FcmChainComparison.indeterminate,
+      firestoreVsPreflightTarget = FcmChainComparison.indeterminate,
+      preflightTargetVsSendTarget = FcmChainComparison.indeterminate,
+      activeSubscriptionsForInstallation =
+          ActiveSubscriptionsForInstallation.indeterminate;
+
+  final FcmChainComparison getTokenVsPersistInput;
+  final FcmChainComparison persistInputVsFirestore;
+  final FcmChainComparison firestoreVsPreflightTarget;
+  final FcmChainComparison preflightTargetVsSendTarget;
+  final ActiveSubscriptionsForInstallation activeSubscriptionsForInstallation;
+}
+
+abstract interface class FcmChainDiagnosticService {
+  Future<FcmChainDiagnosticResult> diagnoseFcmChain({
+    required String installationId,
+    required FcmChainComparison getTokenVsPersistInput,
+    required FcmChainComparison persistInputVsFirestoreAfterCommit,
+  });
+}
+
 class PlatformAdministrationSessionController
     extends ValueNotifier<PlatformAdministrationSessionState> {
   PlatformAdministrationSessionController({bool initiallyValid = true})

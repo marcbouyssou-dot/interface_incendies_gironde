@@ -22,6 +22,7 @@ import '../services/current_mobilization_provider.dart';
 import '../services/firebase_platform_administration_service.dart';
 import '../services/operational_context_provider.dart';
 import '../services/platform_administration_service.dart';
+import '../services/push_token_chain_diagnostic.dart';
 import '../utils/switch_latest.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
@@ -236,6 +237,8 @@ String requireMatchingMobilizationId({
 class FirestoreCoordinationRepository
     implements
         CoordinationRepository,
+        PushSubscriptionReadRepository,
+        PushActivationPersistenceRepository,
         AdministrativeIdentityReadRepository,
         OrganizationEngagementReadDataSource,
         OrganizationLocationReadDataSource,
@@ -2115,13 +2118,30 @@ class FirestoreCoordinationRepository
   @override
   Future<void> registerPushSubscription(
     PushSubscriptionRegistration registration,
-  ) async {
+  ) => _registerPushSubscription(registration);
+
+  @override
+  Future<void> registerPushSubscriptionForActivation(
+    PushSubscriptionRegistration registration, {
+    required void Function(bool tokenChanged) onTokenCompared,
+  }) =>
+      _registerPushSubscription(registration, onTokenCompared: onTokenCompared);
+
+  Future<void> _registerPushSubscription(
+    PushSubscriptionRegistration registration, {
+    void Function(bool tokenChanged)? onTokenCompared,
+  }) async {
     final uid = _notificationUid;
     final reference = _notificationFirestore
         .collection('pushSubscriptions')
         .doc('${uid}_${registration.installationId}');
+    bool? tokenChanged;
     await _notificationFirestore.runTransaction((transaction) async {
       final existing = await transaction.get(reference);
+      tokenChanged = didPushTokenChange(
+        existing.data()?['token'],
+        registration.token,
+      );
       final now = FieldValue.serverTimestamp();
       transaction.set(reference, {
         'uid': uid,
@@ -2134,6 +2154,57 @@ class FirestoreCoordinationRepository
         'updatedAt': now,
       }, SetOptions(merge: true));
     });
+    if (onTokenCompared != null) {
+      unawaited(
+        verifyPersistedPushTokenForDiagnostic(
+          readFirestoreToken: () async {
+            final snapshot = await reference.get();
+            return snapshot.data()?['token'];
+          },
+        ).then(
+          (stored) => emitPushTokenChainLifecycleTrace(
+            debugPrint,
+            PushTokenChainLifecycleTraceState.persistCompareStored,
+            value: stored,
+          ),
+        ),
+      );
+    }
+    if (onTokenCompared case final callback?) {
+      try {
+        callback(tokenChanged ?? true);
+      } catch (_) {
+        // Diagnostic output must never affect a committed subscription.
+      }
+    }
+  }
+
+  @override
+  Future<PushSubscriptionState> readPushSubscriptionState(
+    String installationId,
+  ) async {
+    if (installationId.isEmpty) return PushSubscriptionState.absent;
+    final uid = _notificationUid;
+    final snapshot = await _notificationFirestore
+        .collection('pushSubscriptions')
+        .doc('${uid}_$installationId')
+        .get();
+    final data = snapshot.data();
+    final token = data?['token'];
+    if (!snapshot.exists) return PushSubscriptionState.absent;
+    final validIdentity =
+        data?['uid'] == uid &&
+        data?['installationId'] == installationId &&
+        data?['platform'] == 'web' &&
+        token is String &&
+        token.trim().isNotEmpty;
+    if (!validIdentity) return PushSubscriptionState.inactive;
+    if (data?['active'] == true) return PushSubscriptionState.active;
+    if (data?['disabledReason'] ==
+        'messaging/registration-token-not-registered') {
+      return PushSubscriptionState.stale;
+    }
+    return PushSubscriptionState.inactive;
   }
 
   @override

@@ -107,6 +107,16 @@ import {
   solicitationJournalFirestoreServices,
   SolicitationJournalError,
 } from './operational_notifications/solicitation_journal.js';
+import {
+  sendTargetedPushTest as sendTargetedPushTestRequest,
+  targetedPushTestServices,
+  TargetedPushTestError,
+} from './targeted_push_test.js';
+import {
+  diagnoseFcmChain as diagnoseFcmChainRequest,
+  fcmChainDiagnosticServices,
+  FcmChainDiagnosticError,
+} from './fcm_chain_diagnostic.js';
 
 export {
   createPublishedNeedDiffusion,
@@ -367,6 +377,29 @@ const platformCallableOptions = Object.freeze({
   region: 'europe-west1',
   enforceAppCheck: true,
 });
+
+export const sendTargetedPushTest = onCall(
+  platformCallableOptions,
+  async (request) => targetedPushTestCallable(() =>
+    sendTargetedPushTestRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: targetedPushTestServices({
+        firestore: getFirestore(),
+        messaging: getMessaging(),
+      }),
+    })),
+);
+
+export const diagnoseFcmChain = onCall(
+  platformCallableOptions,
+  async (request) => fcmChainDiagnosticCallable(() =>
+    diagnoseFcmChainRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: fcmChainDiagnosticServices({firestore: getFirestore()}),
+    })),
+);
 
 export const createOperation = onCall(
   platformCallableOptions,
@@ -1451,6 +1484,34 @@ async function platformAdministrationCallable(action) {
       'internal',
       'L’administration de la plateforme a échoué.',
     );
+  }
+}
+
+async function targetedPushTestCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof TargetedPushTestError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('TARGETED_PUSH_TEST_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal',
+      'La notification de test n’a pas pu être envoyée.',
+    );
+  }
+}
+
+async function fcmChainDiagnosticCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof FcmChainDiagnosticError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    throw new HttpsError('internal', 'Le diagnostic FCM a échoué.');
   }
 }
 

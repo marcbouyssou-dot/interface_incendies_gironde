@@ -1,25 +1,51 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
+import 'dart:async';
 import 'dart:html' as html;
 import 'dart:js_interop';
 import 'dart:math';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/app_notification.dart';
 import 'push_installation_id.dart';
 import 'push_notification_gateway_stub.dart';
+import 'push_token_chain_diagnostic.dart';
 
 export 'push_notification_gateway_stub.dart'
     show
         PushActivationResult,
+        PushActivationTraceState,
+        LocalMessagingWorkerCandidate,
+        LocalSubscriptionTraceState,
         PushNotificationGateway,
         PushPermissionState,
-        resolveWebPushPermissionState;
+        PushRecoveryTraceState,
+        PushRenewalTraceState,
+        PushSubscriptionAfterFailure,
+        PushStaleRecoveryGateway,
+        PushUnsubscribeErrorClass,
+        PushUnsubscribeErrorInfo,
+        applicationServerKeyMatchesVapid,
+        emitPushActivationPermission,
+        emitPushActivationTrace,
+        emitLocalSubscriptionTrace,
+        isExpectedFirebaseMessagingServiceWorker,
+        isExpectedFirebaseMessagingWorkerScope,
+        isExpectedFirebaseMessagingWorkerScript,
+        runInstrumentedLocalSubscriptionCheck,
+        runTracedLocalBrowserRead,
+        runTracedPushActivationTokenRequest,
+        runTracedPushUnsubscribeCall,
+        runTracedStalePushRecovery,
+        resolveWebPushPermissionState,
+        traceLocalSubscriptionException,
+        traceLocalSubscriptionGuard,
+        tracePushUnsubscribePrecheck;
 
 const _vapidKey = String.fromEnvironment('FIREBASE_WEB_PUSH_VAPID_KEY');
 const _installationKey = 'mobsante.push.installation.v1';
-
 extension type _BadgeNavigator._(JSObject _) implements JSObject {
   external JSPromise<JSAny?> setAppBadge(JSNumber count);
   external JSPromise<JSAny?> clearAppBadge();
@@ -28,13 +54,52 @@ extension type _BadgeNavigator._(JSObject _) implements JSObject {
 @JS('navigator')
 external _BadgeNavigator get _badgeNavigator;
 
+@JS('Error')
+external JSFunction get _javaScriptErrorConstructor;
+
+PushUnsubscribeErrorInfo classifyWebPushUnsubscribeError(Object error) {
+  if (error is html.DomException) {
+    return PushUnsubscribeErrorInfo(
+      name: error.name,
+      errorClass: PushUnsubscribeErrorClass.domException,
+    );
+  }
+  if (error is Error ||
+      (error as JSAny?).instanceof(_javaScriptErrorConstructor)) {
+    return const PushUnsubscribeErrorInfo(
+      name: 'Other',
+      errorClass: PushUnsubscribeErrorClass.error,
+    );
+  }
+  return const PushUnsubscribeErrorInfo(
+    name: 'Other',
+    errorClass: PushUnsubscribeErrorClass.other,
+  );
+}
+
 PushNotificationGateway createPushNotificationGateway() =>
     FirebaseWebPushNotificationGateway.instance;
 
-class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
+class FirebaseWebPushNotificationGateway
+    implements PushNotificationGateway, PushStaleRecoveryGateway {
   FirebaseWebPushNotificationGateway._();
 
   static final instance = FirebaseWebPushNotificationGateway._();
+
+  Future<void> _operationTail = Future.value();
+  Future<PushSubscriptionRegistration?>? _sessionReconciliation;
+  Future<PushSubscriptionRegistration?>? _forcedRenewal;
+  Future<PushSubscriptionRegistration?>? _staleRecovery;
+  int _registrationGeneration = 0;
+
+  @override
+  String get installationId => _installationId();
+
+  @override
+  String? get existingInstallationId {
+    final value = html.window.localStorage[_installationKey];
+    return value == null || value.isEmpty ? null : value;
+  }
 
   @override
   Stream<PushSubscriptionRegistration> get registrationUpdates =>
@@ -66,7 +131,62 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
   }
 
   @override
+  Future<bool> hasUsableLocalSubscription() =>
+      runInstrumentedLocalSubscriptionCheck(
+        hasVapidConfig: () => _vapidKey.trim().isNotEmpty,
+        permissionGranted: () => html.Notification.permission == 'granted',
+        serviceWorkerApi: () => html.window.navigator.serviceWorker,
+        getRegistrations: (serviceWorkers) => serviceWorkers.getRegistrations(),
+        inspectRegistration: (rawCandidate) {
+          if (rawCandidate is! html.ServiceWorkerRegistration) return null;
+          final active = rawCandidate.active;
+          if (active == null) {
+            return LocalMessagingWorkerCandidate(
+              registration: rawCandidate,
+              active: false,
+              scriptOk: false,
+              scopeOk: false,
+              matches: false,
+            );
+          }
+          final origin = html.window.location.origin;
+          final scope = rawCandidate.scope ?? '';
+          final scriptUrl = active.scriptUrl ?? '';
+          final state = active.state ?? '';
+          return LocalMessagingWorkerCandidate(
+            registration: rawCandidate,
+            active: state == 'activated',
+            scriptOk: isExpectedFirebaseMessagingWorkerScript(
+              origin: origin,
+              scriptUrl: scriptUrl,
+            ),
+            scopeOk: isExpectedFirebaseMessagingWorkerScope(
+              origin: origin,
+              scope: scope,
+            ),
+            matches: isExpectedFirebaseMessagingServiceWorker(
+              origin: origin,
+              scope: scope,
+              scriptUrl: scriptUrl,
+              state: state,
+            ),
+          );
+        },
+        getPushManager: (registration) => registration.pushManager,
+        getSubscription: (pushManager) => pushManager.getSubscription(),
+        asPushSubscription: (candidate) =>
+            candidate is html.PushSubscription ? candidate : null,
+        applicationServerKeyPresent: (subscription) =>
+            subscription.options?.applicationServerKey != null,
+        vapidMatches: _hasExpectedVapidKey,
+        classifyError: (error) =>
+            classifyWebPushUnsubscribeError(error).errorClass,
+        trace: debugPrint,
+      );
+
+  @override
   Future<PushActivationResult> activate() async {
+    PushTokenChainDiagnosticSession.startActivation();
     if (!await FirebaseMessaging.instance.isSupported()) {
       return const PushActivationResult(PushPermissionState.unsupported);
     }
@@ -75,24 +195,266 @@ class FirebaseWebPushNotificationGateway implements PushNotificationGateway {
     }
     final settings = await FirebaseMessaging.instance.requestPermission();
     final state = _map(settings.authorizationStatus);
+    emitPushActivationPermission(
+      granted: state == PushPermissionState.granted,
+      trace: debugPrint,
+    );
     if (state != PushPermissionState.granted) {
       return PushActivationResult(state);
+    }
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) {
+      return PushActivationResult(state, registration: await forcedRenewal);
+    }
+    _registrationGeneration += 1;
+    final generation = _registrationGeneration;
+    late final Future<PushSubscriptionRegistration?> activation;
+    activation = _enqueueRegistration(() async {
+      final token = await runTracedPushActivationTokenRequest(
+        getToken: () =>
+            FirebaseMessaging.instance.getToken(vapidKey: _vapidKey),
+        trace: debugPrint,
+      );
+      if (token == null || token.isEmpty) return null;
+      final chainStateCreated = PushTokenChainDiagnosticSession.recordGetToken(
+        token,
+      );
+      emitPushTokenChainLifecycleTrace(
+        debugPrint,
+        PushTokenChainLifecycleTraceState.chainStateCreated,
+        value: chainStateCreated,
+      );
+      final registration = PushSubscriptionRegistration(
+        installationId: _installationId(),
+        token: token,
+        platform: 'web',
+      );
+      return generation == _registrationGeneration ? registration : null;
+    });
+    _sessionReconciliation = activation;
+    var registration = await activation;
+    if (registration == null && generation != _registrationGeneration) {
+      final replacement = _forcedRenewal;
+      if (replacement != null) registration = await replacement;
+      return PushActivationResult(state, registration: registration);
+    }
+    if (registration == null) {
+      return const PushActivationResult(PushPermissionState.misconfigured);
+    }
+    _sessionReconciliation = Future.value(registration);
+    return PushActivationResult(state, registration: registration);
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> reconcileRegistration() {
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) return forcedRenewal;
+    final generation = _registrationGeneration;
+    return _sessionReconciliation ??= _enqueueRegistration(() async {
+      final registration = await _reconcileRegistration();
+      return generation == _registrationGeneration ? registration : null;
+    });
+  }
+
+  Future<PushSubscriptionRegistration?> _enqueueRegistration(
+    Future<PushSubscriptionRegistration?> Function() operation,
+  ) {
+    final completer = Completer<PushSubscriptionRegistration?>();
+    _operationTail = _operationTail.then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<PushSubscriptionRegistration?> _reconcileRegistration() async {
+    if (!await FirebaseMessaging.instance.isSupported() ||
+        _vapidKey.trim().isEmpty) {
+      return null;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (_map(settings.authorizationStatus) != PushPermissionState.granted) {
+      return null;
     }
     final token = await FirebaseMessaging.instance.getToken(
       vapidKey: _vapidKey,
     );
-    if (token == null || token.isEmpty) {
-      return const PushActivationResult(PushPermissionState.misconfigured);
-    }
-    final installationId = _installationId();
-    return PushActivationResult(
-      state,
-      registration: PushSubscriptionRegistration(
-        installationId: installationId,
-        token: token,
-        platform: 'web',
-      ),
+    if (token == null || token.isEmpty) return null;
+    return PushSubscriptionRegistration(
+      installationId: _installationId(),
+      token: token,
+      platform: 'web',
     );
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> renewRegistration() {
+    final forcedRenewal = _forcedRenewal;
+    if (forcedRenewal != null) return forcedRenewal;
+    _registrationGeneration += 1;
+    _sessionReconciliation = null;
+    late final Future<PushSubscriptionRegistration?> guardedRenewal;
+    guardedRenewal = _enqueueRegistration(_renewRegistration).whenComplete(() {
+      if (identical(_forcedRenewal, guardedRenewal)) {
+        _forcedRenewal = null;
+      }
+    });
+    _forcedRenewal = guardedRenewal;
+    return guardedRenewal;
+  }
+
+  Future<PushSubscriptionRegistration?> _renewRegistration() async {
+    _sessionReconciliation = null;
+    if (!await FirebaseMessaging.instance.isSupported() ||
+        _vapidKey.trim().isEmpty) {
+      return null;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (_map(settings.authorizationStatus) != PushPermissionState.granted) {
+      return null;
+    }
+    final token = await runTracedStaleTokenRenewal(
+      deleteToken: FirebaseMessaging.instance.deleteToken,
+      getToken: () => FirebaseMessaging.instance.getToken(vapidKey: _vapidKey),
+      trace: debugPrint,
+    );
+    if (token == null) return null;
+    final registration = PushSubscriptionRegistration(
+      installationId: _installationId(),
+      token: token,
+      platform: 'web',
+    );
+    _sessionReconciliation = Future.value(registration);
+    return registration;
+  }
+
+  @override
+  Future<PushSubscriptionRegistration?> recoverStaleRegistration() {
+    final staleRecovery = _staleRecovery;
+    if (staleRecovery != null) return staleRecovery;
+    _registrationGeneration += 1;
+    _sessionReconciliation = null;
+    late final Future<PushSubscriptionRegistration?> guardedRecovery;
+    guardedRecovery = _enqueueRegistration(_recoverStaleRegistration)
+        .whenComplete(() {
+          if (identical(_staleRecovery, guardedRecovery)) {
+            _staleRecovery = null;
+          }
+        });
+    _staleRecovery = guardedRecovery;
+    return guardedRecovery;
+  }
+
+  Future<PushSubscriptionRegistration?> _recoverStaleRegistration() async {
+    if (!await FirebaseMessaging.instance.isSupported() ||
+        _vapidKey.trim().isEmpty) {
+      return null;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (_map(settings.authorizationStatus) != PushPermissionState.granted) {
+      return null;
+    }
+    final token = await runTracedStalePushRecovery(
+      unsubscribe: () => _unsubscribeCurrentPushSubscription(trace: debugPrint),
+      getToken: () => FirebaseMessaging.instance.getToken(vapidKey: _vapidKey),
+      trace: debugPrint,
+    );
+    if (token == null) return null;
+    final registration = PushSubscriptionRegistration(
+      installationId: _installationId(),
+      token: token,
+      platform: 'web',
+    );
+    _sessionReconciliation = Future.value(registration);
+    return registration;
+  }
+
+  Future<bool> _unsubscribeCurrentPushSubscription({
+    required void Function(String state) trace,
+  }) async {
+    final serviceWorkers = html.window.navigator.serviceWorker;
+    if (serviceWorkers == null) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      return false;
+    }
+    late final List<dynamic> registrations;
+    try {
+      registrations = await serviceWorkers.getRegistrations();
+    } catch (error, stackTrace) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    final messagingRegistrations = <html.ServiceWorkerRegistration>[];
+    for (final candidate in registrations) {
+      if (candidate is! html.ServiceWorkerRegistration) continue;
+      final active = candidate.active;
+      if (active == null) continue;
+      if (isExpectedFirebaseMessagingServiceWorker(
+        origin: html.window.location.origin,
+        scope: candidate.scope ?? '',
+        scriptUrl: active.scriptUrl ?? '',
+        state: active.state ?? '',
+      )) {
+        messagingRegistrations.add(candidate);
+      }
+    }
+    if (messagingRegistrations.length != 1) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      return false;
+    }
+    final pushManager = messagingRegistrations.single.pushManager;
+    if (pushManager == null) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      return false;
+    }
+    late final dynamic subscription;
+    try {
+      subscription = await pushManager.getSubscription();
+    } catch (error, stackTrace) {
+      tracePushUnsubscribePrecheck(passed: false, trace: trace);
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    if (subscription == null) {
+      tracePushUnsubscribePrecheck(passed: true, trace: trace);
+      return true;
+    }
+    if (subscription is! html.PushSubscription ||
+        !_hasExpectedVapidKey(subscription)) {
+      tracePushUnsubscribePrecheck(
+        passed: false,
+        trace: trace,
+        failureState: PushSubscriptionAfterFailure.present,
+      );
+      return false;
+    }
+    tracePushUnsubscribePrecheck(passed: true, trace: trace);
+    return runTracedPushUnsubscribeCall(
+      unsubscribe: subscription.unsubscribe,
+      inspectSubscriptionAfterFailure: () async {
+        final dynamic current = await pushManager.getSubscription();
+        return current == null
+            ? PushSubscriptionAfterFailure.absent
+            : PushSubscriptionAfterFailure.present;
+      },
+      classifyError: classifyWebPushUnsubscribeError,
+      trace: trace,
+    );
+  }
+
+  bool _hasExpectedVapidKey(html.PushSubscription subscription) {
+    try {
+      final applicationServerKey = subscription.options?.applicationServerKey;
+      if (applicationServerKey == null) return false;
+      return applicationServerKeyMatchesVapid(
+        applicationServerKey: applicationServerKey.asUint8List(),
+        vapidKey: _vapidKey,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

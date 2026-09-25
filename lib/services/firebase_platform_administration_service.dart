@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/operation.dart';
+import 'fcm_chain_diagnostic_transport.dart';
 import 'platform_administration_service.dart';
 
 typedef PlatformCallable =
@@ -12,14 +13,23 @@ typedef PlatformCallable =
 class FirebasePlatformAdministrationService
     implements
         PlatformAdministrationService,
-        PlatformAdministrationSessionProvider {
+        PlatformAdministrationSessionProvider,
+        TargetedPushTestService,
+        FcmChainDiagnosticService {
   FirebasePlatformAdministrationService({
     FirebaseFunctions? functions,
     FirebaseAuth? auth,
     PlatformCallable? callable,
+    FcmChainDiagnosticTransport? fcmChainDiagnosticTransport,
+    String? Function()? currentUserUid,
   }) : assert(functions == null || callable == null),
+       _auth = auth,
        _functions = functions,
-       _callable = callable {
+       _callable = callable,
+       _fcmChainDiagnosticTransport =
+           fcmChainDiagnosticTransport ??
+           invokeFcmChainDiagnosticWithoutMessaging,
+       _currentUserUid = currentUserUid {
     if (auth != null) {
       _setSessionFromUser(auth.currentUser);
       _authSubscription = auth.idTokenChanges().listen(
@@ -31,8 +41,11 @@ class FirebasePlatformAdministrationService
 
   static const region = 'europe-west1';
 
+  final FirebaseAuth? _auth;
   final FirebaseFunctions? _functions;
   final PlatformCallable? _callable;
+  final FcmChainDiagnosticTransport _fcmChainDiagnosticTransport;
+  final String? Function()? _currentUserUid;
   final PlatformAdministrationSessionController _sessionState =
       PlatformAdministrationSessionController();
   StreamSubscription<User?>? _authSubscription;
@@ -55,6 +68,85 @@ class FirebasePlatformAdministrationService
 
   @override
   bool get isAvailable => true;
+
+  @override
+  Future<void> sendTargetedPushTest({required String installationId}) {
+    _requireCurrentUser();
+    return _invoke('sendTargetedPushTest', {
+      'installationId': _validInstallationId(installationId),
+      'confirmation': 'SEND_ONE_TEST_PUSH',
+    });
+  }
+
+  @override
+  Future<bool> canSendTargetedPushTest({required String installationId}) async {
+    _requireCurrentUser();
+    try {
+      final response = await _invokeForMap('sendTargetedPushTest', {
+        'installationId': _validInstallationId(installationId),
+        'confirmation': 'CHECK_TEST_PUSH',
+      });
+      return response['available'] == true;
+    } on PlatformAdministrationException {
+      return false;
+    }
+  }
+
+  @override
+  Future<FcmChainDiagnosticResult> diagnoseFcmChain({
+    required String installationId,
+    required FcmChainComparison getTokenVsPersistInput,
+    required FcmChainComparison persistInputVsFirestoreAfterCommit,
+  }) async {
+    _requireCurrentUser();
+    try {
+      final rawResponse = await _fcmChainDiagnosticTransport(
+        auth: _auth,
+        region: region,
+        data: {
+          'installationId': _validInstallationId(installationId),
+          'getTokenVsPersistInput': getTokenVsPersistInput.label,
+          'persistInputVsFirestoreAfterCommit':
+              persistInputVsFirestoreAfterCommit.label,
+        },
+      );
+      if (rawResponse is! Map) throw const FormatException();
+      final response = rawResponse;
+      return FcmChainDiagnosticResult(
+        getTokenVsPersistInput: FcmChainComparison.parse(
+          response['GETTOKEN_VS_PERSIST_INPUT'],
+        ),
+        persistInputVsFirestore: FcmChainComparison.parse(
+          response['PERSIST_INPUT_VS_FIRESTORE'],
+        ),
+        firestoreVsPreflightTarget: FcmChainComparison.parse(
+          response['FIRESTORE_VS_PREFLIGHT_TARGET'],
+        ),
+        preflightTargetVsSendTarget: FcmChainComparison.parse(
+          response['PREFLIGHT_TARGET_VS_SEND_TARGET'],
+        ),
+        activeSubscriptionsForInstallation:
+            ActiveSubscriptionsForInstallation.parse(
+              response['ACTIVE_SUBSCRIPTIONS_FOR_INSTALLATION'],
+            ),
+      );
+    } catch (_) {
+      return const FcmChainDiagnosticResult.indeterminate();
+    }
+  }
+
+  void _requireCurrentUser() {
+    final user = _auth?.currentUser;
+    final uid =
+        _currentUserUid?.call() ??
+        (user?.isAnonymous == false ? user?.uid : null);
+    if (uid == null || uid.isEmpty) {
+      _sessionState.markExpired();
+      throw const PlatformAdministrationException(
+        'Votre session a expiré. Reconnectez-vous.',
+      );
+    }
+  }
 
   @override
   Future<void> createMobilization(MobilizationAdministrationDraft draft) =>
@@ -179,6 +271,13 @@ class FirebasePlatformAdministrationService
       _invoke(functionName, {'mobilizationId': _validId(mobilizationId)});
 
   Future<void> _invoke(String functionName, Map<String, Object?> data) async {
+    await _invokeForMap(functionName, data);
+  }
+
+  Future<Map<Object?, Object?>> _invokeForMap(
+    String functionName,
+    Map<String, Object?> data,
+  ) async {
     if (_sessionState.value == PlatformAdministrationSessionState.expired) {
       throw const PlatformAdministrationException(
         'Votre session a expiré. Reconnectez-vous.',
@@ -193,6 +292,7 @@ class FirebasePlatformAdministrationService
                     .call<Object?>(data))
                 .data;
       if (response is! Map) throw const FormatException();
+      return response;
     } on PlatformAdministrationException {
       rethrow;
     } on FirebaseFunctionsException catch (error) {
@@ -213,6 +313,19 @@ class FirebasePlatformAdministrationService
         !RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(value)) {
       throw const PlatformAdministrationException(
         'La demande d’administration est invalide.',
+      );
+    }
+    return value;
+  }
+
+  String _validInstallationId(Object? value) {
+    if (value is! String ||
+        value.isEmpty ||
+        value.length > 160 ||
+        value.trim() != value ||
+        value.contains('/')) {
+      throw const PlatformAdministrationException(
+        'L’installation Push courante est invalide.',
       );
     }
     return value;
@@ -250,6 +363,8 @@ class FirebasePlatformAdministrationService
     'not-found' => 'Cette donnée n’existe plus. Actualisez la page.',
     'failed-precondition' =>
       'Cette action n’est plus possible dans l’état actuel.',
+    'resource-exhausted' =>
+      'Une notification test a déjà été envoyée à cette installation.',
     'unavailable' ||
     'deadline-exceeded' => 'Le service est momentanément indisponible.',
     _ => 'L’action d’administration n’a pas pu aboutir.',
