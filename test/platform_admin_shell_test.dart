@@ -28,7 +28,9 @@ import 'package:interface_incendies_gironde/screens/platform_admin_shell.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_statistics_screen.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_history_screen.dart';
 import 'package:interface_incendies_gironde/screens/platform_admin_more_screen.dart';
+import 'package:interface_incendies_gironde/screens/platform_admin_profile_screen.dart';
 import 'package:interface_incendies_gironde/screens/platform_operation_form_dialog.dart';
+import 'package:interface_incendies_gironde/screens/notification_center_screen.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
@@ -928,6 +930,8 @@ void main() {
     await tester.pumpAndSettle();
     final signOut = find.byKey(const Key('platform-admin-sign-out'));
     expect(signOut, findsOneWidget);
+    await tester.ensureVisible(signOut);
+    await tester.pumpAndSettle();
     expect(tester.getSize(signOut).height, greaterThanOrEqualTo(44));
 
     await tester.tap(signOut);
@@ -948,7 +952,10 @@ void main() {
 
       await tester.tap(find.text('Plus').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('platform-admin-sign-out')));
+      final signOut = find.byKey(const Key('platform-admin-sign-out'));
+      await tester.ensureVisible(signOut);
+      await tester.pumpAndSettle();
+      await tester.tap(signOut);
       await tester.pumpAndSettle();
       final confirm = find.byKey(const Key('confirm-platform-admin-sign-out'));
       expect(confirm, findsOneWidget);
@@ -1007,6 +1014,130 @@ void main() {
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });
+
+  testWidgets('Plus menu gives the platform admin access to Notifications', (
+    tester,
+  ) async {
+    await _pumpPlatformAdmin(tester);
+
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    final notifications = find.byKey(
+      const Key('platform-admin-notifications'),
+    );
+    expect(notifications, findsOneWidget);
+
+    await tester.tap(notifications);
+    await tester.pumpAndSettle();
+    expect(find.byType(NotificationCenterScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Plus menu gives the platform admin access to Profil', (
+    tester,
+  ) async {
+    await _pumpPlatformAdmin(tester);
+
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    final profile = find.byKey(const Key('platform-admin-profile'));
+    expect(profile, findsOneWidget);
+
+    await tester.tap(profile);
+    await tester.pumpAndSettle();
+    expect(find.byType(PlatformAdminProfileScreen), findsOneWidget);
+    expect(find.text('Administrateur plateforme'), findsOneWidget);
+    // NoPlatformAdministrationService (the default test double) exposes no
+    // email — the screen must show that honestly, never a fabricated value.
+    expect(find.text('Non renseigné'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Notifications never exposes the admin diagnostic card to an '
+    'unauthorized role',
+    (tester) async {
+      await _pumpPlatformAdmin(tester);
+
+      await tester.tap(find.text('Plus').last);
+      await tester.pumpAndSettle();
+      // The Plus menu itself no longer has a separate "Diagnostic push"
+      // entry — Notifications is the single, shared destination.
+      expect(find.byKey(const Key('platform-admin-diagnostic')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('platform-admin-notifications')));
+      await tester.pumpAndSettle();
+      expect(find.byType(NotificationCenterScreen), findsOneWidget);
+      // NoPlatformAdministrationService (default test double) does not
+      // implement TargetedPushTestService: the diagnostic card must be
+      // absent, not just hidden behind a missing menu entry.
+      expect(
+        find.byKey(const Key('send-targeted-push-test')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Notifications exposes the admin diagnostic card when the role '
+    'supports it',
+    (tester) async {
+      await tester.pumpWidget(
+        FireCoordinationApp(
+          repository: _RecordingCoordinationRepository(),
+          platformRuntime: _MultiPreviewRuntime(
+            administrationService: const _DiagnosticCapableAdministrationService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Plus').last);
+      await tester.pumpAndSettle();
+      final notifications = find.byKey(
+        const Key('platform-admin-notifications'),
+      );
+      expect(notifications, findsOneWidget);
+      await tester.ensureVisible(notifications);
+      await tester.pumpAndSettle();
+
+      await tester.tap(notifications);
+      await tester.pumpAndSettle();
+      expect(find.byType(NotificationCenterScreen), findsOneWidget);
+      expect(find.text('Diagnostic administrateur'), findsOneWidget);
+      expect(
+        find.byKey(const Key('send-targeted-push-test')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    "Profil shows the diagnostic-capable admin's real email",
+    (tester) async {
+      await tester.pumpWidget(
+        FireCoordinationApp(
+          repository: _RecordingCoordinationRepository(),
+          platformRuntime: _MultiPreviewRuntime(
+            administrationService: const _DiagnosticCapableAdministrationService(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Plus').last);
+      await tester.pumpAndSettle();
+      final profile = find.byKey(const Key('platform-admin-profile'));
+      await tester.ensureVisible(profile);
+      await tester.pumpAndSettle();
+      await tester.tap(profile);
+      await tester.pumpAndSettle();
+      expect(find.text('admin@example.test'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> _pumpPlatformAdmin(
@@ -1442,6 +1573,25 @@ class _SessionAdministrationService extends NoPlatformAdministrationService
     }
     createOperationCalls++;
   }
+}
+
+class _DiagnosticCapableAdministrationService
+    extends NoPlatformAdministrationService
+    implements TargetedPushTestService {
+  const _DiagnosticCapableAdministrationService();
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  String? get currentUserEmail => 'admin@example.test';
+
+  @override
+  Future<bool> canSendTargetedPushTest({required String installationId}) =>
+      Future.value(false);
+
+  @override
+  Future<void> sendTargetedPushTest({required String installationId}) async {}
 }
 
 class _PreviewOperationRepository implements OperationReadRepository {

@@ -159,6 +159,10 @@ class OperationAdministrationDraft {
 abstract interface class PlatformAdministrationService {
   bool get isAvailable;
 
+  /// The authenticated administrator's email, if known. Never fabricated —
+  /// null when unavailable (e.g. [NoPlatformAdministrationService]).
+  String? get currentUserEmail;
+
   Future<void> createMobilization(MobilizationAdministrationDraft draft);
 
   Future<void> createOperation(OperationAdministrationDraft draft);
@@ -199,6 +203,9 @@ class NoPlatformAdministrationService implements PlatformAdministrationService {
 
   @override
   bool get isAvailable => false;
+
+  @override
+  String? get currentUserEmail => null;
 
   Never _unavailable() => throw const PlatformAdministrationException(
     'Les actions d’administration ne sont pas disponibles.',

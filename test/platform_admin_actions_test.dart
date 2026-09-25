@@ -475,6 +475,9 @@ class _RecordingPlatformService implements PlatformAdministrationService {
   @override
   bool get isAvailable => true;
 
+  @override
+  String? get currentUserEmail => 'admin@example.test';
+
   Future<void> _complete() async {
     if (failure != null) throw failure!;
     final pending = pendingMutation;

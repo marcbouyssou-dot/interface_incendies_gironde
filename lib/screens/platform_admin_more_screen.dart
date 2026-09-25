@@ -5,9 +5,9 @@ import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/perspective_switcher.dart';
-import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 import 'notification_center_screen.dart';
+import 'platform_admin_profile_screen.dart';
 
 class PlatformAdminMoreScreen extends StatefulWidget {
   const PlatformAdminMoreScreen({
@@ -28,11 +28,25 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
   bool _confirmationOpen = false;
   bool _signingOut = false;
 
-  void _openNotifications(TargetedPushTestService service) {
+  void _openNotifications() {
+    final service = switch (widget.administrationService) {
+      final TargetedPushTestService pushTestService => pushTestService,
+      _ => null,
+    };
     Navigator.of(context).push(
       AppPageRoute<void>(
         builder: (_) =>
             NotificationCenterScreen(targetedPushTestService: service),
+      ),
+    );
+  }
+
+  void _openProfile() {
+    Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) => PlatformAdminProfileScreen(
+          administrationService: widget.administrationService,
+        ),
       ),
     );
   }
@@ -119,38 +133,41 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
                   ),
                   const SizedBox(height: V5Spacing.xxl),
                   const PlatformAdminPerspectiveSection(),
-                  if (widget.administrationService
-                      case final TargetedPushTestService pushTestService) ...[
-                    const SizedBox(height: V5Spacing.xxl),
-                    V5Section(
-                      title: 'Diagnostic',
-                      leading: Icon(
-                        Icons.notifications_outlined,
-                        color: accent,
-                      ),
-                      child: V5Button(
-                        key: const Key('platform-admin-notifications'),
-                        expanded: true,
-                        onPressed: () => _openNotifications(pushTestService),
-                        label: 'Notifications',
-                        icon: Icons.notifications_outlined,
-                        tone: V5ButtonTone.secondary,
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: V5Spacing.xxl),
-                  V5Section(
-                    title: 'Session',
-                    leading: Icon(Icons.lock_outline_rounded, color: accent),
-                    child: V5Button(
+                  _MoreGroup(
+                    accent: accent,
+                    children: [
+                      _MoreRow(
+                        key: const Key('platform-admin-notifications'),
+                        icon: Icons.notifications_outlined,
+                        label: 'Notifications',
+                        accent: accent,
+                        onTap: _openNotifications,
+                      ),
+                      _MoreRow(
+                        key: const Key('platform-admin-profile'),
+                        icon: Icons.person_outline_rounded,
+                        label: 'Profil',
+                        accent: accent,
+                        onTap: _openProfile,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: V5Spacing.lg),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
                       key: const Key('platform-admin-sign-out'),
-                      expanded: true,
                       onPressed: _confirmationOpen || _signingOut
                           ? null
                           : _requestSignOut,
-                      label: _signingOut ? 'Déconnexion…' : 'Se déconnecter',
-                      icon: Icons.logout_rounded,
-                      tone: V5ButtonTone.secondary,
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        foregroundColor: colors.textSecondary,
+                      ),
+                      child: Text(
+                        _signingOut ? 'Déconnexion…' : 'Se déconnecter',
+                      ),
                     ),
                   ),
                 ],
@@ -158,6 +175,87 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MoreGroup extends StatelessWidget {
+  const _MoreGroup({required this.children, required this.accent});
+
+  final List<Widget> children;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceElevated,
+        borderRadius: BorderRadius.circular(V5Radius.card),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            children[index],
+            if (index < children.length - 1)
+              Divider(
+                height: 1,
+                thickness: 0.5,
+                indent: 54,
+                color: colors.outline,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MoreRow extends StatelessWidget {
+  const _MoreRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: V5Spacing.md),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: accent),
+                const SizedBox(width: V5Spacing.md),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: colors.textSecondary),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

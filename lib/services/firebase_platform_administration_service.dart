@@ -70,6 +70,9 @@ class FirebasePlatformAdministrationService
   bool get isAvailable => true;
 
   @override
+  String? get currentUserEmail => _auth?.currentUser?.email;
+
+  @override
   Future<void> sendTargetedPushTest({required String installationId}) {
     _requireCurrentUser();
     return _invoke('sendTargetedPushTest', {
