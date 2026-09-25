@@ -12,7 +12,6 @@ import '../repositories/platform_read_repository.dart';
 import '../repositories/operation_read_repository.dart';
 import '../services/current_mobilization_provider.dart';
 import '../services/platform_administration_service.dart';
-import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/platform_admin_bottom_navigation.dart';
@@ -245,54 +244,6 @@ class _PlatformAdminExpiredSessionState
                 ),
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class PlatformAdminComingSoonScreen extends StatelessWidget {
-  const PlatformAdminComingSoonScreen({
-    super.key,
-    required this.title,
-    required this.icon,
-  });
-
-  final String title;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.v5Colors;
-    final accent = PlatformAdminIdentity.accent(context);
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(V5Spacing.xl),
-        child: Semantics(
-          label: '$title, à venir',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: PlatformAdminIdentity.container(context),
-                  borderRadius: BorderRadius.circular(V5Radius.card),
-                ),
-                child: Icon(icon, color: accent, size: 30),
-              ),
-              const SizedBox(height: V5Spacing.md),
-              Text(title, style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: V5Spacing.xs),
-              Text(
-                'À venir',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
-              ),
-            ],
           ),
         ),
       ),
