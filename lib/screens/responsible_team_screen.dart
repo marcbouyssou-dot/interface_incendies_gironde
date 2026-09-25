@@ -146,21 +146,17 @@ class _ResponsibleTeamContent extends StatelessWidget {
                     children: [
                       const MobSantePageHeader(title: 'Mon équipe'),
                       const SizedBox(height: V5Spacing.lg),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final status in _responsibleStatusOrder) ...[
-                              _StatusChip(
-                                status: status,
-                                selected: status == selectedStatus,
-                                onSelected: () => onStatusChanged(status),
-                              ),
-                              if (status != _responsibleStatusOrder.last)
-                                const SizedBox(width: V5Spacing.xs),
-                            ],
-                          ],
-                        ),
+                      Wrap(
+                        spacing: V5Spacing.xs,
+                        runSpacing: V5Spacing.xs,
+                        children: [
+                          for (final status in _responsibleStatusOrder)
+                            _StatusChip(
+                              status: status,
+                              selected: status == selectedStatus,
+                              onSelected: () => onStatusChanged(status),
+                            ),
+                        ],
                       ),
                     ],
                   ),

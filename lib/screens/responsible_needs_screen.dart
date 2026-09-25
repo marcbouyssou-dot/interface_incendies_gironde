@@ -217,21 +217,17 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: V5Spacing.sm),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final filter in _NeedsFilter.values) ...[
-                              _FilterChip(
-                                filter: filter,
-                                selected: filter == selectedFilter,
-                                onSelected: () => onFilterChanged(filter),
-                              ),
-                              if (filter != _NeedsFilter.values.last)
-                                const SizedBox(width: V5Spacing.xs),
-                            ],
-                          ],
-                        ),
+                      Wrap(
+                        spacing: V5Spacing.xs,
+                        runSpacing: V5Spacing.xs,
+                        children: [
+                          for (final filter in _NeedsFilter.values)
+                            _FilterChip(
+                              filter: filter,
+                              selected: filter == selectedFilter,
+                              onSelected: () => onFilterChanged(filter),
+                            ),
+                        ],
                       ),
                     ],
                   ),
