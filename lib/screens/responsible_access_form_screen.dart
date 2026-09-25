@@ -4,20 +4,21 @@ import '../models/need.dart';
 import '../models/responsible_access.dart';
 import '../models/responsible_account.dart';
 import '../repositories/responsible_access_administration_repository.dart';
+import '../theme/v5_foundation.dart';
 import '../widgets/common.dart';
 import '../widgets/location_multi_selector.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 import '../widgets/v5_secondary_navigation.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _AccessFormVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF5F6865);
-  static const orange = Color(0xFFB9470A);
 }
 
 class ResponsibleAccessFormScreen extends StatefulWidget {
@@ -70,11 +71,12 @@ class _ResponsibleAccessFormScreenState
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _AccessFormVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: const V5SecondaryNavigationBar(title: 'Gérer l’accès'),
       bottomNavigationBar: Material(
-        color: _AccessFormVisuals.surface,
+        color: colors.surface,
         elevation: 6,
         shadowColor: const Color(0x24173052),
         child: SafeArea(
@@ -98,7 +100,9 @@ class _ResponsibleAccessFormScreenState
                             color: _AccessFormVisuals.border,
                           ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(
+                              V5Radius.control,
+                            ),
                           ),
                           textStyle: const TextStyle(
                             fontWeight: FontWeight.w700,
@@ -113,13 +117,13 @@ class _ResponsibleAccessFormScreenState
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: V5Spacing.sm),
                     Expanded(
                       child: V5Button(
                         key: const Key('save-responsible-access'),
                         expanded: true,
-                        backgroundColor: _AccessFormVisuals.orange,
-                        foregroundColor: Colors.white,
+                        backgroundColor: colors.accent,
+                        foregroundColor: colors.onAccent,
                         loading: _submitting,
                         onPressed: _submitting ? null : _save,
                         label: _submitting ? 'Enregistrement…' : 'Enregistrer',
@@ -180,14 +184,14 @@ class _ResponsibleAccessFormScreenState
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(17),
-                decoration: _accessFormCardDecoration(),
+                decoration: _accessFormCardDecoration(colors),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
                       decoration: BoxDecoration(
                         color: _AccessFormVisuals.fieldBackground,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(V5Radius.control),
                         border: Border.all(color: _AccessFormVisuals.border),
                       ),
                       child: V5SwitchTile(
@@ -197,7 +201,7 @@ class _ResponsibleAccessFormScreenState
                             ? 'Accès autorisé'
                             : 'Accès désactivé',
                         value: _active,
-                        activeColor: _AccessFormVisuals.orange,
+                        activeColor: colors.accent,
                         onChanged: _submitting
                             ? null
                             : (value) => setState(() => _active = value),
@@ -311,9 +315,9 @@ class _ResponsibleAccessFormScreenState
   }
 }
 
-BoxDecoration _accessFormCardDecoration() {
+BoxDecoration _accessFormCardDecoration(V5Colors colors) {
   return BoxDecoration(
-    color: _AccessFormVisuals.surface,
+    color: colors.surface,
     borderRadius: BorderRadius.circular(18),
     border: Border.all(color: _AccessFormVisuals.border),
     boxShadow: const [

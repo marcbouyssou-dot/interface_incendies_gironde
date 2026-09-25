@@ -6,21 +6,21 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/location_administration_repository.dart';
 import '../repositories/location_administration_repository_scope.dart';
 import '../repositories/repository_scope.dart';
-import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 import '../widgets/v5_secondary_navigation.dart';
 import 'admin_location_form_screen.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _LocationAdminVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF5F6865);
-  static const orange = Color(0xFFB9470A);
 }
 
 enum _LocationStatusFilter { all, active, inactive }
@@ -62,8 +62,9 @@ class _LocationAdministrationScreenState
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _LocationAdminVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: const V5SecondaryNavigationBar(title: 'Lieux'),
       body: SafeArea(
         top: false,
@@ -101,6 +102,7 @@ class _LocationAdministrationScreenState
   }
 
   Widget _content(List<AdminLocation> locations) {
+    final colors = context.v5Colors;
     final filtered = locations
         .where((location) {
           final search = _normalize(
@@ -124,7 +126,7 @@ class _LocationAdministrationScreenState
             ? 18.0
             : (constraints.maxWidth - 560) / 2;
         return RefreshIndicator(
-          color: _LocationAdminVisuals.orange,
+          color: colors.accent,
           onRefresh: _reload,
           child: ListView(
             key: const Key('admin-location-list'),
@@ -137,7 +139,7 @@ class _LocationAdministrationScreenState
             ),
             children: [
               _LocationAdminHeader(onCreate: _openCreate),
-              const SizedBox(height: 20),
+              const SizedBox(height: V5Spacing.lg),
               V5Section(
                 title: 'Filtres',
                 leading: const Icon(Icons.tune_rounded),
@@ -149,7 +151,7 @@ class _LocationAdministrationScreenState
                       prefixIcon: const Icon(Icons.search_rounded),
                       onChanged: (value) => setState(() => _query = value),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: V5Spacing.sm),
                     _groupFilter(),
                     const SizedBox(height: 9),
                     _typeFilter(),
@@ -178,7 +180,7 @@ class _LocationAdministrationScreenState
                   onToggle: () => _toggle(location),
                   onDelete: location.canDelete ? () => _delete(location) : null,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: V5Spacing.sm),
               ],
             ],
           ),
@@ -356,6 +358,7 @@ class _LocationAdminHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -379,7 +382,7 @@ class _LocationAdminHeader extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: V5Spacing.xs),
         const Text(
           'Centres actifs et lieux historiques',
           style: TextStyle(
@@ -393,8 +396,8 @@ class _LocationAdminHeader extends StatelessWidget {
         V5Button(
           key: const Key('admin-location-create'),
           expanded: true,
-          backgroundColor: _LocationAdminVisuals.orange,
-          foregroundColor: Colors.white,
+          backgroundColor: colors.accent,
+          foregroundColor: colors.onAccent,
           icon: Icons.add_location_alt_outlined,
           onPressed: onCreate,
           label: 'Créer un lieu',
@@ -411,8 +414,8 @@ class _EmptyLocationAdminState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: _locationAdminCardDecoration(),
+      padding: const EdgeInsets.all(V5Spacing.xl),
+      decoration: _locationAdminCardDecoration(context.v5Colors),
       child: const Column(
         children: [
           Icon(
@@ -446,9 +449,9 @@ class _LocationAdminLoading extends StatelessWidget {
   }
 }
 
-BoxDecoration _locationAdminCardDecoration({Color? color}) {
+BoxDecoration _locationAdminCardDecoration(V5Colors colors, {Color? color}) {
   return BoxDecoration(
-    color: color ?? _LocationAdminVisuals.surface,
+    color: color ?? colors.surface,
     borderRadius: BorderRadius.circular(18),
     border: Border.all(color: _LocationAdminVisuals.border),
     boxShadow: const [
@@ -472,12 +475,12 @@ class _LocationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       key: Key('admin-location-${location.id}'),
       decoration: _locationAdminCardDecoration(
-        color: location.active
-            ? _LocationAdminVisuals.surface
-            : _LocationAdminVisuals.fieldBackground,
+        colors,
+        color: location.active ? colors.surface : _LocationAdminVisuals.fieldBackground,
       ),
       child: Padding(
         padding: const EdgeInsets.all(17),
@@ -503,29 +506,29 @@ class _LocationCard extends StatelessWidget {
               ],
             ),
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
+              padding: EdgeInsets.symmetric(vertical: V5Spacing.sm),
               child: Divider(height: 1, color: _LocationAdminVisuals.border),
             ),
             _LocationAdminDetail(
               icon: Icons.location_on_outlined,
               value: location.addressLabel,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: V5Spacing.xs),
             _LocationAdminDetail(
               icon: Icons.map_outlined,
               value: location.group.label,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: V5Spacing.xs),
             _LocationAdminDetail(
               icon: Icons.category_outlined,
               value: location.type.label,
             ),
             if (!location.isOperational) ...[
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 'Lieu non opérationnel dans le référentiel',
                 style: TextStyle(
-                  color: _LocationAdminVisuals.orange,
+                  color: colors.accent,
                   fontSize: 12,
                   height: 1.4,
                   fontWeight: FontWeight.w700,
@@ -550,11 +553,11 @@ class _LocationCard extends StatelessWidget {
                 label: const Text('Modifier'),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: V5Spacing.xxs),
             Wrap(
               alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 4,
+              spacing: V5Spacing.xs,
+              runSpacing: V5Spacing.xxs,
               children: [
                 TextButton.icon(
                   key: Key('admin-location-toggle-${location.id}'),
@@ -576,7 +579,10 @@ class _LocationCard extends StatelessWidget {
                   )
                 else
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: V5Spacing.sm,
+                      vertical: V5Spacing.xs,
+                    ),
                     child: Text(
                       'Lieu utilisé : désactivation uniquement',
                       style: TextStyle(
@@ -631,26 +637,29 @@ class _StatusBadge extends StatelessWidget {
   final bool active;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: active ? AppColors.greenSoft : _LocationAdminVisuals.surface,
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(
-        color: active
-            ? AppColors.green.withValues(alpha: .22)
-            : _LocationAdminVisuals.border,
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: active ? colors.successContainer : colors.surface,
+        borderRadius: BorderRadius.circular(V5Radius.pill),
+        border: Border.all(
+          color: active
+              ? colors.success.withValues(alpha: .22)
+              : _LocationAdminVisuals.border,
+        ),
       ),
-    ),
-    child: Text(
-      active ? 'Actif' : 'Désactivé',
-      style: TextStyle(
-        color: active ? AppColors.green : AppColors.textMuted,
-        fontSize: 12,
-        fontWeight: FontWeight.w800,
+      child: Text(
+        active ? 'Actif' : 'Désactivé',
+        style: TextStyle(
+          color: active ? colors.success : colors.textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _LoadError extends StatelessWidget {
@@ -659,17 +668,20 @@ class _LoadError extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => _LocationAdminMessageState(
-    icon: Icons.cloud_off_outlined,
-    message: 'Les lieux ne sont pas disponibles.',
-    action: V5Button(
-      expanded: true,
-      onPressed: onRetry,
-      backgroundColor: _LocationAdminVisuals.orange,
-      foregroundColor: Colors.white,
-      label: 'Réessayer',
-    ),
-  );
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return _LocationAdminMessageState(
+      icon: Icons.cloud_off_outlined,
+      message: 'Les lieux ne sont pas disponibles.',
+      action: V5Button(
+        expanded: true,
+        onPressed: onRetry,
+        backgroundColor: colors.accent,
+        foregroundColor: colors.onAccent,
+        label: 'Réessayer',
+      ),
+    );
+  }
 }
 
 class _LocationAdminMessageState extends StatelessWidget {
@@ -685,17 +697,18 @@ class _LocationAdminMessageState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return ColoredBox(
-      color: _LocationAdminVisuals.background,
+      color: colors.canvas,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(V5Spacing.xl),
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(22),
-              decoration: _locationAdminCardDecoration(),
+              decoration: _locationAdminCardDecoration(colors),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -712,7 +725,7 @@ class _LocationAdminMessageState extends StatelessWidget {
                     ),
                   ),
                   if (action != null) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: V5Spacing.md),
                     SizedBox(width: double.infinity, child: action),
                   ],
                 ],
@@ -739,8 +752,8 @@ class _AccessRefused extends StatelessWidget {
         : V5Button(
             expanded: true,
             onPressed: onRetry,
-            backgroundColor: _LocationAdminVisuals.orange,
-            foregroundColor: Colors.white,
+            backgroundColor: context.v5Colors.accent,
+            foregroundColor: context.v5Colors.onAccent,
             label: 'Réessayer',
           ),
   );

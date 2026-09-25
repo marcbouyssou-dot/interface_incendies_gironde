@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../models/need.dart';
 import '../repositories/coordination_repository.dart';
+import '../theme/v5_foundation.dart';
 import '../widgets/mission_location_details.dart';
 import '../widgets/v5_controls.dart';
 
+// Some literals below have no exact V5Colors/V5Spacing/V5Radius equivalent
+// (e.g. navy 0xFF173052 vs. V5Colors.textPrimary 0xFF10233E are close but
+// not identical) and are kept local rather than forced onto a near-match
+// token, per this Lot's fidelity rule.
 abstract final class _ConfirmationVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF5F6865);
-  static const orange = Color(0xFFB9470A);
   static const orangeSoft = Color(0xFFFFE8D9);
 }
 
@@ -32,8 +34,9 @@ class EngagementConfirmationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _ConfirmationVisuals.background,
+      backgroundColor: colors.canvas,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -63,7 +66,7 @@ class EngagementConfirmationScreen extends StatelessWidget {
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: _ConfirmationVisuals.orangeSoft,
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(V5Radius.card),
                             ),
                             child: const Text(
                               '❤️',
@@ -82,7 +85,7 @@ class EngagementConfirmationScreen extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: V5Spacing.xs),
                         Text(
                           result.existingMessage ??
                               'Votre engagement est confirmé.',
@@ -111,8 +114,8 @@ class EngagementConfirmationScreen extends StatelessWidget {
                           width: double.infinity,
                           padding: const EdgeInsets.all(17),
                           decoration: BoxDecoration(
-                            color: _ConfirmationVisuals.surface,
-                            borderRadius: BorderRadius.circular(20),
+                            color: colors.surface,
+                            borderRadius: BorderRadius.circular(V5Radius.card),
                             border: Border.all(
                               color: _ConfirmationVisuals.border,
                             ),
@@ -171,12 +174,12 @@ class EngagementConfirmationScreen extends StatelessWidget {
                           ),
                         ),
                         const Spacer(),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: V5Spacing.xl),
                         V5Button(
                           expanded: true,
                           onPressed: () => Navigator.pop(context),
-                          backgroundColor: _ConfirmationVisuals.orange,
-                          foregroundColor: Colors.white,
+                          backgroundColor: colors.accent,
+                          foregroundColor: colors.onAccent,
                           label: 'Retour aux missions',
                         ),
                       ],
@@ -217,7 +220,7 @@ class _ConfirmationDetail extends StatelessWidget {
           ),
           child: Icon(icon, color: _ConfirmationVisuals.navy, size: 20),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: V5Spacing.sm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,7 +234,7 @@ class _ConfirmationDetail extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: V5Spacing.xxs),
               Text(
                 value,
                 style: const TextStyle(

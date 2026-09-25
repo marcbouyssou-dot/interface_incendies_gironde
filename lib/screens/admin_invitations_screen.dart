@@ -9,7 +9,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/responsible_access_administration_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
-import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/common.dart';
@@ -19,14 +19,14 @@ import '../widgets/v5_form_system.dart';
 import '../widgets/v5_secondary_navigation.dart';
 import 'responsible_access_form_screen.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _ResponsibleVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF5F6865);
-  static const orange = Color(0xFFB9470A);
 }
 
 class AdminInvitationsScreen extends StatefulWidget {
@@ -54,8 +54,9 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _ResponsibleVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: const V5SecondaryNavigationBar(title: 'Responsables'),
       body: SafeArea(
         top: false,
@@ -95,11 +96,12 @@ class _AccessDenied extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: _ResponsibleVisuals.background,
-      child: Center(
+    final colors = context.v5Colors;
+    return ColoredBox(
+      color: colors.canvas,
+      child: const Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.all(V5Spacing.xl),
           child: Text(
             'Accès réservé au coordinateur départemental.',
             textAlign: TextAlign.center,
@@ -240,16 +242,17 @@ class _CoordinatorInvitationsContentState
                 .toList(growable: false);
             return LayoutBuilder(
               builder: (context, constraints) {
+                final colors = context.v5Colors;
                 final horizontalPadding = constraints.maxWidth <= 596
                     ? 18.0
                     : (constraints.maxWidth - 560) / 2;
                 return Material(
-                  color: _ResponsibleVisuals.background,
+                  color: colors.canvas,
                   child: ListView(
                     key: const Key('admin-invitations-list'),
                     padding: EdgeInsets.fromLTRB(
                       horizontalPadding,
-                      12,
+                      V5Spacing.sm,
                       horizontalPadding,
                       36,
                     ),
@@ -258,7 +261,7 @@ class _CoordinatorInvitationsContentState
                       const SizedBox(height: 22),
                       Container(
                         clipBehavior: Clip.antiAlias,
-                        decoration: _responsibleCardDecoration(),
+                        decoration: _responsibleCardDecoration(colors),
                         child: ExpansionTile(
                           key: const Key('responsible-accounts-section'),
                           tilePadding: const EdgeInsets.symmetric(
@@ -269,7 +272,7 @@ class _CoordinatorInvitationsContentState
                             13,
                             0,
                             13,
-                            4,
+                            V5Spacing.xxs,
                           ),
                           iconColor: _ResponsibleVisuals.navy,
                           collapsedIconColor: _ResponsibleVisuals.textMuted,
@@ -326,7 +329,7 @@ class _CoordinatorInvitationsContentState
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: V5Spacing.xl),
                       const _ManagementSectionTitle(title: 'Invitations'),
                       const SizedBox(height: 11),
                       if (snapshot.hasError)
@@ -544,6 +547,7 @@ class _ResponsibleHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -593,7 +597,7 @@ class _ResponsibleHeader extends StatelessWidget {
             tooltip: 'Inviter un responsable',
             onPressed: onInvite,
             style: IconButton.styleFrom(
-              backgroundColor: _ResponsibleVisuals.orange,
+              backgroundColor: colors.accent,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(15),
@@ -635,9 +639,9 @@ class _InlineLoading extends StatelessWidget {
   }
 }
 
-BoxDecoration _responsibleCardDecoration({Color? color}) {
+BoxDecoration _responsibleCardDecoration(V5Colors colors, {Color? color}) {
   return BoxDecoration(
-    color: color ?? _ResponsibleVisuals.surface,
+    color: color ?? colors.surface,
     borderRadius: BorderRadius.circular(18),
     border: Border.all(color: _ResponsibleVisuals.border),
     boxShadow: const [
@@ -673,9 +677,11 @@ class _ResponsibleAccountCard extends StatelessWidget {
             .map((id) => locationsById[id]?.name ?? 'Lieu indisponible')
             .toList()
           ..sort();
+    final colors = context.v5Colors;
     return Container(
       key: Key('responsible-account-${account.uid}'),
       decoration: _responsibleCardDecoration(
+        colors,
         color: _ResponsibleVisuals.fieldBackground,
       ),
       child: Padding(
@@ -700,7 +706,7 @@ class _ResponsibleAccountCard extends StatelessWidget {
               ],
             ),
             if (account.email case final email?) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: V5Spacing.xxs),
               Text(
                 email,
                 style: const TextStyle(
@@ -711,14 +717,14 @@ class _ResponsibleAccountCard extends StatelessWidget {
               ),
             ],
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
+              padding: EdgeInsets.symmetric(vertical: V5Spacing.sm),
               child: Divider(height: 1, color: _ResponsibleVisuals.border),
             ),
             _ManagementDetailLine(
               icon: Icons.admin_panel_settings_outlined,
               text: roleLabel,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: V5Spacing.xs),
             _ManagementDetailLine(
               icon: Icons.location_on_outlined,
               text: access.locationIds.isEmpty
@@ -800,12 +806,13 @@ class _AccountStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.green : AppColors.red;
+    final colors = context.v5Colors;
+    final color = active ? colors.success : colors.danger;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: .1),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(V5Radius.pill),
         border: Border.all(color: color.withValues(alpha: .22)),
       ),
       child: Text(
@@ -831,11 +838,11 @@ class _AccessListError extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7F6),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(V5Radius.control),
         border: Border.all(color: const Color(0xFFFFDCD8)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(V5Spacing.md),
         child: Column(
           children: [
             const Text(
@@ -848,7 +855,7 @@ class _AccessListError extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: V5Spacing.xs),
             TextButton(onPressed: onRetry, child: const Text('Réessayer')),
           ],
         ),
@@ -893,9 +900,10 @@ class _InvitationCard extends StatelessWidget {
                       .toList())
             .toList()
           ..sort();
+    final colors = context.v5Colors;
     return Container(
       key: Key('invitation-card-${invitation.id}'),
-      decoration: _responsibleCardDecoration(),
+      decoration: _responsibleCardDecoration(colors),
       child: Padding(
         padding: const EdgeInsets.all(17),
         child: Column(
@@ -928,7 +936,7 @@ class _InvitationCard extends StatelessWidget {
               ),
             ),
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
+              padding: EdgeInsets.symmetric(vertical: V5Spacing.sm),
               child: Divider(height: 1, color: _ResponsibleVisuals.border),
             ),
             _ManagementDetailLine(
@@ -937,7 +945,7 @@ class _InvitationCard extends StatelessWidget {
                   ? 'Coordinateur'
                   : 'Responsable',
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: V5Spacing.xs),
             _ManagementDetailLine(
               icon: Icons.location_on_outlined,
               text: locationLabels.join(' · '),
@@ -962,13 +970,13 @@ class _InvitationCard extends StatelessWidget {
                     key: Key('resend-invitation-${invitation.id}'),
                     onPressed: provisioning ? null : onResend,
                     expanded: true,
-                    backgroundColor: _ResponsibleVisuals.orange,
+                    backgroundColor: colors.accent,
                     foregroundColor: Colors.white,
                     loading: provisioning,
                     icon: Icons.send_outlined,
                     label: provisioning ? 'Envoi…' : 'Renvoyer',
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: V5Spacing.xxs),
                   Wrap(
                     alignment: WrapAlignment.center,
                     spacing: 2,
@@ -1001,12 +1009,12 @@ class _InvitationCard extends StatelessWidget {
                     key: Key('reactivate-invitation-${invitation.id}'),
                     onPressed: onReactivate,
                     expanded: true,
-                    backgroundColor: _ResponsibleVisuals.orange,
+                    backgroundColor: colors.accent,
                     foregroundColor: Colors.white,
                     icon: Icons.refresh_rounded,
                     label: 'Réactiver',
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: V5Spacing.xxs),
                   Wrap(
                     alignment: WrapAlignment.center,
                     spacing: 2,
@@ -1040,17 +1048,18 @@ class _InvitationStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final (label, color) = switch (status) {
-      AdminInvitationStatus.pending => ('En attente', AppColors.orange),
-      AdminInvitationStatus.accepted => ('Compte préparé', AppColors.green),
-      AdminInvitationStatus.expired => ('Expirée', AppColors.textMuted),
-      AdminInvitationStatus.cancelled => ('Annulée', AppColors.red),
+      AdminInvitationStatus.pending => ('En attente', colors.accent),
+      AdminInvitationStatus.accepted => ('Compte préparé', colors.success),
+      AdminInvitationStatus.expired => ('Expirée', colors.textSecondary),
+      AdminInvitationStatus.cancelled => ('Annulée', colors.danger),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: .1),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(V5Radius.pill),
         border: Border.all(color: color.withValues(alpha: .22)),
       ),
       child: Text(
@@ -1070,8 +1079,9 @@ class _EmptyInvitations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
-      decoration: _responsibleCardDecoration(),
+      decoration: _responsibleCardDecoration(colors),
       child: const Padding(
         padding: EdgeInsets.all(26),
         child: Column(
@@ -1081,7 +1091,7 @@ class _EmptyInvitations extends StatelessWidget {
               color: _ResponsibleVisuals.textMuted,
               size: 34,
             ),
-            SizedBox(height: 12),
+            SizedBox(height: V5Spacing.sm),
             Text(
               'Aucune invitation pour le moment.',
               textAlign: TextAlign.center,
@@ -1107,10 +1117,10 @@ class _ErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(V5Spacing.lg),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7F6),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(V5Radius.section),
         border: Border.all(color: const Color(0xFFFFDCD8)),
       ),
       child: Text(
@@ -1180,8 +1190,9 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _ResponsibleVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: V5SecondaryNavigationBar(
         title: _isEditing ? 'Modifier l’invitation' : 'Inviter un responsable',
       ),
@@ -1204,7 +1215,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: EdgeInsets.fromLTRB(
                 horizontalPadding,
-                12,
+                V5Spacing.sm,
                 horizontalPadding,
                 36,
               ),
@@ -1416,8 +1427,9 @@ class _InvitationSubmitBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Material(
-      color: _ResponsibleVisuals.surface,
+      color: colors.surface,
       elevation: 6,
       shadowColor: const Color(0x24173052),
       child: AnimatedPadding(
@@ -1440,7 +1452,7 @@ class _InvitationSubmitBar extends StatelessWidget {
                   editing ? 'save-admin-invitation' : 'create-admin-invitation',
                 ),
                 expanded: true,
-                backgroundColor: _ResponsibleVisuals.orange,
+                backgroundColor: colors.accent,
                 foregroundColor: Colors.white,
                 loading: submitting,
                 icon: Icons.send_rounded,

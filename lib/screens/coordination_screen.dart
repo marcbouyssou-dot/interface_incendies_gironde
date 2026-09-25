@@ -7,6 +7,7 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/csv_export.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
@@ -15,8 +16,6 @@ import '../widgets/v5_controls.dart';
 import 'create_need_screen.dart';
 
 abstract final class _StatisticsVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -382,6 +381,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
     final coverage = required == 0 ? 0.0 : totalQuotas.coverage;
     final timingCounts = _missionTimingCounts(dashboardMissions, now);
     final locationStats = _locationDashboardStats(dashboardMissions, locations);
+    final colors = context.v5Colors;
     return PageContainer(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -389,21 +389,21 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
               ? 18.0
               : (constraints.maxWidth - 520) / 2;
           return Material(
-            color: _StatisticsVisuals.background,
+            color: colors.canvas,
             child: CustomScrollView(
               key: const PageStorageKey('coordination'),
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    16,
+                    V5Spacing.md,
                     horizontalPadding,
                     18,
                   ),
                   sliver: SliverList.list(
                     children: [
                       const _StatisticsPageHeader(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: V5Spacing.lg),
                       if (access?.isCoordinator == true)
                         _CoordinatorGlobalDashboard(
                           totalMissions: dashboardMissions.length,
@@ -441,26 +441,26 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                                   child: _StatusMetric(
                                     label: 'Critiques',
                                     value: critical,
-                                    color: AppColors.red,
+                                    color: colors.danger,
                                     background: AppColors.redSoft,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: V5Spacing.xs),
                                 Expanded(
                                   child: _StatusMetric(
                                     label: 'À compléter',
                                     value: incomplete,
-                                    color: AppColors.orange,
-                                    background: AppColors.orangeSoft,
+                                    color: colors.accent,
+                                    background: colors.warningContainer,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: V5Spacing.xs),
                                 Expanded(
                                   child: _StatusMetric(
                                     label: 'Complets',
                                     value: complete,
-                                    color: AppColors.green,
-                                    background: AppColors.greenSoft,
+                                    color: colors.success,
+                                    background: colors.successContainer,
                                   ),
                                 ),
                               ],
@@ -468,7 +468,7 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: V5Spacing.xl),
                       _StatisticsSectionHeader(
                         eyebrow: 'MISSIONS',
                         title: 'Toutes les missions',
@@ -487,7 +487,8 @@ class _CoordinationScreenState extends State<CoordinationScreen> {
                   ),
                   sliver: SliverList.separated(
                     itemCount: visibleMissions.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: V5Spacing.sm),
                     itemBuilder: (context, index) => _SituationRow(
                       key: ValueKey(visibleMissions[index].id),
                       need: visibleMissions[index],
@@ -558,7 +559,7 @@ class _StatisticsPageHeader extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              SizedBox(height: 8),
+              SizedBox(height: V5Spacing.xs),
               Text(
                 'Couverture des missions pour la période sélectionnée.',
                 style: TextStyle(
@@ -571,7 +572,7 @@ class _StatisticsPageHeader extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: 16),
+        SizedBox(width: V5Spacing.md),
         BrandMark(size: 46),
       ],
     );
@@ -609,7 +610,7 @@ class _StatisticsSectionHeader extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: V5Spacing.xxs),
               Text(
                 title,
                 style: const TextStyle(
@@ -621,7 +622,7 @@ class _StatisticsSectionHeader extends StatelessWidget {
                 ),
               ),
               if (subtitle != null) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: V5Spacing.xxs),
                 Text(
                   subtitle!,
                   style: const TextStyle(
@@ -636,12 +637,12 @@ class _StatisticsSectionHeader extends StatelessWidget {
           ),
         ),
         if (trailing != null) ...[
-          const SizedBox(width: 12),
+          const SizedBox(width: V5Spacing.sm),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
             decoration: BoxDecoration(
               color: _StatisticsVisuals.fieldBackground,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(V5Radius.pill),
               border: Border.all(color: _StatisticsVisuals.border),
             ),
             child: Text(
@@ -666,11 +667,12 @@ class _StatisticsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
-        color: _StatisticsVisuals.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _StatisticsVisuals.border),
         boxShadow: const [
@@ -697,6 +699,7 @@ class _SiteCoverageOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return _StatisticsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -716,13 +719,13 @@ class _SiteCoverageOverview extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: V5Spacing.md),
           AnimatedCoverageIndicator(value: coverage, minHeight: 12),
           const SizedBox(height: 11),
           Text(
             'Encore $remainingProfessionals professionnels',
-            style: const TextStyle(
-              color: AppColors.orange,
+            style: TextStyle(
+              color: colors.accent,
               fontSize: 14,
               fontWeight: FontWeight.w800,
             ),
@@ -738,10 +741,16 @@ class _ResponsibleAccessUnavailableState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return PageContainer(
       child: ListView(
         key: const Key('responsible-access-unavailable-state'),
-        padding: const EdgeInsets.fromLTRB(20, 42, 20, 32),
+        padding: const EdgeInsets.fromLTRB(
+          V5Spacing.lg,
+          42,
+          V5Spacing.lg,
+          V5Spacing.xxl,
+        ),
         children: [
           const PageHeader(
             eyebrow: 'Accès responsable',
@@ -753,22 +762,22 @@ class _ResponsibleAccessUnavailableState extends StatelessWidget {
           const SizedBox(height: 22),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(V5Spacing.lg),
               child: Column(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.lock_clock_outlined,
-                    color: AppColors.orange,
+                    color: colors.accent,
                     size: 34,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: V5Spacing.sm),
                   Text(
                     'Par sécurité, aucun accès privilégié n’est affiché.',
                     key: const Key('responsible-access-unavailable-message'),
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: V5Spacing.xs),
                   const Text(
                     'Réessayez dans quelques instants.',
                     textAlign: TextAlign.center,
@@ -839,13 +848,14 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final useStackedHeader = MediaQuery.textScalerOf(context).scale(12) >= 18;
     final exportButton = OutlinedButton.icon(
       key: const Key('dashboard-export-csv'),
       style: OutlinedButton.styleFrom(
         foregroundColor: _StatisticsVisuals.navy,
         minimumSize: const Size(44, 46),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: V5Spacing.sm),
         side: const BorderSide(color: _StatisticsVisuals.border),
       ),
       onPressed: () => _exportCsv(context),
@@ -889,19 +899,21 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                     ChoiceChip(
                       key: Key('dashboard-period-${period.name}'),
                       label: Text(period.label),
-                      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      labelPadding: const EdgeInsets.symmetric(
+                        horizontal: V5Spacing.xs,
+                      ),
                       selected: selectedPeriod == period,
                       showCheckmark: false,
-                      selectedColor: AppColors.orange,
+                      selectedColor: colors.accent,
                       backgroundColor: _StatisticsVisuals.fieldBackground,
                       side: BorderSide(
                         color: selectedPeriod == period
-                            ? AppColors.orange
+                            ? colors.accent
                             : _StatisticsVisuals.border,
                       ),
                       labelStyle: TextStyle(
                         color: selectedPeriod == period
-                            ? Colors.white
+                            ? colors.onAccent
                             : _StatisticsVisuals.navy,
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -915,7 +927,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: V5Spacing.sm),
         _StatisticsCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -924,7 +936,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                 eyebrow: 'VUE GLOBALE',
                 title: 'Chiffres clés',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: V5Spacing.md),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -957,8 +969,8 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                   Text(
                     '${(coverage * 100).round()} %',
                     key: const Key('dashboard-global-coverage'),
-                    style: const TextStyle(
-                      color: AppColors.orange,
+                    style: TextStyle(
+                      color: colors.accent,
                       fontSize: 25,
                       height: 1,
                       fontWeight: FontWeight.w900,
@@ -966,7 +978,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: V5Spacing.md),
               AnimatedCoverageIndicator(value: coverage, minHeight: 10),
               const SizedBox(height: 7),
               const Align(
@@ -980,7 +992,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: V5Spacing.md),
               Row(
                 children: [
                   Expanded(
@@ -988,21 +1000,21 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                       metricKey: const Key('dashboard-current-missions'),
                       label: 'Aujourd’hui',
                       value: currentMissions,
-                      color: AppColors.green,
-                      background: AppColors.greenSoft,
+                      color: colors.success,
+                      background: colors.successContainer,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: V5Spacing.xs),
                   Expanded(
                     child: _DashboardMetric(
                       metricKey: const Key('dashboard-upcoming-missions'),
                       label: 'À venir',
                       value: upcomingMissions,
-                      color: AppColors.orange,
-                      background: AppColors.orangeSoft,
+                      color: colors.accent,
+                      background: colors.warningContainer,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: V5Spacing.xs),
                   Expanded(
                     child: _DashboardMetric(
                       metricKey: const Key('dashboard-past-missions'),
@@ -1022,19 +1034,19 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
                       metricKey: const Key('dashboard-mobilized-professionals'),
                       label: 'Professionnels mobilisés',
                       value: mobilizedProfessionals,
-                      color: AppColors.green,
-                      background: AppColors.greenSoft,
+                      color: colors.success,
+                      background: colors.successContainer,
                       compactLabel: false,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: V5Spacing.xs),
                   Expanded(
                     child: _DashboardMetric(
                       metricKey: const Key('dashboard-remaining-professionals'),
                       label: 'Encore recherchés',
                       value: remainingProfessionals,
-                      color: AppColors.orange,
-                      background: AppColors.orangeSoft,
+                      color: colors.accent,
+                      background: colors.warningContainer,
                       compactLabel: false,
                     ),
                   ),
@@ -1043,7 +1055,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: V5Spacing.sm),
         _StatisticsCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1070,7 +1082,7 @@ class _CoordinatorGlobalDashboard extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: V5Spacing.sm),
         _StatisticsCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1114,21 +1126,22 @@ class _ProfessionDashboardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final coverage = quota.required == 0 ? 0.0 : quota.coverage;
     final color = quota.required == 0
-        ? AppColors.textMuted
+        ? colors.textSecondary
         : quota.isCovered
-        ? AppColors.green
+        ? colors.success
         : coverage < .5
-        ? AppColors.red
-        : AppColors.orange;
+        ? colors.danger
+        : colors.accent;
     return Container(
       key: Key('dashboard-profession-${profession.id}'),
       width: double.infinity,
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(V5Radius.control),
         border: Border.all(color: color.withValues(alpha: 0.16)),
       ),
       child: Column(
@@ -1139,8 +1152,8 @@ class _ProfessionDashboardRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   profession.label,
-                  style: const TextStyle(
-                    color: AppColors.navy,
+                  style: TextStyle(
+                    color: colors.brand,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1211,20 +1224,21 @@ class _LocationDashboardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final color = stats.required == 0
-        ? AppColors.textMuted
+        ? colors.textSecondary
         : stats.coverage >= 1
-        ? AppColors.green
+        ? colors.success
         : stats.coverage < .5
-        ? AppColors.red
-        : AppColors.orange;
+        ? colors.danger
+        : colors.accent;
     return Container(
       key: Key('dashboard-location-${stats.id}'),
       width: double.infinity,
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(V5Radius.control),
         border: Border.all(color: color.withValues(alpha: 0.16)),
       ),
       child: Column(
@@ -1235,8 +1249,8 @@ class _LocationDashboardRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   stats.name,
-                  style: const TextStyle(
-                    color: AppColors.navy,
+                  style: TextStyle(
+                    color: colors.brand,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1254,12 +1268,12 @@ class _LocationDashboardRow extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: V5Spacing.xxs),
           Text(
             '${stats.missionCount} mission${stats.missionCount > 1 ? 's' : ''}',
             key: Key('dashboard-location-${stats.id}-missions'),
-            style: const TextStyle(
-              color: AppColors.textMuted,
+            style: TextStyle(
+              color: colors.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1317,24 +1331,25 @@ class _DashboardBreakdownValue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Column(
       children: [
         Text(
           '$value',
           key: valueKey,
-          style: const TextStyle(
-            color: AppColors.navy,
+          style: TextStyle(
+            color: colors.brand,
             fontSize: 18,
             height: 1,
             fontWeight: FontWeight.w900,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: V5Spacing.xxs),
         Text(
           label,
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppColors.textMuted,
+          style: TextStyle(
+            color: colors.textSecondary,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
@@ -1365,10 +1380,13 @@ class _DashboardMetric extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(minHeight: compactLabel ? 82 : 100),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: V5Spacing.xs,
+        vertical: V5Spacing.sm,
+      ),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(V5Radius.control),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1419,10 +1437,13 @@ class _StatusMetric extends StatelessWidget {
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
           : const Duration(milliseconds: 280),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: V5Spacing.md,
+      ),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(V5Radius.section),
         border: Border.all(color: color.withValues(alpha: 0.12)),
       ),
       child: Column(
@@ -1470,12 +1491,13 @@ class _SituationRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     final useStackedHeader = MediaQuery.textScalerOf(context).scale(12) >= 18;
     final status = StatusPill(status: need.status);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _StatisticsVisuals.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _StatisticsVisuals.border),
         boxShadow: const [
@@ -1499,7 +1521,7 @@ class _SituationRow extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: V5Spacing.xs),
             status,
           ] else
             Row(
@@ -1515,7 +1537,7 @@ class _SituationRow extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: V5Spacing.xs),
                 status,
               ],
             ),
@@ -1530,7 +1552,7 @@ class _SituationRow extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: V5Spacing.xxs),
           Text(
             location?.type.label ?? 'Lieu d’intervention',
             style: const TextStyle(
@@ -1590,10 +1612,10 @@ class _ResponsibleMissionActions extends StatelessWidget {
     final canCancel =
         need.createdBy != null && need.createdBy == currentAccess.uid;
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: V5Spacing.sm),
       child: Wrap(
         spacing: 10,
-        runSpacing: 8,
+        runSpacing: V5Spacing.xs,
         children: [
           OutlinedButton.icon(
             key: Key('edit-mission-${need.id}'),
@@ -1666,11 +1688,12 @@ class _MissionEngagementsState extends State<_MissionEngagements> {
     return StreamBuilder<List<EngagementInfo>>(
       stream: _engagements,
       builder: (context, snapshot) {
+        final colors = context.v5Colors;
         if (snapshot.hasError) {
-          return const Text(
+          return Text(
             'Engagements indisponibles',
             style: TextStyle(
-              color: AppColors.red,
+              color: colors.danger,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1681,10 +1704,10 @@ class _MissionEngagementsState extends State<_MissionEngagements> {
           return const LinearProgressIndicator();
         }
         if (engagements.isEmpty) {
-          return const Text(
+          return Text(
             'Aucun engagé',
             style: TextStyle(
-              color: AppColors.textMuted,
+              color: colors.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1739,15 +1762,16 @@ class _EngagementRowState extends State<_EngagementRow> {
           engagement.profession.canonicalId!,
         )?.shortLabel ??
         engagement.profession.label;
+    final colors = context.v5Colors;
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.only(top: V5Spacing.xs),
       child: Row(
         children: [
           Expanded(
             child: Text(
               '$profession • ${engagement.status.label}',
-              style: const TextStyle(
-                color: AppColors.navy,
+              style: TextStyle(
+                color: colors.brand,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
