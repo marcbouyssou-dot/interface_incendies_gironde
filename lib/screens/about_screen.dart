@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import '../widgets/v5_secondary_navigation.dart';
+import 'diagnostic_push_registration_screen.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -86,6 +88,15 @@ class AboutScreen extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
                 ),
+              ),
+              TextButton(
+                key: const Key('about-push-diagnostic-link'),
+                onPressed: () => Navigator.of(context).push(
+                  AppPageRoute<void>(
+                    builder: (_) => const DiagnosticPushRegistrationScreen(),
+                  ),
+                ),
+                child: const Text('Diagnostic Push'),
               ),
             ],
           ),

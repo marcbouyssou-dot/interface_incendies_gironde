@@ -10,11 +10,13 @@ import '../models/volunteer_profile.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
+import '../utils/app_page_route.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/professional_rpps_verification.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
+import 'diagnostic_push_registration_screen.dart';
 
 class ProfessionalProfileScreen extends StatefulWidget {
   const ProfessionalProfileScreen({
@@ -342,6 +344,23 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                     onPressed: widget.onOpenNotifications,
                     icon: const Icon(Icons.notifications_outlined),
                     label: const Text('Notifications'),
+                  ),
+                  const SizedBox(height: V5Spacing.xs),
+                  // TEMPORAIRE — recette diagnostic Push (JOB-0024). Bouton temporaire,
+                  // à retirer après la recette iPhone du diagnostic Push. Volontairement
+                  // hors du bloc `if (kDebugMode)` : doit rester visible en build
+                  // release / Deploy Preview pour permettre le diagnostic sur un iPhone
+                  // réel.
+                  OutlinedButton.icon(
+                    key: const Key('open-diagnostic-push'),
+                    onPressed: () => Navigator.of(context).push(
+                      AppPageRoute<void>(
+                        builder: (_) =>
+                            const DiagnosticPushRegistrationScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.bug_report_outlined),
+                    label: const Text('Diagnostic Push'),
                   ),
                   const SizedBox(height: V5Spacing.xs),
                   if (kDebugMode) ...[
