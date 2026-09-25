@@ -64,10 +64,16 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       title: 'Finalités du traitement',
                       paragraphs: [
                         'Ces données servent à organiser les missions, vérifier les '
-                            'informations professionnelles requises, suivre les '
-                            'quotas et permettre aux responsables autorisés de '
-                            'contacter les participants lorsque la coordination '
-                            'l’exige.',
+                            'informations professionnelles requises et suivre les '
+                            'quotas de participation.',
+                        'Les responsables et coordinateurs autorisés voient '
+                            'uniquement le nom, la profession et le statut '
+                            'd’engagement des professionnels mobilisés sur leurs '
+                            'missions ; ils n’ont pas accès dans l’application à '
+                            'leur téléphone, leur email, leur identifiant RPPS ou '
+                            'leur adresse. Toute prise de contact directe avec un '
+                            'professionnel se fait aujourd’hui en dehors de '
+                            'l’application.',
                         'Les statistiques du tableau de bord sont calculées sous '
                             'forme agrégée et ne présentent aucune donnée '
                             'nominative.',
@@ -84,8 +90,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         'Cette version ne comporte pas de suppression automatique : '
                             'les données restent conservées jusqu’à une demande '
                             'd’effacement ou jusqu’à la clôture et l’archivage du '
-                            'dispositif par l’éditeur. Les exports CSV sont générés '
-                            'à la demande et ne sont pas stockés par l’application.',
+                            'dispositif par l’éditeur.',
+                        'L’administration de la plateforme peut ponctuellement '
+                            'générer des exports au format CSV à des fins de '
+                            'gestion opérationnelle ; ces exports ne sont pas '
+                            'stockés par l’application et ne constituent pas, à ce '
+                            'jour, une fonctionnalité d’export personnel '
+                            'déclenchable directement par les professionnels.',
                       ],
                     ),
                     SizedBox(height: 13),
