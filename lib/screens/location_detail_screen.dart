@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../models/need.dart';
 import '../models/responsible_access.dart';
+import '../theme/v5_foundation.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_secondary_navigation.dart';
 import 'create_need_screen.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _MissionDetailVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -46,7 +48,7 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _MissionDetailVisuals.background,
+      backgroundColor: context.v5Colors.canvas,
       appBar: const V5SecondaryNavigationBar(title: 'Fiche du lieu'),
       body: SafeArea(
         top: false,
@@ -175,24 +177,25 @@ class _LocationDetailScreenState extends State<LocationDetailScreen> {
     final activeMissions = _activeMissions(missions, currentLocation);
     return LayoutBuilder(
       builder: (context, constraints) {
+        final colors = context.v5Colors;
         final horizontalPadding = constraints.maxWidth <= 556
             ? 18.0
             : (constraints.maxWidth - 520) / 2;
         return Material(
-          color: _MissionDetailVisuals.background,
+          color: colors.canvas,
           child: ListView(
             key: const Key('location-detail-screen'),
             padding: EdgeInsets.fromLTRB(
               horizontalPadding,
-              12,
+              V5Spacing.sm,
               horizontalPadding,
               36,
             ),
             children: [
               _LocationSummaryCard(location: currentLocation),
-              const SizedBox(height: 24),
+              const SizedBox(height: V5Spacing.xl),
               _ActiveNeedsHeader(count: activeMissions.length),
-              const SizedBox(height: 12),
+              const SizedBox(height: V5Spacing.sm),
               if (activeMissions.isEmpty)
                 const _EmptyNeedsCard()
               else
@@ -283,7 +286,7 @@ class _LocationSummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
       decoration: BoxDecoration(
-        color: _MissionDetailVisuals.surface,
+        color: context.v5Colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _MissionDetailVisuals.border),
         boxShadow: const [
@@ -362,7 +365,12 @@ class _LocationSummaryCard extends StatelessWidget {
                   border: Border.all(color: _MissionDetailVisuals.border),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
+                  padding: const EdgeInsets.fromLTRB(
+                    14,
+                    2,
+                    14,
+                    V5Spacing.xxs,
+                  ),
                   child: MissionLocationDetails(
                     location: location,
                     phoneButtonLabel: 'Appeler le référent',
@@ -399,7 +407,7 @@ class _ActiveNeedsHeader extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              SizedBox(height: 4),
+              SizedBox(height: V5Spacing.xxs),
               Text(
                 'Besoins en cours',
                 style: TextStyle(
@@ -412,12 +420,12 @@ class _ActiveNeedsHeader extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: V5Spacing.sm),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
             color: _MissionDetailVisuals.fieldBackground,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(V5Radius.pill),
             border: Border.all(color: _MissionDetailVisuals.border),
           ),
           child: Text(
@@ -440,9 +448,9 @@ class _EmptyNeedsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(V5Spacing.lg),
       decoration: BoxDecoration(
-        color: _MissionDetailVisuals.surface,
+        color: context.v5Colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _MissionDetailVisuals.border),
       ),
@@ -454,7 +462,7 @@ class _EmptyNeedsCard extends StatelessWidget {
             color: _MissionDetailVisuals.textMuted,
             size: 22,
           ),
-          SizedBox(width: 12),
+          SizedBox(width: V5Spacing.sm),
           Expanded(
             child: Text(
               'Aucun besoin en cours pour ce lieu.',

@@ -6,19 +6,20 @@ import 'package:flutter/material.dart';
 import '../firebase_bootstrap.dart';
 import '../firebase_startup_gate.dart';
 import '../theme/app_theme.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/system_theme.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/v5_controls.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _ActivationVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF5F6865);
-  static const orange = Color(0xFFB9470A);
 }
 
 enum ActivationFailure { invalid, expired, alreadyUsed, unavailable }
@@ -288,7 +289,7 @@ class _AdminAccountActivationScreenState
     } else if (_success) {
       content = _ActivationMessage(
         icon: Icons.check_circle_rounded,
-        iconColor: AppColors.green,
+        iconColor: context.v5Colors.success,
         title: 'Votre accès responsable est activé.',
         message: 'Vous pouvez maintenant vous connecter à MobSanté.',
         actionLabel: 'Se connecter',
@@ -357,8 +358,9 @@ class _ActivationFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _ActivationVisuals.background,
+      backgroundColor: colors.canvas,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -366,25 +368,25 @@ class _ActivationFrame extends StatelessWidget {
                 ? 20.0
                 : (constraints.maxWidth - 520) / 2;
             return Material(
-              color: _ActivationVisuals.background,
+              color: colors.canvas,
               child: ListView(
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
-                  24,
+                  V5Spacing.xl,
                   horizontalPadding,
                   36,
                 ),
                 children: [
                   const _ActivationHeader(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: V5Spacing.xl),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(V5Spacing.lg),
                     decoration: BoxDecoration(
-                      color: _ActivationVisuals.surface,
-                      borderRadius: BorderRadius.circular(20),
+                      color: colors.surface,
+                      borderRadius: BorderRadius.circular(V5Radius.card),
                       border: Border.all(color: _ActivationVisuals.border),
                       boxShadow: const [
                         BoxShadow(
@@ -446,18 +448,18 @@ class _ActivationLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           child: V5ActivityIndicator(
             size: 34,
-            color: _ActivationVisuals.orange,
+            color: context.v5Colors.accent,
           ),
         ),
-        SizedBox(height: 18),
-        Text(
+        const SizedBox(height: 18),
+        const Text(
           'Vérification de votre invitation…',
           textAlign: TextAlign.center,
           style: TextStyle(
@@ -585,7 +587,7 @@ class _ActivationForm extends StatelessWidget {
             ),
           ),
           if (formError != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: V5Spacing.sm),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
@@ -597,8 +599,8 @@ class _ActivationForm extends StatelessWidget {
               child: Text(
                 formError!,
                 key: const Key('activation-form-error'),
-                style: const TextStyle(
-                  color: AppColors.red,
+                style: TextStyle(
+                  color: context.v5Colors.danger,
                   fontSize: 13,
                   height: 1.35,
                   fontWeight: FontWeight.w700,
@@ -610,8 +612,8 @@ class _ActivationForm extends StatelessWidget {
           V5Button(
             key: const Key('activate-account'),
             expanded: true,
-            backgroundColor: _ActivationVisuals.orange,
-            foregroundColor: Colors.white,
+            backgroundColor: context.v5Colors.accent,
+            foregroundColor: context.v5Colors.onAccent,
             loading: submitting,
             onPressed: submitting ? null : onSubmit,
             label: submitting ? 'Activation…' : 'Activer mon accès',
@@ -644,11 +646,11 @@ InputDecoration _activationInputDecoration({
     fillColor: _ActivationVisuals.fieldBackground,
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 17),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(V5Radius.control),
       borderSide: const BorderSide(color: _ActivationVisuals.border),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(V5Radius.control),
       borderSide: const BorderSide(color: _ActivationVisuals.navy, width: 1.5),
     ),
   );
@@ -659,13 +661,13 @@ class _ActivationMessage extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
-    this.iconColor = AppColors.orange,
+    this.iconColor,
     this.actionLabel,
     this.onAction,
   });
 
   final IconData icon;
-  final Color iconColor;
+  final Color? iconColor;
   final String title;
   final String message;
   final String? actionLabel;
@@ -673,6 +675,8 @@ class _ActivationMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    final effectiveIconColor = iconColor ?? colors.accent;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -680,12 +684,12 @@ class _ActivationMessage extends StatelessWidget {
           width: 64,
           height: 64,
           decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
+            color: effectiveIconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(V5Radius.card),
           ),
-          child: Icon(icon, size: 32, color: iconColor),
+          child: Icon(icon, size: 32, color: effectiveIconColor),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: V5Spacing.md),
         Text(
           title,
           textAlign: TextAlign.center,
@@ -696,7 +700,7 @@ class _ActivationMessage extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: V5Spacing.xs),
         Text(
           message,
           textAlign: TextAlign.center,
@@ -712,8 +716,8 @@ class _ActivationMessage extends StatelessWidget {
           V5Button(
             expanded: true,
             onPressed: onAction,
-            backgroundColor: _ActivationVisuals.orange,
-            foregroundColor: Colors.white,
+            backgroundColor: colors.accent,
+            foregroundColor: colors.onAccent,
             label: actionLabel!,
           ),
         ],

@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
+import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
 import '../widgets/v5_secondary_navigation.dart';
 import 'legal_notice_screen.dart';
 import 'privacy_policy_screen.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _TermsVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
@@ -21,8 +23,9 @@ class InformationConsentScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _TermsVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: const V5SecondaryNavigationBar(
         title: 'Informations et consentement',
       ),
@@ -35,12 +38,12 @@ class InformationConsentScreen extends StatelessWidget {
                   ? 18.0
                   : (constraints.maxWidth - 520) / 2;
               return Material(
-                color: _TermsVisuals.background,
+                color: colors.canvas,
                 child: ListView(
                   key: const Key('information-consent-screen'),
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    12,
+                    V5Spacing.sm,
                     horizontalPadding,
                     36,
                   ),
@@ -154,7 +157,7 @@ class _TermsHeader extends StatelessWidget {
             fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: V5Spacing.xs),
         const Text(
           'À lire avant de proposer votre participation à une mission.',
           style: TextStyle(
@@ -186,7 +189,7 @@ class _InformationSection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
-        color: _TermsVisuals.surface,
+        color: context.v5Colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _TermsVisuals.border),
         boxShadow: const [
@@ -211,7 +214,7 @@ class _InformationSection extends StatelessWidget {
                 ),
                 child: Icon(icon, color: _TermsVisuals.navy, size: 20),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: V5Spacing.sm),
               Expanded(
                 child: Text(
                   title,
@@ -234,7 +237,7 @@ class _InformationSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Padding(
-                  padding: EdgeInsets.only(top: 8),
+                  padding: EdgeInsets.only(top: V5Spacing.xs),
                   child: Icon(Icons.circle, color: _TermsVisuals.navy, size: 5),
                 ),
                 const SizedBox(width: 10),
@@ -251,7 +254,7 @@ class _InformationSection extends StatelessWidget {
                 ),
               ],
             ),
-            if (index < items.length - 1) const SizedBox(height: 12),
+            if (index < items.length - 1) const SizedBox(height: V5Spacing.sm),
           ],
         ],
       ),
@@ -273,7 +276,7 @@ class _TermsNavigationPanel extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: _TermsVisuals.surface,
+        color: context.v5Colors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _TermsVisuals.border),
         boxShadow: const [
@@ -326,7 +329,10 @@ class _TermsNavigationRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 68),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 15,
+              vertical: V5Spacing.sm,
+            ),
             child: Row(
               children: [
                 Container(
@@ -338,7 +344,7 @@ class _TermsNavigationRow extends StatelessWidget {
                   ),
                   child: Icon(icon, color: _TermsVisuals.navy, size: 20),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: V5Spacing.sm),
                 Expanded(
                   child: Text(
                     title,
@@ -349,7 +355,7 @@ class _TermsNavigationRow extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: V5Spacing.xs),
                 const Icon(
                   Icons.chevron_right_rounded,
                   color: _TermsVisuals.textMuted,

@@ -4,19 +4,20 @@ import '../models/admin_location.dart';
 import '../models/need.dart';
 import '../repositories/location_administration_repository.dart';
 import '../repositories/location_administration_repository_scope.dart';
+import '../theme/v5_foundation.dart';
 import '../widgets/common.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 import '../widgets/v5_secondary_navigation.dart';
 
+// navy/fieldBackground/border/textMuted have no exact V5Colors equivalent
+// (close but not identical values) and stay local rather than forced onto
+// a near-match token, per this Lot's fidelity rule.
 abstract final class _LocationFormVisuals {
-  static const background = Color(0xFFF6F7F8);
-  static const surface = Colors.white;
   static const navy = Color(0xFF173052);
   static const fieldBackground = Color(0xFFF1F1EF);
   static const border = Color(0xFFE5E5E1);
   static const textMuted = Color(0xFF5F6865);
-  static const orange = Color(0xFFB9470A);
 }
 
 class AdminLocationFormScreen extends StatefulWidget {
@@ -89,8 +90,9 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.v5Colors;
     return Scaffold(
-      backgroundColor: _LocationFormVisuals.background,
+      backgroundColor: colors.canvas,
       appBar: V5SecondaryNavigationBar(
         title: _editing ? 'Modifier le lieu' : 'Créer un lieu',
       ),
@@ -256,7 +258,7 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
         ),
       ),
       bottomNavigationBar: Material(
-        color: _LocationFormVisuals.surface,
+        color: colors.surface,
         elevation: 6,
         shadowColor: const Color(0x24173052),
         child: AnimatedPadding(
@@ -277,8 +279,8 @@ class _AdminLocationFormScreenState extends State<AdminLocationFormScreen> {
                 child: V5Button(
                   key: const Key('admin-location-submit'),
                   expanded: true,
-                  backgroundColor: _LocationFormVisuals.orange,
-                  foregroundColor: Colors.white,
+                  backgroundColor: colors.accent,
+                  foregroundColor: colors.onAccent,
                   loading: _submitting,
                   onPressed: _submitting ? null : _submit,
                   label: _submitting
@@ -427,7 +429,7 @@ class _LocationFormStatus extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: V5Spacing.xxs),
           const Text(
             'Le statut se modifie depuis la liste des lieux.',
             style: TextStyle(
@@ -459,7 +461,7 @@ class _AdaptiveFieldPair extends StatelessWidget {
         return Row(
           children: [
             Expanded(child: first),
-            const SizedBox(width: 12),
+            const SizedBox(width: V5Spacing.sm),
             Expanded(child: second),
           ],
         );
