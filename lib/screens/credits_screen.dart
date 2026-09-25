@@ -29,9 +29,20 @@ class CreditsScreen extends StatelessWidget {
               final horizontalPadding = constraints.maxWidth <= 556
                   ? 18.0
                   : (constraints.maxWidth - 520) / 2;
+              // The credits content (header + 2 cards) is much shorter than
+              // most legal/detail screens; pinned to the top like a plain
+              // ListView, it leaves a large empty gap below on taller
+              // viewports. Centering it vertically (falling back to a
+              // scrollable top-anchored layout when content doesn't fit)
+              // redistributes that same whitespace evenly instead, with no
+              // new content.
+              final contentMinHeight = (constraints.maxHeight - 48).clamp(
+                0.0,
+                double.infinity,
+              );
               return Material(
                 color: _CreditsVisuals.background,
-                child: ListView(
+                child: SingleChildScrollView(
                   key: const Key('credits-screen'),
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
@@ -39,13 +50,22 @@ class CreditsScreen extends StatelessWidget {
                     horizontalPadding,
                     36,
                   ),
-                  children: const [
-                    _CreditsHeader(),
-                    SizedBox(height: 22),
-                    _DesignerCard(),
-                    SizedBox(height: 13),
-                    _ThanksCard(),
-                  ],
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: contentMinHeight),
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _CreditsHeader(),
+                          SizedBox(height: 22),
+                          _DesignerCard(),
+                          SizedBox(height: 13),
+                          _ThanksCard(),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               );
             },

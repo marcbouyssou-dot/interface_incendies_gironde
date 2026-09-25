@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../data/mock_data.dart';
 import '../models/need.dart';
+import '../utils/location_slug.dart';
 
 enum SeedResult { imported, skipped }
 
@@ -101,31 +102,6 @@ class FirestoreSeedService {
     if (location.type == ResponsePlaceType.redCross) {
       return 'partnersites-croix-rouge-bordeaux';
     }
-    var normalized = '${location.group.name}-${location.name}'.toLowerCase();
-    const replacements = {
-      'à': 'a',
-      'â': 'a',
-      'ä': 'a',
-      'ç': 'c',
-      'é': 'e',
-      'è': 'e',
-      'ê': 'e',
-      'ë': 'e',
-      'î': 'i',
-      'ï': 'i',
-      'ô': 'o',
-      'ö': 'o',
-      'ù': 'u',
-      'û': 'u',
-      'ü': 'u',
-      'ÿ': 'y',
-      'œ': 'oe',
-    };
-    for (final entry in replacements.entries) {
-      normalized = normalized.replaceAll(entry.key, entry.value);
-    }
-    return normalized
-        .replaceAll(RegExp('[^a-z0-9]+'), '-')
-        .replaceAll(RegExp('^-|-\$'), '');
+    return locationSlug('${location.group.name}-${location.name}');
   }
 }

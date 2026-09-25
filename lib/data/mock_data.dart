@@ -1,4 +1,5 @@
 import '../models/need.dart';
+import '../utils/location_slug.dart';
 import 'location_address_registry.dart';
 
 const needs = <CoordinationNeed>[
@@ -83,7 +84,7 @@ ResponsePlace _station(
 }) {
   final reference = verifiedLocationRegistry[name]!;
   return ResponsePlace(
-    id: '${group.name}-${name.toLowerCase().replaceAll(' ', '-')}',
+    id: locationSlug('${group.name}-$name'),
     name: reference.displayName,
     type: reference.type,
     group: group,
