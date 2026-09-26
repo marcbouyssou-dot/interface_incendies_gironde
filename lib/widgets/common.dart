@@ -1873,6 +1873,8 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   String? _legacyCptsId;
   final _otherEquipmentController = TextEditingController();
   bool _submitting = false;
+  String? _submitError;
+  final _submitErrorKey = GlobalKey();
   bool _loadingProfile = true;
   bool _editingProfile = true;
   String? _profileError;
@@ -1913,15 +1915,43 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   bool get _equipmentDetailsRequired =>
       ProfessionalEquipmentRegistry.requiresDetails(_selectedEquipment);
 
-  bool get _hasValidProfessionalIdentifier => isValidProfessionalIdentifier(
-    _professionalIdType,
-    _professionalIdController.text,
-  );
+  List<EngagementProfileGap> get _engagementGaps =>
+      ProfessionalProfileValidation.engagementGaps(
+        firstName: _firstNameController.text,
+        lastName: _lastNameController.text,
+        phone: _phoneController.text,
+        email: _emailController.text,
+        profession: _profession,
+        professionalIdType: _professionalIdType,
+        professionalIdValue: _professionalIdController.text,
+        cptsId: _legacyCptsId,
+        cptsLabel: _hasCpts ? _cptsController.text : null,
+        equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
+          _selectedEquipment,
+        ),
+        otherEquipmentDetails: _equipmentDetailsRequired
+            ? _otherEquipmentController.text
+            : null,
+      );
 
-  bool get _isProfessionalIdentifierReady => isValidProfessionalIdentifier(
-    _professionalIdType,
-    _professionalIdController.text,
-  );
+  bool get _isProfileReadyToEngage => _engagementGaps.isEmpty;
+
+  void _onFieldChanged() => setState(() => _submitError = null);
+
+  void _revealSubmitError({bool revalidateFields = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (revalidateFields) _formKey.currentState?.validate();
+      final errorContext = _submitErrorKey.currentContext;
+      if (errorContext != null) {
+        Scrollable.ensureVisible(
+          errorContext,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 180),
+        );
+      }
+    });
+  }
 
   int get _professionalIdentifierMaxLength =>
       _professionalIdType == ProfessionalIdType.rpps ? 11 : 32;
@@ -2181,11 +2211,12 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                       ],
                     ),
                     const SizedBox(height: AppFormLayout.sectionSpacing),
-                    if (_isProfessionalIdentifierReady)
-                      const _ProfessionalIdentifierReadyNotice()
+                    if (_isProfileReadyToEngage)
+                      const _EngagementReadyNotice()
                     else
-                      _ProfessionalIdentifierRequiredNotice(
-                        ordinalOnly: _isVeterinarian,
+                      _EngagementGapsNotice(
+                        gaps: _engagementGaps,
+                        profession: _profession,
                       ),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -2207,7 +2238,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                       TextButton(
                         onPressed: () => setState(() => _editingProfile = true),
                         child: Text(
-                          _isProfessionalIdentifierReady
+                          _isProfileReadyToEngage
                               ? 'Modifier mes informations'
                               : 'Compléter mon profil',
                         ),
@@ -2272,6 +2303,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                     labelText: 'Prénom',
                                   ),
                                   validator: _required,
+                                  onChanged: (_) => _onFieldChanged(),
                                 );
                                 final lastNameField = TextFormField(
                                   controller: _lastNameController,
@@ -2280,6 +2312,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                     labelText: 'Nom',
                                   ),
                                   validator: _required,
+                                  onChanged: (_) => _onFieldChanged(),
                                 );
                                 if (constraints.maxWidth < 300) {
                                   return Column(
@@ -2309,6 +2342,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 labelText: 'Téléphone',
                               ),
                               validator: _phone,
+                              onChanged: (_) => _onFieldChanged(),
                             ),
                             const SizedBox(height: AppFormLayout.fieldSpacing),
                             TextFormField(
@@ -2319,6 +2353,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 labelText: 'Email',
                               ),
                               validator: _email,
+                              onChanged: (_) => _onFieldChanged(),
                             ),
                           ],
                         ),
@@ -2338,10 +2373,14 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 key: const Key('professional-id-type'),
                                 initialValue: _professionalIdType,
                                 isExpanded: true,
-                                decoration: const InputDecoration(
+                                decoration: InputDecoration(
                                   labelText: 'Identifiant professionnel *',
-                                  helperText: 'Obligatoire pour participer.',
-                                  prefixIcon: Icon(Icons.badge_outlined),
+                                  helperText: professionAllowsNoIdentifier(
+                                    _profession,
+                                  )
+                                      ? null
+                                      : 'Obligatoire pour participer.',
+                                  prefixIcon: const Icon(Icons.badge_outlined),
                                 ),
                                 items: _professionalIdTypeOptions
                                     .map(
@@ -2356,15 +2395,20 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                     )
                                     .toList(),
                                 validator: (type) {
-                                  if (_isVeterinarian) {
-                                    return type == ProfessionalIdType.ordinal
-                                        ? null
-                                        : 'Le numéro ordinal est obligatoire.';
+                                  if (type == ProfessionalIdType.rpps ||
+                                      type == ProfessionalIdType.ordinal) {
+                                    return null;
                                   }
-                                  return type == ProfessionalIdType.rpps ||
-                                          type == ProfessionalIdType.ordinal
-                                      ? null
-                                      : 'Choisissez un identifiant RPPS ou ordinal.';
+                                  if (type == ProfessionalIdType.none &&
+                                      professionAllowsNoIdentifier(
+                                        _profession,
+                                      )) {
+                                    return null;
+                                  }
+                                  if (_isVeterinarian) {
+                                    return 'Le numéro ordinal est obligatoire.';
+                                  }
+                                  return 'Choisissez un identifiant RPPS ou ordinal.';
                                 },
                                 onChanged: (type) {
                                   if (type == null) return;
@@ -2550,11 +2594,19 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                   labelText: 'Précisez le matériel',
                                 ),
                                 validator: _required,
+                                onChanged: (_) => _onFieldChanged(),
                               ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 18),
+                    ],
+                    if (_submitError != null) ...[
+                      KeyedSubtree(
+                        key: _submitErrorKey,
+                        child: _SheetErrorNotice(message: _submitError!),
+                      ),
+                      const SizedBox(height: 12),
                     ],
                     V5Button(
                       expanded: true,
@@ -2622,23 +2674,30 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   Future<void> _submit() async {
     if (_submitting) return;
     _trimProfessionalIdentifier();
-    if (!_hasValidProfessionalIdentifier) {
-      setState(() => _editingProfile = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isVeterinarian
-                ? 'Complétez votre profil avec votre numéro ordinal avant de '
-                      'participer.'
-                : 'Complétez votre profil avec un numéro RPPS ou ordinal '
-                      'avant de participer.',
-          ),
-        ),
-      );
+    final gaps = _engagementGaps;
+    if (gaps.isNotEmpty) {
+      setState(() {
+        _editingProfile = true;
+        _submitError =
+            'Complétez votre profil avant de participer : '
+            '${gaps.map((gap) => gap.label(_profession)).join(', ')}.';
+      });
+      _revealSubmitError(revalidateFields: true);
       return;
     }
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _submitting = true);
+    if (!_formKey.currentState!.validate()) {
+      setState(
+        () => _submitError =
+            'Certains champs sont à corriger avant de confirmer votre '
+            'participation.',
+      );
+      _revealSubmitError();
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _submitError = null;
+    });
     late final EngagementCreationResult result;
     try {
       result = await RepositoryScope.of(context).createEngagement(
@@ -2661,23 +2720,21 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
       );
     } on RepositoryException catch (error) {
       if (!mounted) return;
-      setState(() => _submitting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      setState(() {
+        _submitting = false;
+        _submitError = error.message;
+      });
+      _revealSubmitError();
       return;
     } catch (error, stackTrace) {
       debugPrint('Erreur UI createEngagement : $error');
       debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
-      setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'L’inscription n’a pas pu être enregistrée. Réessayez.',
-          ),
-        ),
-      );
+      setState(() {
+        _submitting = false;
+        _submitError = 'L’inscription n’a pas pu être enregistrée. Réessayez.';
+      });
+      _revealSubmitError();
       return;
     }
     if (!mounted) return;
@@ -2770,75 +2827,89 @@ class _ProfileFormCard extends StatelessWidget {
   }
 }
 
-class _ProfessionalIdentifierRequiredNotice extends StatelessWidget {
-  const _ProfessionalIdentifierRequiredNotice({required this.ordinalOnly});
+class _EngagementGapsNotice extends StatelessWidget {
+  const _EngagementGapsNotice({required this.gaps, required this.profession});
 
-  final bool ordinalOnly;
+  final List<EngagementProfileGap> gaps;
+  final VolunteerProfession profession;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    return Container(
-      key: const Key('professional-identifier-required'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colors.warningContainer,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: colors.warning.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: colors.surfaceElevated,
-              borderRadius: BorderRadius.circular(12),
+    return Semantics(
+      container: true,
+      child: Container(
+        key: const Key('engagement-profile-incomplete'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colors.warningContainer,
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: colors.warning.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.surfaceElevated,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.error_outline_rounded,
+                color: colors.warning,
+                size: 21,
+              ),
             ),
-            child: Icon(Icons.badge_outlined, color: colors.warning, size: 21),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Profil à compléter',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Profil à compléter',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  ordinalOnly
-                      ? 'Votre numéro ordinal est obligatoire pour participer. '
-                            'Complétez votre profil avant de confirmer votre '
-                            'participation.'
-                      : 'Un numéro RPPS ou ordinal est obligatoire pour '
-                            'participer. Complétez votre profil avant de '
-                            'confirmer votre participation.',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 12,
-                    height: 1.4,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Il manque pour participer :',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 12,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  for (final gap in gaps)
+                    Text(
+                      '• ${gap.label(profession)}',
+                      key: Key('engagement-gap-${gap.name}'),
+                      style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 12,
+                        height: 1.4,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
-  const _ProfessionalIdentifierReadyNotice();
+class _EngagementReadyNotice extends StatelessWidget {
+  const _EngagementReadyNotice();
 
   @override
   Widget build(BuildContext context) {
@@ -2881,9 +2952,10 @@ class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Votre identifiant professionnel est renseigné.',
+                  'Les informations nécessaires à votre engagement sont '
+                  'renseignées.',
                   style: TextStyle(
                     color: colors.textSecondary,
                     fontSize: 12,
@@ -2899,6 +2971,52 @@ class _ProfessionalIdentifierReadyNotice extends StatelessWidget {
   }
 }
 
+class _SheetErrorNotice extends StatelessWidget {
+  const _SheetErrorNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: 'Erreur : $message',
+      child: ExcludeSemantics(
+        child: Container(
+          key: const Key('registration-submit-error'),
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: colors.dangerContainer,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colors.danger.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline_rounded, color: colors.danger, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 13,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ProfileSummary extends StatelessWidget {
   const _ProfileSummary({required this.profile});
 
@@ -2907,6 +3025,12 @@ class _ProfileSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final gaps = ProfessionalProfileValidation.engagementGapsForProfile(profile);
+    final phoneMissing = gaps.contains(EngagementProfileGap.phone);
+    final emailMissing = gaps.contains(EngagementProfileGap.email);
+    final identifierMissing = gaps.contains(
+      EngagementProfileGap.professionalIdentifier,
+    );
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -2950,7 +3074,9 @@ class _ProfileSummary extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      profile.displayName,
+                      profile.displayName.isEmpty
+                          ? 'Nom à renseigner'
+                          : profile.displayName,
                       style: TextStyle(
                         color: colors.textPrimary,
                         fontSize: 17,
@@ -2973,19 +3099,42 @@ class _ProfileSummary extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _ProfileSummaryItem(
+            key: const Key('profile-summary-phone'),
             icon: Icons.phone_outlined,
             label: 'Téléphone',
-            value: profile.phone,
+            value: phoneMissing ? 'À renseigner' : profile.phone.trim(),
+            missing: phoneMissing,
           ),
-          if (profile.email?.trim().isNotEmpty ?? false) ...[
-            const SizedBox(height: 10),
-            _ProfileSummaryItem(
-              icon: Icons.mail_outline_rounded,
-              label: 'Email',
-              value: profile.email!.trim(),
-            ),
-          ],
-          if (profile.effectiveProfessionalIdType != ProfessionalIdType.none)
+          const SizedBox(height: 10),
+          _ProfileSummaryItem(
+            key: const Key('profile-summary-email'),
+            icon: Icons.mail_outline_rounded,
+            label: 'Email',
+            value: emailMissing
+                ? (profile.email?.trim().isEmpty ?? true
+                      ? 'À renseigner'
+                      : '${profile.email!.trim()} (invalide)')
+                : profile.email!.trim(),
+            missing: emailMissing,
+          ),
+          if (identifierMissing)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: _ProfileSummaryItem(
+                key: const Key('profile-summary-identifier'),
+                icon: Icons.badge_outlined,
+                label: profile.effectiveProfessionalIdType ==
+                        ProfessionalIdType.none
+                    ? 'Identifiant professionnel'
+                    : profile.effectiveProfessionalIdType.label,
+                value: profile.effectiveProfessionalIdValue.isEmpty
+                    ? 'À renseigner'
+                    : '${profile.effectiveProfessionalIdValue} (invalide)',
+                missing: true,
+              ),
+            )
+          else if (profile.effectiveProfessionalIdType !=
+              ProfessionalIdType.none)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: _ProfileSummaryItem(
@@ -3029,14 +3178,17 @@ class _ProfileSummary extends StatelessWidget {
 
 class _ProfileSummaryItem extends StatelessWidget {
   const _ProfileSummaryItem({
+    super.key,
     required this.icon,
     required this.label,
     required this.value,
+    this.missing = false,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final bool missing;
 
   @override
   Widget build(BuildContext context) {
@@ -3044,7 +3196,11 @@ class _ProfileSummaryItem extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: colors.textSecondary, size: 17),
+        Icon(
+          missing ? Icons.error_outline_rounded : icon,
+          color: missing ? colors.warning : colors.textSecondary,
+          size: 17,
+        ),
         const SizedBox(width: 9),
         Expanded(
           child: Column(
@@ -3066,7 +3222,7 @@ class _ProfileSummaryItem extends StatelessWidget {
                   color: colors.textPrimary,
                   fontSize: 12,
                   height: 1.35,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: missing ? FontWeight.w800 : FontWeight.w700,
                 ),
               ),
             ],

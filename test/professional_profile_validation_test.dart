@@ -63,6 +63,140 @@ void main() {
     );
   });
 
+  group('professional identifier eligibility (profession-aware)', () {
+    test(
+      'otherHealthProfessional may hold no identifier at all',
+      () {
+        expect(
+          professionAllowsNoIdentifier(
+            VolunteerProfession.otherHealthProfessional,
+          ),
+          isTrue,
+        );
+        expect(
+          hasCompleteProfessionalIdentifier(
+            VolunteerProfession.otherHealthProfessional,
+            ProfessionalIdType.none,
+            '',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'professions requiring RPPS or ordinal still refuse none',
+      () {
+        for (final profession in [
+          VolunteerProfession.mk,
+          VolunteerProfession.pp,
+          VolunteerProfession.doctor,
+          VolunteerProfession.nurse,
+          VolunteerProfession.veterinarian,
+        ]) {
+          expect(
+            professionAllowsNoIdentifier(profession),
+            isFalse,
+            reason: '$profession should not allow ProfessionalIdType.none',
+          );
+          expect(
+            hasCompleteProfessionalIdentifier(
+              profession,
+              ProfessionalIdType.none,
+              '',
+            ),
+            isFalse,
+            reason: '$profession should reject a bare "none" identifier',
+          );
+        }
+      },
+    );
+
+    test('none is still refused for otherHealthProfessional if a stray '
+        'value is present', () {
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.otherHealthProfessional,
+          ProfessionalIdType.none,
+          'unexpected',
+        ),
+        isFalse,
+      );
+    });
+
+    test('a well-formed RPPS is accepted regardless of profession', () {
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.mk,
+          ProfessionalIdType.rpps,
+          '10123456789',
+        ),
+        isTrue,
+      );
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.mk,
+          ProfessionalIdType.rpps,
+          '123',
+        ),
+        isFalse,
+      );
+    });
+
+    test('veterinarian keeps its existing ordinal-based eligibility', () {
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.veterinarian,
+          ProfessionalIdType.ordinal,
+          'VET-33001',
+        ),
+        isTrue,
+      );
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.veterinarian,
+          ProfessionalIdType.ordinal,
+          '',
+        ),
+        isFalse,
+      );
+    });
+
+    test(
+      'VolunteerProfile.hasValidProfessionalIdentifier delegates to the '
+      'central rule',
+      () {
+        const withoutIdentifier = VolunteerProfile(
+          uid: 'professional',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          profession: VolunteerProfession.otherHealthProfessional,
+          professionalIdType: ProfessionalIdType.none,
+          professionalIdValue: '',
+        );
+        expect(withoutIdentifier.hasValidProfessionalIdentifier, isTrue);
+        expect(
+          ProfessionalProfileValidation.isComplete(withoutIdentifier),
+          isTrue,
+        );
+
+        const sameProfileForMk = VolunteerProfile(
+          uid: 'professional',
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          profession: VolunteerProfession.mk,
+          professionalIdType: ProfessionalIdType.none,
+          professionalIdValue: '',
+        );
+        expect(sameProfileForMk.hasValidProfessionalIdentifier, isFalse);
+      },
+    );
+  });
+
   group('equipment validation', () {
     String? persistenceError(List<String> equipment, String? details) =>
         ProfessionalProfileValidation.persistenceError(

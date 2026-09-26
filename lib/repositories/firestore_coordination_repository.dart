@@ -1403,7 +1403,8 @@ class FirestoreCoordinationRepository
             ? ProfessionalIdType.rpps
             : ProfessionalIdType.none);
     final resolvedProfessionalIdValue = professionalIdValue ?? rpps ?? '';
-    if (!isValidProfessionalIdentifier(
+    if (!hasCompleteProfessionalIdentifier(
+      profession,
       resolvedProfessionalIdType,
       resolvedProfessionalIdValue,
     )) {

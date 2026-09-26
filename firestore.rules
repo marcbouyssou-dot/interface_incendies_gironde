@@ -1499,11 +1499,18 @@ service cloud.firestore {
         && exists(volunteerPath(request.auth.uid));
     }
 
+    function professionAllowsNoIdentifier(profession) {
+      return canonicalProfession(profession) == 'other_health_professional';
+    }
+
     function hasParticipationProfessionalIdentifier(data) {
       return 'professionalIdType' in data
         && 'professionalIdValue' in data
-        && data.professionalIdType in ['rpps', 'ordinal']
-        && isNonBlankCanonicalText(data.professionalIdValue);
+        && ((data.professionalIdType in ['rpps', 'ordinal']
+            && isNonBlankCanonicalText(data.professionalIdValue))
+          || (data.professionalIdType == 'none'
+            && data.professionalIdValue == ''
+            && professionAllowsNoIdentifier(data.get('profession', ''))));
     }
 
     function expectedStatus(data) {

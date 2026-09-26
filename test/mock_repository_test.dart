@@ -1316,6 +1316,89 @@ void main() {
       expect((await repository.getVolunteerProfile())?.profession, profession);
     }
   });
+
+  test(
+    'mock authorizes engagement with no identifier for a profession that '
+    'allows none',
+    () async {
+      final mission = CoordinationNeed(
+        id: 'other-health-professional-none',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 0,
+        registeredPhysiotherapists: 0,
+        requiredPodiatrists: 0,
+        registeredPodiatrists: 0,
+        professionQuotas: ProfessionQuotas.fromMaps(
+          requiredByProfession: {
+            VolunteerProfession.otherHealthProfessional.canonicalId!: 1,
+          },
+          registeredByProfession: const {},
+        ),
+        equipment: const [],
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+      );
+
+      final result = await repository.createEngagement(
+        missionId: mission.id,
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        professionalIdType: ProfessionalIdType.none,
+        professionalIdValue: '',
+        profession: VolunteerProfession.otherHealthProfessional,
+      );
+
+      expect(result, EngagementCreationResult.created);
+      final profile = await repository.getVolunteerProfile();
+      expect(profile?.professionalIdType, ProfessionalIdType.none);
+      expect(profile?.hasValidProfessionalIdentifier, isTrue);
+    },
+  );
+
+  test(
+    'mock still refuses no identifier for a profession that requires one',
+    () async {
+      final mission = CoordinationNeed(
+        id: 'mk-requires-identifier',
+        place: 'Mission',
+        group: TerritorialGroup.medoc,
+        date: 'Demain',
+        time: '08:00 — 12:00',
+        endAt: DateTime.now().add(const Duration(hours: 2)),
+        requiredPhysiotherapists: 1,
+        registeredPhysiotherapists: 0,
+        requiredPodiatrists: 0,
+        registeredPodiatrists: 0,
+        equipment: const [],
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: [mission],
+        initialLocations: const [],
+      );
+
+      await expectLater(
+        repository.createEngagement(
+          missionId: mission.id,
+          firstName: 'Alice',
+          lastName: 'Martin',
+          phone: '0600000000',
+          email: 'alice@example.fr',
+          professionalIdType: ProfessionalIdType.none,
+          professionalIdValue: '',
+          profession: VolunteerProfession.mk,
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
+    },
+  );
 }
 
 MissionDraft _draftFor(ResponsePlace location) => MissionDraft(

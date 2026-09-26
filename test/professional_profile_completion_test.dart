@@ -181,6 +181,66 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a profession requiring no identifier can select "Aucun identifiant" '
+    'and save',
+    (tester) async {
+      final profiles = <String, VolunteerProfile>{};
+      final repository = MockCoordinationRepository(
+        responsibleAccess: null,
+        initialProfiles: profiles,
+      );
+
+      await _pumpApp(tester, repository);
+      await _openProfessionalProfile(tester);
+      await tester.tap(find.byKey(const Key('edit-professional-profile')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('professional-profile-profession')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Autre professionnel de santé').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('professional-profile-id-value')),
+        findsNothing,
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-first-name')),
+        'Alice',
+      );
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-last-name')),
+        'Martin',
+      );
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-phone')),
+        '0600000000',
+      );
+      await tester.enterText(
+        find.byKey(const Key('professional-profile-email')),
+        'alice@example.fr',
+      );
+
+      await _scrollTo(
+        tester,
+        find.byKey(const Key('save-professional-profile')),
+      );
+      await tester.tap(find.byKey(const Key('save-professional-profile')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Profil enregistré.'), findsOneWidget);
+      expect(find.text('Profil complet'), findsOneWidget);
+
+      final saved = await repository.getVolunteerProfile();
+      expect(saved?.profession, VolunteerProfession.otherHealthProfessional);
+      expect(saved?.effectiveProfessionalIdType, ProfessionalIdType.none);
+      expect(saved?.effectiveProfessionalIdValue, isEmpty);
+      expect(saved?.hasValidProfessionalIdentifier, isTrue);
+    },
+  );
+
   testWidgets('an existing professional profile remains editable', (
     tester,
   ) async {

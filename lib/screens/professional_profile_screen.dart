@@ -660,6 +660,9 @@ class _ProfessionalProfileEditorState
                             _idType = _keepsLegacyOrdinal
                                 ? ProfessionalIdType.ordinal
                                 : ProfessionalIdType.rpps;
+                          } else if (professionAllowsNoIdentifier(value)) {
+                            _idType = ProfessionalIdType.none;
+                            _idValue.clear();
                           }
                         });
                       },
@@ -744,33 +747,48 @@ class _ProfessionalProfileEditorState
                             V5SelectOption(value: type, label: type.label),
                         ],
                         onChanged: (value) {
-                          if (value != null) setState(() => _idType = value);
+                          if (value != null) {
+                            setState(() {
+                              _idType = value;
+                              if (value == ProfessionalIdType.none) {
+                                _idValue.clear();
+                              }
+                            });
+                          }
                         },
-                        validator: (value) =>
-                            value == ProfessionalIdType.rpps ||
-                                value == ProfessionalIdType.ordinal
-                            ? null
-                            : 'Choisissez un identifiant professionnel.',
+                        validator: (value) {
+                          if (value == ProfessionalIdType.rpps ||
+                              value == ProfessionalIdType.ordinal) {
+                            return null;
+                          }
+                          if (value == ProfessionalIdType.none &&
+                              professionAllowsNoIdentifier(_profession)) {
+                            return null;
+                          }
+                          return 'Choisissez un identifiant professionnel.';
+                        },
                       ),
-                    const SizedBox(height: V5Spacing.sm),
-                    V5TextField(
-                      key: const Key('professional-profile-id-value'),
-                      label: _idType.label,
-                      controller: _idValue,
-                      focusNode: _idValueFocus,
-                      keyboardType: _idType == ProfessionalIdType.rpps
-                          ? TextInputType.number
-                          : TextInputType.text,
-                      isRequired: true,
-                      inputFormatters: [
-                        if (_idType == ProfessionalIdType.rpps)
-                          FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(
-                          _idType == ProfessionalIdType.rpps ? 11 : 32,
-                        ),
-                      ],
-                      validator: _idValidator,
-                    ),
+                    if (_idType != ProfessionalIdType.none) ...[
+                      const SizedBox(height: V5Spacing.sm),
+                      V5TextField(
+                        key: const Key('professional-profile-id-value'),
+                        label: _idType.label,
+                        controller: _idValue,
+                        focusNode: _idValueFocus,
+                        keyboardType: _idType == ProfessionalIdType.rpps
+                            ? TextInputType.number
+                            : TextInputType.text,
+                        isRequired: true,
+                        inputFormatters: [
+                          if (_idType == ProfessionalIdType.rpps)
+                            FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(
+                            _idType == ProfessionalIdType.rpps ? 11 : 32,
+                          ),
+                        ],
+                        validator: _idValidator,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1061,15 +1079,18 @@ class _ProfessionalProfileEditorState
         label: 'Type d’identifiant',
         error:
             _idType == ProfessionalIdType.rpps ||
-                _idType == ProfessionalIdType.ordinal
+                _idType == ProfessionalIdType.ordinal ||
+                (_idType == ProfessionalIdType.none &&
+                    professionAllowsNoIdentifier(_profession))
             ? null
             : 'Choisissez un identifiant professionnel.',
       ),
-      (
-        focusNode: _idValueFocus,
-        label: _idType.label,
-        error: _idValidator(_idValue.text),
-      ),
+      if (_idType != ProfessionalIdType.none)
+        (
+          focusNode: _idValueFocus,
+          label: _idType.label,
+          error: _idValidator(_idValue.text),
+        ),
       (
         focusNode: _professionalAddressLine1Focus,
         label: 'Adresse professionnelle',

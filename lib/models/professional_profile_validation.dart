@@ -2,6 +2,32 @@ import 'need.dart';
 import 'professional_equipment.dart';
 import 'volunteer_profile.dart';
 
+/// Information a profile must hold before an engagement can be attempted.
+enum EngagementProfileGap {
+  firstName,
+  lastName,
+  phone,
+  email,
+  professionalIdentifier,
+  cptsLabel,
+  equipmentDetails,
+}
+
+extension EngagementProfileGapLabel on EngagementProfileGap {
+  String label(VolunteerProfession profession) => switch (this) {
+    EngagementProfileGap.firstName => 'Prénom',
+    EngagementProfileGap.lastName => 'Nom',
+    EngagementProfileGap.phone => 'Téléphone',
+    EngagementProfileGap.email => 'Email valide',
+    EngagementProfileGap.professionalIdentifier =>
+      profession == VolunteerProfession.veterinarian
+          ? 'Numéro ordinal'
+          : 'Identifiant professionnel (RPPS ou numéro ordinal)',
+    EngagementProfileGap.cptsLabel => 'Nom de la CPTS (160 caractères maximum)',
+    EngagementProfileGap.equipmentDetails => 'Précision sur le matériel',
+  };
+}
+
 abstract final class ProfessionalProfileValidation {
   static bool isValidEmail(String? value) {
     final normalized = value?.trim() ?? '';
@@ -49,20 +75,65 @@ abstract final class ProfessionalProfileValidation {
     return null;
   }
 
-  static bool isComplete(VolunteerProfile? profile) {
-    if (profile == null || !profile.hasValidProfessionalIdentifier) {
-      return false;
-    }
-    final hasIdentity =
-        profile.firstName.trim().isNotEmpty &&
-        profile.lastName.trim().isNotEmpty &&
-        profile.phone.trim().isNotEmpty &&
-        isValidEmail(profile.email);
-    final hasEquipmentDetails =
-        !ProfessionalEquipmentRegistry.requiresDetails(profile.equipment) ||
-        (profile.otherEquipmentDetails?.trim().isNotEmpty ?? false);
-    return hasIdentity && hasEquipmentDetails;
+  /// Single definition of "this profile can attempt an engagement".
+  ///
+  /// It is a superset of what `createEngagement()` and the Firestore rules
+  /// refuse (valid email, complete identifier, CPTS length, equipment
+  /// details), plus the identity fields every profile form already requires
+  /// (first name, last name, phone). An empty result therefore guarantees the
+  /// engagement is not refused for a missing profile field.
+  static List<EngagementProfileGap> engagementGaps({
+    required String? firstName,
+    required String? lastName,
+    required String? phone,
+    required String? email,
+    required VolunteerProfession profession,
+    required ProfessionalIdType professionalIdType,
+    required String? professionalIdValue,
+    String? cptsId,
+    String? cptsLabel,
+    List<String> equipment = const [],
+    String? otherEquipmentDetails,
+  }) {
+    bool blank(String? value) => value == null || value.trim().isEmpty;
+    return [
+      if (blank(firstName)) EngagementProfileGap.firstName,
+      if (blank(lastName)) EngagementProfileGap.lastName,
+      if (blank(phone)) EngagementProfileGap.phone,
+      if (!isValidEmail(email)) EngagementProfileGap.email,
+      if (!hasCompleteProfessionalIdentifier(
+        profession,
+        professionalIdType,
+        professionalIdValue,
+      ))
+        EngagementProfileGap.professionalIdentifier,
+      if ((_trimmedOrNull(cptsId)?.length ?? 0) > 160 ||
+          (_trimmedOrNull(cptsLabel)?.length ?? 0) > 160)
+        EngagementProfileGap.cptsLabel,
+      if (ProfessionalEquipmentRegistry.requiresDetails(equipment) &&
+          blank(otherEquipmentDetails))
+        EngagementProfileGap.equipmentDetails,
+    ];
   }
+
+  static List<EngagementProfileGap> engagementGapsForProfile(
+    VolunteerProfile profile,
+  ) => engagementGaps(
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    phone: profile.phone,
+    email: profile.email,
+    profession: profile.profession,
+    professionalIdType: profile.effectiveProfessionalIdType,
+    professionalIdValue: profile.effectiveProfessionalIdValue,
+    cptsId: profile.cptsId,
+    cptsLabel: profile.cptsLabel,
+    equipment: profile.equipment,
+    otherEquipmentDetails: profile.otherEquipmentDetails,
+  );
+
+  static bool isComplete(VolunteerProfile? profile) =>
+      profile != null && engagementGapsForProfile(profile).isEmpty;
 
   static bool preservesVerification({
     required VolunteerProfile? existing,

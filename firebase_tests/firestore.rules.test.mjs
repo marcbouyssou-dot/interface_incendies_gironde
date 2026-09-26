@@ -1949,6 +1949,207 @@ test('engagements: canonical non-legacy professions are allowed', async () => {
   }
 });
 
+test('engagements: otherHealthProfessional may engage with no identifier', async () => {
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'missions/mission-a'),
+      genericMission({
+        requiredByProfession: {
+          ...emptyQuotas(),
+          other_health_professional: 1,
+        },
+      }),
+    );
+  });
+  const noIdProfile = volunteer('none-user', {
+    profession: 'other_health_professional',
+    professionalIdType: 'none',
+    professionalIdValue: '',
+  });
+  delete noIdProfile.rpps;
+  await assertSucceeds(setDoc(
+    doc(db('none-user'), 'volunteers/none-user'),
+    noIdProfile,
+  ));
+  await assertSucceeds(
+    engage('none-user', 'other_health_professional', {}, false),
+  );
+});
+
+test(
+  'engagements: a profession requiring RPPS/ordinal still denies none',
+  async () => {
+    await seed({mission: false});
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'missions/mission-a'),
+        genericMission({
+          requiredByProfession: {
+            ...emptyQuotas(),
+            physiotherapist: 1,
+          },
+        }),
+      );
+    });
+    const noIdProfile = volunteer('mk-none-user', {
+      profession: 'mk',
+      professionalIdType: 'none',
+      professionalIdValue: '',
+    });
+    delete noIdProfile.rpps;
+    await assertSucceeds(setDoc(
+      doc(db('mk-none-user'), 'volunteers/mk-none-user'),
+      noIdProfile,
+    ));
+    await assertFails(engage('mk-none-user', 'mk', {}, false));
+  },
+);
+
+test('engagements: a valid RPPS still succeeds (unchanged behavior)', async () => {
+  await seed();
+  await assertSucceeds(engage('alice-rpps'));
+  const adminDb = db('coord');
+  const stored = (await getDoc(
+    doc(adminDb, 'engagements/mission-a_alice-rpps'),
+  )).data();
+  assert.equal(stored.status, 'confirmed');
+});
+
+test('engagements: an invalid RPPS format denies engagement creation', async () => {
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'missions/mission-a'),
+      genericMission({
+        requiredByProfession: {...emptyQuotas(), physiotherapist: 1},
+      }),
+    );
+  });
+  const userDb = db('bad-rpps-user');
+  const batch = writeBatch(userDb);
+  batch.set(doc(userDb, 'volunteers/bad-rpps-user'), volunteer(
+    'bad-rpps-user',
+    {professionalIdType: 'rpps', professionalIdValue: '123', rpps: '123'},
+  ));
+  batch.set(doc(userDb, 'engagements/mission-a_bad-rpps-user'), {
+    missionId: 'mission-a', mobilizationId: activeMobilizationId,
+    volunteerId: 'bad-rpps-user', profession: 'mk',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    status: 'confirmed',
+  });
+  batch.update(doc(userDb, 'missions/mission-a'), {
+    registeredMk: 1,
+    registeredByProfession: {...emptyQuotas(), physiotherapist: 1},
+    status: 'complete',
+    updatedAt: serverTimestamp(),
+  });
+  await assertFails(batch.commit());
+});
+
+test('engagements: a profile without email is denied (matches client readiness)', async () => {
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'missions/mission-a'),
+      genericMission({
+        requiredByProfession: {...emptyQuotas(), other_health_professional: 1},
+      }),
+    );
+  });
+  const noEmail = volunteer('no-email-user', {
+    profession: 'other_health_professional',
+    professionalIdType: 'none',
+    professionalIdValue: '',
+  });
+  delete noEmail.rpps;
+  delete noEmail.email;
+  const userDb = db('no-email-user');
+  const batch = writeBatch(userDb);
+  batch.set(doc(userDb, 'volunteers/no-email-user'), noEmail);
+  batch.set(doc(userDb, 'engagements/mission-a_no-email-user'), {
+    missionId: 'mission-a', mobilizationId: activeMobilizationId,
+    volunteerId: 'no-email-user', profession: 'other_health_professional',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    status: 'confirmed',
+  });
+  batch.update(doc(userDb, 'missions/mission-a'), {
+    registeredByProfession: {...emptyQuotas(), other_health_professional: 1},
+    status: 'complete',
+    updatedAt: serverTimestamp(),
+  });
+  await assertFails(batch.commit());
+});
+
+test('engagements: a valid ordinal still succeeds (unchanged behavior)', async () => {
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), 'missions/mission-a'),
+      genericMission({
+        requiredByProfession: {...emptyQuotas(), veterinarian: 1},
+      }),
+    );
+  });
+  const ordinalProfile = volunteer('vet-ordinal-user', {
+    profession: 'veterinarian',
+    professionalIdType: 'ordinal',
+    professionalIdValue: 'ORD-123',
+  });
+  delete ordinalProfile.rpps;
+  await assertSucceeds(setDoc(
+    doc(db('vet-ordinal-user'), 'volunteers/vet-ordinal-user'),
+    ordinalProfile,
+  ));
+  await assertSucceeds(
+    engage('vet-ordinal-user', 'veterinarian', {}, false),
+  );
+});
+
+test(
+  'engagements: profession/identifier falsification across documents is denied',
+  async () => {
+    await seed({mission: false});
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'missions/mission-a'),
+        genericMission({
+          requiredByProfession: {...emptyQuotas(), physiotherapist: 1},
+        }),
+      );
+    });
+    // The volunteer profile is legitimately "other_health_professional" with
+    // no identifier, but the attacker tries to claim an "mk" engagement
+    // (which requires RPPS/ordinal) by declaring a mismatched profession on
+    // the engagement document itself.
+    const noIdProfile = volunteer('spoof-user', {
+      profession: 'other_health_professional',
+      professionalIdType: 'none',
+      professionalIdValue: '',
+    });
+    delete noIdProfile.rpps;
+    await assertSucceeds(setDoc(
+      doc(db('spoof-user'), 'volunteers/spoof-user'),
+      noIdProfile,
+    ));
+    const userDb = db('spoof-user');
+    const batch = writeBatch(userDb);
+    batch.set(doc(userDb, 'engagements/mission-a_spoof-user'), {
+      missionId: 'mission-a', mobilizationId: activeMobilizationId,
+      volunteerId: 'spoof-user', profession: 'mk',
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      status: 'confirmed',
+    });
+    batch.update(doc(userDb, 'missions/mission-a'), {
+      registeredMk: 1,
+      registeredByProfession: {...emptyQuotas(), physiotherapist: 1},
+      status: 'complete',
+      updatedAt: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+  },
+);
+
 test('engagements: unknown profession is denied', async () => {
   await seed({mission: false});
   await env.withSecurityRulesDisabled(async (context) => {
