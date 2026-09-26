@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../models/need.dart';
 import '../utils/switch_latest.dart';
 import 'coordination_repository.dart';
@@ -76,6 +78,19 @@ class OrganizationScopedMissionReadRepository
     if (mobilizationIds.isEmpty) {
       return Stream<List<CoordinationNeed>>.value(const []);
     }
+    final platformRepository = _platformRepository;
+    if (platformRepository is MobilizationLookupRepository) {
+      // Lecture unitaire : un Coordinateur affecté ne peut pas lister toute la
+      // collection `mobilizations` (règle `list`), mais peut lire chacune de
+      // ses mobilisations. Un identifiant non lisible est simplement exclu.
+      return switchLatest(
+        _watchReadableMobilizationIds(
+          platformRepository as MobilizationLookupRepository,
+          mobilizationIds,
+        ),
+        _watchMissionsForAccessibleMobilizations,
+      );
+    }
     return switchLatest(
       _platformRepository.watchMobilizations(includeInactive: true),
       (mobilizations) {
@@ -118,6 +133,62 @@ class OrganizationScopedMissionReadRepository
           ),
     );
   }
+
+  Stream<Set<String>> _watchReadableMobilizationIds(
+    MobilizationLookupRepository lookup,
+    Set<String> requestedIds,
+  ) => Stream<Set<String>>.multi((controller) {
+    final ids = requestedIds.where(_isValidDocumentId).toList()..sort();
+    if (ids.isEmpty) {
+      controller.add(const <String>{});
+      controller.close();
+      return;
+    }
+    final readable = <String, bool>{};
+    Set<String>? lastEmitted;
+    var completed = 0;
+    final subscriptions = <StreamSubscription<Object?>>[];
+
+    void emitWhenReady() {
+      if (readable.length != ids.length) return;
+      final current = {
+        for (final entry in readable.entries)
+          if (entry.value) entry.key,
+      };
+      final previous = lastEmitted;
+      if (previous != null &&
+          previous.length == current.length &&
+          previous.containsAll(current)) {
+        return;
+      }
+      lastEmitted = current;
+      controller.add(current);
+    }
+
+    for (final id in ids) {
+      subscriptions.add(
+        lookup
+            .watchMobilization(id)
+            .listen(
+              (mobilization) {
+                readable[id] = mobilization != null && mobilization.id == id;
+                emitWhenReady();
+              },
+              onError: controller.addError,
+              onDone: () {
+                readable.putIfAbsent(id, () => false);
+                emitWhenReady();
+                if (++completed == ids.length) controller.close();
+              },
+            ),
+      );
+    }
+    controller.onCancel = () async {
+      for (final subscription in subscriptions) {
+        await subscription.cancel();
+      }
+    };
+  });
 
   Stream<List<CoordinationNeed>> _watchMissionsForAccessibleMobilizations(
     Set<String> mobilizationIds,

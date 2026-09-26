@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/mobilization.dart';
@@ -94,7 +96,8 @@ class FirestorePlatformReadDataSource implements PlatformReadDataSource {
   }
 }
 
-class FirestorePlatformReadRepository implements PlatformReadRepository {
+class FirestorePlatformReadRepository
+    implements PlatformReadRepository, MobilizationLookupRepository {
   const FirestorePlatformReadRepository({
     required PlatformReadDataSource dataSource,
   }) : _dataSource = dataSource;
@@ -143,6 +146,32 @@ class FirestorePlatformReadRepository implements PlatformReadRepository {
         .map(
           (documents) =>
               documents.map(_mobilizationFromDocument).toList(growable: false),
+        );
+  }
+
+  @override
+  Stream<Mobilization?> watchMobilization(String mobilizationId) {
+    return _dataSource
+        .watchMobilizationDocument(mobilizationId)
+        .map(
+          (document) =>
+              document == null ? null : _mobilizationFromDocument(document),
+        )
+        .transform(
+          StreamTransformer<Mobilization?, Mobilization?>.fromHandlers(
+            handleError: (error, stackTrace, sink) {
+              // Un refus sur un identifiant précis signifie « non lisible » :
+              // la mobilisation est exclue, sans faire tomber les autres
+              // lectures. Toute autre erreur reste une vraie panne.
+              if (error is FirebaseException &&
+                  error.code == 'permission-denied') {
+                sink.add(null);
+                sink.close();
+                return;
+              }
+              sink.addError(error, stackTrace);
+            },
+          ),
         );
   }
 

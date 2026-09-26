@@ -18,7 +18,10 @@ import 'platform_read_repository.dart';
 /// Les territoires restent partagés. Toutes les lectures de mobilisations,
 /// y compris la mobilisation active legacy, appliquent la même politique.
 class OrganizationScopedPlatformReadRepository
-    implements PlatformReadRepository, ResponsibleMobilizationReadRepository {
+    implements
+        PlatformReadRepository,
+        ResponsibleMobilizationReadRepository,
+        MobilizationLookupRepository {
   const OrganizationScopedPlatformReadRepository({
     required PlatformReadRepository delegate,
     required OperationReadRepository operationRepository,
@@ -67,6 +70,49 @@ class OrganizationScopedPlatformReadRepository
           return List<Mobilization>.unmodifiable([mobilization]);
         });
       });
+
+  @override
+  Stream<Mobilization?> watchMobilization(String mobilizationId) =>
+      switchLatest(watchValueListenable(_context), (context) {
+        final source = _lookupMobilization(mobilizationId);
+        if (OrganizationContextReadPolicy.hasGlobalPlatformAccess(context)) {
+          return source;
+        }
+        final organizationId =
+            OrganizationContextReadPolicy.readableOrganizationId(context);
+        if (organizationId == null) return Stream<Mobilization?>.value(null);
+        return _combineLatestOperationsAndMobilizations<Mobilization?>(
+          _operationRepository.watchOperations(),
+          source,
+          (operations, mobilization) =>
+              mobilization != null &&
+                  _resolver.isMobilizationAccessible(
+                    mobilization: mobilization,
+                    organizationId: organizationId,
+                    accessibleOperationIds: operations
+                        .map((operation) => operation.id)
+                        .toSet(),
+                  )
+              ? mobilization
+              : null,
+        );
+      });
+
+  Stream<Mobilization?> _lookupMobilization(String mobilizationId) {
+    final delegate = _delegate;
+    if (delegate is MobilizationLookupRepository) {
+      return (delegate as MobilizationLookupRepository).watchMobilization(
+        mobilizationId,
+      );
+    }
+    return delegate
+        .watchMobilizations(includeInactive: true)
+        .map(
+          (mobilizations) => mobilizations
+              .where((mobilization) => mobilization.id == mobilizationId)
+              .firstOrNull,
+        );
+  }
 
   @override
   Stream<List<Mobilization>> watchMobilizations({

@@ -14,6 +14,16 @@ abstract interface class PlatformReadRepository {
   Stream<Mobilization?> watchActiveMobilization();
 }
 
+/// Lecture unitaire (`get`) d'une mobilisation, sans requête de collection.
+///
+/// Un Coordinateur affecté peut lire ses mobilisations une à une, mais les
+/// règles ne lui ouvrent pas le `list` global de `mobilizations`.
+abstract interface class MobilizationLookupRepository {
+  /// Émet la mobilisation lisible, ou `null` lorsqu'elle est absente ou n'est
+  /// pas lisible pour l'identité courante.
+  Stream<Mobilization?> watchMobilization(String mobilizationId);
+}
+
 /// Lecture des mobilisations actives utilisée par le parcours Responsable.
 ///
 /// Contrairement à [PlatformReadRepository.watchMobilizations], ce contrat

@@ -5202,3 +5202,25 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
     'locations/site-platform-private',
   )));
 });
+
+test('mobilizations: an assigned coordinator can get its mobilization and read its missions but cannot list mobilizations', async () => {
+  await seed();
+  const coordinatorDb = db('coord');
+
+  await assertSucceeds(
+    getDoc(doc(coordinatorDb, `mobilizations/${activeMobilizationId}`)),
+  );
+  await assertSucceeds(getDocs(query(
+    collection(coordinatorDb, 'missions'),
+    where('mobilizationId', 'in', [activeMobilizationId]),
+    where('isActive', '==', true),
+  )));
+
+  // The collection-wide list has no assigned-coordinator branch: this is the
+  // query the Cockpit must never issue for a Coordinator.
+  await assertFails(getDocs(collection(coordinatorDb, 'mobilizations')));
+  await assertFails(getDocs(query(
+    collection(coordinatorDb, 'mobilizations'),
+    where('status', '==', 'active'),
+  )));
+});
