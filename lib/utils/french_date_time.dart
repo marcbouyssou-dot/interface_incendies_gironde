@@ -24,6 +24,31 @@ abstract final class FrenchDateTime {
     'décembre',
   ];
 
+  static const _weekdaysShort = <String>[
+    'lun.',
+    'mar.',
+    'mer.',
+    'jeu.',
+    'ven.',
+    'sam.',
+    'dim.',
+  ];
+
+  static const _monthsShort = <String>[
+    'janv.',
+    'févr.',
+    'mars',
+    'avr.',
+    'mai',
+    'juin',
+    'juil.',
+    'août',
+    'sept.',
+    'oct.',
+    'nov.',
+    'déc.',
+  ];
+
   static String date(DateTime value) {
     return '${_weekdays[value.weekday - 1]} ${value.day} '
         '${_months[value.month - 1]} ${value.year}';
@@ -35,8 +60,18 @@ abstract final class FrenchDateTime {
     return '${_two(hour)}:${_two(minute)}';
   }
 
+  /// Clock range of a slot. The start date is shown separately by [date];
+  /// when the slot ends on another calendar day, the end date is spelled out
+  /// so a multi-day slot is never read as a same-day one.
   static String timeRange(DateTime start, DateTime end) {
-    return '${time(start)} — ${time(end)}';
+    final sameDay =
+        start.year == end.year &&
+        start.month == end.month &&
+        start.day == end.day;
+    if (sameDay) return '${time(start)} — ${time(end)}';
+    final year = end.year == start.year ? '' : ' ${end.year}';
+    return '${time(start)} — ${_weekdaysShort[end.weekday - 1]} ${end.day} '
+        '${_monthsShort[end.month - 1]}$year, ${time(end)}';
   }
 
   static String relativeDate(DateTime value, {DateTime? now}) {

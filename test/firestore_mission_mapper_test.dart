@@ -61,7 +61,7 @@ void main() {
     expect(mission.place, places.first.name);
     expect(mission.startAt, start);
     expect(mission.endAt, end);
-    expect(mission.time, '22:00 — 02:00');
+    expect(mission.time, '22:00 — ven. 31 juil., 02:00');
     expect(mission.requiredPhysiotherapists, 2);
     expect(mission.requiredPodiatrists, 1);
     expect(mission.priority, NeedPriority.standard);

@@ -115,7 +115,7 @@ void main() {
 
     expect(emissions.last, hasLength(1));
     expect(emissions.last.single.place, places.first.name);
-    expect(emissions.last.single.time, '22:00 — 02:00');
+    expect(emissions.last.single.time, '22:00 — ven. 31 juil., 02:00');
     await subscription.cancel();
   });
 
