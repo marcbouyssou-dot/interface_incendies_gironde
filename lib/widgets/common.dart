@@ -2162,6 +2162,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
               constraints: const BoxConstraints(maxWidth: 520),
               child: Form(
                 key: _formKey,
+                autovalidateMode: AutovalidateMode.onUserInteractionIfError,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,

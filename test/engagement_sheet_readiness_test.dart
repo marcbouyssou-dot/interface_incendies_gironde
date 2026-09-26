@@ -473,4 +473,141 @@ void main() {
       );
     });
   });
+
+  group('registration sheet — validation errors while editing', () {
+    Finder field(String label) => find.widgetWithText(TextFormField, label);
+
+    FormFieldState<String> stateOf(WidgetTester tester, String label) =>
+        tester.state<FormFieldState<String>>(field(label));
+
+    Future<MockCoordinationRepository> openWithoutEmail(
+      WidgetTester tester,
+    ) async {
+      final repository = MockCoordinationRepository(
+        responsibleAccess: null,
+        initialMissions: [_mission()],
+        initialLocations: const [],
+        initialProfiles: const {'mock-volunteer': _noEmailProfile},
+      );
+      await _openSheet(tester, repository);
+      await _tapConfirm(tester);
+      await tester.ensureVisible(field('Email'));
+      await tester.pumpAndSettle();
+      return repository;
+    }
+
+    Future<void> type(WidgetTester tester, String text) async {
+      await tester.enterText(field('Email'), text);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'profile without email → Confirmer → "Champ requis" → typing a valid '
+      'email clears the stale error and the banner becomes ready',
+      (tester) async {
+        final repository = await openWithoutEmail(tester);
+
+        expect(stateOf(tester, 'Email').errorText, 'Champ requis');
+        expect(find.text('Champ requis'), findsOneWidget);
+        expect(
+          find.byKey(const Key('engagement-profile-incomplete')),
+          findsOneWidget,
+        );
+
+        // Same keystroke-by-keystroke path as on the iPhone.
+        await type(tester, 'm');
+        expect(stateOf(tester, 'Email').errorText, 'Email invalide');
+        await type(tester, 'marc');
+        expect(stateOf(tester, 'Email').errorText, 'Email invalide');
+        await type(tester, 'marc@example');
+        expect(
+          stateOf(tester, 'Email').errorText,
+          'Email invalide',
+          reason: 'an incomplete address must stay flagged while typing',
+        );
+        expect(
+          find.byKey(const Key('professional-identifier-ready')),
+          findsNothing,
+        );
+
+        await type(tester, 'marc@example.fr');
+        final email = stateOf(tester, 'Email');
+        expect(email.value, 'marc@example.fr');
+        expect(
+          tester.widget<TextFormField>(field('Email')).controller?.text,
+          'marc@example.fr',
+        );
+        expect(email.errorText, isNull);
+        expect(find.text('Champ requis'), findsNothing);
+        expect(find.text('Email invalide'), findsNothing);
+        expect(
+          find.byKey(const Key('professional-identifier-ready')),
+          findsOneWidget,
+        );
+        expect(find.text('Profil prêt à participer'), findsOneWidget);
+        expect(
+          find.byKey(const Key('engagement-profile-incomplete')),
+          findsNothing,
+        );
+        expect(repository.engagements, isEmpty);
+      },
+    );
+
+    testWidgets('an invalid email stays in error and is never cleared', (
+      tester,
+    ) async {
+      final repository = await openWithoutEmail(tester);
+
+      await type(tester, 'm');
+      await type(tester, 'abc');
+
+      expect(stateOf(tester, 'Email').errorText, 'Email invalide');
+      expect(find.text('Email invalide'), findsOneWidget);
+      expect(
+        find.byKey(const Key('professional-identifier-ready')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('engagement-gap-email')), findsOneWidget);
+
+      // Losing focus does not clear it either.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(stateOf(tester, 'Email').errorText, 'Email invalide');
+      expect(repository.engagements, isEmpty);
+    });
+
+    testWidgets('valid and untouched fields never show a stray error', (
+      tester,
+    ) async {
+      await openWithoutEmail(tester);
+
+      // Only the email was missing: the other prefilled fields stay clean.
+      expect(stateOf(tester, 'Prénom').errorText, isNull);
+      expect(stateOf(tester, 'Nom').errorText, isNull);
+      expect(stateOf(tester, 'Téléphone').errorText, isNull);
+      expect(find.text('Téléphone trop court'), findsNothing);
+
+      await type(tester, 'm');
+      await type(tester, 'marc@example.fr');
+
+      expect(stateOf(tester, 'Prénom').errorText, isNull);
+      expect(stateOf(tester, 'Nom').errorText, isNull);
+      expect(stateOf(tester, 'Téléphone').errorText, isNull);
+      expect(find.text('Champ requis'), findsNothing);
+    });
+
+    testWidgets('after the correction, Confirmer creates the engagement', (
+      tester,
+    ) async {
+      final repository = await openWithoutEmail(tester);
+      await type(tester, 'm');
+      await type(tester, 'marc@example.fr');
+      expect(repository.engagements, isEmpty);
+
+      await _tapConfirm(tester);
+
+      expect(repository.engagements, isNotEmpty);
+      expect(find.byKey(const Key('registration-submit-error')), findsNothing);
+    });
+  });
 }
