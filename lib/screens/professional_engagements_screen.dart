@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
@@ -15,6 +14,9 @@ import '../widgets/professional_page_header.dart';
 import '../widgets/v5_controls.dart';
 
 enum _EngagementPeriod { upcoming, current, past }
+
+typedef _EngagementItem =
+    ({CoordinationNeed mission, EngagementInfo engagement});
 
 class ProfessionalEngagementsScreen extends StatefulWidget {
   const ProfessionalEngagementsScreen({super.key});
@@ -96,7 +98,7 @@ class _ProfessionalEngagementCollectionState
   final Map<String, StreamSubscription<EngagementInfo?>> _subscriptions = {};
   final Map<String, EngagementInfo?> _engagements = {};
   final Set<String> _waiting = {};
-  _EngagementPeriod _period = _EngagementPeriod.upcoming;
+  bool _pastExpanded = false;
 
   @override
   void initState() {
@@ -168,8 +170,14 @@ class _ProfessionalEngagementCollectionState
             final bDate = b.mission.startAt ?? DateTime(9999);
             return aDate.compareTo(bDate);
           });
-    final visible = allEngagements
-        .where((item) => _periodFor(item.mission) == _period)
+    final today = allEngagements
+        .where((item) => _periodFor(item.mission) == _EngagementPeriod.current)
+        .toList(growable: false);
+    final upcoming = allEngagements
+        .where((item) => _periodFor(item.mission) == _EngagementPeriod.upcoming)
+        .toList(growable: false);
+    final past = allEngagements
+        .where((item) => _periodFor(item.mission) == _EngagementPeriod.past)
         .toList(growable: false);
 
     return LayoutBuilder(
@@ -177,81 +185,71 @@ class _ProfessionalEngagementCollectionState
         final horizontalPadding = constraints.maxWidth <= 556
             ? 18.0
             : (constraints.maxWidth - 520) / 2;
-        return CustomScrollView(
+        return ListView(
           key: const PageStorageKey('professional-engagements'),
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                24,
-                horizontalPadding,
-                18,
-              ),
-              sliver: SliverList.list(
-                children: [
-                  const ProfessionalPageHeader(title: 'Mes engagements'),
-                  const SizedBox(height: V5Spacing.lg),
-                  CupertinoSlidingSegmentedControl<_EngagementPeriod>(
-                    key: const Key('professional-engagement-periods'),
-                    groupValue: _period,
-                    thumbColor: context.v5Colors.surfaceElevated,
-                    backgroundColor: context.v5Colors.surfaceMuted,
-                    onValueChanged: (value) {
-                      if (value != null) setState(() => _period = value);
-                    },
-                    children: const {
-                      _EngagementPeriod.current: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 9),
-                        child: Text('Aujourd’hui'),
-                      ),
-                      _EngagementPeriod.upcoming: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 9),
-                        child: Text('À venir'),
-                      ),
-                      _EngagementPeriod.past: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 9),
-                        child: Text('Passés'),
-                      ),
-                    },
-                  ),
-                ],
-              ),
-            ),
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            10,
+            horizontalPadding,
+            36,
+          ),
+          children: [
+            const ProfessionalIdentityHeader(),
+            const SizedBox(height: V5Spacing.md),
             if (_waiting.isNotEmpty && allEngagements.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: V5Spacing.xl),
                 child: Center(child: V5ActivityIndicator()),
               )
-            else if (visible.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _EngagementEmptyState(period: _period),
-              )
-            else
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontalPadding,
-                  0,
-                  horizontalPadding,
-                  36,
-                ),
-                sliver: SliverList.separated(
-                  itemCount: visible.length,
-                  itemBuilder: (context, index) {
-                    final item = visible[index];
-                    return _EngagementCard(
-                      mission: item.mission,
-                      engagement: item.engagement,
-                      location: responsePlaceForNeed(
-                        item.mission,
-                        widget.locations,
-                      ),
-                    );
+            else ...[
+              _EngagementPeriodSection(
+                title: 'AUJOURD’HUI',
+                emptyMessage: 'Aucun engagement aujourd’hui.',
+                items: today,
+                locations: widget.locations,
+              ),
+              const SizedBox(height: V5Spacing.lg),
+              _EngagementPeriodSection(
+                title: 'À VENIR',
+                emptyMessage: 'Aucun engagement à venir.',
+                items: upcoming,
+                locations: widget.locations,
+              ),
+              const SizedBox(height: V5Spacing.lg),
+              Theme(
+                data: Theme.of(
+                  context,
+                ).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  key: const Key('professional-past-engagements'),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  initiallyExpanded: _pastExpanded,
+                  onExpansionChanged: (expanded) {
+                    setState(() => _pastExpanded = expanded);
                   },
-                  separatorBuilder: (_, _) =>
-                      const SizedBox(height: V5Spacing.sm),
+                  title: Text(
+                    'PASSÉS (${past.length})',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: context.v5Colors.textSecondary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.7,
+                    ),
+                  ),
+                  children: [
+                    if (past.isEmpty)
+                      const _EngagementEmptyState(
+                        period: _EngagementPeriod.past,
+                      )
+                    else
+                      _EngagementCards(
+                        items: past,
+                        locations: widget.locations,
+                      ),
+                  ],
                 ),
               ),
+            ],
           ],
         );
       },
@@ -268,6 +266,75 @@ class _ProfessionalEngagementCollectionState
       MissionTemporalState.past => _EngagementPeriod.past,
     };
   }
+}
+
+class _EngagementPeriodSection extends StatelessWidget {
+  const _EngagementPeriodSection({
+    required this.title,
+    required this.emptyMessage,
+    required this.items,
+    required this.locations,
+  });
+
+  final String title;
+  final String emptyMessage;
+  final List<_EngagementItem> items;
+  final List<ResponsePlace> locations;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: context.v5Colors.info,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.8,
+        ),
+      ),
+      const SizedBox(height: V5Spacing.sm),
+      if (items.isEmpty)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(V5Spacing.md),
+          decoration: BoxDecoration(
+            color: context.v5Colors.surfaceMuted,
+            borderRadius: BorderRadius.circular(V5Radius.control),
+          ),
+          child: Text(
+            emptyMessage,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: context.v5Colors.textSecondary,
+            ),
+          ),
+        )
+      else
+        _EngagementCards(items: items, locations: locations),
+    ],
+  );
+}
+
+class _EngagementCards extends StatelessWidget {
+  const _EngagementCards({required this.items, required this.locations});
+
+  final List<_EngagementItem> items;
+  final List<ResponsePlace> locations;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      for (var index = 0; index < items.length; index++) ...[
+        _EngagementCard(
+          mission: items[index].mission,
+          engagement: items[index].engagement,
+          location: responsePlaceForNeed(items[index].mission, locations),
+        ),
+        if (index < items.length - 1)
+          const SizedBox(height: V5Spacing.sm),
+      ],
+    ],
+  );
 }
 
 class _EngagementCard extends StatelessWidget {

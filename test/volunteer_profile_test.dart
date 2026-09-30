@@ -23,6 +23,53 @@ void main() {
     },
   );
 
+  test('profile identifier compatibility follows the profession', () {
+    const mkWithHistoricalOrdinal = VolunteerProfile(
+      uid: 'mk-ordinal',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      profession: VolunteerProfession.mk,
+      professionalIdType: ProfessionalIdType.ordinal,
+      professionalIdValue: 'ORD-123',
+    );
+    const mkWithRpps = VolunteerProfile(
+      uid: 'mk-rpps',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      profession: VolunteerProfession.mk,
+      professionalIdType: ProfessionalIdType.rpps,
+      professionalIdValue: '10123456789',
+    );
+    const veterinarianWithOrdinal = VolunteerProfile(
+      uid: 'veterinarian-ordinal',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      profession: VolunteerProfession.veterinarian,
+      professionalIdType: ProfessionalIdType.ordinal,
+      professionalIdValue: 'VET-33001',
+    );
+    const professionWithoutRequiredIdentifier = VolunteerProfile(
+      uid: 'other-health-professional',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      profession: VolunteerProfession.otherHealthProfessional,
+      professionalIdType: ProfessionalIdType.none,
+      professionalIdValue: '',
+    );
+
+    expect(mkWithHistoricalOrdinal.hasValidProfessionalIdentifier, isFalse);
+    expect(mkWithRpps.hasValidProfessionalIdentifier, isTrue);
+    expect(veterinarianWithOrdinal.hasValidProfessionalIdentifier, isTrue);
+    expect(
+      professionWithoutRequiredIdentifier.hasValidProfessionalIdentifier,
+      isTrue,
+    );
+  });
+
   test(
     'mock profile is absent, persistent, editable and isolated by uid',
     () async {

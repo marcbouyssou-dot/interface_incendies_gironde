@@ -22,13 +22,24 @@ import 'create_need_screen.dart';
 class _MissionFilterMemory {
   static int status = 0;
   static TerritorialGroup? group;
-  static String? date;
+  static String? when;
 }
 
+const _whenToday = 'today';
+const _whenTomorrow = 'tomorrow';
+const _whenThisWeek = 'this_week';
+const _whenLater = 'later';
+const _whenCustomPrefix = 'date:';
+
 class SlotsScreen extends StatefulWidget {
-  const SlotsScreen({super.key, this.professionalJourney = false});
+  const SlotsScreen({
+    super.key,
+    this.professionalJourney = false,
+    this.onCompleteProfileForMission,
+  });
 
   final bool professionalJourney;
+  final ValueChanged<CoordinationNeed>? onCompleteProfileForMission;
 
   @override
   State<SlotsScreen> createState() => _SlotsScreenState();
@@ -37,7 +48,7 @@ class SlotsScreen extends StatefulWidget {
 class _SlotsScreenState extends State<SlotsScreen> {
   int _filter = _MissionFilterMemory.status;
   TerritorialGroup? _group = _MissionFilterMemory.group;
-  String? _date = _MissionFilterMemory.date;
+  String? _when = _MissionFilterMemory.when;
   bool _showAdvancedFilters = _MissionFilterMemory.status != 0;
   String? _editingMissionId;
   LiveCoordinationData? _liveData;
@@ -160,22 +171,15 @@ class _SlotsScreenState extends State<SlotsScreen> {
         : _filter == 0
         ? missions
         : missions.where((need) => need.status.index == _filter - 1).toList();
-    final selectedDate = professionalJourney ? _date : null;
-    final dateNeeds = selectedDate == null
+    final selectedWhen = professionalJourney ? _when : null;
+    final dateNeeds = selectedWhen == null
         ? statusNeeds
         : statusNeeds
-              .where((need) => _missionDateLabel(need) == selectedDate)
+              .where((need) => _matchesMissionWhen(need, selectedWhen))
               .toList();
     final visibleNeeds = _group == null
         ? dateNeeds
         : dateNeeds.where((need) => need.group == _group).toList();
-    final availableDateValues = <String>{
-      for (final mission in missions)
-        if (!professionalJourney || isMissionOperational(mission))
-          _missionDateLabel(mission),
-    };
-    if (selectedDate != null) availableDateValues.add(selectedDate);
-    final availableDates = availableDateValues.toList(growable: false);
     final hasPrivilegedAccess = access?.hasPrivilegedAccess == true;
     return PageContainer(
       child: LayoutBuilder(
@@ -191,7 +195,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    professionalJourney ? 24 : 16,
+                    professionalJourney ? 10 : 16,
                     horizontalPadding,
                     18,
                   ),
@@ -203,8 +207,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                         showOverview:
                             hasPrivilegedAccess && !professionalJourney,
                         group: _group,
-                        date: _date,
-                        availableDates: availableDates,
+                        when: _when,
                         onGroupChanged: _selectGroup,
                         onDateChanged: _selectDate,
                       ),
@@ -229,7 +232,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                         filtered: _hasActiveFilters,
                         professionalJourney: professionalJourney,
                         periodLabel: professionalJourney
-                            ? _professionalPeriodLabel(_date)
+                            ? _professionalPeriodLabel(_when)
                             : null,
                         status: _filter,
                         showAdvanced: _showAdvancedFilters,
@@ -255,7 +258,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                       child: _MissionsEmptyState(
                         filtered: _hasActiveFilters,
                         periodLabel: professionalJourney
-                            ? _professionalPeriodLabel(_date)
+                            ? _professionalPeriodLabel(_when)
                             : null,
                       ),
                     ),
@@ -273,6 +276,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
                         visibleNeeds,
                         locations,
                         profile,
+                        widget.onCompleteProfileForMission,
                       ),
                     ),
                   )
@@ -372,6 +376,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
     List<CoordinationNeed> missions,
     List<ResponsePlace> locations,
     VolunteerProfile? profile,
+    ValueChanged<CoordinationNeed>? onCompleteProfileForMission,
   ) {
     final urgent = missions
         .where(
@@ -409,6 +414,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
           missions: items,
           locations: locations,
           preferredProfession: profile?.profession,
+          onCompleteProfileForMission: onCompleteProfileForMission,
         ),
       );
     }
@@ -422,7 +428,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
   bool get _hasActiveFilters =>
       _filter != 0 ||
       _group != null ||
-      (widget.professionalJourney && _date != null);
+      (widget.professionalJourney && _when != null);
 
   void _select(int index) {
     _MissionFilterMemory.status = index;
@@ -435,19 +441,19 @@ class _SlotsScreenState extends State<SlotsScreen> {
   }
 
   void _selectDate(String? date) {
-    _MissionFilterMemory.date = date;
-    setState(() => _date = date);
+    _MissionFilterMemory.when = date;
+    setState(() => _when = date);
   }
 
   void _resetFilters() {
     if (!_hasActiveFilters) return;
     _MissionFilterMemory.status = 0;
     _MissionFilterMemory.group = null;
-    _MissionFilterMemory.date = null;
+    _MissionFilterMemory.when = null;
     setState(() {
       _filter = 0;
       _group = null;
-      _date = null;
+      _when = null;
       _showAdvancedFilters = false;
     });
   }
@@ -470,11 +476,103 @@ String _missionDateLabel(CoordinationNeed mission) => mission.startAt == null
     ? mission.date
     : FrenchDateTime.relativeDate(mission.startAt!);
 
-String _professionalPeriodLabel(String? selectedDate) => switch (selectedDate) {
-  'Aujourd’hui' => 'Aujourd’hui',
-  'Demain' => 'Demain',
+String _professionalPeriodLabel(String? selectedWhen) => switch (selectedWhen) {
+  _whenToday => 'Aujourd’hui',
+  _whenTomorrow => 'Demain',
+  _whenThisWeek => 'Cette semaine',
+  _whenLater => 'Plus tard',
+  _ when selectedWhen?.startsWith(_whenCustomPrefix) == true =>
+    _missionWhenLabel(selectedWhen),
   _ => 'À venir',
 };
+
+String _missionWhenLabel(String? value) => switch (value) {
+  _whenToday => 'Aujourd’hui',
+  _whenTomorrow => 'Demain',
+  _whenThisWeek => 'Cette semaine',
+  _whenLater => 'Plus tard',
+  _ when value?.startsWith(_whenCustomPrefix) == true =>
+    FrenchDateTime.date(_decodeMissionDate(value!)!),
+  _ => 'Toutes les dates',
+};
+
+DateTime _localCivilDay(DateTime value, [int dayOffset = 0]) => DateTime(
+  value.year,
+  value.month,
+  value.day + dayOffset,
+);
+
+bool _matchesMissionWhen(
+  CoordinationNeed mission,
+  String selectedWhen, {
+  DateTime? now,
+}) {
+  final reference = now ?? DateTime.now();
+  final today = _localCivilDay(reference);
+  final missionStart = mission.startAt;
+  if (missionStart == null) {
+    final label = _missionDateLabel(mission);
+    return switch (selectedWhen) {
+      _whenToday => label == 'Aujourd’hui',
+      _whenTomorrow => label == 'Demain',
+      _ => selectedWhen.startsWith(_whenCustomPrefix) &&
+          label == _missionWhenLabel(selectedWhen),
+    };
+  }
+  final missionEnd = mission.endAt;
+  final tomorrow = _localCivilDay(reference, 1);
+  final dayAfterTomorrow = _localCivilDay(reference, 2);
+  final dayAfterSunday = _localCivilDay(
+    reference,
+    DateTime.sunday - today.weekday + 1,
+  );
+  if (missionEnd != null && missionEnd.isAfter(missionStart)) {
+    bool intersects(DateTime periodStart, DateTime periodEnd) =>
+        missionStart.isBefore(periodEnd) && missionEnd.isAfter(periodStart);
+    return switch (selectedWhen) {
+      _whenToday => intersects(today, tomorrow),
+      _whenTomorrow => intersects(tomorrow, dayAfterTomorrow),
+      _whenThisWeek => intersects(today, dayAfterSunday),
+      _whenLater => missionEnd.isAfter(dayAfterSunday),
+      _ => switch (_decodeMissionDate(selectedWhen)) {
+        final selectedDay? => intersects(
+          selectedDay,
+          _localCivilDay(selectedDay, 1),
+        ),
+        null => false,
+      },
+    };
+  }
+  final missionDay = _localCivilDay(missionStart);
+  final endOfWeek = _localCivilDay(
+    reference,
+    DateTime.sunday - today.weekday,
+  );
+  return switch (selectedWhen) {
+    _whenToday => missionDay == today,
+    _whenTomorrow => missionDay == tomorrow,
+    _whenThisWeek =>
+      !missionDay.isBefore(today) && !missionDay.isAfter(endOfWeek),
+    _whenLater => missionDay.isAfter(endOfWeek),
+    _ => missionDay == _decodeMissionDate(selectedWhen),
+  };
+}
+
+String _encodeMissionDate(DateTime value) =>
+    '$_whenCustomPrefix${value.year.toString().padLeft(4, '0')}-'
+    '${value.month.toString().padLeft(2, '0')}-'
+    '${value.day.toString().padLeft(2, '0')}';
+
+DateTime? _decodeMissionDate(String value) {
+  if (!value.startsWith(_whenCustomPrefix)) return null;
+  final parts = value.substring(_whenCustomPrefix.length).split('-');
+  if (parts.length != 3) return null;
+  final year = int.tryParse(parts[0]);
+  final month = int.tryParse(parts[1]);
+  final day = int.tryParse(parts[2]);
+  if (year == null || month == null || day == null) return null;
+  return DateTime(year, month, day);
+}
 
 String _professionalEmptyMissionTitle(String periodLabel) =>
     switch (periodLabel) {
@@ -490,6 +588,7 @@ class _ProfessionalMissionSection extends StatelessWidget {
     required this.missions,
     required this.locations,
     required this.preferredProfession,
+    required this.onCompleteProfileForMission,
   });
 
   final Key sectionKey;
@@ -497,10 +596,12 @@ class _ProfessionalMissionSection extends StatelessWidget {
   final List<CoordinationNeed> missions;
   final List<ResponsePlace> locations;
   final VolunteerProfession? preferredProfession;
+  final ValueChanged<CoordinationNeed>? onCompleteProfileForMission;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final urgent = title == 'Missions urgentes';
     return Column(
       key: sectionKey,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -508,11 +609,26 @@ class _ProfessionalMissionSection extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              child: Row(
+                children: [
+                  if (urgent) ...[
+                    Icon(
+                      Icons.priority_high_rounded,
+                      size: 19,
+                      color: colors.danger,
+                    ),
+                    const SizedBox(width: 5),
+                  ],
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: urgent ? colors.danger : colors.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             Text(
@@ -535,6 +651,9 @@ class _ProfessionalMissionSection extends StatelessWidget {
             professionalDetailsExpanded: false,
             preferredProfession: preferredProfession,
             featured: title == 'Missions urgentes' && index == 0,
+            onCompleteProfile: onCompleteProfileForMission == null
+                ? null
+                : () => onCompleteProfileForMission!(missions[index]),
           ),
           if (index < missions.length - 1) const SizedBox(height: 14),
         ],
@@ -549,8 +668,7 @@ class _MissionDecisionHeader extends StatelessWidget {
     required this.professionalJourney,
     required this.showOverview,
     required this.group,
-    required this.date,
-    required this.availableDates,
+    required this.when,
     required this.onGroupChanged,
     required this.onDateChanged,
   });
@@ -559,8 +677,7 @@ class _MissionDecisionHeader extends StatelessWidget {
   final bool professionalJourney;
   final bool showOverview;
   final TerritorialGroup? group;
-  final String? date;
-  final List<String> availableDates;
+  final String? when;
   final ValueChanged<TerritorialGroup?> onGroupChanged;
   final ValueChanged<String?> onDateChanged;
 
@@ -593,7 +710,7 @@ class _MissionDecisionHeader extends StatelessWidget {
         ? 'Une mission prioritaire attend encore des renforts.'
         : 'Des équipes ont besoin de vous.';
     final professionalVerdict = missions.isEmpty
-        ? _professionalEmptyMissionTitle(_professionalPeriodLabel(date))
+        ? _professionalEmptyMissionTitle(_professionalPeriodLabel(when))
         : urgentCount == 1
         ? '1 mission urgente nécessite votre attention.'
         : urgentCount > 1
@@ -609,7 +726,7 @@ class _MissionDecisionHeader extends StatelessWidget {
       activeValue: group?.label,
       selectedValue: group?.name ?? 'all',
       options: [
-        const _HeroFilterOption(value: 'all', label: 'Tous les secteurs'),
+        const _HeroFilterOption(value: 'all', label: 'Partout'),
         for (final value in TerritorialGroup.values)
           _HeroFilterOption(value: value.name, label: value.label),
       ],
@@ -621,13 +738,24 @@ class _MissionDecisionHeader extends StatelessWidget {
       chipKey: const Key('professional-hero-when'),
       icon: Icons.calendar_today_outlined,
       label: 'Quand',
-      activeValue: date,
-      selectedValue: date ?? 'all',
-      options: [
-        const _HeroFilterOption(value: 'all', label: 'Toutes les dates'),
-        for (final value in availableDates)
-          _HeroFilterOption(value: value, label: value),
+      activeValue: when == null ? null : _missionWhenLabel(when),
+      selectedValue: when ?? 'all',
+      options: const [
+        _HeroFilterOption(value: _whenToday, label: 'Aujourd’hui'),
+        _HeroFilterOption(value: _whenTomorrow, label: 'Demain'),
+        _HeroFilterOption(value: _whenThisWeek, label: 'Cette semaine'),
+        _HeroFilterOption(value: _whenLater, label: 'Plus tard'),
+        _HeroFilterOption(value: 'custom', label: 'Choisir une date'),
+        _HeroFilterOption(value: 'all', label: 'Toutes les dates'),
       ],
+      resolveSelection: (context, value) async {
+        if (value != 'custom') return value;
+        final selected = await _showMissionDatePicker(
+          context,
+          initialDate: when == null ? null : _decodeMissionDate(when!),
+        );
+        return selected == null ? null : _encodeMissionDate(selected);
+      },
       onSelected: (value) => onDateChanged(value == 'all' ? null : value),
     );
     return Column(
@@ -636,6 +764,8 @@ class _MissionDecisionHeader extends StatelessWidget {
         if (professionalJourney)
           MobSanteJourneyHeader(
             journey: MobSanteJourney.professional,
+            journeyTitleSuffix: 'de santé',
+            sloganText: MobSanteJourneyHeader.professionalSlogan,
             pageTitle: professionalVerdict,
             pageTitleKey: const Key('professional-page-title'),
           )
@@ -708,6 +838,7 @@ class _HeroFilterChip extends StatelessWidget {
     required this.selectedValue,
     required this.options,
     required this.onSelected,
+    this.resolveSelection,
   });
 
   final Key chipKey;
@@ -717,6 +848,8 @@ class _HeroFilterChip extends StatelessWidget {
   final String selectedValue;
   final List<_HeroFilterOption> options;
   final ValueChanged<String> onSelected;
+  final Future<String?> Function(BuildContext context, String value)?
+  resolveSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -790,12 +923,16 @@ class _HeroFilterChip extends StatelessWidget {
       backgroundColor: Colors.transparent,
       barrierColor: colors.shadow.withValues(alpha: 0.28),
       builder: (sheetContext) => _ProfessionalFilterSheet(
-        title: label == 'Où' ? 'Où aider ?' : 'Quand aider ?',
+        title: label == 'Où' ? 'Où intervenir ?' : 'Quand intervenir ?',
         selectedValue: selectedValue,
         options: options,
-        onSelected: (value) {
-          onSelected(value);
+        onSelected: (value) async {
           Navigator.of(sheetContext).pop();
+          final resolver = resolveSelection;
+          final resolved = resolver == null
+              ? value
+              : await resolver(context, value);
+          if (resolved != null) onSelected(resolved);
         },
       ),
     );
@@ -820,7 +957,7 @@ class _ProfessionalFilterSheet extends StatelessWidget {
   final String title;
   final String selectedValue;
   final List<_HeroFilterOption> options;
-  final ValueChanged<String> onSelected;
+  final Future<void> Function(String) onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -917,6 +1054,75 @@ class _ProfessionalFilterSheet extends StatelessWidget {
   }
 }
 
+Future<DateTime?> _showMissionDatePicker(
+  BuildContext context, {
+  DateTime? initialDate,
+}) {
+  final now = DateTime.now();
+  final minimumDate = DateTime(now.year, now.month, now.day);
+  final maximumDate = DateTime(now.year + 2, 12, 31);
+  var pending = initialDate == null || initialDate.isBefore(minimumDate)
+      ? minimumDate
+      : initialDate.isAfter(maximumDate)
+      ? maximumDate
+      : initialDate;
+  final colors = context.v5Colors;
+  return showNativeBottomSheet<DateTime>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: colors.surfaceElevated,
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Choisir une date',
+            style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: V5Spacing.sm),
+          SizedBox(
+            height: 216,
+            child: CupertinoDatePicker(
+              mode: CupertinoDatePickerMode.date,
+              initialDateTime: pending,
+              minimumDate: minimumDate,
+              maximumDate: maximumDate,
+              onDateTimeChanged: (value) => pending = value,
+            ),
+          ),
+          const SizedBox(height: V5Spacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoButton(
+                  minimumSize: const Size.fromHeight(44),
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: const Text('Annuler'),
+                ),
+              ),
+              const SizedBox(width: V5Spacing.xs),
+              Expanded(
+                child: CupertinoButton.filled(
+                  key: const Key('professional-when-date-apply'),
+                  minimumSize: const Size.fromHeight(44),
+                  onPressed: () => Navigator.of(sheetContext).pop(pending),
+                  child: const Text('Choisir'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _MissionResultsHeader extends StatelessWidget {
   const _MissionResultsHeader({
     required this.count,
@@ -950,20 +1156,20 @@ class _MissionResultsHeader extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            periodLabel!,
-            key: const Key('professional-missions-period'),
-            style: TextStyle(
-              color: colors.info,
-              fontSize: 18,
-              height: 1.25,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: V5Spacing.xs),
           Row(
             children: [
-              const Spacer(),
+              Expanded(
+                child: Text(
+                  periodLabel!,
+                  key: const Key('professional-missions-period'),
+                  style: TextStyle(
+                    color: colors.info,
+                    fontSize: 18,
+                    height: 1.25,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
               _MissionCount(label: label),
               const SizedBox(width: V5Spacing.xxs),
               IconButton(
@@ -1164,7 +1370,7 @@ class _ProfessionalMissionsLoadingState extends StatelessWidget {
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(
                     horizontalPadding,
-                    24,
+                    10,
                     horizontalPadding,
                     36,
                   ),
@@ -1172,6 +1378,8 @@ class _ProfessionalMissionsLoadingState extends StatelessWidget {
                     children: [
                       const MobSanteJourneyHeader(
                         journey: MobSanteJourney.professional,
+                        journeyTitleSuffix: 'de santé',
+                        sloganText: MobSanteJourneyHeader.professionalSlogan,
                         pageTitle: 'Missions à venir',
                         pageTitleKey: Key('professional-page-title'),
                       ),

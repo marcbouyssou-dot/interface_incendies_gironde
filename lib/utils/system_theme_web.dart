@@ -3,31 +3,27 @@
 import 'dart:html' as html;
 
 const _applicationBackground = '#F6F7F8';
-const _darkApplicationBackground = '#0D1622';
-const _splashBackground = '#10233E';
 const _splashClass = 'mobsante-splash-active';
 var _pendingApplicationBackground = _applicationBackground;
-var _pendingAppleStatusBarStyle = 'default';
 var _applicationRevealed = false;
 
 void activateLightApplicationChrome() {
   _pendingApplicationBackground = _applicationBackground;
-  _pendingAppleStatusBarStyle = 'default';
   if (_applicationRevealed) _applyPendingApplicationChrome();
 }
 
 void activateDarkApplicationChrome() {
-  _pendingApplicationBackground = _darkApplicationBackground;
-  _pendingAppleStatusBarStyle = 'black-translucent';
+  // iOS standalone PWAs read their status-bar style at launch and can retain
+  // a runtime mutation across background/resume cycles. MobSanté therefore
+  // keeps the outer Web chrome light even if Flutter renders a dark surface.
+  _pendingApplicationBackground = _applicationBackground;
   if (_applicationRevealed) _applyPendingApplicationChrome();
 }
 
 void activateSplashApplicationChrome() {
   _setApplicationChrome(
-    background: _splashBackground,
+    background: _applicationBackground,
     splashActive: true,
-    appleStatusBarStyle: 'black-translucent',
-    updateThemeColor: false,
   );
 }
 
@@ -74,14 +70,12 @@ void _applyPendingApplicationChrome() {
   _setApplicationChrome(
     background: _pendingApplicationBackground,
     splashActive: false,
-    appleStatusBarStyle: _pendingAppleStatusBarStyle,
   );
 }
 
 void _setApplicationChrome({
   required String background,
   required bool splashActive,
-  required String appleStatusBarStyle,
   bool updateThemeColor = true,
 }) {
   if (updateThemeColor) {
@@ -89,9 +83,6 @@ void _setApplicationChrome({
         .querySelector('meta[name="theme-color"]')
         ?.setAttribute('content', background);
   }
-  html.document
-      .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
-      ?.setAttribute('content', appleStatusBarStyle);
   final documentElement = html.document.documentElement;
   documentElement?.classes.toggle(_splashClass, splashActive);
   documentElement?.style.backgroundColor = background;

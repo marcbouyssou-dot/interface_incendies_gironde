@@ -19,6 +19,22 @@ bool isValidProfessionalIdentifier(ProfessionalIdType type, String? value) {
       professionalIdentifierValidationMessage(type, value) == null;
 }
 
+/// Identifier type required to complete a profile for [profession].
+///
+/// Historical values may still be stored, but only the returned type counts
+/// toward profile completion. A `null` result keeps the existing optional
+/// identifier behavior for professions without a mandatory identifier.
+ProfessionalIdType? requiredProfessionalIdType(
+  VolunteerProfession profession,
+) => switch (profession) {
+  VolunteerProfession.mk ||
+  VolunteerProfession.pp ||
+  VolunteerProfession.doctor ||
+  VolunteerProfession.nurse => ProfessionalIdType.rpps,
+  VolunteerProfession.veterinarian => ProfessionalIdType.ordinal,
+  VolunteerProfession.otherHealthProfessional => null,
+};
+
 /// Whether [profession] may legitimately have no RPPS/ordinal number at all.
 ///
 /// This is a distinct question from "is this identifier value well-formed"
@@ -26,7 +42,7 @@ bool isValidProfessionalIdentifier(ProfessionalIdType type, String? value) {
 /// which only judge a value against its own claimed type). Only professions
 /// with no national registry equivalent to draw on may skip having one.
 bool professionAllowsNoIdentifier(VolunteerProfession profession) =>
-    profession == VolunteerProfession.otherHealthProfessional;
+    requiredProfessionalIdType(profession) == null;
 
 /// Whether a professional's declared identifier (type + value) is complete
 /// enough for [profession] to participate in a mission.
@@ -42,6 +58,8 @@ bool hasCompleteProfessionalIdentifier(
   ProfessionalIdType type,
   String? value,
 ) {
+  final requiredType = requiredProfessionalIdType(profession);
+  if (requiredType != null && type != requiredType) return false;
   if (type == ProfessionalIdType.none) {
     return professionAllowsNoIdentifier(profession) &&
         professionalIdentifierValidationMessage(type, value) == null;

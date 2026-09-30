@@ -9,6 +9,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/services/professional_verification_service.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/widgets/professional_rpps_verification.dart';
+import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 const rpps = '00000000000';
 
@@ -76,6 +77,24 @@ Future<void> enterAndVerify(WidgetTester tester, String value) async {
   );
   await tester.tap(find.byKey(const Key('verify-professional-rpps')));
   await tester.pump();
+}
+
+Future<void> openProfessionalProfile(WidgetTester tester) async {
+  final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
+  navigation.onDestinationSelected(2);
+  await tester.pumpAndSettle();
+}
+
+Future<void> revealInProfessionalProfile(
+  WidgetTester tester,
+  Finder target,
+) async {
+  await tester.scrollUntilVisible(
+    target,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -247,13 +266,15 @@ void main() {
     await tester.pumpWidget(
       FireCoordinationApp(
         repository: repository,
-        initialTab: 1,
         professionalVerificationService: service,
       ),
     );
     await tester.pumpAndSettle();
+    await openProfessionalProfile(tester);
 
-    expect(find.byKey(const Key('professional-rpps-field')), findsOneWidget);
+    final rppsField = find.byKey(const Key('professional-rpps-field'));
+    await revealInProfessionalProfile(tester, rppsField);
+    expect(rppsField, findsOneWidget);
     final field = tester.widget<TextFormField>(find.byType(TextFormField));
     expect(field.controller?.text, rpps);
   });
@@ -283,14 +304,15 @@ void main() {
     Future<void> pumpApp() => tester.pumpWidget(
       FireCoordinationApp(
         repository: repository,
-        initialTab: 1,
         professionalVerificationService: service,
       ),
     );
 
     await pumpApp();
     await tester.pumpAndSettle();
+    await openProfessionalProfile(tester);
     final verify = find.byKey(const Key('verify-professional-rpps'));
+    await revealInProfessionalProfile(tester, verify);
     await tester.ensureVisible(verify);
     await tester.pumpAndSettle();
     await tester.tap(verify);
@@ -315,9 +337,14 @@ void main() {
     await tester.pumpAndSettle();
     await pumpApp();
     await tester.pumpAndSettle();
+    await openProfessionalProfile(tester);
 
+    final persistedVerification = find.byKey(
+      const Key('professional-rpps-persisted-verified'),
+    );
+    await revealInProfessionalProfile(tester, persistedVerification);
     expect(
-      find.byKey(const Key('professional-rpps-persisted-verified')),
+      persistedVerification,
       findsOneWidget,
     );
     expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);

@@ -427,6 +427,9 @@ void main() {
           cptsId: 'cpts-medoc',
           cptsLabel: 'CPTS Médoc',
           profession: VolunteerProfession.mk,
+          professionalAddressLine1: '10 rue de la Santé',
+          professionalPostalCode: '33000',
+          professionalCity: 'Bordeaux',
           equipment: ['Table'],
         ),
       },
@@ -470,7 +473,7 @@ void main() {
     );
   });
 
-  testWidgets('professional id, optional CPTS and equipment are modular', (
+  testWidgets('required RPPS, optional CPTS and equipment are modular', (
     tester,
   ) async {
     final repository = MockCoordinationRepository(
@@ -480,7 +483,10 @@ void main() {
     await pumpApp(tester, repository);
     await openEngagementForm(tester);
 
-    expect(find.text('Aucun identifiant'), findsOneWidget);
+    expect(find.text('RPPS'), findsOneWidget);
+    expect(find.text('Aucun identifiant'), findsNothing);
+    expect(find.text('Numéro ordinal'), findsNothing);
+    expect(find.text('Numéro RPPS *'), findsOneWidget);
     expect(find.text('Aucune'), findsOneWidget);
     for (final equipment in [
       'Table de massage',
@@ -491,7 +497,7 @@ void main() {
     ]) {
       expect(find.text(equipment), findsOneWidget);
     }
-    expect(find.byKey(const Key('professional-id-value')), findsNothing);
+    expect(find.byKey(const Key('professional-id-value')), findsOneWidget);
     expect(find.byKey(const Key('other-equipment-details')), findsNothing);
 
     await tester.scrollUntilVisible(
@@ -532,7 +538,10 @@ void main() {
       );
       await pumpApp(tester, repository);
       await openEngagementForm(tester);
-      await tester.tap(find.text('Compléter mon profil'));
+      final completeProfile = find.text('Compléter mon profil');
+      await tester.ensureVisible(completeProfile);
+      await tester.pumpAndSettle();
+      await tester.tap(completeProfile);
       await tester.pumpAndSettle();
 
       final doctor = find.byKey(const Key('profession-physician'));
@@ -632,6 +641,16 @@ void main() {
       mission: mission(),
       engagementStream: Stream.value(null),
       completion: completion,
+      initialProfile: const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: '',
+        lastName: '',
+        phone: '',
+        profession: VolunteerProfession.pp,
+        professionalAddressLine1: '10 rue de la Santé',
+        professionalPostalCode: '33000',
+        professionalCity: 'Bordeaux',
+      ),
     );
     await pumpApp(tester, repository);
     await openEngagementForm(tester);
@@ -663,6 +682,16 @@ void main() {
       mission: mission(),
       engagementStream: Stream.value(null),
       result: EngagementCreationResult.alreadyConfirmed,
+      initialProfile: const VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: '',
+        lastName: '',
+        phone: '',
+        profession: VolunteerProfession.pp,
+        professionalAddressLine1: '10 rue de la Santé',
+        professionalPostalCode: '33000',
+        professionalCity: 'Bordeaux',
+      ),
     );
     await pumpApp(tester, repository);
     await openEngagementForm(tester);
@@ -829,7 +858,14 @@ class _EngagementUiRepository extends MockCoordinationRepository {
     required this.engagementStream,
     this.completion,
     this.result = EngagementCreationResult.created,
-  }) : super(initialMissions: [mission], initialLocations: const []);
+    VolunteerProfile? initialProfile,
+  }) : super(
+         initialMissions: [mission],
+         initialLocations: const [],
+         initialProfiles: initialProfile == null
+             ? const {}
+             : {'mock-volunteer': initialProfile},
+       );
 
   final Stream<EngagementInfo?> engagementStream;
   final Completer<EngagementCreationResult>? completion;

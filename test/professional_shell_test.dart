@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
@@ -14,6 +16,7 @@ import 'package:interface_incendies_gironde/screens/responsible_home_screen.dart
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
 import 'package:interface_incendies_gironde/utils/mission_timing.dart';
+import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
 import 'package:interface_incendies_gironde/widgets/responsible_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/coordinator_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
@@ -47,6 +50,7 @@ void main() {
     expect(find.byType(V5BottomNavigation), findsOneWidget);
     expect(find.text('MobSanté'), findsOneWidget);
     expect(find.text('Professionnel'), findsOneWidget);
+    expect(find.text('de santé'), findsOneWidget);
     expect(
       find.text('Trouvez rapidement où vous pouvez être utile.'),
       findsOneWidget,
@@ -76,6 +80,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('À venir'), findsOneWidget);
+    final identityMark = tester.widget<BrandMark>(
+      find.descendant(
+        of: find.byKey(const Key('mobsante-product-identity')),
+        matching: find.byType(BrandMark),
+      ),
+    );
+    expect(identityMark.size, 48);
     expect(find.text('Voir les détails'), findsWidgets);
     expect(find.text('Détails de la mission'), findsNothing);
 
@@ -86,7 +97,7 @@ void main() {
     );
     final missionDate = find.descendant(
       of: firstMission,
-      matching: find.text('mardi 29 juillet'),
+      matching: find.textContaining('MARDI 29 JUILLET'),
     );
     final missionProfession = find.descendant(
       of: firstMission,
@@ -135,6 +146,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('professional-hero-where')));
     await tester.pumpAndSettle();
+    expect(find.text('Où intervenir ?'), findsOneWidget);
+    expect(find.text('Partout'), findsOneWidget);
     await tester.tap(find.text('Bordeaux Métropole').last);
     await tester.pumpAndSettle();
     expect(
@@ -147,12 +160,24 @@ void main() {
 
     await tester.tap(find.byKey(const Key('professional-hero-when')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('mardi 29 juillet').last);
+    for (final shortcut in [
+      'Aujourd’hui',
+      'Demain',
+      'Cette semaine',
+      'Plus tard',
+      'Choisir une date',
+    ]) {
+      expect(find.text(shortcut), findsOneWidget);
+    }
+    await tester.tap(find.text('Choisir une date'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CupertinoDatePicker), findsOneWidget);
+    await tester.tap(find.byKey(const Key('professional-when-date-apply')));
     await tester.pumpAndSettle();
     expect(
       find.descendant(
         of: find.byKey(const Key('professional-hero-when')),
-        matching: find.text('mardi 29 juillet'),
+        matching: find.textContaining(RegExp(r'\d{1,2}')),
       ),
       findsOneWidget,
     );
@@ -166,7 +191,7 @@ void main() {
     await tester.tap(find.byKey(const Key('professional-reset-filters')));
     await tester.pumpAndSettle();
     expect(find.text('Bordeaux Métropole'), findsNothing);
-    expect(find.text('mardi 29 juillet'), findsWidgets);
+    expect(find.textContaining('MARDI 29 JUILLET'), findsWidgets);
 
     final detailsDisclosure = find.text('Voir les détails').first;
     await tester.drag(
@@ -192,11 +217,11 @@ void main() {
 
     await tester.tap(find.text('Engagements'));
     await tester.pumpAndSettle();
-    expect(find.text('Mes engagements'), findsOneWidget);
+    expect(find.text('Professionnel'), findsNothing);
     expect(find.text('Aucun engagement à venir.'), findsOneWidget);
-    expect(find.text('Aujourd’hui'), findsOneWidget);
-    expect(find.text('À venir'), findsOneWidget);
-    expect(find.text('Passés'), findsOneWidget);
+    expect(find.text('AUJOURD’HUI'), findsOneWidget);
+    expect(find.text('À VENIR'), findsOneWidget);
+    expect(find.text('PASSÉS (0)'), findsOneWidget);
     expect(find.text('En cours'), findsNothing);
     expect(
       find.text('Vos engagements seront bientôt disponibles ici.'),
@@ -205,8 +230,11 @@ void main() {
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
-    expect(find.text('Mon profil'), findsOneWidget);
-    expect(find.text('Identité professionnelle'), findsOneWidget);
+    expect(
+      find.byKey(const Key('professional-profile-completion-actions')),
+      findsOneWidget,
+    );
+    expect(find.text('Identité et coordonnées'), findsOneWidget);
     expect(
       find.text('Votre profil professionnel sera bientôt disponible ici.'),
       findsNothing,
@@ -216,53 +244,98 @@ void main() {
       const Offset(0, -900),
     );
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('open-responsible-access')), findsOneWidget);
+    expect(find.byKey(const Key('open-responsible-access')), findsNothing);
   });
 
-  testWidgets('professional engagement card uses the shared V5Card/V5StatusPill', (
-    tester,
-  ) async {
-    const engagement = EngagementInfo(
-      missionId: 'engagement-card-mission',
-      volunteerId: 'mock-volunteer',
-      profession: VolunteerProfession.mk,
-      status: EngagementStatus.confirmed,
-    );
-    final repository = MockCoordinationRepository(
-      initialMissions: const [
-        CoordinationNeed(
-          id: 'engagement-card-mission',
-          locationId: 'site-a',
-          place: 'Site A',
-          group: TerritorialGroup.medoc,
-          date: 'Aujourd’hui',
-          time: '08:00 — 12:00',
-          requiredPhysiotherapists: 1,
-          registeredPhysiotherapists: 0,
-          requiredPodiatrists: 0,
-          registeredPodiatrists: 0,
-          equipment: [],
-          createdBy: 'mock-coordinator',
+  testWidgets(
+    'mobilization with an incomplete profile opens completion and keeps a mission return',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        FireCoordinationApp(
+          repository: MockCoordinationRepository(responsibleAccess: null),
         ),
-      ],
-      initialLocations: const [],
-      responsibleAccess: null,
-    );
-    repository.engagements['engagement-card-mission'] = engagement;
+      );
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
-    await tester.pumpAndSettle();
+      final action = find.text('Je me mobilise').first;
+      await tester.ensureVisible(action);
+      await tester.pumpAndSettle();
+      await tester.tap(action);
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Engagements'));
-    await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('professional-profile-editor-title')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('professional-profile-address-line-1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('return-to-engagement-mission')),
+        findsOneWidget,
+      );
 
-    expect(find.byType(V5Card), findsOneWidget);
-    final pill = tester.widget<V5StatusPill>(find.byType(V5StatusPill));
-    expect(pill.tone, V5StatusTone.success);
-    expect(pill.label, EngagementStatus.confirmed.label);
-    expect(find.text(EngagementStatus.confirmed.label), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      Navigator.of(
+        tester.element(
+          find.byKey(const Key('professional-profile-editor-title')),
+        ),
+      ).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('return-to-engagement-mission')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const PageStorageKey('slots')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'professional engagement card uses the shared V5Card/V5StatusPill',
+    (tester) async {
+      const engagement = EngagementInfo(
+        missionId: 'engagement-card-mission',
+        volunteerId: 'mock-volunteer',
+        profession: VolunteerProfession.mk,
+        status: EngagementStatus.confirmed,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: const [
+          CoordinationNeed(
+            id: 'engagement-card-mission',
+            locationId: 'site-a',
+            place: 'Site A',
+            group: TerritorialGroup.medoc,
+            date: 'Aujourd’hui',
+            time: '08:00 — 12:00',
+            requiredPhysiotherapists: 1,
+            registeredPhysiotherapists: 0,
+            requiredPodiatrists: 0,
+            registeredPodiatrists: 0,
+            equipment: [],
+            createdBy: 'mock-coordinator',
+          ),
+        ],
+        initialLocations: const [],
+        responsibleAccess: null,
+      );
+      repository.engagements['engagement-card-mission'] = engagement;
+
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Engagements'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(V5Card), findsOneWidget);
+      final pill = tester.widget<V5StatusPill>(find.byType(V5StatusPill));
+      expect(pill.tone, V5StatusTone.success);
+      expect(pill.label, EngagementStatus.confirmed.label);
+      expect(find.text(EngagementStatus.confirmed.label), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('professional mission empty state repeats its active period', (
     tester,
@@ -282,6 +355,127 @@ void main() {
     expect(
       find.text('Les nouvelles missions de cette période apparaîtront ici.'),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('professional date filters use the whole mission interval', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dayAfterSunday = today.add(
+      Duration(days: DateTime.sunday - today.weekday + 1),
+    );
+    final location = places.first;
+    final repository = MockCoordinationRepository(
+      initialMissions: [
+        CoordinationNeed(
+          id: 'mission-spanning-filter-periods',
+          locationId: location.id,
+          place: location.name,
+          group: location.group,
+          date: 'Période traversante',
+          time: '18:00–12:00',
+          requiredPhysiotherapists: 1,
+          registeredPhysiotherapists: 0,
+          requiredPodiatrists: 0,
+          registeredPodiatrists: 0,
+          equipment: const [],
+          startAt: today.subtract(const Duration(hours: 6)),
+          endAt: dayAfterSunday.add(const Duration(hours: 12)),
+        ),
+        CoordinationNeed(
+          id: 'mission-ended-before-today',
+          locationId: location.id,
+          place: location.name,
+          group: location.group,
+          date: 'Mission terminée',
+          time: '08:00–12:00',
+          requiredPhysiotherapists: 1,
+          registeredPhysiotherapists: 0,
+          requiredPodiatrists: 0,
+          registeredPodiatrists: 0,
+          equipment: const [],
+          startAt: today.subtract(const Duration(days: 2)),
+          endAt: today.subtract(const Duration(hours: 1)),
+        ),
+        CoordinationNeed(
+          id: 'mission-legacy-today-label',
+          locationId: location.id,
+          place: location.name,
+          group: location.group,
+          date: 'Aujourd’hui',
+          time: 'Sans horaire structuré',
+          requiredPhysiotherapists: 1,
+          registeredPhysiotherapists: 0,
+          requiredPodiatrists: 0,
+          registeredPodiatrists: 0,
+          equipment: const [],
+        ),
+      ],
+      initialLocations: [location],
+      responsibleAccess: null,
+    );
+
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    Future<void> selectWhen(String label) async {
+      await tester.tap(find.byKey(const Key('professional-hero-when')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+    }
+
+    for (final period in ['Aujourd’hui', 'Demain', 'Cette semaine', 'Plus tard']) {
+      await selectWhen(period);
+      expect(
+        find.byKey(const ValueKey('mission-spanning-filter-periods')),
+        findsOneWidget,
+        reason: 'The spanning mission must intersect $period',
+      );
+      expect(
+        find.byKey(const ValueKey('mission-ended-before-today')),
+        findsNothing,
+      );
+    }
+
+    await tester.tap(find.byKey(const Key('professional-hero-when')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choisir une date').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('professional-when-date-apply')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('mission-spanning-filter-periods')),
+      findsOneWidget,
+    );
+
+    await selectWhen('Aujourd’hui');
+    expect(
+      find.byKey(const ValueKey('mission-legacy-today-label')),
+      findsOneWidget,
+      reason: 'Unstructured legacy timing must keep its conservative label',
+    );
+    await selectWhen('Toutes les dates');
+  });
+
+  test('professional date filters build local civil-day boundaries', () {
+    final source = File('lib/screens/slots_screen.dart').readAsStringSync();
+    final matcherStart = source.indexOf('bool _matchesMissionWhen(');
+    final matcherEnd = source.indexOf('\nString _encodeMissionDate', matcherStart);
+    final matcherSource = source.substring(matcherStart, matcherEnd);
+
+    expect(matcherSource, contains('_localCivilDay('));
+    expect(
+      matcherSource,
+      isNot(contains('.add(const Duration(days:')),
+      reason: 'A local calendar boundary must not be derived by adding 24h.',
+    );
+    expect(
+      matcherSource,
+      isNot(contains('.add(Duration(days:')),
+      reason: 'Week boundaries must also be rebuilt from date components.',
     );
   });
 
@@ -833,7 +1027,7 @@ void main() {
     );
   });
 
-  testWidgets('debug settings switch the displayed shell instantly', (
+  testWidgets('compact RECETTE control switches the displayed shell instantly', (
     tester,
   ) async {
     await tester.pumpWidget(const FireCoordinationApp());
@@ -856,22 +1050,12 @@ void main() {
     expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
     expect(find.text('Voir les détails'), findsWidgets);
 
-    await tester.tap(find.text('Profil'));
+    await tester.tap(find.byKey(const Key('role-preview-banner')));
     await tester.pumpAndSettle();
-    await tester.drag(
-      find.byKey(const PageStorageKey('professional-profile')),
-      const Offset(0, -1800),
+    await tester.tap(
+      find.byKey(const Key('role-preview-banner-option-responsible')),
     );
     await tester.pumpAndSettle();
-    await tester.drag(
-      find.byKey(const PageStorageKey('professional-profile')),
-      const Offset(0, -600),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('open-development-settings')));
-    await tester.pumpAndSettle();
-    await selectPreview(tester, 'Responsable');
-    await closeSettings(tester);
 
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(ResponsibleShell), findsOneWidget);

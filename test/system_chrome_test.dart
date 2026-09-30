@@ -125,21 +125,31 @@ void main() {
     _expectOnlyLightApplicationChrome(tester);
   });
 
-  test('PWA paints navy before CSS and restores application chrome later', () {
+  test('PWA status bar and safe area use the light application chrome', () {
     final index = File('web/index.html').readAsStringSync();
     final manifest = File('web/manifest.json').readAsStringSync();
 
-    expect(index, contains('<meta name="theme-color" content="#10233E">'));
+    expect(index, contains('<meta name="theme-color" content="#F6F7F8">'));
+    expect(
+      index,
+      contains('<meta name="apple-mobile-web-app-capable" content="yes">'),
+    );
+    expect(
+      index,
+      contains(
+        '<meta name="apple-mobile-web-app-status-bar-style" content="default">',
+      ),
+    );
     expect(
       index,
       contains(
         '<html class="mobsante-splash-active" '
-        'style="background-color: #10233E;">',
+        'style="background-color: #F6F7F8;">',
       ),
     );
-    expect(index, contains('<body style="background-color: #10233E;">'));
+    expect(index, contains('<body style="background-color: #F6F7F8;">'));
     expect(index, contains('background: #F6F7F8;'));
-    expect(index, contains('html.mobsante-splash-active body'));
+    expect(index, isNot(contains('html.mobsante-splash-active body')));
     expect(index, contains('#startup-splash'));
     expect(index, contains('visibility: hidden'));
     expect(index, contains('mobsante-splash-composed'));
@@ -147,6 +157,12 @@ void main() {
     expect(index, contains('mobsante-native-splash-composed'));
     expect(index, contains('padding: var(--startup-splash-safe-block) 28px;'));
     expect(manifest, contains('"theme_color": "#F6F7F8"'));
+    expect(manifest, contains('"background_color": "#F6F7F8"'));
+    final systemTheme = File(
+      'lib/utils/system_theme_web.dart',
+    ).readAsStringSync();
+    expect(systemTheme, isNot(contains("'black-translucent'")));
+    expect(systemTheme, isNot(contains("'#0D1622'")));
   });
 
   test('iPhone safe areas cannot recenter the native splash', () {

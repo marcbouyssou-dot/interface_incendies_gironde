@@ -236,8 +236,10 @@ void main() {
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Email (facultatif)'), findsNothing);
     expect(find.text('Identifiant professionnel *'), findsOneWidget);
-    expect(find.text('Aucun identifiant'), findsOneWidget);
-    expect(find.text('Numéro RPPS *'), findsNothing);
+    expect(find.text('RPPS'), findsOneWidget);
+    expect(find.text('Aucun identifiant'), findsNothing);
+    expect(find.text('Numéro ordinal'), findsNothing);
+    expect(find.text('Numéro RPPS *'), findsOneWidget);
     expect(find.byKey(const Key('cpts-choice')), findsOneWidget);
     expect(find.text('Aucune'), findsOneWidget);
     expect(find.text('Identifiant CPTS'), findsNothing);

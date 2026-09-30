@@ -9,6 +9,9 @@ enum EngagementProfileGap {
   phone,
   email,
   professionalIdentifier,
+  professionalAddress,
+  professionalPostalCode,
+  professionalCity,
   cptsLabel,
   equipmentDetails,
 }
@@ -22,7 +25,13 @@ extension EngagementProfileGapLabel on EngagementProfileGap {
     EngagementProfileGap.professionalIdentifier =>
       profession == VolunteerProfession.veterinarian
           ? 'Numéro ordinal'
-          : 'Identifiant professionnel (RPPS ou numéro ordinal)',
+          : professionAllowsNoIdentifier(profession)
+          ? 'Identifiant professionnel'
+          : 'Numéro RPPS',
+    EngagementProfileGap.professionalAddress => 'Adresse professionnelle',
+    EngagementProfileGap.professionalPostalCode =>
+      'Code postal professionnel',
+    EngagementProfileGap.professionalCity => 'Ville professionnelle',
     EngagementProfileGap.cptsLabel => 'Nom de la CPTS (160 caractères maximum)',
     EngagementProfileGap.equipmentDetails => 'Précision sur le matériel',
   };
@@ -90,6 +99,9 @@ abstract final class ProfessionalProfileValidation {
     required VolunteerProfession profession,
     required ProfessionalIdType professionalIdType,
     required String? professionalIdValue,
+    required String? professionalAddressLine1,
+    required String? professionalPostalCode,
+    required String? professionalCity,
     String? cptsId,
     String? cptsLabel,
     List<String> equipment = const [],
@@ -107,6 +119,11 @@ abstract final class ProfessionalProfileValidation {
         professionalIdValue,
       ))
         EngagementProfileGap.professionalIdentifier,
+      if (blank(professionalAddressLine1))
+        EngagementProfileGap.professionalAddress,
+      if (blank(professionalPostalCode))
+        EngagementProfileGap.professionalPostalCode,
+      if (blank(professionalCity)) EngagementProfileGap.professionalCity,
       if ((_trimmedOrNull(cptsId)?.length ?? 0) > 160 ||
           (_trimmedOrNull(cptsLabel)?.length ?? 0) > 160)
         EngagementProfileGap.cptsLabel,
@@ -126,6 +143,9 @@ abstract final class ProfessionalProfileValidation {
     profession: profile.profession,
     professionalIdType: profile.effectiveProfessionalIdType,
     professionalIdValue: profile.effectiveProfessionalIdValue,
+    professionalAddressLine1: profile.professionalAddressLine1,
+    professionalPostalCode: profile.professionalPostalCode,
+    professionalCity: profile.professionalCity,
     cptsId: profile.cptsId,
     cptsLabel: profile.cptsLabel,
     equipment: profile.equipment,

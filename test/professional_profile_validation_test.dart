@@ -56,6 +56,9 @@ void main() {
           profession: VolunteerProfession.mk,
           professionalIdType: ProfessionalIdType.rpps,
           professionalIdValue: '123',
+          professionalAddressLine1: '10 rue de la Santé',
+          professionalPostalCode: '33000',
+          professionalCity: 'Bordeaux',
         );
 
         expect(ProfessionalProfileValidation.isComplete(profile), isFalse);
@@ -64,6 +67,68 @@ void main() {
   });
 
   group('professional identifier eligibility (profession-aware)', () {
+    test('identifier compatibility follows the profession registry', () {
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.mk,
+          ProfessionalIdType.ordinal,
+          'ORD-123',
+        ),
+        isFalse,
+        reason: 'A historical ordinal must not complete an MK profile',
+      );
+      for (final profession in [
+        VolunteerProfession.mk,
+        VolunteerProfession.doctor,
+        VolunteerProfession.nurse,
+        VolunteerProfession.pp,
+      ]) {
+        expect(requiredProfessionalIdType(profession), ProfessionalIdType.rpps);
+        expect(
+          hasCompleteProfessionalIdentifier(
+            profession,
+            ProfessionalIdType.rpps,
+            '10123456789',
+          ),
+          isTrue,
+        );
+        expect(
+          hasCompleteProfessionalIdentifier(
+            profession,
+            ProfessionalIdType.ordinal,
+            'ORD-123',
+          ),
+          isFalse,
+        );
+      }
+      expect(
+        requiredProfessionalIdType(VolunteerProfession.veterinarian),
+        ProfessionalIdType.ordinal,
+      );
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.veterinarian,
+          ProfessionalIdType.ordinal,
+          'VET-33001',
+        ),
+        isTrue,
+      );
+      expect(
+        hasCompleteProfessionalIdentifier(
+          VolunteerProfession.otherHealthProfessional,
+          ProfessionalIdType.none,
+          '',
+        ),
+        isTrue,
+      );
+      expect(
+        requiredProfessionalIdType(
+          VolunteerProfession.otherHealthProfessional,
+        ),
+        isNull,
+      );
+    });
+
     test(
       'otherHealthProfessional may hold no identifier at all',
       () {
@@ -175,6 +240,9 @@ void main() {
           profession: VolunteerProfession.otherHealthProfessional,
           professionalIdType: ProfessionalIdType.none,
           professionalIdValue: '',
+          professionalAddressLine1: '10 rue de la Santé',
+          professionalPostalCode: '33000',
+          professionalCity: 'Bordeaux',
         );
         expect(withoutIdentifier.hasValidProfessionalIdentifier, isTrue);
         expect(
@@ -191,6 +259,9 @@ void main() {
           profession: VolunteerProfession.mk,
           professionalIdType: ProfessionalIdType.none,
           professionalIdValue: '',
+          professionalAddressLine1: '10 rue de la Santé',
+          professionalPostalCode: '33000',
+          professionalCity: 'Bordeaux',
         );
         expect(sameProfileForMk.hasValidProfessionalIdentifier, isFalse);
       },
@@ -235,6 +306,87 @@ void main() {
         ], 'Kit métier'),
         isNull,
       );
+    });
+  });
+
+  group('canonical summary action gaps', () {
+    const validProfile = VolunteerProfile(
+      uid: 'professional',
+      firstName: 'Alice',
+      lastName: 'Martin',
+      phone: '0600000000',
+      email: 'alice@example.fr',
+      profession: VolunteerProfession.mk,
+      professionalIdType: ProfessionalIdType.rpps,
+      professionalIdValue: '10123456789',
+      professionalAddressLine1: '10 rue de la Santé',
+      professionalPostalCode: '33000',
+      professionalCity: 'Bordeaux',
+    );
+
+    test('reports malformed non-empty values and partial addresses', () {
+      final gaps = ProfessionalProfileValidation.engagementGapsForProfile(
+        validProfile.copyWith(
+          email: 'email-invalide',
+          professionalCity: '',
+          professionalIdType: ProfessionalIdType.ordinal,
+          professionalIdValue: 'ORD-123',
+        ),
+      );
+
+      expect(
+        gaps,
+        containsAll([
+          EngagementProfileGap.email,
+          EngagementProfileGap.professionalIdentifier,
+          EngagementProfileGap.professionalCity,
+        ]),
+      );
+    });
+
+    test('keeps empty optional fields neutral and a valid profile gap-free', () {
+      final profile = validProfile.copyWith(
+        cptsId: null,
+        cptsLabel: null,
+        equipment: const [],
+        otherEquipmentDetails: null,
+      );
+
+      expect(
+        ProfessionalProfileValidation.engagementGapsForProfile(profile),
+        isEmpty,
+      );
+    });
+
+    test('an absent-profile shape excludes optional CPTS and equipment', () {
+      final gaps = ProfessionalProfileValidation.engagementGaps(
+        firstName: null,
+        lastName: null,
+        phone: null,
+        email: null,
+        profession: VolunteerProfession.mk,
+        professionalIdType: ProfessionalIdType.rpps,
+        professionalIdValue: null,
+        professionalAddressLine1: null,
+        professionalPostalCode: null,
+        professionalCity: null,
+      );
+
+      expect(
+        gaps,
+        containsAll([
+          EngagementProfileGap.firstName,
+          EngagementProfileGap.lastName,
+          EngagementProfileGap.phone,
+          EngagementProfileGap.email,
+          EngagementProfileGap.professionalIdentifier,
+          EngagementProfileGap.professionalAddress,
+          EngagementProfileGap.professionalPostalCode,
+          EngagementProfileGap.professionalCity,
+        ]),
+      );
+      expect(gaps, isNot(contains(EngagementProfileGap.cptsLabel)));
+      expect(gaps, isNot(contains(EngagementProfileGap.equipmentDetails)));
     });
   });
 

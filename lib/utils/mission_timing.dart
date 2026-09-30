@@ -7,12 +7,18 @@ MissionTemporalState missionTemporalState(
   DateTime? now,
 }) {
   final reference = now ?? DateTime.now();
+  final todayStart = DateTime(reference.year, reference.month, reference.day);
+  final tomorrowStart = DateTime(
+    reference.year,
+    reference.month,
+    reference.day + 1,
+  );
   final endAt = mission.endAt;
-  if (endAt != null && !reference.isBefore(endAt)) {
+  if (endAt != null && !endAt.isAfter(todayStart)) {
     return MissionTemporalState.past;
   }
   final startAt = mission.startAt;
-  if (startAt != null && reference.isBefore(startAt)) {
+  if (startAt != null && !startAt.isBefore(tomorrowStart)) {
     return MissionTemporalState.upcoming;
   }
   if (startAt != null || endAt != null) {

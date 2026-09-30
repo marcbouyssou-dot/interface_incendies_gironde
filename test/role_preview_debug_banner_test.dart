@@ -21,39 +21,82 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> selectViaBanner(WidgetTester tester, RolePreviewMode mode) async {
+  Future<void> selectViaBanner(
+    WidgetTester tester,
+    RolePreviewMode mode,
+  ) async {
     await tester.tap(find.byKey(const Key('role-preview-banner')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(Key('role-preview-banner-option-${mode.name}')));
+    await tester.tap(
+      find.byKey(Key('role-preview-banner-option-${mode.name}')),
+    );
     await tester.pumpAndSettle();
   }
 
   testWidgets(
-    'role preview banner switches shells in 1-2 taps and returns to automatic',
+    'compact RECETTE tab switches among the three review journeys',
     (tester) async {
       final repository = MockCoordinationRepository(responsibleAccess: null);
       await pumpApp(tester, repository);
 
       // 1) starts on the real automatic journey (no access => Professional).
       expect(find.byType(ProfessionalShell), findsOneWidget);
-      expect(find.text('MODE RECETTE · Parcours : Professionnel'), findsOneWidget);
+      expect(
+        find.text('RECETTE'),
+        findsOneWidget,
+      );
+      final semantics = tester.getSemantics(
+        find.byKey(const Key('role-preview-banner')),
+      );
+      expect(semantics.label, 'Changer le parcours de prévisualisation');
+      expect(semantics.value, 'Parcours actuel : Professionnel');
+      expect(semantics.flagsCollection.isButton, isTrue);
+
+      await tester.tap(find.byKey(const Key('role-preview-banner')));
+      await tester.pumpAndSettle();
+      for (final mode in const [
+        RolePreviewMode.professional,
+        RolePreviewMode.responsible,
+        RolePreviewMode.coordinator,
+      ]) {
+        expect(
+          find.byKey(Key('role-preview-banner-option-${mode.name}')),
+          findsOneWidget,
+        );
+      }
+      expect(
+        find.byKey(const Key('role-preview-banner-option-automatic')),
+        findsNothing,
+      );
+      expect(find.text('Administrateur de plateforme'), findsNothing);
+      Navigator.of(tester.element(find.text('Coordinateur'))).pop();
+      await tester.pumpAndSettle();
 
       // 2) one tap on the banner + one tap on an option = shell switches.
       await selectViaBanner(tester, RolePreviewMode.coordinator);
       expect(find.byType(CoordinatorShell), findsOneWidget);
       expect(find.byType(ProfessionalShell), findsNothing);
-      expect(find.text('MODE RECETTE · Parcours : Coordinateur'), findsOneWidget);
+      expect(
+        find.text('RECETTE'),
+        findsOneWidget,
+      );
 
       await selectViaBanner(tester, RolePreviewMode.responsible);
       expect(find.byType(ResponsibleShell), findsOneWidget);
       expect(find.byType(CoordinatorShell), findsNothing);
-      expect(find.text('MODE RECETTE · Parcours : Responsable'), findsOneWidget);
+      expect(
+        find.text('RECETTE'),
+        findsOneWidget,
+      );
 
-      // 3) back to Automatique restores the real (unmodified) journey.
-      await selectViaBanner(tester, RolePreviewMode.automatic);
+      // 3) Professional is the explicit return path in the compact picker.
+      await selectViaBanner(tester, RolePreviewMode.professional);
       expect(find.byType(ProfessionalShell), findsOneWidget);
       expect(find.byType(ResponsibleShell), findsNothing);
-      expect(find.text('MODE RECETTE · Parcours : Professionnel'), findsOneWidget);
+      expect(
+        find.text('RECETTE'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -82,9 +125,9 @@ void main() {
       expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
       expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
 
-      // Proof the real access was never mutated: returning to Automatique
-      // resolves back to Responsible, not to whatever was last previewed.
-      await selectViaBanner(tester, RolePreviewMode.automatic);
+      // The explicit Responsable preview still resolves through the untouched
+      // real site-manager access and never grants coordinator capabilities.
+      await selectViaBanner(tester, RolePreviewMode.responsible);
       expect(find.byType(ResponsibleShell), findsOneWidget);
       expect(find.byType(CoordinatorShell), findsNothing);
       expect(tester.takeException(), isNull);

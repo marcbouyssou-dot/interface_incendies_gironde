@@ -10,6 +10,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/utils/french_date_time.dart';
+import 'package:interface_incendies_gironde/utils/mission_timing.dart';
 import 'package:interface_incendies_gironde/widgets/responsible_mission_card.dart';
 
 CoordinationNeed _need(DateTime start, DateTime end) => CoordinationNeed(
@@ -32,6 +33,86 @@ CoordinationNeed _need(DateTime start, DateTime end) => CoordinationNeed(
 );
 
 void main() {
+  group('missionTemporalState uses the local civil day', () {
+    final midday = DateTime(2026, 9, 28, 12);
+
+    test('today remains current after the slot has ended', () {
+      expect(
+        missionTemporalState(
+          _need(DateTime(2026, 9, 28, 8), DateTime(2026, 9, 28, 10)),
+          now: midday,
+        ),
+        MissionTemporalState.current,
+      );
+    });
+
+    test('yesterday is past', () {
+      expect(
+        missionTemporalState(
+          _need(DateTime(2026, 9, 27, 8), DateTime(2026, 9, 27, 18)),
+          now: midday,
+        ),
+        MissionTemporalState.past,
+      );
+    });
+
+    test('the day before yesterday is past', () {
+      expect(
+        missionTemporalState(
+          _need(DateTime(2026, 9, 26, 8), DateTime(2026, 9, 26, 18)),
+          now: midday,
+        ),
+        MissionTemporalState.past,
+      );
+    });
+
+    test('tomorrow is upcoming', () {
+      expect(
+        missionTemporalState(
+          _need(DateTime(2026, 9, 29, 8), DateTime(2026, 9, 29, 18)),
+          now: midday,
+        ),
+        MissionTemporalState.upcoming,
+      );
+    });
+
+    test('a multi-day slot including today is current', () {
+      expect(
+        missionTemporalState(
+          _need(DateTime(2026, 9, 27, 8), DateTime(2026, 9, 29, 18)),
+          now: midday,
+        ),
+        MissionTemporalState.current,
+      );
+    });
+
+    test('a completed multi-day slot is past', () {
+      expect(
+        missionTemporalState(
+          _need(DateTime(2026, 9, 25, 8), DateTime(2026, 9, 27, 18)),
+          now: midday,
+        ),
+        MissionTemporalState.past,
+      );
+    });
+
+    test('classification changes at the local day boundary', () {
+      final mission = _need(
+        DateTime(2026, 9, 29, 8),
+        DateTime(2026, 9, 29, 18),
+      );
+
+      expect(
+        missionTemporalState(mission, now: DateTime(2026, 9, 28, 23, 59)),
+        MissionTemporalState.upcoming,
+      );
+      expect(
+        missionTemporalState(mission, now: DateTime(2026, 9, 29, 0, 1)),
+        MissionTemporalState.current,
+      );
+    });
+  });
+
   group('FrenchDateTime.timeRange', () {
     test('same day keeps the compact clock range', () {
       expect(
@@ -145,6 +226,9 @@ void main() {
               profession: VolunteerProfession.otherHealthProfessional,
               professionalIdType: ProfessionalIdType.none,
               professionalIdValue: '',
+              professionalAddressLine1: '10 rue de la Santé',
+              professionalPostalCode: '33000',
+              professionalCity: 'Bordeaux',
             ),
           },
         );
@@ -174,8 +258,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Engagements'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Aujourd’hui').first);
-        await tester.pumpAndSettle();
+        expect(find.text('AUJOURD’HUI'), findsOneWidget);
         expect(find.textContaining(need.time), findsWidgets);
         expect(tester.takeException(), isNull);
       });

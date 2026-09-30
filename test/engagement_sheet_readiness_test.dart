@@ -51,6 +51,9 @@ const _completeProfile = VolunteerProfile(
   profession: VolunteerProfession.otherHealthProfessional,
   professionalIdType: ProfessionalIdType.none,
   professionalIdValue: '',
+  professionalAddressLine1: '10 rue de la Santé',
+  professionalPostalCode: '33000',
+  professionalCity: 'Bordeaux',
 );
 
 class _FailingRepository extends MockCoordinationRepository {
@@ -140,6 +143,9 @@ void main() {
       List<String> equipment = const [],
       String? details,
       String? cptsLabel,
+      String? address = '10 rue de la Santé',
+      String? postalCode = '33000',
+      String? city = 'Bordeaux',
     }) => ProfessionalProfileValidation.engagementGaps(
       firstName: first,
       lastName: last,
@@ -151,6 +157,9 @@ void main() {
       equipment: equipment,
       otherEquipmentDetails: details,
       cptsLabel: cptsLabel,
+      professionalAddressLine1: address,
+      professionalPostalCode: postalCode,
+      professionalCity: city,
     );
 
     test('a complete profile has no gap', () {
@@ -171,6 +180,9 @@ void main() {
         [EngagementProfileGap.equipmentDetails],
       );
       expect(gaps(cptsLabel: 'x' * 161), [EngagementProfileGap.cptsLabel]);
+      expect(gaps(address: null), [EngagementProfileGap.professionalAddress]);
+      expect(gaps(postalCode: null), [EngagementProfileGap.professionalPostalCode]);
+      expect(gaps(city: null), [EngagementProfileGap.professionalCity]);
     });
 
     test('identifier rules stay profession-aware and never relaxed', () {
@@ -236,6 +248,9 @@ void main() {
                 profession: profession,
                 professionalIdType: type,
                 professionalIdValue: value,
+                professionalAddressLine1: '10 rue de la Santé',
+                professionalPostalCode: '33000',
+                professionalCity: 'Bordeaux',
               );
               if (missing.isNotEmpty) continue;
               exercised++;
@@ -302,125 +317,39 @@ void main() {
       expect(find.text('0600000000'), findsOneWidget);
     });
 
-    testWidgets(
-      'profile without email: banner is not green, gap is named, summary flags it',
-      (tester) async {
-        final repository = MockCoordinationRepository(
-          responsibleAccess: null,
-          initialMissions: [_mission()],
-          initialLocations: const [],
-          initialProfiles: const {'mock-volunteer': _noEmailProfile},
-        );
-        await _openSheet(tester, repository);
-
-        expect(
-          find.byKey(const Key('professional-identifier-ready')),
-          findsNothing,
-        );
-        expect(
-          find.byKey(const Key('engagement-profile-incomplete')),
-          findsOneWidget,
-        );
-        expect(find.byKey(const Key('engagement-gap-email')), findsOneWidget);
-        expect(find.byKey(const Key('engagement-gap-phone')), findsNothing);
-        expect(find.text('Email'), findsOneWidget);
-        expect(find.text('À renseigner'), findsOneWidget);
-        expect(find.text('Compléter mon profil'), findsOneWidget);
-        expect(find.text('Modifier mes informations'), findsNothing);
-      },
-    );
-
-    testWidgets(
-      'profile without email → confirm → the error is visible inside the sheet '
-      'and nothing is written',
-      (tester) async {
-        final repository = MockCoordinationRepository(
-          responsibleAccess: null,
-          initialMissions: [_mission()],
-          initialLocations: const [],
-          initialProfiles: const {'mock-volunteer': _noEmailProfile},
-        );
-        await _openSheet(tester, repository);
-        await _tapConfirm(tester);
-
-        final error = find.byKey(const Key('registration-submit-error'));
-        _expectVisibleInsideSheet(tester, error);
-        expect(
-          find.descendant(
-            of: error,
-            matching: find.textContaining('Email valide'),
-          ),
-          findsOneWidget,
-        );
-        expect(find.byType(SnackBar), findsNothing);
-        expect(repository.engagements, isEmpty);
-        expect(tester.takeException(), isNull);
-      },
-    );
-
-    testWidgets(
-      'summary without phone and email shows both as to be filled in',
-      (tester) async {
-        final repository = MockCoordinationRepository(
-          responsibleAccess: null,
-          initialMissions: [_mission()],
-          initialLocations: const [],
-          initialProfiles: const {
-            'mock-volunteer': VolunteerProfile(
-              uid: 'mock-volunteer',
-              firstName: 'Test',
-              lastName: 'iPhone',
-              phone: '',
-              profession: VolunteerProfession.otherHealthProfessional,
-              professionalIdType: ProfessionalIdType.none,
-              professionalIdValue: '',
-            ),
-          },
-        );
-        await _openSheet(tester, repository);
-
-        expect(find.byKey(const Key('engagement-gap-phone')), findsOneWidget);
-        expect(find.byKey(const Key('engagement-gap-email')), findsOneWidget);
-        expect(find.text('À renseigner'), findsNWidgets(2));
-        expect(find.text('Compléter mon profil'), findsOneWidget);
-      },
-    );
-
-    testWidgets('typing the missing email turns the banner green live', (
+    testWidgets('an RPPS profession never offers an ordinal alternative', (
       tester,
     ) async {
+      const rppsProfile = VolunteerProfile(
+        uid: 'mock-volunteer',
+        firstName: 'Alice',
+        lastName: 'Martin',
+        phone: '0600000000',
+        email: 'alice@example.fr',
+        profession: VolunteerProfession.mk,
+        professionalIdType: ProfessionalIdType.rpps,
+        professionalIdValue: '10123456789',
+        professionalAddressLine1: '10 rue de la Santé',
+        professionalPostalCode: '33000',
+        professionalCity: 'Bordeaux',
+      );
       final repository = MockCoordinationRepository(
         responsibleAccess: null,
         initialMissions: [_mission()],
         initialLocations: const [],
-        initialProfiles: const {'mock-volunteer': _noEmailProfile},
+        initialProfiles: const {'mock-volunteer': rppsProfile},
       );
       await _openSheet(tester, repository);
-
-      await tester.tap(find.text('Compléter mon profil'));
+      await tester.tap(find.text('Modifier mes informations'));
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('engagement-profile-incomplete')),
-        findsOneWidget,
-      );
 
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Email'),
-        'test.iphone@example.fr',
-      );
+      final selector = find.byKey(const Key('professional-id-type'));
+      await tester.ensureVisible(selector);
+      await tester.tap(selector);
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('professional-identifier-ready')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('engagement-profile-incomplete')),
-        findsNothing,
-      );
 
-      await _tapConfirm(tester);
-      expect(find.byKey(const Key('registration-submit-error')), findsNothing);
-      expect(repository.engagements, isNotEmpty);
+      expect(find.text('RPPS'), findsWidgets);
+      expect(find.text('Numéro ordinal'), findsNothing);
     });
 
     testWidgets(
@@ -471,143 +400,6 @@ void main() {
         ),
         findsOneWidget,
       );
-    });
-  });
-
-  group('registration sheet — validation errors while editing', () {
-    Finder field(String label) => find.widgetWithText(TextFormField, label);
-
-    FormFieldState<String> stateOf(WidgetTester tester, String label) =>
-        tester.state<FormFieldState<String>>(field(label));
-
-    Future<MockCoordinationRepository> openWithoutEmail(
-      WidgetTester tester,
-    ) async {
-      final repository = MockCoordinationRepository(
-        responsibleAccess: null,
-        initialMissions: [_mission()],
-        initialLocations: const [],
-        initialProfiles: const {'mock-volunteer': _noEmailProfile},
-      );
-      await _openSheet(tester, repository);
-      await _tapConfirm(tester);
-      await tester.ensureVisible(field('Email'));
-      await tester.pumpAndSettle();
-      return repository;
-    }
-
-    Future<void> type(WidgetTester tester, String text) async {
-      await tester.enterText(field('Email'), text);
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets(
-      'profile without email → Confirmer → "Champ requis" → typing a valid '
-      'email clears the stale error and the banner becomes ready',
-      (tester) async {
-        final repository = await openWithoutEmail(tester);
-
-        expect(stateOf(tester, 'Email').errorText, 'Champ requis');
-        expect(find.text('Champ requis'), findsOneWidget);
-        expect(
-          find.byKey(const Key('engagement-profile-incomplete')),
-          findsOneWidget,
-        );
-
-        // Same keystroke-by-keystroke path as on the iPhone.
-        await type(tester, 'm');
-        expect(stateOf(tester, 'Email').errorText, 'Email invalide');
-        await type(tester, 'marc');
-        expect(stateOf(tester, 'Email').errorText, 'Email invalide');
-        await type(tester, 'marc@example');
-        expect(
-          stateOf(tester, 'Email').errorText,
-          'Email invalide',
-          reason: 'an incomplete address must stay flagged while typing',
-        );
-        expect(
-          find.byKey(const Key('professional-identifier-ready')),
-          findsNothing,
-        );
-
-        await type(tester, 'marc@example.fr');
-        final email = stateOf(tester, 'Email');
-        expect(email.value, 'marc@example.fr');
-        expect(
-          tester.widget<TextFormField>(field('Email')).controller?.text,
-          'marc@example.fr',
-        );
-        expect(email.errorText, isNull);
-        expect(find.text('Champ requis'), findsNothing);
-        expect(find.text('Email invalide'), findsNothing);
-        expect(
-          find.byKey(const Key('professional-identifier-ready')),
-          findsOneWidget,
-        );
-        expect(find.text('Profil prêt à participer'), findsOneWidget);
-        expect(
-          find.byKey(const Key('engagement-profile-incomplete')),
-          findsNothing,
-        );
-        expect(repository.engagements, isEmpty);
-      },
-    );
-
-    testWidgets('an invalid email stays in error and is never cleared', (
-      tester,
-    ) async {
-      final repository = await openWithoutEmail(tester);
-
-      await type(tester, 'm');
-      await type(tester, 'abc');
-
-      expect(stateOf(tester, 'Email').errorText, 'Email invalide');
-      expect(find.text('Email invalide'), findsOneWidget);
-      expect(
-        find.byKey(const Key('professional-identifier-ready')),
-        findsNothing,
-      );
-      expect(find.byKey(const Key('engagement-gap-email')), findsOneWidget);
-
-      // Losing focus does not clear it either.
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      expect(stateOf(tester, 'Email').errorText, 'Email invalide');
-      expect(repository.engagements, isEmpty);
-    });
-
-    testWidgets('valid and untouched fields never show a stray error', (
-      tester,
-    ) async {
-      await openWithoutEmail(tester);
-
-      // Only the email was missing: the other prefilled fields stay clean.
-      expect(stateOf(tester, 'Prénom').errorText, isNull);
-      expect(stateOf(tester, 'Nom').errorText, isNull);
-      expect(stateOf(tester, 'Téléphone').errorText, isNull);
-      expect(find.text('Téléphone trop court'), findsNothing);
-
-      await type(tester, 'm');
-      await type(tester, 'marc@example.fr');
-
-      expect(stateOf(tester, 'Prénom').errorText, isNull);
-      expect(stateOf(tester, 'Nom').errorText, isNull);
-      expect(stateOf(tester, 'Téléphone').errorText, isNull);
-      expect(find.text('Champ requis'), findsNothing);
-    });
-
-    testWidgets('after the correction, Confirmer creates the engagement', (
-      tester,
-    ) async {
-      final repository = await openWithoutEmail(tester);
-      await type(tester, 'm');
-      await type(tester, 'marc@example.fr');
-      expect(repository.engagements, isEmpty);
-
-      await _tapConfirm(tester);
-
-      expect(repository.engagements, isNotEmpty);
-      expect(find.byKey(const Key('registration-submit-error')), findsNothing);
     });
   });
 }

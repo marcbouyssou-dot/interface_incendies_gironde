@@ -31,18 +31,29 @@ class MobSanteJourneyHeader extends StatelessWidget {
     required this.journey,
     this.pageTitle,
     this.pageTitleKey = const Key('role-page-title'),
+    this.journeyTitle,
+    this.journeyTitleSuffix,
+    this.sloganText,
   });
 
   static const slogan = 'Le bon professionnel, au bon endroit, au bon moment.';
+  static const professionalSlogan =
+      'Le bon professionnel · au bon endroit · au bon moment';
 
   final MobSanteJourney journey;
   final String? pageTitle;
   final Key pageTitleKey;
+  final String? journeyTitle;
+  final String? journeyTitleSuffix;
+  final String? sloganText;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final visiblePageTitle = pageTitle?.trim();
+    final visibleJourneyTitle = journeyTitle?.trim() ?? journey.title;
+    final visibleJourneyTitleSuffix = journeyTitleSuffix?.trim();
+    final visibleSlogan = sloganText?.trim() ?? slogan;
     return Semantics(
       container: true,
       child: Column(
@@ -53,12 +64,12 @@ class MobSanteJourneyHeader extends StatelessWidget {
             key: const Key('mobsante-product-identity'),
             label:
                 '${AppIdentity.productName}. '
-                '${slogan.replaceAll('\n', ' ')}',
+                '${visibleSlogan.replaceAll('\n', ' ')}',
             child: ExcludeSemantics(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const BrandMark(size: 36),
+                  const BrandMark(size: 48),
                   const SizedBox(width: V5Spacing.sm),
                   Expanded(
                     child: Column(
@@ -67,11 +78,13 @@ class MobSanteJourneyHeader extends StatelessWidget {
                         Text(
                           AppIdentity.productName,
                           key: const Key('mobsante-product-name'),
-                          style: Theme.of(context).textTheme.titleMedium
+                          style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(
                                 color: colors.textPrimary,
+                                fontSize: 26,
+                                height: 1.05,
                                 fontWeight: FontWeight.w800,
-                                letterSpacing: -0.2,
+                                letterSpacing: -0.45,
                               ),
                         ),
                         const SizedBox(height: 1),
@@ -80,7 +93,7 @@ class MobSanteJourneyHeader extends StatelessWidget {
                             final allowScalingToWrap =
                                 MediaQuery.textScalerOf(context).scale(1) > 1;
                             final sloganText = Text(
-                              slogan,
+                              visibleSlogan,
                               key: const Key('mobsante-product-slogan'),
                               maxLines: allowScalingToWrap ? null : 1,
                               style: Theme.of(context).textTheme.bodySmall
@@ -108,16 +121,44 @@ class MobSanteJourneyHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: V5Spacing.md),
+          const SizedBox(height: V5Spacing.sm),
           Semantics(
+            key: Key('mobsante-journey-title-${journey.name}'),
             header: true,
-            child: Text(
-              journey.title,
-              key: Key('mobsante-journey-title-${journey.name}'),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: colors.textPrimary,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.35,
+            label: [
+              visibleJourneyTitle,
+              if (visibleJourneyTitleSuffix?.isNotEmpty == true)
+                visibleJourneyTitleSuffix!,
+            ].join(' '),
+            excludeSemantics: true,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    visibleJourneyTitle,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.35,
+                    ),
+                  ),
+                  if (visibleJourneyTitleSuffix?.isNotEmpty == true) ...[
+                    const SizedBox(width: 5),
+                    Text(
+                      visibleJourneyTitleSuffix!,
+                      maxLines: 1,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.35,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -130,7 +171,7 @@ class MobSanteJourneyHeader extends StatelessWidget {
             ).textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
           ),
           if (visiblePageTitle?.isNotEmpty == true) ...[
-            const SizedBox(height: V5Spacing.md),
+            const SizedBox(height: V5Spacing.sm),
             _AnimatedHeaderTitle(
               title: visiblePageTitle!,
               titleKey: pageTitleKey,
@@ -163,10 +204,124 @@ class ProfessionalPageHeader extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) => MobSantePageHeader(
-    title: title,
-    titleKey: const Key('professional-page-title'),
+  Widget build(BuildContext context) => MobSanteJourneyHeader(
+    journey: MobSanteJourney.professional,
+    journeyTitleSuffix: 'de santé',
+    sloganText: MobSanteJourneyHeader.professionalSlogan,
+    pageTitle: title,
+    pageTitleKey: const Key('professional-page-title'),
   );
+}
+
+/// Compact product identity used on professional secondary tabs.
+/// It intentionally omits the journey title and page subtitle.
+class ProfessionalIdentityHeader extends StatelessWidget {
+  const ProfessionalIdentityHeader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Semantics(
+      key: const Key('mobsante-product-identity'),
+      container: true,
+      label:
+          '${AppIdentity.productName}. '
+          '${MobSanteJourneyHeader.professionalSlogan}',
+      child: ExcludeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const BrandMark(size: 48),
+            const SizedBox(width: V5Spacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppIdentity.productName,
+                    key: const Key('mobsante-product-name'),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colors.textPrimary,
+                      fontSize: 26,
+                      height: 1.05,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.45,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      MobSanteJourneyHeader.professionalSlogan,
+                      key: const Key('mobsante-product-slogan'),
+                      maxLines: 1,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                        fontSize: 11,
+                        height: 1.22,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ProfessionalProfileEditorHeader extends StatelessWidget {
+  const ProfessionalProfileEditorHeader({
+    super.key,
+    this.title = 'Compléter mon profil',
+    this.subtitle =
+        'Complétez vos informations pour pouvoir vous engager sur une mission.',
+  });
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.v5Colors;
+    return Semantics(
+      container: true,
+      label: 'Mon profil MobSanté. $title. $subtitle',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const BrandMark(size: 38),
+                const SizedBox(width: V5Spacing.sm),
+                Expanded(
+                  child: Text(
+                    title,
+                    key: const Key('professional-profile-editor-title'),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: V5Spacing.xs),
+            Text(
+              subtitle,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AnimatedHeaderTitle extends StatelessWidget {

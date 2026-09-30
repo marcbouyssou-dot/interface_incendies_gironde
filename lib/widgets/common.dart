@@ -22,6 +22,7 @@ import 'mission_location_details.dart';
 import 'native_interactions.dart';
 import 'operation_context_badge.dart';
 import 'mobilization_design_system.dart';
+import 'professional_rpps_verification.dart';
 import 'v5_controls.dart';
 import 'v5_form_system.dart';
 
@@ -755,6 +756,7 @@ class NeedCard extends StatelessWidget {
     this.isMissionEditorOpening = false,
     this.isMissionEditorBlocked = false,
     this.preferredProfession,
+    this.onCompleteProfile,
   });
   final CoordinationNeed need;
   final ResponsePlace? location;
@@ -768,6 +770,7 @@ class NeedCard extends StatelessWidget {
   final bool isMissionEditorOpening;
   final bool isMissionEditorBlocked;
   final VolunteerProfession? preferredProfession;
+  final VoidCallback? onCompleteProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -1047,7 +1050,10 @@ class NeedCard extends StatelessWidget {
             NeedStatus.complete => MissionCardState.complete,
           };
 
-    return MissionCard(
+    final missionDate = need.startAt == null
+        ? need.date
+        : FrenchDateTime.relativeDate(need.startAt!);
+    final card = MissionCard(
       state: missionCardState,
       professionalPalette: professionalJourney,
       contextHeader: MissionOperationContextBadge(
@@ -1056,10 +1062,10 @@ class NeedCard extends StatelessWidget {
       locationType: location?.type.label ?? 'Lieu d’intervention',
       locationTypeKey: const Key('mission-location-type'),
       locationName: need.place,
-      dateLabel: need.startAt == null
-          ? need.date
-          : FrenchDateTime.relativeDate(need.startAt!),
-      timeLabel: need.time,
+      dateLabel: professionalJourney ? 'DATE · HORAIRE' : missionDate,
+      timeLabel: professionalJourney
+          ? '${missionDate.toUpperCase()}\n${need.time}'
+          : need.time,
       timingBadge: MissionTimingPill(
         mission: need,
         professionalPalette: professionalJourney,
@@ -1092,6 +1098,7 @@ class NeedCard extends StatelessWidget {
         professionalHome: true,
         professionalJourney: professionalJourney,
         showActionIcon: !professionalJourney,
+        onCompleteProfile: onCompleteProfile,
       ),
       secondaryDetailsExpanded: professionalDetailsExpanded,
       secondaryDetailsToggleKey: Key('mission-details-${need.id}'),
@@ -1212,6 +1219,27 @@ class NeedCard extends StatelessWidget {
               ),
             ),
     );
+    if (!professionalJourney || missionCardState != MissionCardState.urgent) {
+      return card;
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(V5Radius.card),
+      child: Stack(
+        children: [
+          card,
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              key: Key('mission-urgent-accent-${need.id}'),
+              width: 4,
+              color: colors.danger,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _animatedCard(BuildContext context, Widget content) {
@@ -1261,6 +1289,7 @@ class _NeedActions extends StatefulWidget {
     this.professionalHome = false,
     this.professionalJourney = false,
     this.showActionIcon = true,
+    this.onCompleteProfile,
   });
 
   final CoordinationNeed need;
@@ -1268,6 +1297,7 @@ class _NeedActions extends StatefulWidget {
   final bool professionalHome;
   final bool professionalJourney;
   final bool showActionIcon;
+  final VoidCallback? onCompleteProfile;
 
   @override
   State<_NeedActions> createState() => _NeedActionsState();
@@ -1278,6 +1308,24 @@ class _NeedActionsState extends State<_NeedActions> {
   Stream<EngagementInfo?>? _engagement;
 
   CoordinationNeed get need => widget.need;
+
+  Future<void> _startEngagement() async {
+    if (widget.onCompleteProfile != null) {
+      final profile = await RepositoryScope.of(context).getVolunteerProfile();
+      if (!mounted) return;
+      if (!ProfessionalProfileValidation.isComplete(profile)) {
+        widget.onCompleteProfile!();
+        return;
+      }
+    }
+    if (!mounted) return;
+    await showNativeBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _RegistrationSheet(need: need, location: widget.location),
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -1398,15 +1446,7 @@ class _NeedActionsState extends State<_NeedActions> {
                 onPressed:
                     engagement.status == EngagementStatus.cancelled ||
                         engagement.status == EngagementStatus.pending
-                    ? () => showNativeBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        showDragHandle: true,
-                        builder: (_) => _RegistrationSheet(
-                          need: need,
-                          location: widget.location,
-                        ),
-                      )
+                    ? _startEngagement
                     : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: widget.professionalJourney
@@ -1484,13 +1524,7 @@ class _NeedActionsState extends State<_NeedActions> {
         return _actionButton(
           onPressed: need.status == NeedStatus.complete
               ? null
-              : () => showNativeBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  showDragHandle: true,
-                  builder: (_) =>
-                      _RegistrationSheet(need: need, location: widget.location),
-                ),
+              : _startEngagement,
           style: FilledButton.styleFrom(
             backgroundColor: widget.professionalJourney
                 ? colors.info
@@ -1896,9 +1930,12 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   bool get _isVeterinarian => _profession == VolunteerProfession.veterinarian;
 
-  List<ProfessionalIdType> get _professionalIdTypeOptions => _isVeterinarian
-      ? const [ProfessionalIdType.ordinal]
-      : ProfessionalIdType.values;
+  List<ProfessionalIdType> get _professionalIdTypeOptions {
+    final requiredType = requiredProfessionalIdType(_profession);
+    return requiredType == null
+        ? ProfessionalIdType.values
+        : [requiredType];
+  }
 
   List<ProfessionalEquipmentDefinition> get _equipmentOptions =>
       ProfessionalEquipmentRegistry.forProfession(_profession.canonicalId!);
@@ -1924,6 +1961,9 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
         profession: _profession,
         professionalIdType: _professionalIdType,
         professionalIdValue: _professionalIdController.text,
+        professionalAddressLine1: _profile?.professionalAddressLine1,
+        professionalPostalCode: _profile?.professionalPostalCode,
+        professionalCity: _profile?.professionalCity,
         cptsId: _legacyCptsId,
         cptsLabel: _hasCpts ? _cptsController.text : null,
         equipment: ProfessionalEquipmentRegistry.normalizeStoredValues(
@@ -1966,10 +2006,11 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
   }
 
   void _applyProfessionalIdentifierTypeForProfession() {
-    if (!_isVeterinarian || _professionalIdType == ProfessionalIdType.ordinal) {
+    final requiredType = requiredProfessionalIdType(_profession);
+    if (requiredType == null || _professionalIdType == requiredType) {
       return;
     }
-    _professionalIdType = ProfessionalIdType.ordinal;
+    _professionalIdType = requiredType;
     _professionalIdController.clear();
   }
 
@@ -2409,7 +2450,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                   if (_isVeterinarian) {
                                     return 'Le numéro ordinal est obligatoire.';
                                   }
-                                  return 'Choisissez un identifiant RPPS ou ordinal.';
+                                  return 'Choisissez l’identifiant demandé.';
                                 },
                                 onChanged: (type) {
                                   if (type == null) return;

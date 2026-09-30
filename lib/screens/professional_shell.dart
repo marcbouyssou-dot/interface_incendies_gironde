@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
-import '../repositories/live_data_scope.dart';
+import '../models/need.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/v5_bottom_navigation.dart';
 import '../widgets/native_interactions.dart';
-import 'create_need_screen.dart';
-import 'development_settings_screen.dart';
 import 'professional_engagements_screen.dart';
 import 'professional_profile_screen.dart';
 import 'notification_center_screen.dart';
@@ -41,11 +39,12 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   }
 
   Widget _createScreen(int index) => switch (index) {
-    0 => const SlotsScreen(professionalJourney: true),
+    0 => SlotsScreen(
+      professionalJourney: true,
+      onCompleteProfileForMission: _completeProfileForMission,
+    ),
     1 => const ProfessionalEngagementsScreen(),
     2 => ProfessionalProfileScreen(
-      onOpenResponsibleAccess: _openResponsibleAccess,
-      onOpenSettings: _openSettings,
       onOpenNotifications: _openNotifications,
       onSignOut: _signOut,
       verificationService: widget.verificationService,
@@ -60,34 +59,19 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     });
   }
 
-  void _openResponsibleAccess() {
-    final repository = RepositoryScope.of(context);
-    Navigator.of(context).push(
-      AppPageRoute<void>(
-        builder: (_) => Scaffold(
-          body: SafeArea(
-            child: ResponsibleLogin(
-              repository: repository,
-              onSignedIn: () {
-                if (mounted) Navigator.of(context).pop();
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openSettings() {
-    final liveData = LiveCoordinationDataScope.of(context);
-    Navigator.of(context).push(
-      AppPageRoute<void>(
-        builder: (_) => LiveCoordinationDataScope(
-          data: liveData,
-          child: const DevelopmentSettingsScreen(),
-        ),
-      ),
-    );
+  void _completeProfileForMission(CoordinationNeed mission) {
+    setState(() {
+      _screens[2] = ProfessionalProfileScreen(
+        key: ValueKey('profile-completion-${mission.id}'),
+        initiallyOpenEditor: true,
+        returnToMissionLabel: mission.place,
+        onReturnToMission: () => _selectTab(0),
+        onOpenNotifications: _openNotifications,
+        onSignOut: _signOut,
+        verificationService: widget.verificationService,
+      );
+      _currentIndex = 2;
+    });
   }
 
   void _openNotifications() {
