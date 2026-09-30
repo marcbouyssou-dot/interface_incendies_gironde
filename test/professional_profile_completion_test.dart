@@ -10,10 +10,51 @@ import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
+import 'package:interface_incendies_gironde/screens/professional_profile_screen.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 
 void main() {
+  test('professional identifier label follows the required profession', () {
+    for (final profession in [
+      VolunteerProfession.mk,
+      VolunteerProfession.pp,
+      VolunteerProfession.doctor,
+      VolunteerProfession.nurse,
+    ]) {
+      expect(
+        professionalIdentifierLabel(profession, ProfessionalIdType.ordinal),
+        'RPPS',
+      );
+    }
+    expect(
+      professionalIdentifierLabel(
+        VolunteerProfession.veterinarian,
+        ProfessionalIdType.rpps,
+      ),
+      'Numéro ordinal',
+    );
+    expect(
+      professionalIdentifierLabel(
+        VolunteerProfession.otherHealthProfessional,
+        ProfessionalIdType.ordinal,
+      ),
+      'Numéro ordinal',
+    );
+  });
+
+  test('personal names gain capitals without changing existing case', () {
+    expect(normalizeProfessionalName('marc'), 'Marc');
+    expect(normalizeProfessionalName('dupont'), 'Dupont');
+    expect(normalizeProfessionalName('jean-pierre'), 'Jean-Pierre');
+    expect(normalizeProfessionalName('marie-claire'), 'Marie-Claire');
+    expect(normalizeProfessionalName("d'estaing"), "d'Estaing");
+    expect(normalizeProfessionalName("O'Connor"), "O'Connor");
+    expect(normalizeProfessionalName('le gall'), 'Le Gall');
+    expect(normalizeProfessionalName('McDonald'), 'McDonald');
+    expect(normalizeProfessionalName('  Jean-Pierre  '), 'Jean-Pierre');
+  });
+
   testWidgets(
     'an incomplete professional profile can be completed and survives reload',
     (tester) async {
@@ -81,6 +122,7 @@ void main() {
         ),
       );
       expect(firstNameEditable.focusNode.hasFocus, isTrue);
+      expect(firstNameEditable.textCapitalization, TextCapitalization.words);
       final firstNameSemantics = tester.getSemantics(
         find.bySemanticsLabel(
           RegExp(r'Prénom, obligatoire, Erreur : Champ requis'),
@@ -90,11 +132,11 @@ void main() {
 
       await tester.enterText(
         find.byKey(const Key('professional-profile-first-name')),
-        'Alice',
+        'alice',
       );
       await tester.enterText(
         find.byKey(const Key('professional-profile-last-name')),
-        'Martin',
+        'martin',
       );
       await tester.enterText(
         find.byKey(const Key('professional-profile-phone')),
@@ -193,6 +235,8 @@ void main() {
 
       final saved = await repository.getVolunteerProfile();
       expect(saved?.uid, 'mock-volunteer');
+      expect(saved?.firstName, 'Alice');
+      expect(saved?.lastName, 'Martin');
       expect(saved?.profession, VolunteerProfession.mk);
       expect(saved?.effectiveProfessionalIdType, ProfessionalIdType.rpps);
       expect(saved?.equipment, [ProfessionalEquipmentId.massageTable]);
@@ -331,10 +375,7 @@ void main() {
       find.byKey(const Key('professional-profile-editor-title')),
       findsOneWidget,
     );
-    expect(
-      find.text('Identifiant : RPPS'),
-      findsOneWidget,
-    );
+    expect(find.text('Identifiant : RPPS'), findsOneWidget);
     expect(
       _fieldText(tester, const Key('professional-profile-id-value')),
       isEmpty,
@@ -422,17 +463,52 @@ void main() {
     );
     expect(find.text('Où souhaitez-vous intervenir ?'), findsOneWidget);
     expect(find.text('Secteurs d’intervention'), findsOneWidget);
-    expect(
-      find.text('Établissements précis (facultatif)'),
-      findsOneWidget,
+    expect(find.text('Établissements précis (facultatif)'), findsOneWidget);
+    final searchedLocation = places.firstWhere(
+      (location) =>
+          location.name.contains('Bastide') &&
+          location.isOperational &&
+          location.isEnabled,
     );
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('professional-profile-locations')),
+    );
+    await tester.tap(find.byKey(const Key('professional-profile-locations')));
+    await tester.pumpAndSettle();
+    final locationSearch = find.byKey(
+      const Key('professional-profile-location-search'),
+    );
+    await tester.enterText(locationSearch, 'BASTIDE');
+    await tester.pumpAndSettle();
+    final searchedOption = find.byKey(
+      Key('professional-profile-location-${searchedLocation.id}'),
+    );
+    expect(searchedOption, findsOneWidget);
+    await tester.tap(searchedOption);
+    await tester.pumpAndSettle();
+    await tester.enterText(locationSearch, 'merignac');
+    await tester.pumpAndSettle();
+    expect(find.text('Mérignac'), findsOneWidget);
+    await tester.enterText(locationSearch, 'aucun-resultat-v22');
+    await tester.pumpAndSettle();
+    expect(find.text('Aucun établissement trouvé'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('professional-profile-location-search-clear')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(locationSearch, 'bastide');
+    await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(searchedOption).value, isTrue);
+    await tester.tap(
+      find.byKey(const Key('professional-profile-location-apply')),
+    );
+    await tester.pumpAndSettle();
     await _scrollTo(
       tester,
       find.byKey(const Key('professional-profile-territories')),
     );
-    await tester.tap(
-      find.byKey(const Key('professional-profile-territories')),
-    );
+    await tester.tap(find.byKey(const Key('professional-profile-territories')));
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const Key('professional-profile-territory-southBasin')),
@@ -470,7 +546,10 @@ void main() {
       'medoc',
       'southBasin',
     });
-    expect(saved?.mobilizationPreferences?.locationIds, {'merignac'});
+    expect(saved?.mobilizationPreferences?.locationIds, {
+      'merignac',
+      searchedLocation.id,
+    });
     expect(saved?.mobilizationPreferences?.preferredWeekdays, {
       ProfessionalWeekday.monday,
       ProfessionalWeekday.tuesday,
@@ -591,8 +670,14 @@ void main() {
       find.byKey(const Key('professional-profile-editor-mode-cpts')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('professional-profile-cpts-label')), findsOneWidget);
-    expect(find.byKey(const Key('professional-profile-first-name')), findsNothing);
+    expect(
+      find.byKey(const Key('professional-profile-cpts-label')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('professional-profile-first-name')),
+      findsNothing,
+    );
     Navigator.of(
       tester.element(find.byKey(const Key('professional-profile-cpts-label'))),
     ).pop();
@@ -641,7 +726,10 @@ void main() {
         ),
       );
       expect(emailValue.style?.color, colors.danger);
-      expect(find.textContaining('Informations manquantes : Email valide'), findsOneWidget);
+      expect(
+        find.textContaining('Informations manquantes : Email valide'),
+        findsOneWidget,
+      );
 
       await _scrollProfileTo(tester, find.text('Aucune CPTS renseignée'));
       final optionalCpts = tester.widget<Text>(
@@ -649,7 +737,9 @@ void main() {
       );
       expect(optionalCpts.style?.color, colors.textPrimary);
       await _scrollProfileTo(tester, find.text('Aucun renseigné'));
-      final optionalEquipment = tester.widget<Text>(find.text('Aucun renseigné'));
+      final optionalEquipment = tester.widget<Text>(
+        find.text('Aucun renseigné'),
+      );
       expect(optionalEquipment.style?.color, colors.textPrimary);
     },
   );
@@ -688,7 +778,9 @@ void main() {
     },
   );
 
-  testWidgets('valid profile summary has no false danger value', (tester) async {
+  testWidgets('valid profile summary has no false danger value', (
+    tester,
+  ) async {
     final repository = MockCoordinationRepository(
       responsibleAccess: null,
       initialProfiles: {'mock-volunteer': _verifiedProfile()},
@@ -741,7 +833,10 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('edit-professional-equipment')));
       await tester.pumpAndSettle();
-      await _scrollTo(tester, find.byKey(const Key('save-professional-profile')));
+      await _scrollTo(
+        tester,
+        find.byKey(const Key('save-professional-profile')),
+      );
       await tester.tap(find.byKey(const Key('save-professional-profile')));
       await tester.pumpAndSettle();
 
@@ -802,7 +897,10 @@ void main() {
     );
     await _pumpApp(tester, repository);
     await _openProfessionalProfile(tester);
-    await _scrollProfileTo(tester, find.byKey(const Key('edit-professional-cpts')));
+    await _scrollProfileTo(
+      tester,
+      find.byKey(const Key('edit-professional-cpts')),
+    );
     await tester.tap(find.byKey(const Key('edit-professional-cpts')));
     await tester.pumpAndSettle();
     await _scrollTo(tester, find.byKey(const Key('save-professional-profile')));
@@ -1038,8 +1136,9 @@ String _fieldText(WidgetTester tester, Key key) =>
     tester.widget<V5TextField>(find.byKey(key)).controller?.text ?? '';
 
 class _FailingSaveRepository extends MockCoordinationRepository {
-  _FailingSaveRepository({required Map<String, VolunteerProfile> initialProfiles})
-    : super(responsibleAccess: null, initialProfiles: initialProfiles);
+  _FailingSaveRepository({
+    required Map<String, VolunteerProfile> initialProfiles,
+  }) : super(responsibleAccess: null, initialProfiles: initialProfiles);
 
   @override
   Future<void> saveVolunteerProfile(VolunteerProfile profile) async {

@@ -20,6 +20,63 @@ import '../widgets/native_interactions.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
+/// Capitalizes word starts without changing the remaining letters of a name.
+String normalizeProfessionalName(String value) {
+  final trimmed = value.trim();
+  return trimmed.replaceAllMapped(RegExp(r"(^|[\s\-’'])([a-zà-ÿ])"), (match) {
+    final prefix = match.group(1)!;
+    final letter = match.group(2)!;
+    if (letter == 'd' &&
+        match.end < trimmed.length &&
+        (trimmed[match.end] == "'" || trimmed[match.end] == '’')) {
+      return '$prefix$letter';
+    }
+    return '$prefix${letter.toUpperCase()}';
+  });
+}
+
+String professionalIdentifierLabel(
+  VolunteerProfession? profession,
+  ProfessionalIdType? currentType,
+) =>
+    (profession == null ? null : requiredProfessionalIdType(profession))
+        ?.label ??
+    currentType?.label ??
+    'RPPS ou numéro ordinal';
+
+String _locationSearchText(String value) {
+  const accents = {
+    'à': 'a',
+    'â': 'a',
+    'ä': 'a',
+    'á': 'a',
+    'ã': 'a',
+    'ç': 'c',
+    'è': 'e',
+    'é': 'e',
+    'ê': 'e',
+    'ë': 'e',
+    'ì': 'i',
+    'í': 'i',
+    'î': 'i',
+    'ï': 'i',
+    'ò': 'o',
+    'ó': 'o',
+    'ô': 'o',
+    'ö': 'o',
+    'õ': 'o',
+    'ù': 'u',
+    'ú': 'u',
+    'û': 'u',
+    'ü': 'u',
+    'ÿ': 'y',
+    'ý': 'y',
+    'œ': 'oe',
+    'æ': 'ae',
+  };
+  return value.toLowerCase().split('').map((c) => accents[c] ?? c).join();
+}
+
 String _weekdayLabel(ProfessionalWeekday weekday) => switch (weekday) {
   ProfessionalWeekday.monday => 'Lundi',
   ProfessionalWeekday.tuesday => 'Mardi',
@@ -54,7 +111,6 @@ class ProfessionalProfileScreen extends StatefulWidget {
   const ProfessionalProfileScreen({
     super.key,
     required this.onOpenNotifications,
-    required this.onSignOut,
     this.initiallyOpenEditor = false,
     this.returnToMissionLabel,
     this.onReturnToMission,
@@ -62,7 +118,6 @@ class ProfessionalProfileScreen extends StatefulWidget {
   });
 
   final VoidCallback onOpenNotifications;
-  final Future<void> Function() onSignOut;
   final bool initiallyOpenEditor;
   final String? returnToMissionLabel;
   final VoidCallback? onReturnToMission;
@@ -79,7 +134,6 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
   StreamSubscription<List<ResponsePlace>>? _locationsSubscription;
   List<ResponsePlace> _availableLocations = const [];
   Future<VolunteerProfile?>? _profile;
-  bool _signingOut = false;
   bool _initialEditorScheduled = false;
 
   @override
@@ -151,16 +205,6 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
     }
   }
 
-  Future<void> _signOut() async {
-    if (_signingOut) return;
-    setState(() => _signingOut = true);
-    try {
-      await widget.onSignOut();
-    } finally {
-      if (mounted) setState(() => _signingOut = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -175,7 +219,8 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
           final profileComplete = ProfessionalProfileValidation.isComplete(
             profile,
           );
-          final profileGaps = (profile == null
+          final profileGaps =
+              (profile == null
               ? ProfessionalProfileValidation.engagementGaps(
                   firstName: null,
                   lastName: null,
@@ -190,7 +235,8 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                 )
               : ProfessionalProfileValidation.engagementGapsForProfile(
                   profile,
-                )).toSet();
+                        ))
+                  .toSet();
           bool requiresAction(EngagementProfileGap gap) =>
               profileGaps.contains(gap);
           if (widget.initiallyOpenEditor && !_initialEditorScheduled) {
@@ -337,9 +383,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                           EngagementProfileGap.professionalIdentifier,
                         )) ...[
                           const _ProfileValue(
-                            key: Key(
-                              'professional-profile-value-identifier',
-                            ),
+                            key: Key('professional-profile-value-identifier'),
                             label: 'Identifiant professionnel',
                             value: 'À compléter',
                             requiresAction: true,
@@ -391,9 +435,12 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                             'professional-profile-value-identifier-type',
                           ),
                           label: 'Type d’identifiant',
-                          value:
-                              profile?.effectiveProfessionalIdType.label ??
-                              'Non renseigné',
+                          value: profile == null
+                              ? 'Non renseigné'
+                              : professionalIdentifierLabel(
+                                  profile.profession,
+                                  profile.effectiveProfessionalIdType,
+                                ),
                           requiresAction: requiresAction(
                             EngagementProfileGap.professionalIdentifier,
                           ),
@@ -402,9 +449,10 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                           key: const Key(
                             'professional-profile-value-identifier',
                           ),
-                          label:
-                              profile?.effectiveProfessionalIdType.label ??
-                              'RPPS ou numéro ordinal',
+                          label: professionalIdentifierLabel(
+                            profile?.profession,
+                            profile?.effectiveProfessionalIdType,
+                          ),
                           value:
                               profile
                                       ?.effectiveProfessionalIdValue
@@ -520,13 +568,8 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                     icon: const Icon(Icons.notifications_outlined),
                     label: const Text('Notifications'),
                   ),
-                  const SizedBox(height: V5Spacing.xs),
-                  TextButton.icon(
-                    key: const Key('professional-sign-out'),
-                    onPressed: _signingOut ? null : _signOut,
-                    icon: const Icon(Icons.logout_rounded),
-                    label: Text(_signingOut ? 'Déconnexion…' : 'Déconnexion'),
-                  ),
+                  // TODO: Auth Professionnel récupérable (email/OTP, lien
+                  // magique ou passkey) avant de réintroduire Déconnexion.
                 ],
               );
             },
@@ -606,6 +649,7 @@ class _MultiSelectPreferenceField<T> extends StatelessWidget {
     required this.values,
     required this.options,
     required this.onChanged,
+    this.searchable = false,
   });
 
   final String label;
@@ -613,6 +657,7 @@ class _MultiSelectPreferenceField<T> extends StatelessWidget {
   final Set<T> values;
   final List<_PreferenceOption<T>> options;
   final ValueChanged<Set<T>> onChanged;
+  final bool searchable;
 
   @override
   Widget build(BuildContext context) {
@@ -652,65 +697,142 @@ class _MultiSelectPreferenceField<T> extends StatelessWidget {
     );
   }
 
-  Future<void> _openPicker(BuildContext context) async {
-    final draft = Set<T>.of(values);
-    await showNativeBottomSheet<void>(
+  Future<void> _openPicker(BuildContext context) => showNativeBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
+    builder: (sheetContext) => _PreferencePickerContent<T>(
+      label: label,
+      keyPrefix: keyPrefix,
+      values: values,
+      options: options,
+      searchable: searchable,
+      onChanged: onChanged,
+    ),
+  );
+}
+
+class _PreferencePickerContent<T> extends StatefulWidget {
+  const _PreferencePickerContent({
+    required this.label,
+    required this.keyPrefix,
+    required this.values,
+    required this.options,
+    required this.searchable,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String keyPrefix;
+  final Set<T> values;
+  final List<_PreferenceOption<T>> options;
+  final bool searchable;
+  final ValueChanged<Set<T>> onChanged;
+
+  @override
+  State<_PreferencePickerContent<T>> createState() =>
+      _PreferencePickerContentState<T>();
+}
+
+class _PreferencePickerContentState<T>
+    extends State<_PreferencePickerContent<T>> {
+  late final Set<T> _draft = Set<T>.of(widget.values);
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleOptions = widget.options
+        .where(
+          (option) => _locationSearchText(
+            option.label,
+          ).contains(_locationSearchText(_query.trim())),
+        )
+        .toList(growable: false);
+    return Padding(
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                label,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
+            widget.label,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: V5Spacing.sm),
+          if (widget.searchable) ...[
+            TextField(
+              key: Key('${widget.keyPrefix}-search'),
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: InputDecoration(
+                hintText: 'Rechercher un établissement',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        key: Key('${widget.keyPrefix}-search-clear'),
+                        tooltip: 'Effacer la recherche',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => setState(() {
+                          _searchController.clear();
+                          _query = '';
+                        }),
+                      ),
                 ),
               ),
               const SizedBox(height: V5Spacing.sm),
+          ],
               Flexible(
                 child: ListView(
                   shrinkWrap: true,
                   children: [
-                    for (final option in options)
+                for (final option in visibleOptions)
                       CheckboxListTile(
                         key: Key(
-                          '$keyPrefix-${option.id ?? option.value.toString().split('.').last}',
+                      '${widget.keyPrefix}-${option.id ?? option.value.toString().split('.').last}',
                         ),
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.leading,
                         title: Text(option.label),
-                        value: draft.contains(option.value),
-                        onChanged: (selected) => setSheetState(() {
+                    value: _draft.contains(option.value),
+                    onChanged: (selected) => setState(() {
                           if (selected == true) {
-                            draft.add(option.value);
+                        _draft.add(option.value);
                           } else {
-                            draft.remove(option.value);
+                        _draft.remove(option.value);
                           }
                         }),
                       ),
+                if (widget.searchable && visibleOptions.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('Aucun établissement trouvé')),
+                  ),
                   ],
                 ),
               ),
               const SizedBox(height: V5Spacing.sm),
               V5Button(
-                key: Key('$keyPrefix-apply'),
+            key: Key('${widget.keyPrefix}-apply'),
                 expanded: true,
                 onPressed: () {
-                  onChanged(Set<T>.of(draft));
-                  Navigator.of(sheetContext).pop();
+              widget.onChanged(Set<T>.of(_draft));
+              Navigator.of(context).pop();
                 },
                 label: 'Valider',
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }
@@ -761,9 +883,9 @@ class _ProfileCompletionActions extends StatelessWidget {
             Expanded(
               child: Text(
                 complete ? 'Profil complet' : 'Profil à compléter',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
           ],
@@ -1128,8 +1250,9 @@ class _ProfessionalProfileEditorState
                                   value.canonicalId!,
                                 ),
                           );
-                          final requiredIdType =
-                              requiredProfessionalIdType(value);
+                            final requiredIdType = requiredProfessionalIdType(
+                              value,
+                            );
                           if (requiredIdType != null) {
                             if (_idType != requiredIdType) {
                               _idValue.clear();
@@ -1150,6 +1273,7 @@ class _ProfessionalProfileEditorState
                             key: const Key('professional-profile-first-name'),
                             label: 'Prénom',
                             controller: _firstName,
+                              textCapitalization: TextCapitalization.words,
                             focusNode: _firstNameFocus,
                             isRequired: true,
                             validator: _required,
@@ -1161,6 +1285,7 @@ class _ProfessionalProfileEditorState
                             key: const Key('professional-profile-last-name'),
                             label: 'Nom',
                             controller: _lastName,
+                              textCapitalization: TextCapitalization.words,
                             focusNode: _lastNameFocus,
                             isRequired: true,
                             validator: _required,
@@ -1203,7 +1328,9 @@ class _ProfessionalProfileEditorState
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Identifiant : ${_idType.label}',
-                          key: const Key('professional-profile-fixed-id-type'),
+                            key: const Key(
+                              'professional-profile-fixed-id-type',
+                            ),
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       )
@@ -1307,7 +1434,9 @@ class _ProfessionalProfileEditorState
                           Expanded(
                             flex: 2,
                           child: V5TextField(
-                            key: const Key('professional-profile-postal-code'),
+                                key: const Key(
+                                  'professional-profile-postal-code',
+                                ),
                             label: 'Code postal',
                             controller: _professionalPostalCode,
                             focusNode: _professionalPostalCodeFocus,
@@ -1455,6 +1584,7 @@ class _ProfessionalProfileEditorState
                       key: const Key('professional-profile-locations'),
                       label: 'Établissements précis (facultatif)',
                       keyPrefix: 'professional-profile-location',
+                        searchable: true,
                       values: _locationIds,
                       options: _locationOptions,
                       onChanged: (values) => setState(() {
@@ -1646,8 +1776,8 @@ class _ProfessionalProfileEditorState
         case _ProfileEditorMode.completion:
         case _ProfileEditorMode.full:
           updatedProfile = currentProfile.copyWith(
-            firstName: _firstName.text.trim(),
-            lastName: _lastName.text.trim(),
+            firstName: normalizeProfessionalName(_firstName.text),
+            lastName: normalizeProfessionalName(_lastName.text),
             phone: _phone.text.trim(),
             email: _email.text.trim(),
             profession: _profession,
@@ -1774,9 +1904,7 @@ class _ProfessionalProfileEditorState
         (
           focusNode: _professionalPostalCodeFocus,
           label: 'Code postal professionnel',
-          error: _professionalPostalCodeValidator(
-            _professionalPostalCode.text,
-          ),
+          error: _professionalPostalCodeValidator(_professionalPostalCode.text),
         ),
         (
           focusNode: _professionalCityFocus,

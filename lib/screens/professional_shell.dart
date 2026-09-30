@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
 import '../models/need.dart';
-import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
@@ -46,7 +45,6 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     1 => const ProfessionalEngagementsScreen(),
     2 => ProfessionalProfileScreen(
       onOpenNotifications: _openNotifications,
-      onSignOut: _signOut,
       verificationService: widget.verificationService,
     ),
     _ => throw RangeError.index(index, _screens),
@@ -67,7 +65,6 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
         returnToMissionLabel: mission.place,
         onReturnToMission: () => _selectTab(0),
         onOpenNotifications: _openNotifications,
-        onSignOut: _signOut,
         verificationService: widget.verificationService,
       );
       _currentIndex = 2;
@@ -79,8 +76,6 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
       AppPageRoute<void>(builder: (_) => const NotificationCenterScreen()),
     );
   }
-
-  Future<void> _signOut() => RepositoryScope.of(context).signOutResponsible();
 
   @override
   Widget build(BuildContext context) {

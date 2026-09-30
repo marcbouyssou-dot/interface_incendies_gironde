@@ -147,8 +147,10 @@ void main() {
     await tester.tap(find.byKey(const Key('professional-hero-where')));
     await tester.pumpAndSettle();
     expect(find.text('Où intervenir ?'), findsOneWidget);
-    expect(find.text('Partout'), findsOneWidget);
+    expect(find.text('Partout'), findsNWidgets(2));
     await tester.tap(find.text('Bordeaux Métropole').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('professional-where-apply')));
     await tester.pumpAndSettle();
     expect(
       find.descendant(
@@ -245,6 +247,90 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('open-responsible-access')), findsNothing);
+  });
+
+  testWidgets('Où combines sectors with OR and Partout clears selection', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: MockCoordinationRepository(responsibleAccess: null),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final where = find.byKey(const Key('professional-hero-where'));
+    expect(
+      find.descendant(of: where, matching: find.text('Partout')),
+      findsOneWidget,
+    );
+    await tester.tap(where);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bordeaux Métropole').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('professional-where-apply')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('mission-merignac')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-langon')), findsNothing);
+
+    await tester.tap(where);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Sud Gironde').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sud Gironde').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('professional-where-apply')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: where, matching: find.text('2 secteurs')),
+      findsOneWidget,
+    );
+    expect(find.text('2 missions'), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-merignac')), findsOneWidget);
+
+    await tester.tap(where);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Partout').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('professional-where-apply')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: where, matching: find.text('Partout')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('mission-merignac')), findsOneWidget);
+    expect(find.text('2 missions'), findsNothing);
+  });
+
+  testWidgets('professional profile has no logout and keeps its three tabs', (
+    tester,
+  ) async {
+    final repository = _TrackingSignOutRepository();
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Profil'));
+    await tester.pumpAndSettle();
+    final profileScroll = find.byKey(const PageStorageKey('professional-profile'));
+    final notifications = find.byKey(const Key('open-notification-center'));
+    for (var attempt = 0; attempt < 10 && notifications.evaluate().isEmpty;
+        attempt++) {
+      await tester.drag(profileScroll, const Offset(0, -350));
+      await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(notifications);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('professional-sign-out')), findsNothing);
+    expect(find.text('Déconnexion'), findsNothing);
+    expect(notifications, findsOneWidget);
+
+    await tester.tap(find.text('Engagements'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aucun engagement à venir.'), findsOneWidget);
+    await tester.tap(find.text('Missions'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('professional-hero-where')), findsOneWidget);
+    expect(repository.signOutCalls, 0);
   });
 
   testWidgets(
@@ -427,7 +513,12 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    for (final period in ['Aujourd’hui', 'Demain', 'Cette semaine', 'Plus tard']) {
+    for (final period in [
+      'Aujourd’hui',
+      'Demain',
+      'Cette semaine',
+      'Plus tard',
+    ]) {
       await selectWhen(period);
       expect(
         find.byKey(const ValueKey('mission-spanning-filter-periods')),
@@ -463,7 +554,10 @@ void main() {
   test('professional date filters build local civil-day boundaries', () {
     final source = File('lib/screens/slots_screen.dart').readAsStringSync();
     final matcherStart = source.indexOf('bool _matchesMissionWhen(');
-    final matcherEnd = source.indexOf('\nString _encodeMissionDate', matcherStart);
+    final matcherEnd = source.indexOf(
+      '\nString _encodeMissionDate',
+      matcherStart,
+    );
     final matcherSource = source.substring(matcherStart, matcherEnd);
 
     expect(matcherSource, contains('_localCivilDay('));
@@ -1027,9 +1121,9 @@ void main() {
     );
   });
 
-  testWidgets('compact RECETTE control switches the displayed shell instantly', (
-    tester,
-  ) async {
+  testWidgets(
+    'compact RECETTE control switches the displayed shell instantly',
+    (tester) async {
     await tester.pumpWidget(const FireCoordinationApp());
     await tester.pumpAndSettle();
 
@@ -1061,7 +1155,8 @@ void main() {
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
     expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
-  });
+    },
+  );
 
   testWidgets('coordinator preview never elevates a real site manager', (
     tester,
@@ -1118,6 +1213,17 @@ class _RoleAwareRepository extends MockCoordinationRepository {
   }
 
   Future<void> disposeRoleStream() => _accessUpdates.close();
+}
+
+class _TrackingSignOutRepository extends MockCoordinationRepository {
+  _TrackingSignOutRepository() : super(responsibleAccess: null);
+
+  int signOutCalls = 0;
+
+  @override
+  Future<void> signOutResponsible() async {
+    signOutCalls++;
+  }
 }
 
 CoordinationNeed _responsibleMission({

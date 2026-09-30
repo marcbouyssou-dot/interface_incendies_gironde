@@ -48,6 +48,7 @@ class SlotsScreen extends StatefulWidget {
 class _SlotsScreenState extends State<SlotsScreen> {
   int _filter = _MissionFilterMemory.status;
   TerritorialGroup? _group = _MissionFilterMemory.group;
+  Set<TerritorialGroup> _professionalGroups = {};
   String? _when = _MissionFilterMemory.when;
   bool _showAdvancedFilters = _MissionFilterMemory.status != 0;
   String? _editingMissionId;
@@ -177,7 +178,13 @@ class _SlotsScreenState extends State<SlotsScreen> {
         : statusNeeds
               .where((need) => _matchesMissionWhen(need, selectedWhen))
               .toList();
-    final visibleNeeds = _group == null
+    final visibleNeeds = professionalJourney
+        ? _professionalGroups.isEmpty
+              ? dateNeeds
+              : dateNeeds
+                    .where((need) => _professionalGroups.contains(need.group))
+                    .toList()
+        : _group == null
         ? dateNeeds
         : dateNeeds.where((need) => need.group == _group).toList();
     final hasPrivilegedAccess = access?.hasPrivilegedAccess == true;
@@ -206,9 +213,10 @@ class _SlotsScreenState extends State<SlotsScreen> {
                         professionalJourney: professionalJourney,
                         showOverview:
                             hasPrivilegedAccess && !professionalJourney,
-                        group: _group,
+                        selectedGroups: _professionalGroups,
                         when: _when,
-                        onGroupChanged: _selectGroup,
+                        onGroupsChanged: (groups) =>
+                            setState(() => _professionalGroups = groups),
                         onDateChanged: _selectDate,
                       ),
                       if (!professionalJourney) ...[
@@ -389,10 +397,10 @@ class _SlotsScreenState extends State<SlotsScreen> {
     final remaining = missions
         .where((mission) => !urgentIds.contains(mission.id))
         .toList(growable: false);
-    final nearby = _group == null
+    final nearby = _professionalGroups.isEmpty
         ? const <CoordinationNeed>[]
         : remaining
-              .where((mission) => mission.group == _group)
+              .where((mission) => _professionalGroups.contains(mission.group))
               .toList(growable: false);
     final nearbyIds = nearby.map((mission) => mission.id).toSet();
     final others = remaining
@@ -427,7 +435,9 @@ class _SlotsScreenState extends State<SlotsScreen> {
 
   bool get _hasActiveFilters =>
       _filter != 0 ||
-      _group != null ||
+      (widget.professionalJourney
+          ? _professionalGroups.isNotEmpty
+          : _group != null) ||
       (widget.professionalJourney && _when != null);
 
   void _select(int index) {
@@ -453,6 +463,7 @@ class _SlotsScreenState extends State<SlotsScreen> {
     setState(() {
       _filter = 0;
       _group = null;
+      _professionalGroups = {};
       _when = null;
       _showAdvancedFilters = false;
     });
@@ -491,16 +502,14 @@ String _missionWhenLabel(String? value) => switch (value) {
   _whenTomorrow => 'Demain',
   _whenThisWeek => 'Cette semaine',
   _whenLater => 'Plus tard',
-  _ when value?.startsWith(_whenCustomPrefix) == true =>
-    FrenchDateTime.date(_decodeMissionDate(value!)!),
+  _ when value?.startsWith(_whenCustomPrefix) == true => FrenchDateTime.date(
+    _decodeMissionDate(value!)!,
+  ),
   _ => 'Toutes les dates',
 };
 
-DateTime _localCivilDay(DateTime value, [int dayOffset = 0]) => DateTime(
-  value.year,
-  value.month,
-  value.day + dayOffset,
-);
+DateTime _localCivilDay(DateTime value, [int dayOffset = 0]) =>
+    DateTime(value.year, value.month, value.day + dayOffset);
 
 bool _matchesMissionWhen(
   CoordinationNeed mission,
@@ -515,7 +524,8 @@ bool _matchesMissionWhen(
     return switch (selectedWhen) {
       _whenToday => label == 'Aujourd’hui',
       _whenTomorrow => label == 'Demain',
-      _ => selectedWhen.startsWith(_whenCustomPrefix) &&
+      _ =>
+        selectedWhen.startsWith(_whenCustomPrefix) &&
           label == _missionWhenLabel(selectedWhen),
     };
   }
@@ -544,10 +554,7 @@ bool _matchesMissionWhen(
     };
   }
   final missionDay = _localCivilDay(missionStart);
-  final endOfWeek = _localCivilDay(
-    reference,
-    DateTime.sunday - today.weekday,
-  );
+  final endOfWeek = _localCivilDay(reference, DateTime.sunday - today.weekday);
   return switch (selectedWhen) {
     _whenToday => missionDay == today,
     _whenTomorrow => missionDay == tomorrow,
@@ -667,18 +674,18 @@ class _MissionDecisionHeader extends StatelessWidget {
     required this.missions,
     required this.professionalJourney,
     required this.showOverview,
-    required this.group,
+    required this.selectedGroups,
     required this.when,
-    required this.onGroupChanged,
+    required this.onGroupsChanged,
     required this.onDateChanged,
   });
 
   final List<CoordinationNeed> missions;
   final bool professionalJourney;
   final bool showOverview;
-  final TerritorialGroup? group;
+  final Set<TerritorialGroup> selectedGroups;
   final String? when;
-  final ValueChanged<TerritorialGroup?> onGroupChanged;
+  final ValueChanged<Set<TerritorialGroup>> onGroupsChanged;
   final ValueChanged<String?> onDateChanged;
 
   @override
@@ -723,16 +730,21 @@ class _MissionDecisionHeader extends StatelessWidget {
       chipKey: const Key('professional-hero-where'),
       icon: Icons.location_on_outlined,
       label: 'Où',
-      activeValue: group?.label,
-      selectedValue: group?.name ?? 'all',
+      activeValue: selectedGroups.isEmpty
+          ? 'Partout'
+          : selectedGroups.length == 1
+          ? selectedGroups.single.label
+          : '${selectedGroups.length} secteurs',
+      selectedValue: 'all',
+      selectedValues: selectedGroups.map((group) => group.name).toSet(),
       options: [
         const _HeroFilterOption(value: 'all', label: 'Partout'),
         for (final value in TerritorialGroup.values)
           _HeroFilterOption(value: value.name, label: value.label),
       ],
-      onSelected: (value) => onGroupChanged(
-        value == 'all' ? null : TerritorialGroup.values.byName(value),
-      ),
+      onSelected: (_) {},
+      onMultiSelected: (values) =>
+          onGroupsChanged(values.map(TerritorialGroup.values.byName).toSet()),
     );
     final whenFilter = _HeroFilterChip(
       chipKey: const Key('professional-hero-when'),
@@ -839,6 +851,8 @@ class _HeroFilterChip extends StatelessWidget {
     required this.options,
     required this.onSelected,
     this.resolveSelection,
+    this.selectedValues,
+    this.onMultiSelected,
   });
 
   final Key chipKey;
@@ -846,8 +860,10 @@ class _HeroFilterChip extends StatelessWidget {
   final String label;
   final String? activeValue;
   final String selectedValue;
+  final Set<String>? selectedValues;
   final List<_HeroFilterOption> options;
   final ValueChanged<String> onSelected;
+  final ValueChanged<Set<String>>? onMultiSelected;
   final Future<String?> Function(BuildContext context, String value)?
   resolveSelection;
 
@@ -925,7 +941,14 @@ class _HeroFilterChip extends StatelessWidget {
       builder: (sheetContext) => _ProfessionalFilterSheet(
         title: label == 'Où' ? 'Où intervenir ?' : 'Quand intervenir ?',
         selectedValue: selectedValue,
+        selectedValues: selectedValues,
         options: options,
+        onMultiSelected: onMultiSelected == null
+            ? null
+            : (values) {
+                Navigator.of(sheetContext).pop();
+                onMultiSelected!(values);
+              },
         onSelected: (value) async {
           Navigator.of(sheetContext).pop();
           final resolver = resolveSelection;
@@ -946,18 +969,30 @@ class _HeroFilterOption {
   final String label;
 }
 
-class _ProfessionalFilterSheet extends StatelessWidget {
+class _ProfessionalFilterSheet extends StatefulWidget {
   const _ProfessionalFilterSheet({
     required this.title,
     required this.selectedValue,
     required this.options,
     required this.onSelected,
+    this.selectedValues,
+    this.onMultiSelected,
   });
 
   final String title;
   final String selectedValue;
+  final Set<String>? selectedValues;
   final List<_HeroFilterOption> options;
   final Future<void> Function(String) onSelected;
+  final ValueChanged<Set<String>>? onMultiSelected;
+
+  @override
+  State<_ProfessionalFilterSheet> createState() =>
+      _ProfessionalFilterSheetState();
+}
+
+class _ProfessionalFilterSheetState extends State<_ProfessionalFilterSheet> {
+  late final Set<String> _draft = {...?widget.selectedValues};
 
   @override
   Widget build(BuildContext context) {
@@ -990,7 +1025,7 @@ class _ProfessionalFilterSheet extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    title,
+                    widget.title,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       color: colors.textPrimary,
                       fontWeight: FontWeight.w800,
@@ -1003,7 +1038,7 @@ class _ProfessionalFilterSheet extends StatelessWidget {
                 child: ListView.separated(
                   shrinkWrap: true,
                   padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-                  itemCount: options.length,
+                  itemCount: widget.options.length,
                   separatorBuilder: (_, _) => Divider(
                     height: 1,
                     thickness: 0.5,
@@ -1012,13 +1047,29 @@ class _ProfessionalFilterSheet extends StatelessWidget {
                     color: colors.outline.withValues(alpha: 0.7),
                   ),
                   itemBuilder: (context, index) {
-                    final option = options[index];
-                    final selected = option.value == selectedValue;
+                    final option = widget.options[index];
+                    final selected = widget.selectedValues == null
+                        ? option.value == widget.selectedValue
+                        : option.value == 'all'
+                        ? _draft.isEmpty
+                        : _draft.contains(option.value);
                     return CupertinoButton(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: const Size.fromHeight(52),
                       pressedOpacity: 0.68,
-                      onPressed: () => onSelected(option.value),
+                      onPressed: () {
+                        if (widget.selectedValues == null) {
+                          widget.onSelected(option.value);
+                        } else {
+                          setState(() {
+                            if (option.value == 'all') {
+                              _draft.clear();
+                            } else if (!_draft.add(option.value)) {
+                              _draft.remove(option.value);
+                            }
+                          });
+                        }
+                      },
                       child: Row(
                         children: [
                           Expanded(
@@ -1046,6 +1097,18 @@ class _ProfessionalFilterSheet extends StatelessWidget {
                   },
                 ),
               ),
+              if (widget.onMultiSelected != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      key: const Key('professional-where-apply'),
+                      onPressed: () => widget.onMultiSelected!(Set.of(_draft)),
+                      child: const Text('Valider'),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
