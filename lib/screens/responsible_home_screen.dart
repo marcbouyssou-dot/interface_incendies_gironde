@@ -282,9 +282,20 @@ class _ResponsibleHomeContent extends StatelessWidget {
                     const SizedBox(height: V5Spacing.lg),
                     SegmentedButton<_HomeHorizon>(
                       key: const Key('responsible-home-horizon'),
+                      showSelectedIcon: false,
                       segments: [
                         for (final value in _HomeHorizon.values)
-                          ButtonSegment(value: value, label: Text(value.label)),
+                          ButtonSegment(
+                            value: value,
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                value.label,
+                                maxLines: 1,
+                                softWrap: false,
+                              ),
+                            ),
+                          ),
                       ],
                       selected: {horizon},
                       onSelectionChanged: (values) =>

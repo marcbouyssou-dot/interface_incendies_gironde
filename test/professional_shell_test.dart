@@ -1103,6 +1103,49 @@ void main() {
     expect(find.text('raw-technical-uid'), findsNothing);
   });
 
+  testWidgets('responsible today label stays on one line at iPhone widths', (
+    tester,
+  ) async {
+    final site = places.first;
+    final repository = MockCoordinationRepository(
+      initialMissions: const [],
+      initialLocations: [site],
+      responsibleAccess: ResponsibleAccess(
+        uid: 'manager-horizon-layout',
+        role: ResponsibleRole.siteManager,
+        locationIds: {site.id},
+        active: true,
+      ),
+    );
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    for (final size in const [
+      Size(320, 844),
+      Size(375, 844),
+      Size(390, 844),
+      Size(430, 932),
+      Size(776, 420),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      final label = tester.widget<Text>(find.text('Aujourd’hui'));
+      expect(label.maxLines, 1, reason: '$size');
+      expect(label.softWrap, isFalse, reason: '$size');
+      expect(
+        find.ancestor(
+          of: find.text('Aujourd’hui'),
+          matching: find.byType(FittedBox),
+        ),
+        findsOneWidget,
+        reason: '$size',
+      );
+      expect(tester.takeException(), isNull, reason: '$size');
+    }
+  });
+
   testWidgets('responsible empty states communicate operational serenity', (
     tester,
   ) async {

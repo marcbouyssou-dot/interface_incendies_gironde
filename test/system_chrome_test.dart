@@ -151,6 +151,13 @@ void main() {
     expect(index, contains('background: #F6F7F8;'));
     expect(index, isNot(contains('html.mobsante-splash-active body')));
     expect(index, contains('#startup-splash'));
+    final nativeSplash = RegExp(
+      r'#startup-splash\s*\{([^}]*)\}',
+      dotAll: true,
+    ).firstMatch(index);
+    expect(nativeSplash, isNotNull);
+    expect(nativeSplash!.group(1), contains('background: #F6F7F8;'));
+    expect(nativeSplash.group(1), isNot(contains('background: #10233E;')));
     expect(index, contains('visibility: hidden'));
     expect(index, contains('mobsante-splash-composed'));
     expect(index, contains('image.decode()'));
