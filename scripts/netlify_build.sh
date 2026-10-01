@@ -21,6 +21,11 @@ flutter pub get
 
 build_arguments=(--release --pwa-strategy=none)
 
+if [[ "${CONTEXT:-}" == "branch-deploy" &&
+      "${MOBSANTE_RECIPE_MODE:-false}" == "true" ]]; then
+  build_arguments+=("--dart-define=MOBSANTE_RECIPE_MODE=true")
+fi
+
 if [[ "${USE_FIREBASE:-false}" == "true" ]]; then
   required_firebase_variables=(
     FIREBASE_API_KEY

@@ -55,6 +55,27 @@ void main() {
     expect(normalizeProfessionalName('  Jean-Pierre  '), 'Jean-Pierre');
   });
 
+  testWidgets('incomplete default MK summary labels its identifier RPPS', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(responsibleAccess: null);
+    await _pumpApp(tester, repository);
+    await _openProfessionalProfile(tester);
+    expect(find.text('Profil à compléter'), findsOneWidget);
+    await _scrollProfileTo(
+      tester,
+      find.byKey(const Key('professional-profile-value-identifier')),
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('professional-profile-value-identifier')),
+        matching: find.text('RPPS'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('RPPS ou numéro ordinal'), findsNothing);
+  });
+
   testWidgets(
     'an incomplete professional profile can be completed and survives reload',
     (tester) async {

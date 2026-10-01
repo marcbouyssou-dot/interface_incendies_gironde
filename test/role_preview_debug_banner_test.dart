@@ -10,6 +10,22 @@ import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 
 void main() {
+  test('recipe switcher availability follows debug and explicit recipe mode', () {
+    expect(
+      shouldShowRecipeSwitcher(isDebugBuild: true, recipeModeEnabled: false),
+      isTrue,
+    );
+    expect(
+      shouldShowRecipeSwitcher(isDebugBuild: false, recipeModeEnabled: true),
+      isTrue,
+    );
+    expect(
+      shouldShowRecipeSwitcher(isDebugBuild: false, recipeModeEnabled: false),
+      isFalse,
+    );
+    expect(showRecipeSwitcher, isTrue);
+  });
+
   Future<void> pumpApp(
     WidgetTester tester,
     MockCoordinationRepository repository,

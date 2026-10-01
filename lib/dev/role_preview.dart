@@ -3,6 +3,18 @@ import 'package:flutter/material.dart';
 
 enum RolePreviewMode { automatic, professional, responsible, coordinator }
 
+const bool recipeModeEnabled = bool.fromEnvironment('MOBSANTE_RECIPE_MODE');
+
+bool shouldShowRecipeSwitcher({
+  required bool isDebugBuild,
+  required bool recipeModeEnabled,
+}) => isDebugBuild || recipeModeEnabled;
+
+final bool showRecipeSwitcher = shouldShowRecipeSwitcher(
+  isDebugBuild: kDebugMode,
+  recipeModeEnabled: recipeModeEnabled,
+);
+
 extension RolePreviewModeLabel on RolePreviewMode {
   String get label => switch (this) {
     RolePreviewMode.automatic => 'Automatique',
@@ -18,7 +30,7 @@ class RolePreviewController extends ChangeNotifier {
   RolePreviewMode get mode => _mode;
 
   void select(RolePreviewMode mode) {
-    if (!kDebugMode || mode == _mode) return;
+    if (!showRecipeSwitcher || mode == _mode) return;
     _mode = mode;
     notifyListeners();
   }
@@ -58,9 +70,9 @@ class _RolePreviewInherited extends InheritedNotifier<RolePreviewController> {
   const _RolePreviewInherited({required super.notifier, required super.child});
 }
 
-/// Debug-only overlay: floats a [RolePreviewDebugBanner] on top of [child]
+/// Recipe overlay: floats a [RolePreviewDebugBanner] on top of [child]
 /// so any shell can offer 1-2-tap journey switching without duplicating
-/// layout. Renders exactly [child], unchanged, outside kDebugMode.
+/// layout. Renders exactly [child] when the switcher is disabled.
 ///
 /// This is a pure display affordance around [RolePreviewController] — the
 /// single existing source of truth for the previewed journey. It never
@@ -79,7 +91,7 @@ class RolePreviewDebugOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return child;
+    if (!showRecipeSwitcher) return child;
     return Stack(
       children: [
         child,
@@ -99,9 +111,9 @@ class RolePreviewDebugOverlay extends StatelessWidget {
   }
 }
 
-/// Debug-only pill showing "MODE RECETTE — Parcours : {journey}"; a tap
+/// Recipe pill showing "MODE RECETTE — Parcours : {journey}"; a tap
 /// opens a picker over [RolePreviewMode.values] and calls
-/// [RolePreviewController.select]. Renders nothing outside kDebugMode.
+/// [RolePreviewController.select]. Renders nothing when disabled.
 /// Selecting a mode only ever changes which shell is displayed — see
 /// [RolePreviewController.select] and its call site in app_shell.dart,
 /// which is the sole place the previewed journey is consumed.
@@ -112,7 +124,7 @@ class RolePreviewDebugBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return const SizedBox.shrink();
+    if (!showRecipeSwitcher) return const SizedBox.shrink();
     final controller = RolePreviewScope.of(context);
     final active = controller.mode != RolePreviewMode.automatic;
     final displayLabel = active ? controller.mode.label : currentJourneyLabel;

@@ -450,7 +450,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                             'professional-profile-value-identifier',
                           ),
                           label: professionalIdentifierLabel(
-                            profile?.profession,
+                            profile?.profession ?? VolunteerProfession.mk,
                             profile?.effectiveProfessionalIdType,
                           ),
                           value:

@@ -778,7 +778,7 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final previewMode = kDebugMode
+    final previewMode = showRecipeSwitcher
         ? RolePreviewScope.of(context).mode
         : RolePreviewMode.automatic;
     final perspectiveController = CrossRolePerspectiveScope.of(context);
