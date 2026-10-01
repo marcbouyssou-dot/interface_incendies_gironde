@@ -192,15 +192,16 @@ double _contrastRatio(Color foreground, Color background) {
 }
 
 Future<void> _chooseDate(WidgetTester tester) async {
-  final field = find.byKey(const Key('mission-date'));
-  await tester.ensureVisible(field);
-  await tester.pumpAndSettle();
+  final field = find.byKey(const Key('mission-date-tomorrow'));
+  final form = find.byKey(const PageStorageKey('create'));
+  final height = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+  for (var attempt = 0; attempt < 8; attempt++) {
+    final y = tester.getCenter(field).dy;
+    if (y > 80 && y < height - 80) break;
+    await tester.drag(form, Offset(0, y >= height - 80 ? -350 : 350));
+    await tester.pumpAndSettle();
+  }
   await tester.tap(field);
-  await tester.pumpAndSettle();
-  tester
-      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
-      .onDateTimeChanged(DateTime.now().add(const Duration(days: 1)));
-  await tester.tap(find.text('Valider'));
   await tester.pumpAndSettle();
 }
 

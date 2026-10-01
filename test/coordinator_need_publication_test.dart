@@ -24,9 +24,9 @@ void main() {
 
       expect(repository.createCalls, 1);
       expect(repository.lastDraft?.location.id, location.id);
-      expect(find.text('Mission publiée'), findsOneWidget);
+      expect(find.text('Votre besoin est publié.'), findsOneWidget);
 
-      await tester.tap(find.text('Voir la mission'));
+      await tester.tap(find.text('Voir le besoin'));
       await tester.pumpAndSettle();
 
       final sector = find.byKey(Key('sector-status-${location.group.name}'));
@@ -119,17 +119,17 @@ Future<void> _openAndCompleteForm(
 
   expect(find.byKey(const Key('mission-location')), findsOneWidget);
   expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+  await tester.drag(find.byKey(const PageStorageKey('create')),
+      const Offset(0, -400));
+  await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('mission-location')));
   await tester.pumpAndSettle();
   await tester.tap(find.text(location.name).last);
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byKey(const Key('mission-date')));
+  await tester.ensureVisible(find.byKey(const Key('mission-date-tomorrow')));
   await tester.pumpAndSettle();
-  tester
-      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
-      .onDateTimeChanged(DateTime.now().add(const Duration(days: 1)));
-  await tester.tap(find.text('Valider'));
+  await tester.tap(find.byKey(const Key('mission-date-tomorrow')));
   await tester.pumpAndSettle();
 
   await _chooseTime(tester, const Key('mission-start-time'));
@@ -138,23 +138,22 @@ Future<void> _openAndCompleteForm(
   await tester.ensureVisible(physiotherapistAdd);
   await tester.pumpAndSettle();
   await tester.tap(physiotherapistAdd);
-  await _scrollIntoView(tester, find.byKey(const Key('publish-mission')));
+  final form = find.byKey(const PageStorageKey('create'));
+  await tester.drag(form, const Offset(0, -1200));
+  await tester.pumpAndSettle();
+  await tester.drag(form, const Offset(0, -450));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('review-mission')));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _chooseTime(WidgetTester tester, Key fieldKey) async {
+  await tester.ensureVisible(find.byKey(fieldKey));
+  await tester.pumpAndSettle();
   await tester.tap(find.byKey(fieldKey));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Valider'));
   await tester.pumpAndSettle();
-}
-
-Future<void> _scrollIntoView(WidgetTester tester, Finder target) async {
-  final form = find.byKey(const PageStorageKey('create'));
-  for (var attempt = 0; attempt < 10; attempt++) {
-    if (tester.getCenter(target).dy < 800) return;
-    await tester.drag(form, const Offset(0, -500));
-    await tester.pumpAndSettle();
-  }
 }
 
 class _CoordinatorPublicationRepository extends MockCoordinationRepository {

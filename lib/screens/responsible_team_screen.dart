@@ -144,7 +144,10 @@ class _ResponsibleTeamContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(title: 'Mon équipe'),
+                      const MobSanteJourneyHeader(
+                        journey: MobSanteJourney.responsible,
+                        pageTitle: 'Mon équipe',
+                      ),
                       const SizedBox(height: V5Spacing.lg),
                       Wrap(
                         spacing: V5Spacing.xs,

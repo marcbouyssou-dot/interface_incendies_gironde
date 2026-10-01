@@ -4,7 +4,7 @@ extension PlatformActorKindLabel on PlatformActorKind {
   String get label => switch (this) {
     PlatformActorKind.professional => 'Professionnels',
     PlatformActorKind.coordinator => 'Coordinateurs',
-    PlatformActorKind.manager => 'Responsables',
+    PlatformActorKind.manager => 'Responsables de site',
   };
 }
 
@@ -200,7 +200,7 @@ class PlatformManagerViewData {
       uid: uid,
       displayName:
           _optionalText(data['displayName']) ??
-          _identityFallback('Responsable', uid),
+          _identityFallback('Responsable de site', uid),
       active: data['active'] == true,
       locations: _mapList(data['locations'], PlatformActorReference.fromMap),
       operations: _mapList(data['operations'], PlatformActorReference.fromMap),

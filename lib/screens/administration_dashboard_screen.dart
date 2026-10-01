@@ -230,7 +230,7 @@ class _AdministrationDashboard extends StatelessWidget {
                     key: const Key('admin-invitations-entry'),
                     semanticLabel: 'Ouvrir la gestion des responsables',
                     icon: Icons.admin_panel_settings_outlined,
-                    title: 'Responsables',
+                    title: 'Responsables de site',
                     description: 'Invitations et accès aux centres',
                     onTap: () => _openInvitations(context),
                   ),
@@ -285,7 +285,7 @@ class _AdministrationHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'ESPACE RESPONSABLE',
+                'ESPACE RESPONSABLE DE SITE',
                 style: TextStyle(
                   color: _AdministrationVisuals.textMuted,
                   fontSize: 12,

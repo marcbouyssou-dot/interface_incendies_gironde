@@ -362,7 +362,7 @@ class _ManagerActorCard extends StatelessWidget {
     key: Key('manager-${actor.uid}'),
     icon: Icons.local_hospital_outlined,
     title: actor.displayName,
-    subtitle: actor.active ? 'Responsable actif' : 'Responsable inactif',
+    subtitle: actor.active ? 'Responsable de site actif' : 'Responsable de site inactif',
     statusActive: actor.active,
     facts: [
       '${actor.locations.length} établissement(s)',
@@ -762,7 +762,7 @@ class PlatformManagerDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _ActorDetailScaffold(
     title: actor.displayName,
-    subtitle: actor.active ? 'Responsable actif' : 'Responsable inactif',
+    subtitle: actor.active ? 'Responsable de site actif' : 'Responsable de site inactif',
     children: [
       _DetailFacts(
         values: [

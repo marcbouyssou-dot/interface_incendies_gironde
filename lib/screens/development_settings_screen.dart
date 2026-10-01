@@ -36,6 +36,7 @@ class DevelopmentSettingsScreen extends StatelessWidget {
               const SizedBox(height: V5Spacing.xl),
               DropdownButtonFormField<RolePreviewMode>(
                 key: const Key('role-preview-selector'),
+                isExpanded: true,
                 initialValue: mode,
                 decoration: const InputDecoration(
                   labelText: 'Parcours affiché',

@@ -148,7 +148,10 @@ class _ResponsibleProfileContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const MobSantePageHeader(title: 'Mon profil responsable'),
+                  const MobSanteJourneyHeader(
+                    journey: MobSanteJourney.responsible,
+                    pageTitle: 'Mon profil',
+                  ),
                   const SizedBox(height: V5Spacing.xxl),
                   Text(
                     'Centre géré',

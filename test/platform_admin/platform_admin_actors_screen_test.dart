@@ -119,7 +119,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(PlatformAdminActorsScreen), findsOneWidget);
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -280));
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
     await tester.pumpAndSettle();
     expect(
       tester.getSize(find.byKey(const Key('platform-actor-export'))).height,

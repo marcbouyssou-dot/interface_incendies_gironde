@@ -81,7 +81,7 @@ class _ResponsibleShellState extends State<ResponsibleShell> {
   @override
   Widget build(BuildContext context) {
     return RolePreviewDebugOverlay(
-      journeyLabel: 'Responsable',
+      journeyLabel: 'Responsable de site',
       child: Scaffold(
         key: const Key('responsible-shell'),
         backgroundColor: context.v5Colors.canvas,
@@ -165,7 +165,7 @@ class _ResponsiblePreviewBannerState extends State<_ResponsiblePreviewBanner> {
           return CrossRolePreviewBanner(
             label: 'Coordinateur',
             title:
-                'Perspective Responsable · ${location?.name ?? 'centre sélectionné'}',
+                'Perspective Responsable de site · ${location?.name ?? 'centre sélectionné'}',
             exitLabel: 'Revenir',
             accentColor: context.v5Colors.accent,
             compact: true,

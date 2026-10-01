@@ -300,7 +300,7 @@ void main() {
         .widget<V5BottomBar>(find.byKey(const Key('v5-bottom-navigation')))
         .onDestinationSelected(2);
     await tester.pumpAndSettle();
-    expect(find.text('Mon profil'), findsOneWidget);
+    expect(find.byKey(const Key('mobsante-product-identity')), findsOneWidget);
 
     final edit = find.byKey(const Key('edit-professional-profile'));
     for (var attempt = 0; attempt < 6 && edit.evaluate().isEmpty; attempt++) {
@@ -326,15 +326,16 @@ void main() {
 }
 
 Future<void> _chooseDate(WidgetTester tester) async {
-  final field = find.byKey(const Key('mission-date'));
-  await tester.ensureVisible(field);
-  await tester.pumpAndSettle();
+  final field = find.byKey(const Key('mission-date-tomorrow'));
+  final form = find.byKey(const PageStorageKey('create'));
+  final height = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+  for (var attempt = 0; attempt < 8; attempt++) {
+    final y = tester.getCenter(field).dy;
+    if (y > 80 && y < height - 80) break;
+    await tester.drag(form, Offset(0, y >= height - 80 ? -350 : 350));
+    await tester.pumpAndSettle();
+  }
   await tester.tap(field);
-  await tester.pumpAndSettle();
-  tester
-      .widget<CupertinoDatePicker>(find.byType(CupertinoDatePicker))
-      .onDateTimeChanged(DateTime.now().add(const Duration(days: 1)));
-  await tester.tap(find.text('Valider'));
   await tester.pumpAndSettle();
 }
 

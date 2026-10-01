@@ -25,6 +25,7 @@ void main() {
     WidgetTester tester,
     _MissionRepository repository, {
     CoordinationNeed? mission,
+    bool requireSiteManagerScope = false,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -39,7 +40,12 @@ void main() {
           child: MaterialApp(
             theme: AppTheme.light,
             home: Scaffold(
-              body: SafeArea(child: CreateNeedScreen(mission: mission)),
+              body: SafeArea(
+                child: CreateNeedScreen(
+                  mission: mission,
+                  requireSiteManagerScope: requireSiteManagerScope,
+                ),
+              ),
             ),
           ),
         ),
@@ -59,14 +65,12 @@ void main() {
   }
 
   Future<void> chooseDate(WidgetTester tester) async {
-    final field = find.byKey(const Key('mission-date'));
+    final field = find.byKey(const Key('mission-date-today'));
     await tester.ensureVisible(field);
     await tester.pumpAndSettle();
     await tester.tap(field);
     await tester.pumpAndSettle();
-    expect(find.byType(CupertinoDatePicker), findsOneWidget);
-    await tester.tap(find.text('Valider'));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mission-selected-date')), findsOneWidget);
   }
 
   Future<void> chooseTime(
@@ -174,11 +178,31 @@ void main() {
     await pumpForm(tester, _MissionRepository());
     await chooseDate(tester);
     final today = DateTime.now();
-    expect(find.text(FrenchDateTime.date(today)), findsOneWidget);
+    expect(
+      find.text('Date retenue : ${FrenchDateTime.date(today)}'),
+      findsOneWidget,
+    );
 
     await chooseTime(tester, const Key('mission-start-time'), '08:00');
     await chooseTime(tester, const Key('mission-end-time'), '12:00');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('custom need date opens a calendar', (tester) async {
+    await pumpForm(tester, _MissionRepository());
+    final button = find.byKey(const Key('mission-date'));
+    await tester.drag(
+      find.byKey(const PageStorageKey('create')),
+      const Offset(0, -500),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('mission-selected-date')), findsNothing);
   });
 
   testWidgets('publication refuses a missing location', (tester) async {
@@ -283,7 +307,7 @@ void main() {
     },
   );
 
-  testWidgets('a new need keeps exactly one profession', (tester) async {
+  testWidgets('a new need keeps independent profession quotas', (tester) async {
     final repository = _MissionRepository();
     await pumpForm(tester, repository);
 
@@ -307,6 +331,38 @@ void main() {
     expect(repository.lastDraft?.requiredByProfession, {
       'physiotherapist': 0,
       'podiatrist': 0,
+      'physician': 1,
+      'nurse': 2,
+      'veterinarian': 0,
+      'other_health_professional': 0,
+    });
+  });
+
+  testWidgets('changing and clearing one quota preserves the others', (
+    tester,
+  ) async {
+    final repository = _MissionRepository();
+    await pumpForm(tester, repository);
+    await completeRequiredFields(tester, addQuota: false);
+    for (var index = 0; index < 3; index++) {
+      await incrementQuota(tester, 'physiotherapist');
+    }
+    await incrementQuota(tester, 'podiatrist');
+    await incrementQuota(tester, 'physician');
+    await incrementQuota(tester, 'nurse');
+    await incrementQuota(tester, 'nurse');
+    await tester.drag(
+      find.byKey(const PageStorageKey('create')),
+      const Offset(0, 350),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('physician-remove')));
+    await tester.tap(find.byKey(const Key('physician-remove')));
+    await tester.pumpAndSettle();
+    await publishReviewedNeed(tester);
+    expect(repository.lastDraft?.requiredByProfession, {
+      'physiotherapist': 3,
+      'podiatrist': 1,
       'physician': 0,
       'nurse': 2,
       'veterinarian': 0,
@@ -441,6 +497,58 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('responsible perspective uses only the cumulative site scope', (
+    tester,
+  ) async {
+    final operational = places
+        .where((location) => location.isOperational && location.isEnabled)
+        .take(2)
+        .toList();
+    final repository = _MissionRepository(
+      access: ResponsibleAccess.v2(
+        uid: 'cumulative-responsible',
+        roles: const ['coordinator', 'site_manager'],
+        locationIds: {operational.first.id},
+        active: true,
+      ),
+      locations: operational,
+    );
+    await pumpForm(tester, repository, requireSiteManagerScope: true);
+    expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
+    expect(find.text(operational.first.name), findsOneWidget);
+    expect(find.text(operational.last.name), findsNothing);
+  });
+
+  testWidgets('responsible perspective blocks accounts without site role', (
+    tester,
+  ) async {
+    await pumpForm(tester, _MissionRepository(), requireSiteManagerScope: true);
+    expect(
+      find.text('Ce compte ne possède pas le rôle Responsable de site.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('review-mission')), findsNothing);
+  });
+
+  testWidgets('responsible perspective blocks an empty site scope', (
+    tester,
+  ) async {
+    final repository = _MissionRepository(
+      access: const ResponsibleAccess(
+        uid: 'unassigned-manager',
+        role: ResponsibleRole.siteManager,
+        locationIds: {},
+        active: true,
+      ),
+    );
+    await pumpForm(tester, repository, requireSiteManagerScope: true);
+    expect(
+      find.text('Aucun site autorisé et disponible pour ce compte.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('review-mission')), findsNothing);
+  });
+
   testWidgets(
     'multi-site manager selector contains only authorized locations',
     (tester) async {
@@ -535,6 +643,55 @@ void main() {
     expect(repository.lastDraft?.requiredPhysiotherapists, 2);
     expect(repository.lastDraft?.priority, NeedPriority.crisis);
     expect(find.text('Mission mise à jour.'), findsOneWidget);
+  });
+
+  testWidgets('editing a multi-day mission keeps its end date offset', (
+    tester,
+  ) async {
+    final location = places.first;
+    final start = DateUtils.dateOnly(
+      DateTime.now().add(const Duration(days: 2)),
+    );
+    final mission = CoordinationNeed(
+      id: 'multi-day-need',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: 'Multi-jours',
+      time: '22:00 — 02:00',
+      startAt: DateTime(start.year, start.month, start.day, 22),
+      endAt: DateTime(start.year, start.month, start.day + 2, 2),
+      requiredPhysiotherapists: 1,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      equipment: const [],
+    );
+    final repository = _MissionRepository(locations: [location]);
+    await pumpForm(tester, repository, mission: mission);
+    await tester.ensureVisible(find.byKey(const Key('mission-date-today')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('mission-date-today')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+    final draft = repository.lastDraft!;
+    expect(draft.startAt.hour, 22);
+    expect(draft.endAt.hour, 2);
+    expect(
+      DateTime.utc(draft.endAt.year, draft.endAt.month, draft.endAt.day)
+          .difference(
+            DateTime.utc(
+              draft.startAt.year,
+              draft.startAt.month,
+              draft.startAt.day,
+            ),
+          )
+          .inDays,
+      2,
+    );
   });
 
   testWidgets('return from edit mode closes the form without writing', (

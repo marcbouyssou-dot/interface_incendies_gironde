@@ -40,6 +40,7 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
   Stream<ResponsibleAccess?>? _responsibleAccess;
+  _HomeHorizon _horizon = _HomeHorizon.today;
 
   @override
   void didChangeDependencies() {
@@ -115,6 +116,9 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
                       onCreateNeed: _openCreateNeed,
                       onOpenNeeds: widget.onOpenNeeds,
                       previewLocationId: widget.previewLocationId,
+                      horizon: _horizon,
+                      onHorizonChanged: (value) =>
+                          setState(() => _horizon = value),
                     );
                   },
                 );
@@ -136,6 +140,7 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
             resizeToAvoidBottomInset: true,
             body: SafeArea(
               child: CreateNeedScreen(
+                requireSiteManagerScope: true,
                 onViewMission: () => Navigator.of(context).pop(),
                 onMissionPublished: widget.onMissionPublished,
               ),
@@ -147,6 +152,38 @@ class _ResponsibleHomeScreenState extends State<ResponsibleHomeScreen> {
   }
 }
 
+enum _HomeHorizon { today, tomorrow, upcoming }
+
+extension on _HomeHorizon {
+  String get label => switch (this) {
+    _HomeHorizon.today => 'Aujourd’hui',
+    _HomeHorizon.tomorrow => 'Demain',
+    _HomeHorizon.upcoming => 'À venir',
+  };
+
+  String get emptyMessage => switch (this) {
+    _HomeHorizon.today => 'Aucun besoin aujourd’hui.',
+    _HomeHorizon.tomorrow => 'Aucun besoin demain.',
+    _HomeHorizon.upcoming => 'Aucun besoin à venir.',
+  };
+}
+
+bool _isInHorizon(CoordinationNeed need, _HomeHorizon horizon, DateTime now) {
+  if (!isMissionOperational(need, now: now)) return false;
+  final start = need.startAt;
+  final end = need.endAt;
+  if (start == null || end == null) return false;
+  final today = DateTime(now.year, now.month, now.day);
+  final tomorrow = DateTime(now.year, now.month, now.day + 1);
+  final dayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
+  return switch (horizon) {
+    _HomeHorizon.today => start.isBefore(tomorrow) && end.isAfter(today),
+    _HomeHorizon.tomorrow =>
+      start.isBefore(dayAfterTomorrow) && end.isAfter(tomorrow),
+    _HomeHorizon.upcoming => end.isAfter(dayAfterTomorrow),
+  };
+}
+
 class _ResponsibleHomeContent extends StatelessWidget {
   const _ResponsibleHomeContent({
     required this.access,
@@ -155,6 +192,8 @@ class _ResponsibleHomeContent extends StatelessWidget {
     required this.onCreateNeed,
     required this.onOpenNeeds,
     required this.previewLocationId,
+    required this.horizon,
+    required this.onHorizonChanged,
   });
 
   final ResponsibleAccess? access;
@@ -163,6 +202,8 @@ class _ResponsibleHomeContent extends StatelessWidget {
   final VoidCallback onCreateNeed;
   final VoidCallback onOpenNeeds;
   final String? previewLocationId;
+  final _HomeHorizon horizon;
+  final ValueChanged<_HomeHorizon> onHorizonChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +215,7 @@ class _ResponsibleHomeContent extends StatelessWidget {
       previewLocationId: previewLocationId,
     );
     final planningNeeds = visibleMissions
-        .where(isMissionScheduledForTomorrow)
+        .where((need) => _isInHorizon(need, horizon, DateTime.now()))
         .toList(growable: false);
     final toHandle = planningNeeds
         .where((need) => need.status == NeedStatus.critical)
@@ -200,21 +241,21 @@ class _ResponsibleHomeContent extends StatelessWidget {
         .toList(growable: false);
     final nextNeed = _nextResponsibleNeed(planningNeeds);
     final deadline = nextNeed == null
-        ? 'Aucune échéance demain.'
+        ? 'Aucune échéance pour cette période.'
         : '${nextNeed.date} · ${nextNeed.time}';
     final verdict = switch (remaining) {
-      0 => 'Tout est couvert pour demain.',
-      1 => '1 poste reste à couvrir demain.',
-      _ => '$remaining postes restent à couvrir demain.',
+      0 => 'Tous les postes sont couverts.',
+      1 => '1 poste reste à couvrir.',
+      _ => '$remaining postes restent à couvrir.',
     };
     final teamSummary = quotas.requiredTotal == 0
-        ? 'Aucun professionnel mobilisé pour demain.'
+        ? 'Aucun professionnel mobilisé pour cette période.'
         : quotas.registeredTotal == 0
-        ? 'Aucun professionnel mobilisé pour demain.'
+        ? 'Aucun professionnel mobilisé pour cette période.'
         : quotas.registeredTotal == 1
-        ? '1 confirmé sur ${quotas.requiredTotal} attendus demain.'
+        ? '1 confirmé sur ${quotas.requiredTotal} attendus.'
         : '${quotas.registeredTotal} confirmés sur '
-              '${quotas.requiredTotal} attendus demain.';
+              '${quotas.requiredTotal} attendus.';
     final centerContext = _centerContext(
       planningNeeds: planningNeeds,
       locations: locations,
@@ -236,57 +277,85 @@ class _ResponsibleHomeContent extends StatelessWidget {
                   children: [
                     const MobSanteJourneyHeader(
                       journey: MobSanteJourney.responsible,
-                      pageTitle: 'Demain dans mon établissement',
+                      pageTitle: 'Situation de mon établissement',
                     ),
                     const SizedBox(height: V5Spacing.lg),
-                    _PlanningHero(
-                      verdict: verdict,
-                      centerContext: centerContext,
-                      secured: remaining == 0,
+                    SegmentedButton<_HomeHorizon>(
+                      key: const Key('responsible-home-horizon'),
+                      segments: [
+                        for (final value in _HomeHorizon.values)
+                          ButtonSegment(value: value, label: Text(value.label)),
+                      ],
+                      selected: {horizon},
+                      onSelectionChanged: (values) =>
+                          onHorizonChanged(values.single),
                     ),
                     const SizedBox(height: V5Spacing.lg),
-                    _ResponsibleDecisionPriorities(
-                      missingProfessions: missingProfessions,
-                      deadline: deadline,
-                    ),
+                    if (planningNeeds.isEmpty) ...[
+                      Text(
+                        horizon.emptyMessage,
+                        key: const Key('responsible-home-empty'),
+                      ),
+                      const SizedBox(height: V5Spacing.xs),
+                      Text(
+                        centerContext,
+                        key: const Key('responsible-planning-context'),
+                      ),
+                    ] else ...[
+                      _PlanningHero(
+                        verdict: verdict,
+                        centerContext: centerContext,
+                        secured: remaining == 0,
+                        periodLabel: horizon.label,
+                      ),
+                      const SizedBox(height: V5Spacing.lg),
+                      _ResponsibleDecisionPriorities(
+                        missingProfessions: missingProfessions,
+                        deadline: deadline,
+                      ),
+                    ],
                     const SizedBox(height: V5Spacing.xl),
                     V5Button(
                       key: const Key('responsible-create-need'),
                       expanded: true,
                       onPressed: onCreateNeed,
-                      backgroundColor: remaining == 0
+                      backgroundColor:
+                          planningNeeds.isNotEmpty && remaining == 0
                           ? colors.warningContainer
                           : colors.accent,
-                      foregroundColor: remaining == 0
+                      foregroundColor:
+                          planningNeeds.isNotEmpty && remaining == 0
                           ? colors.accent
                           : colors.onAccent,
                       label: 'Créer un besoin',
                     ),
-                    const SizedBox(height: V5Spacing.xxl),
-                    _MissionSection(
-                      title: 'À traiter',
-                      emptyMessage:
-                          'Rien ne nécessite votre intervention pour demain.',
-                      needs: toHandle,
-                      onOpenNeeds: onOpenNeeds,
-                    ),
-                    const SizedBox(height: V5Spacing.xxl),
-                    _MissionSection(
-                      title: 'Sous contrôle',
-                      emptyMessage: toHandle.isEmpty
-                          ? 'Tous les besoins de demain sont couverts.'
-                          : 'Les confirmations pour demain apparaîtront ici au fil des '
-                                'mobilisations.',
-                      needs: underControl,
-                      onOpenNeeds: onOpenNeeds,
-                    ),
-                    const SizedBox(height: V5Spacing.xxl),
-                    Text(
-                      'Équipe',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: V5Spacing.sm),
-                    _TeamSummary(message: teamSummary),
+                    if (planningNeeds.isNotEmpty) ...[
+                      const SizedBox(height: V5Spacing.xxl),
+                      _MissionSection(
+                        title: 'À traiter',
+                        emptyMessage:
+                            'Rien ne nécessite votre intervention pour cette période.',
+                        needs: toHandle,
+                        onOpenNeeds: onOpenNeeds,
+                      ),
+                      const SizedBox(height: V5Spacing.xxl),
+                      _MissionSection(
+                        title: 'Sous contrôle',
+                        emptyMessage: toHandle.isEmpty
+                            ? 'Aucun autre besoin pour cette période.'
+                            : 'Les confirmations apparaîtront ici au fil des '
+                                  'mobilisations.',
+                        needs: underControl,
+                        onOpenNeeds: onOpenNeeds,
+                      ),
+                      const SizedBox(height: V5Spacing.xxl),
+                      Text(
+                        'Équipe',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: V5Spacing.sm),
+                      _TeamSummary(message: teamSummary),
+                    ],
                   ],
                 ),
               ),
@@ -345,11 +414,13 @@ class _PlanningHero extends StatelessWidget {
     required this.verdict,
     required this.centerContext,
     required this.secured,
+    required this.periodLabel,
   });
 
   final String verdict;
   final String centerContext;
   final bool secured;
+  final String periodLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -357,7 +428,7 @@ class _PlanningHero extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: true,
-      label: '$verdict Demain, $centerContext',
+      label: '$verdict $periodLabel, $centerContext',
       child: AnimatedSize(
         duration: MediaQuery.disableAnimationsOf(context)
             ? Duration.zero
@@ -405,7 +476,7 @@ class _PlanningHero extends StatelessWidget {
                 ),
                 const SizedBox(height: V5Spacing.sm),
                 Text(
-                  'Demain  •  $centerContext',
+                  '$periodLabel  •  $centerContext',
                   key: const Key('responsible-planning-context'),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.textSecondary,

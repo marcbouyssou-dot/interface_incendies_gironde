@@ -57,8 +57,8 @@ void main() {
     expect(find.text('Responsable Test'), findsOneWidget);
     expect(find.text('Responsable Cumulatif'), findsOneWidget);
     expect(find.text('Coordinateur'), findsOneWidget);
-    expect(find.text('Responsable'), findsOneWidget);
-    expect(find.text('Coordinateur et responsable'), findsOneWidget);
+    expect(find.text('Responsable de site'), findsOneWidget);
+    expect(find.text('Coordinateur et Responsable de site'), findsOneWidget);
     expect(find.text('Actif'), findsNWidgets(2));
     expect(find.text('Inactif'), findsOneWidget);
     expect(
@@ -129,7 +129,7 @@ void main() {
     await tester.tap(find.byKey(const Key('responsible-active-switch')));
     await tester.tap(find.byKey(const Key('save-responsible-access')));
     await tester.pumpAndSettle();
-    expect(find.text('Désactiver ce responsable ?'), findsOneWidget);
+    expect(find.text('Désactiver ce Responsable de site ?'), findsOneWidget);
     expect(
       find.textContaining('Le compte et son historique sont conservés'),
       findsOneWidget,
@@ -149,13 +149,13 @@ void main() {
     await _openForm(tester, repository: repository);
 
     await _chooseRole(tester, 'Coordinateur');
-    await _chooseRole(tester, 'Responsable');
+    await _chooseRole(tester, 'Responsable de site');
     await tester.tap(find.byKey(const Key('save-responsible-access')));
     await tester.pump();
     expect(find.text('Sélectionnez au moins un centre.'), findsOneWidget);
     expect(repository.calls, 0);
 
-    await _chooseRole(tester, 'Coordinateur et responsable');
+    await _chooseRole(tester, 'Coordinateur et Responsable de site');
     await tester.tap(find.byKey(const Key('save-responsible-access')));
     await tester.pump();
     expect(repository.calls, 0);

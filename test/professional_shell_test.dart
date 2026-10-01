@@ -13,6 +13,9 @@ import 'package:interface_incendies_gironde/screens/development_settings_screen.
 import 'package:interface_incendies_gironde/screens/coordinator_shell.dart';
 import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/screens/responsible_home_screen.dart';
+import 'package:interface_incendies_gironde/screens/responsible_needs_screen.dart';
+import 'package:interface_incendies_gironde/screens/responsible_team_screen.dart';
+import 'package:interface_incendies_gironde/screens/responsible_profile_screen.dart';
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 import 'package:interface_incendies_gironde/theme/v5_foundation.dart';
 import 'package:interface_incendies_gironde/utils/mission_timing.dart';
@@ -311,10 +314,15 @@ void main() {
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
-    final profileScroll = find.byKey(const PageStorageKey('professional-profile'));
+    final profileScroll = find.byKey(
+      const PageStorageKey('professional-profile'),
+    );
     final notifications = find.byKey(const Key('open-notification-center'));
-    for (var attempt = 0; attempt < 10 && notifications.evaluate().isEmpty;
-        attempt++) {
+    for (
+      var attempt = 0;
+      attempt < 10 && notifications.evaluate().isEmpty;
+      attempt++
+    ) {
       await tester.drag(profileScroll, const Offset(0, -350));
       await tester.pumpAndSettle();
     }
@@ -624,22 +632,22 @@ void main() {
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
-    expect(find.text('Responsable'), findsOneWidget);
+    expect(find.text('Responsable de site'), findsOneWidget);
     expect(
       find.text('Organisez la couverture de votre établissement.'),
       findsOneWidget,
     );
     expect(find.text('Mon planning est-il sécurisé ?'), findsNothing);
-    expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
-    expect(find.text('Demain dans mon établissement'), findsOneWidget);
+    expect(find.text('Aucun besoin aujourd’hui.'), findsOneWidget);
+    expect(find.text('Situation de mon établissement'), findsOneWidget);
     expect(
       find.byKey(const Key('responsible-planning-context')),
       findsOneWidget,
     );
     expect(find.byKey(const Key('responsible-create-need')), findsOneWidget);
-    expect(find.text('À traiter'), findsOneWidget);
-    expect(find.text('Sous contrôle'), findsOneWidget);
-    expect(find.text('Équipe'), findsWidgets);
+    expect(find.text('À traiter'), findsNothing);
+    expect(find.text('Sous contrôle'), findsNothing);
+    expect(find.text('Équipe'), findsOneWidget);
     expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
     final navigation = tester.widget<V5BottomBar>(find.byType(V5BottomBar));
     expect(navigation.destinations, hasLength(4));
@@ -675,13 +683,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
-    expect(find.text('3 postes restent à couvrir demain.'), findsOneWidget);
+    await tester.tap(find.text('Demain').first);
+    await tester.pumpAndSettle();
+    expect(find.text('3 postes restent à couvrir.'), findsOneWidget);
     expect(find.textContaining('Demain  •  Centre : Mérignac'), findsOneWidget);
     expect(
       find.byKey(const Key('responsible-open-need-mission-merignac')),
       findsOneWidget,
     );
-    expect(find.text('1 confirmé sur 4 attendus demain.'), findsOneWidget);
+    expect(find.text('1 confirmé sur 4 attendus.'), findsOneWidget);
     expect(
       find.byKey(const Key('responsible-missing-professions')),
       findsOneWidget,
@@ -796,6 +806,34 @@ void main() {
     expect(find.byKey(const Key('admin-locations-entry')), findsNothing);
   });
 
+  testWidgets('all responsible tabs share the MobSanté journey header', (
+    tester,
+  ) async {
+    final site = places.first;
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: MockCoordinationRepository(
+          initialMissions: const [],
+          initialLocations: [site],
+          responsibleAccess: ResponsibleAccess(
+            uid: 'manager-headers',
+            role: ResponsibleRole.siteManager,
+            locationIds: {site.id},
+            active: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final tab in ['Accueil', 'Besoins', 'Équipe', 'Profil']) {
+      await tester.tap(find.text(tab).last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('mobsante-journey-header')), findsOneWidget);
+      expect(find.text('MobSanté'), findsOneWidget);
+      expect(find.text('Responsable de site'), findsOneWidget);
+    }
+  });
+
   test('responsible tomorrow scope distinguishes local calendar days', () {
     final bassens = places.first;
     final now = DateTime(2026, 8, 25, 12);
@@ -897,7 +935,13 @@ void main() {
       await tester.pumpWidget(FireCoordinationApp(repository: repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('5 postes restent à couvrir demain.'), findsOneWidget);
+      expect(
+        find.byKey(const Key('responsible-open-need-today-need')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Demain').first);
+      await tester.pumpAndSettle();
+      expect(find.text('5 postes restent à couvrir.'), findsOneWidget);
       expect(
         find.text('Masseur-kinésithérapeute · 3 · Pédicure-podologue · 2'),
         findsOneWidget,
@@ -927,6 +971,16 @@ void main() {
       );
       expect(
         find.byKey(const Key('responsible-open-need-after-tomorrow-need')),
+        findsNothing,
+      );
+      await tester.tap(find.text('À venir').first);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('responsible-open-need-after-tomorrow-need')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('responsible-open-need-tomorrow-early')),
         findsNothing,
       );
     },
@@ -969,12 +1023,16 @@ void main() {
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
 
-    expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
-    expect(find.text('Aucune profession manquante.'), findsOneWidget);
-    expect(find.text('Aucune échéance demain.'), findsOneWidget);
+    await tester.tap(find.text('Demain').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Aucun besoin demain.'), findsOneWidget);
     expect(
-      find.text('Rien ne nécessite votre intervention pour demain.'),
-      findsOneWidget,
+      find.byKey(const Key('responsible-decision-priorities')),
+      findsNothing,
+    );
+    expect(
+      find.text('Rien ne nécessite votre intervention pour cette période.'),
+      findsNothing,
     );
     expect(
       find.byKey(const Key('responsible-open-need-past-only')),
@@ -1064,22 +1122,16 @@ void main() {
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
 
-    expect(find.text('Tout est couvert pour demain.'), findsOneWidget);
+    expect(find.text('Aucun besoin aujourd’hui.'), findsOneWidget);
+    expect(find.textContaining('Centre : ${bassens.name}'), findsOneWidget);
     expect(
-      find.textContaining('Demain  •  Centre : ${bassens.name}'),
-      findsOneWidget,
+      find.text('Rien ne nécessite votre intervention pour cette période.'),
+      findsNothing,
     );
+    expect(find.text('Aucun autre besoin pour cette période.'), findsNothing);
     expect(
-      find.text('Rien ne nécessite votre intervention pour demain.'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Tous les besoins de demain sont couverts.'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Aucun professionnel mobilisé pour demain.'),
-      findsOneWidget,
+      find.text('Aucun professionnel mobilisé pour cette période.'),
+      findsNothing,
     );
     expect(
       find.text('Les confirmations pour demain apparaîtront ici.'),
@@ -1094,7 +1146,11 @@ void main() {
         matching: find.byType(V5Button),
       ),
     );
-    expect(calmCreateButton.backgroundColor, colors.warningContainer);
+    expect(calmCreateButton.backgroundColor, colors.accent);
+
+    await tester.tap(find.text('À venir').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Aucun besoin à venir.'), findsOneWidget);
 
     await tester.tap(find.text('Besoins'));
     await tester.pumpAndSettle();
@@ -1107,9 +1163,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('En cours'), findsNothing);
+    expect(find.byKey(const Key('responsible-needs-create')), findsOneWidget);
     expect(
       find.byKey(const Key('responsible-needs-empty-create')),
-      findsOneWidget,
+      findsNothing,
     );
 
     await tester.tap(find.text('Passés'));
@@ -1122,39 +1179,73 @@ void main() {
   });
 
   testWidgets(
+    'responsible bottom navigation receives portrait and landscape taps',
+    (tester) async {
+      final site = places.first;
+      final repository = MockCoordinationRepository(
+        initialMissions: const [],
+        initialLocations: [site],
+        responsibleAccess: ResponsibleAccess(
+          uid: 'manager-navigation',
+          role: ResponsibleRole.siteManager,
+          locationIds: {site.id},
+          active: true,
+        ),
+      );
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Besoins').last);
+      await tester.pumpAndSettle();
+      expect(find.byType(ResponsibleNeedsScreen), findsOneWidget);
+
+      tester.view.physicalSize = const Size(844, 390);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Équipe').last);
+      await tester.pumpAndSettle();
+      expect(find.byType(ResponsibleTeamScreen), findsOneWidget);
+      await tester.tap(find.text('Profil').last);
+      await tester.pumpAndSettle();
+      expect(find.byType(ResponsibleProfileScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'compact RECETTE control switches the displayed shell instantly',
     (tester) async {
-    await tester.pumpWidget(const FireCoordinationApp());
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(const FireCoordinationApp());
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Plus'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('open-development-settings')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Plus'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('open-development-settings')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Mode Développement'), findsOneWidget);
-    expect(find.text('Automatique'), findsOneWidget);
-    await selectPreview(tester, 'Professionnel');
-    await closeSettings(tester);
-    expect(find.byType(ProfessionalShell), findsOneWidget);
-    expect(
-      find.text('1 mission urgente nécessite votre attention.'),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
-    expect(find.text('Voir les détails'), findsWidgets);
+      expect(find.text('Mode Développement'), findsOneWidget);
+      expect(find.text('Automatique'), findsOneWidget);
+      await selectPreview(tester, 'Professionnel');
+      await closeSettings(tester);
+      expect(find.byType(ProfessionalShell), findsOneWidget);
+      expect(
+        find.text('1 mission urgente nécessite votre attention.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
+      expect(find.text('Voir les détails'), findsWidgets);
 
-    await tester.tap(find.byKey(const Key('role-preview-banner')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('role-preview-banner-option-responsible')),
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('role-preview-banner')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('role-preview-banner-option-responsible')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byType(ProfessionalShell), findsNothing);
-    expect(find.byType(ResponsibleShell), findsOneWidget);
-    expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
-    expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
+      expect(find.byType(ProfessionalShell), findsNothing);
+      expect(find.byType(ResponsibleShell), findsOneWidget);
+      expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
+      expect(find.byType(ResponsibleBottomNavigation), findsOneWidget);
     },
   );
 

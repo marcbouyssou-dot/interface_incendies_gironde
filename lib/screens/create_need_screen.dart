@@ -20,7 +20,11 @@ import '../widgets/responsible_diffusion_summary.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
-Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
+Future<void> openMissionEditor(
+  BuildContext context,
+  CoordinationNeed mission, {
+  bool requireSiteManagerScope = false,
+}) {
   final liveData = LiveCoordinationDataScope.of(context);
   return Navigator.of(context).push<void>(
     AppPageRoute<void>(
@@ -28,7 +32,12 @@ Future<void> openMissionEditor(BuildContext context, CoordinationNeed mission) {
         data: liveData,
         child: Scaffold(
           resizeToAvoidBottomInset: true,
-          body: SafeArea(child: CreateNeedScreen(mission: mission)),
+          body: SafeArea(
+            child: CreateNeedScreen(
+              mission: mission,
+              requireSiteManagerScope: requireSiteManagerScope,
+            ),
+          ),
         ),
       ),
     ),
@@ -43,6 +52,7 @@ class CreateNeedScreen extends StatefulWidget {
     this.mission,
     this.mobilizationId,
     this.createMission,
+    this.requireSiteManagerScope = false,
   });
 
   final VoidCallback? onViewMission;
@@ -50,6 +60,7 @@ class CreateNeedScreen extends StatefulWidget {
   final CoordinationNeed? mission;
   final String? mobilizationId;
   final Future<String> Function(MissionDraft draft)? createMission;
+  final bool requireSiteManagerScope;
 
   @override
   State<CreateNeedScreen> createState() => _CreateNeedScreenState();
@@ -72,6 +83,34 @@ class _ResponsibleAccessReadFailure extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ResponsibleScopeUnavailable extends StatelessWidget {
+  const _ResponsibleScopeUnavailable({required this.message, this.onCancel});
+
+  final String message;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) => PageContainer(
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message, textAlign: TextAlign.center),
+            if (onCancel != null)
+              TextButton(
+                key: const Key('responsible-scope-back'),
+                onPressed: onCancel,
+                child: const Text('Revenir au parcours'),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _CreateNeedScreenState extends State<CreateNeedScreen> {
@@ -114,6 +153,17 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   Stream<List<ResponsePlace>>? _locations;
 
   bool get _isEditing => widget.mission != null;
+
+  int get _existingMissionDaySpan {
+    final start = widget.mission?.startAt;
+    final end = widget.mission?.endAt;
+    if (start == null || end == null) return 0;
+    return DateTime.utc(
+      end.year,
+      end.month,
+      end.day,
+    ).difference(DateTime.utc(start.year, start.month, start.day)).inDays;
+  }
 
   @override
   void initState() {
@@ -189,12 +239,30 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         }
         final access = snapshot.data;
         if (access == null) {
-          return ResponsibleLogin(repository: repository);
+          return ResponsibleLogin(
+            repository: repository,
+            allowPlatformAdministrator: !widget.requireSiteManagerScope,
+            onCancel: Navigator.of(context).canPop()
+                ? () => Navigator.of(context).pop()
+                : null,
+          );
         }
         if (!access.active) {
           return ResponsibleLogin(
             repository: repository,
-            initialMessage: 'Votre compte responsable est inactif.',
+            initialMessage: 'Votre compte Responsable de site est inactif.',
+            allowPlatformAdministrator: !widget.requireSiteManagerScope,
+            onCancel: Navigator.of(context).canPop()
+                ? () => Navigator.of(context).pop()
+                : null,
+          );
+        }
+        if (widget.requireSiteManagerScope && !access.isSiteManager) {
+          return _ResponsibleScopeUnavailable(
+            message: 'Ce compte ne possède pas le rôle Responsable de site.',
+            onCancel: Navigator.of(context).canPop()
+                ? () => Navigator.of(context).pop()
+                : null,
           );
         }
         return StreamBuilder<List<ResponsePlace>>(
@@ -228,6 +296,20 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     ResponsibleAccess access,
     List<ResponsePlace> locations,
   ) {
+    if (widget.requireSiteManagerScope &&
+        !locations.any(
+          (location) =>
+              access.locationIds.contains(location.id) &&
+              location.isOperational &&
+              location.isEnabled,
+        )) {
+      return _ResponsibleScopeUnavailable(
+        message: 'Aucun site autorisé et disponible pour ce compte.',
+        onCancel: Navigator.of(context).canPop()
+            ? () => Navigator.of(context).pop()
+            : null,
+      );
+    }
     if (!_isEditing && _publishedMission != null) {
       final diffusionRepository = DiffusionReadRepositoryScope.maybeOf(context);
       return _MissionPublishedView(
@@ -256,7 +338,21 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     if (_isEditing && _selectedLocation == null) {
       _selectedLocation = responsePlaceForNeed(widget.mission!, locations);
     }
-    final responsibleLocationId = _isEditing
+    if (widget.requireSiteManagerScope &&
+        _isEditing &&
+        !access.locationIds.contains(_selectedLocation?.id)) {
+      return _ResponsibleScopeUnavailable(
+        message: 'Ce besoin ne fait pas partie de vos sites autorisés.',
+        onCancel: Navigator.of(context).canPop()
+            ? () => Navigator.of(context).pop()
+            : null,
+      );
+    }
+    final responsibleLocationId = widget.requireSiteManagerScope
+        ? access.locationIds.length == 1
+              ? access.locationIds.single
+              : null
+        : _isEditing
         ? null
         : access.singleManagedLocationId;
     if (responsibleLocationId != null) {
@@ -292,6 +388,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         _isEditing && _selectedDate != null && _selectedDate!.isBefore(today)
         ? _selectedDate!
         : today;
+    final defaultLastDate = DateTime(today.year + 2, today.month, today.day);
+    final lastDate =
+        _isEditing &&
+            _selectedDate != null &&
+            _selectedDate!.isAfter(defaultLastDate)
+        ? _selectedDate!
+        : defaultLastDate;
     return PageContainer(
       child: Material(
         color: context.v5Colors.canvas,
@@ -359,7 +462,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                         children: [
                           if (!_isEditing) ...[
                             Text(
-                              'Choisissez la profession recherchée.',
+                              'Choisissez les professions recherchées.',
                               style: TextStyle(
                                 color: context.v5Colors.textSecondary,
                                 fontSize: 12,
@@ -378,8 +481,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             const SizedBox(height: V5Spacing.xs),
                           ],
                           Text(
-                            'Un besoin concerne une seule profession. Ajouter '
-                            'une autre profession remplace la sélection actuelle.',
+                            'Définissez un nombre indépendant pour chaque profession.',
                             style: TextStyle(
                               color: context.v5Colors.textSecondary,
                               fontSize: 12,
@@ -419,6 +521,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                       child: _LocationInput(
                         key: _locationKey,
                         access: access,
+                        requireSiteManagerScope: widget.requireSiteManagerScope,
                         locations: locations,
                         selectedLocation: _selectedLocation,
                         preserveUnavailableSelection: _isEditing,
@@ -441,27 +544,107 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                         children: [
                           KeyedSubtree(
                             key: _dateKey,
-                            child: V5DateField(
-                              key: const Key('mission-date'),
-                              label: 'Date',
-                              value: _selectedDate,
-                              firstDate: firstDate,
-                              lastDate: DateTime(
-                                today.year + 2,
-                                today.month,
-                                today.day,
-                              ),
-                              formatter: (_, value) => _formatDate(value),
-                              focusNode: _dateFocusNode,
-                              onChanged: _publishing
-                                  ? null
-                                  : (value) {
-                                      if (value == null || !mounted) return;
-                                      setState(() {
-                                        _selectedDate = value;
-                                        _errorMessage = null;
-                                      });
-                                    },
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const _CreateNeedFieldLabel('Date'),
+                                const SizedBox(height: V5Spacing.xs),
+                                Wrap(
+                                  spacing: V5Spacing.xs,
+                                  runSpacing: V5Spacing.xs,
+                                  children: [
+                                    for (final option in [
+                                      (
+                                        label: 'Aujourd’hui',
+                                        date: today,
+                                        key: 'mission-date-today',
+                                      ),
+                                      (
+                                        label: 'Demain',
+                                        date: today.add(
+                                          const Duration(days: 1),
+                                        ),
+                                        key: 'mission-date-tomorrow',
+                                      ),
+                                    ])
+                                      ChoiceChip(
+                                        key: Key(option.key),
+                                        label: Text(option.label),
+                                        selected: DateUtils.isSameDay(
+                                          _selectedDate,
+                                          option.date,
+                                        ),
+                                        onSelected: _publishing
+                                            ? null
+                                            : (_) => setState(() {
+                                                _selectedDate = option.date;
+                                                _errorMessage = null;
+                                              }),
+                                      ),
+                                    OutlinedButton(
+                                      key: const Key('mission-date'),
+                                      focusNode: _dateFocusNode,
+                                      onPressed: _publishing
+                                          ? null
+                                          : () async {
+                                              final selected = await showDatePicker(
+                                                context: context,
+                                                initialDate:
+                                                    _selectedDate?.isBefore(
+                                                          firstDate,
+                                                        ) ==
+                                                        true
+                                                    ? firstDate
+                                                    : _selectedDate ?? today,
+                                                firstDate: firstDate,
+                                                lastDate: lastDate,
+                                                helpText:
+                                                    'Choisir la date du besoin',
+                                                cancelText: 'Annuler',
+                                                confirmText: 'Valider',
+                                              );
+                                              if (selected == null ||
+                                                  !mounted) {
+                                                return;
+                                              }
+                                              setState(() {
+                                                _selectedDate =
+                                                    DateUtils.dateOnly(
+                                                      selected,
+                                                    );
+                                                _errorMessage = null;
+                                              });
+                                            },
+                                      child: Text(
+                                        _selectedDate != null &&
+                                                !DateUtils.isSameDay(
+                                                  _selectedDate,
+                                                  today,
+                                                ) &&
+                                                !DateUtils.isSameDay(
+                                                  _selectedDate,
+                                                  today.add(
+                                                    const Duration(days: 1),
+                                                  ),
+                                                )
+                                            ? _formatDate(_selectedDate!)
+                                            : 'Choisir une date',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_selectedDate != null) ...[
+                                  const SizedBox(height: V5Spacing.xs),
+                                  Text(
+                                    'Date retenue : ${_formatDate(_selectedDate!)}',
+                                    key: const Key('mission-selected-date'),
+                                  ),
+                                ],
+                                if (_existingMissionDaySpan > 0)
+                                  Text(
+                                    'Le besoin se termine $_existingMissionDaySpan jour(s) après cette date.',
+                                  ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: V5Spacing.md),
@@ -764,6 +947,14 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       }
     }
     final draft = confirmedDraft ?? _buildDraft();
+    if (widget.requireSiteManagerScope &&
+        (!access.isSiteManager ||
+            !access.locationIds.contains(draft.location.id))) {
+      setState(
+        () => _errorMessage = 'Ce site ne fait pas partie de vos droits.',
+      );
+      return;
+    }
     setState(() {
       _publishing = true;
       _errorMessage = null;
@@ -868,7 +1059,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         focusNode: _endTimeFocusNode,
       );
     }
-    if (_minutes(_endTime!) <= _minutes(_startTime!)) {
+    if (_existingMissionDaySpan == 0 &&
+        _minutes(_endTime!) <= _minutes(_startTime!)) {
       return _MissionFormValidationError(
         message: 'L’heure de fin doit être postérieure à l’heure de début.',
         targetKey: _endTimeKey,
@@ -919,11 +1111,30 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   }
 
   MissionDraft _buildDraft() {
-    final schedule = MissionSchedule.fromLocal(
-      date: _selectedDate!,
-      startMinutes: _minutes(_startTime!),
-      endMinutes: _minutes(_endTime!),
-    );
+    final date = _selectedDate!;
+    final daySpan = _existingMissionDaySpan;
+    final schedule = daySpan > 0
+        ? MissionSchedule(
+            startAt: DateTime(
+              date.year,
+              date.month,
+              date.day,
+              _startTime!.hour,
+              _startTime!.minute,
+            ),
+            endAt: DateTime(
+              date.year,
+              date.month,
+              date.day + daySpan,
+              _endTime!.hour,
+              _endTime!.minute,
+            ),
+          )
+        : MissionSchedule.fromLocal(
+            date: date,
+            startMinutes: _minutes(_startTime!),
+            endMinutes: _minutes(_endTime!),
+          );
     return MissionDraft(
       location: _selectedLocation!,
       startAt: schedule.startAt,
@@ -958,16 +1169,6 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     final current = _requiredByProfession[professionId]!;
     final updated = current + delta;
     setState(() {
-      if (!_isEditing && delta > 0 && current == 0) {
-        for (final otherProfessionId in _requiredByProfession.keys) {
-          if (otherProfessionId != professionId) {
-            _requiredByProfession[otherProfessionId] = 0;
-          }
-        }
-        _equipmentProfessionHistory.removeWhere(
-          (otherProfessionId) => otherProfessionId != professionId,
-        );
-      }
       _requiredByProfession[professionId] = updated;
       _equipmentProfessionHistory.remove(professionId);
       if (updated > 0) _equipmentProfessionHistory.add(professionId);
@@ -1140,11 +1341,15 @@ class ResponsibleLogin extends StatefulWidget {
     required this.repository,
     this.initialMessage,
     this.onSignedIn,
+    this.onCancel,
+    this.allowPlatformAdministrator = true,
   });
 
   final CoordinationRepository repository;
   final String? initialMessage;
   final VoidCallback? onSignedIn;
+  final VoidCallback? onCancel;
+  final bool allowPlatformAdministrator;
 
   @override
   State<ResponsibleLogin> createState() => _ResponsibleLoginState();
@@ -1180,7 +1385,9 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
     });
     try {
       final repository = widget.repository;
-      final signIn = repository is PlatformAccountAuthenticator
+      final signIn =
+          widget.allowPlatformAdministrator &&
+              repository is PlatformAccountAuthenticator
           ? (repository as PlatformAccountAuthenticator)
                 .signInPlatformOrResponsible(
                   email: _email.text,
@@ -1223,6 +1430,15 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                 36,
               ),
               children: [
+                if (widget.onCancel != null) ...[
+                  TextButton.icon(
+                    key: const Key('responsible-login-cancel'),
+                    onPressed: _loading ? null : widget.onCancel,
+                    icon: const Icon(Icons.chevron_left_rounded),
+                    label: const Text('Annuler et revenir'),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 const _ResponsibleLoginHeader(),
                 const SizedBox(height: 24),
                 Container(
@@ -1333,7 +1549,7 @@ class _ResponsibleLoginHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'ESPACE RESPONSABLE',
+                    'ESPACE RESPONSABLE DE SITE',
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 12,
@@ -1592,6 +1808,7 @@ class _LocationInput extends StatelessWidget {
   const _LocationInput({
     super.key,
     required this.access,
+    required this.requireSiteManagerScope,
     required this.locations,
     required this.selectedLocation,
     required this.preserveUnavailableSelection,
@@ -1601,6 +1818,7 @@ class _LocationInput extends StatelessWidget {
   });
 
   final ResponsibleAccess access;
+  final bool requireSiteManagerScope;
   final List<ResponsePlace> locations;
   final ResponsePlace? selectedLocation;
   final bool preserveUnavailableSelection;
@@ -1620,10 +1838,11 @@ class _LocationInput extends StatelessWidget {
             !available.any((location) => location.id == selected.id)
         ? [selected, ...available]
         : available;
-    if (access.singleManagedLocationId != null) {
+    if ((requireSiteManagerScope && access.locationIds.length == 1) ||
+        (!requireSiteManagerScope && access.singleManagedLocationId != null)) {
       return _buildLockedLocation(context, displayed);
     }
-    final selectable = access.isLocationRestricted
+    final selectable = requireSiteManagerScope || access.isLocationRestricted
         ? displayed
               .where((location) => access.locationIds.contains(location.id))
               .toList(growable: false)
@@ -1664,7 +1883,9 @@ class _LocationInput extends StatelessWidget {
     BuildContext context,
     List<ResponsePlace> available,
   ) {
-    final locationId = access.singleManagedLocationId;
+    final locationId = requireSiteManagerScope
+        ? access.locationIds.single
+        : access.singleManagedLocationId;
     final location = available
         .where((candidate) => candidate.id == locationId)
         .firstOrNull;

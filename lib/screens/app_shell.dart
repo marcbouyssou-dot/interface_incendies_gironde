@@ -929,7 +929,7 @@ class _AppShellState extends State<AppShell> {
     };
     final previewedJourney = switch (perspectiveController.perspective) {
       CrossRolePerspective.professional => 'Professionnel',
-      CrossRolePerspective.responsible => 'Responsable',
+      CrossRolePerspective.responsible => 'Responsable de site',
       CrossRolePerspective.coordinator => 'Coordinateur',
       CrossRolePerspective.actual => 'Administrateur',
     };

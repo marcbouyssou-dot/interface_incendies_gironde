@@ -130,6 +130,7 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
             resizeToAvoidBottomInset: true,
             body: SafeArea(
               child: CreateNeedScreen(
+                requireSiteManagerScope: true,
                 onViewMission: () => Navigator.of(context).pop(),
                 onMissionPublished: widget.onMissionPublished,
               ),
@@ -144,7 +145,7 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
     if (_editingMissionId != null) return;
     setState(() => _editingMissionId = need.id);
     try {
-      await openMissionEditor(context, need);
+      await openMissionEditor(context, need, requireSiteManagerScope: true);
     } finally {
       if (mounted) setState(() => _editingMissionId = null);
     }
@@ -195,7 +196,10 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(title: 'Mes besoins'),
+                      const MobSanteJourneyHeader(
+                        journey: MobSanteJourney.responsible,
+                        pageTitle: 'Mes besoins',
+                      ),
                       const SizedBox(height: V5Spacing.md),
                       Align(
                         alignment: Alignment.centerRight,
@@ -242,10 +246,7 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 560),
-                    child: _NeedsEmptyState(
-                      filter: selectedFilter,
-                      onCreateNeed: onCreateNeed,
-                    ),
+                    child: _NeedsEmptyState(filter: selectedFilter),
                   ),
                 ),
               ),
@@ -276,8 +277,9 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   final isPast = isMissionPast(need, now: now);
                   final canManage =
                       access != null &&
+                      access!.isSiteManager &&
                       locationId != null &&
-                      access!.canManage(locationId) &&
+                      access!.locationIds.contains(locationId) &&
                       need.isActive &&
                       !need.isCancelled;
                   final canEdit = canManage && !isPast;
@@ -417,10 +419,9 @@ class _NeedsLoading extends StatelessWidget {
 }
 
 class _NeedsEmptyState extends StatelessWidget {
-  const _NeedsEmptyState({required this.filter, required this.onCreateNeed});
+  const _NeedsEmptyState({required this.filter});
 
   final _NeedsFilter filter;
-  final VoidCallback onCreateNeed;
 
   @override
   Widget build(BuildContext context) {
@@ -441,11 +442,7 @@ class _NeedsEmptyState extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: Icon(
-                Icons.check_rounded,
-                size: 21,
-                color: colors.success,
-              ),
+              child: Icon(Icons.check_rounded, size: 21, color: colors.success),
             ),
             const SizedBox(height: V5Spacing.md),
             Text(
@@ -460,16 +457,6 @@ class _NeedsEmptyState extends StatelessWidget {
                   ? 'L’historique de votre établissement apparaîtra ici.'
                   : 'Votre planning est couvert pour cette période.',
               style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: V5Spacing.lg),
-            V5Button(
-              key: const Key('responsible-needs-empty-create'),
-              tone: V5ButtonTone.secondary,
-              compact: true,
-              backgroundColor: Colors.transparent,
-              foregroundColor: colors.accent,
-              label: 'Créer un besoin',
-              onPressed: onCreateNeed,
             ),
           ],
         ),

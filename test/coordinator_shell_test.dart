@@ -85,7 +85,7 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.text('Responsables'), findsOneWidget);
+    expect(find.text('Responsables de site'), findsOneWidget);
     expect(find.text('Professionnels'), findsOneWidget);
     expect(find.text('Lieux'), findsOneWidget);
     expect(find.text('Responsable Mérignac'), findsOneWidget);

@@ -29,7 +29,7 @@ class PlatformAdminPerspectiveSection extends StatelessWidget {
           ),
           PerspectiveOption(
             key: const Key('perspective-responsible'),
-            label: 'Responsable',
+            label: 'Responsable de site',
             selected:
                 controller.perspective == CrossRolePerspective.responsible,
             onTap: () => _showResponsiblePreview(
@@ -105,7 +105,7 @@ class SiteManagerPerspectiveSection extends StatelessWidget {
       children: [
         PerspectiveOption(
           key: const Key('perspective-site-manager'),
-          label: 'Responsable',
+          label: 'Responsable de site',
           selected: controller.perspective != CrossRolePerspective.professional,
           onTap: controller.showActualRole,
           accentColor: accent,
@@ -156,7 +156,7 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
         ),
         PerspectiveOption(
           key: const Key('perspective-responsible'),
-          label: 'Responsable',
+          label: 'Responsable de site',
           selected: controller.perspective == CrossRolePerspective.responsible,
           accentColor: accentColor,
           onTap: () => _selectResponsibleCenter(context, controller),

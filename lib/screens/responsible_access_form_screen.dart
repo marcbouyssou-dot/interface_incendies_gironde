@@ -152,7 +152,7 @@ class _ResponsibleAccessFormScreenState
             ),
             children: [
               V5Section(
-                title: 'Accès responsable',
+                title: 'Accès Responsable de site',
                 leading: const Icon(Icons.admin_panel_settings_outlined),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,7 +216,7 @@ class _ResponsibleAccessFormScreenState
                       options: const [
                         V5SelectOption(
                           value: ResponsibleRole.siteManager,
-                          label: 'Responsable',
+                          label: 'Responsable de site',
                         ),
                         V5SelectOption(
                           value: ResponsibleRole.coordinator,
@@ -224,7 +224,7 @@ class _ResponsibleAccessFormScreenState
                         ),
                         V5SelectOption(
                           value: _cumulative,
-                          label: 'Coordinateur et responsable',
+                          label: 'Coordinateur et Responsable de site',
                         ),
                       ],
                       onChanged: _submitting
@@ -277,7 +277,7 @@ class _ResponsibleAccessFormScreenState
     if (!_active && widget.account.access.active) {
       final confirmed = await showV5Confirmation(
         context: context,
-        title: 'Désactiver ce responsable ?',
+        title: 'Désactiver ce Responsable de site ?',
         message:
             'Le compte et son historique sont conservés, mais ses accès '
             'responsables seront immédiatement suspendus.',

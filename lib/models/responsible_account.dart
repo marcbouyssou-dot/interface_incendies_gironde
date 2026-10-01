@@ -15,7 +15,7 @@ class ResponsibleAccount {
   String get identityLabel =>
       displayName ??
       email ??
-      (access.isCoordinator ? 'Coordinateur' : 'Responsable');
+      (access.isCoordinator ? 'Coordinateur' : 'Responsable de site');
 
   ResponsibleAccount copyWith({ResponsibleAccess? access}) =>
       ResponsibleAccount(

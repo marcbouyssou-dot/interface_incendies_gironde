@@ -19,7 +19,7 @@ extension RolePreviewModeLabel on RolePreviewMode {
   String get label => switch (this) {
     RolePreviewMode.automatic => 'Automatique',
     RolePreviewMode.professional => 'Professionnel',
-    RolePreviewMode.responsible => 'Responsable',
+    RolePreviewMode.responsible => 'Responsable de site',
     RolePreviewMode.coordinator => 'Coordinateur',
   };
 }

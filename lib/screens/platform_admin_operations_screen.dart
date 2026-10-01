@@ -2010,7 +2010,7 @@ class _OperationFutureJourneysSection extends StatelessWidget {
           _OperationJourneyTile(
             key: const Key('future-view-as-responsible'),
             icon: Icons.apartment_outlined,
-            label: 'Responsable',
+            label: 'Responsable de site',
             onTap: () =>
                 _openResponsible(context, locationSnapshot.data ?? const []),
           ),

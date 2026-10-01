@@ -160,7 +160,7 @@ class _CoordinatorActorsContent extends StatelessWidget {
                   const MobSantePageHeader(title: 'Acteurs'),
                   const SizedBox(height: V5Spacing.xxl),
                   _ActorSectionHeader(
-                    title: 'Responsables',
+                    title: 'Responsables de site',
                     actionLabel: 'Gérer',
                     onAction: onManageResponsibles,
                   ),
@@ -237,7 +237,7 @@ class _ResponsibleList extends StatelessWidget {
     if (accounts.isEmpty) {
       return _ActorSurface(
         child: Text(
-          'Aucun responsable de centre.',
+          'Aucun Responsable de site.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       );

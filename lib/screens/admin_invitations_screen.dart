@@ -57,7 +57,7 @@ class _AdminInvitationsScreenState extends State<AdminInvitationsScreen> {
     final colors = context.v5Colors;
     return Scaffold(
       backgroundColor: colors.canvas,
-      appBar: const V5SecondaryNavigationBar(title: 'Responsables'),
+      appBar: const V5SecondaryNavigationBar(title: 'Responsables de site'),
       body: SafeArea(
         top: false,
         child: StreamBuilder<ResponsibleAccess?>(
@@ -566,7 +566,7 @@ class _ResponsibleHeader extends StatelessWidget {
               ),
               SizedBox(height: 7),
               Text(
-                'Responsables',
+                'Responsables de site',
                 style: TextStyle(
                   color: _ResponsibleVisuals.navy,
                   fontSize: 27,
@@ -668,10 +668,10 @@ class _ResponsibleAccountCard extends StatelessWidget {
     final access = account.access;
     final isSelf = account.uid == currentUid;
     final roleLabel = access.isCumulative
-        ? 'Coordinateur et responsable'
+        ? 'Coordinateur et Responsable de site'
         : access.roles.contains(ResponsibleRole.coordinator)
         ? 'Coordinateur'
-        : 'Responsable';
+        : 'Responsable de site';
     final locations =
         access.locationIds
             .map((id) => locationsById[id]?.name ?? 'Lieu indisponible')
@@ -943,7 +943,7 @@ class _InvitationCard extends StatelessWidget {
               icon: Icons.admin_panel_settings_outlined,
               text: invitation.role == AdminInvitationDraft.coordinatorRole
                   ? 'Coordinateur'
-                  : 'Responsable',
+                  : 'Responsable de site',
             ),
             const SizedBox(height: V5Spacing.xs),
             _ManagementDetailLine(
@@ -1264,7 +1264,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                         options: const [
                           V5SelectOption(
                             value: AdminInvitationDraft.siteManagerRole,
-                            label: 'Responsable',
+                            label: 'Responsable de site',
                           ),
                           V5SelectOption(
                             value: AdminInvitationDraft.coordinatorRole,

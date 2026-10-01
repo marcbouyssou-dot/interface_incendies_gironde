@@ -119,6 +119,8 @@ void main() {
       find.byKey(const Key('responsible-edit-need-today')),
       findsOneWidget,
     );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('responsible-edit-need-future')),
       findsOneWidget,
@@ -135,8 +137,8 @@ void main() {
         missions: [
           mission(
             id: 'past',
-            startAt: now.subtract(const Duration(hours: 5)),
-            endAt: now.subtract(const Duration(hours: 1)),
+            startAt: now.subtract(const Duration(days: 2, hours: 5)),
+            endAt: now.subtract(const Duration(days: 2, hours: 1)),
             quotas: historicalQuotas(),
           ),
         ],
@@ -144,6 +146,8 @@ void main() {
       );
 
       await tester.tap(find.byKey(const Key('responsible-needs-filter-past')));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
       await tester.pumpAndSettle();
 
       final card = find.byKey(const Key('responsible-need-past'));
@@ -161,7 +165,7 @@ void main() {
   );
 
   test('past boundary uses the shared mission timing primitive', () {
-    final boundary = DateTime(2026, 8, 25, 12);
+    final boundary = DateTime(2026, 8, 25);
     final beforeBoundary = mission(
       id: 'before-boundary',
       startAt: boundary.subtract(const Duration(hours: 2)),

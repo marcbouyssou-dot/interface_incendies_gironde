@@ -140,7 +140,7 @@ void main() {
     await pumpApp(tester);
     await openInvitations(tester);
 
-    expect(find.text('Responsables'), findsWidgets);
+    expect(find.text('Responsables de site'), findsWidgets);
     expect(find.text('Invitations et accès aux centres'), findsOneWidget);
     expect(find.text('Aucune invitation pour le moment.'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -574,7 +574,7 @@ void main() {
     expect(find.byKey(const Key('location-search')), findsNothing);
 
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Responsable').last);
+    await tester.tap(find.text('Responsable de site').last);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('location-search')), findsOneWidget);
     expect(find.text('14 jours'), findsOneWidget);

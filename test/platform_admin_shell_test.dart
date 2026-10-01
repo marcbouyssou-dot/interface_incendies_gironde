@@ -545,7 +545,7 @@ void main() {
     await openMore();
     await preview(
       option: const Key('perspective-responsible'),
-      title: 'Responsable',
+      title: 'Responsable de site',
       shell: ResponsibleShell,
     );
 
@@ -646,7 +646,7 @@ void main() {
 
       await openAdminPerspective(const Key('perspective-responsible'));
       expect(find.byKey(const Key('responsible-home')), findsOneWidget);
-      expect(find.text('Prévisualisation Responsable'), findsOneWidget);
+      expect(find.text('Prévisualisation Responsable de site'), findsOneWidget);
       await tester.tap(find.text('Besoins').last);
       await tester.pumpAndSettle();
       expect(
@@ -777,7 +777,7 @@ void main() {
         expect(find.text(outsideLocation.name), findsNothing);
         if (shell == ResponsibleShell) {
           expect(find.text(secondLocation.name), findsNothing);
-          expect(find.text(firstLocation.name), findsWidgets);
+          expect(find.textContaining(firstLocation.name), findsWidgets);
         }
         expect(repository.lastObservedAccess, isNull);
 
@@ -789,7 +789,7 @@ void main() {
 
       await preview(
         key: const Key('future-view-as-responsible'),
-        role: 'Responsable',
+        role: 'Responsable de site',
         shell: ResponsibleShell,
       );
       await preview(
