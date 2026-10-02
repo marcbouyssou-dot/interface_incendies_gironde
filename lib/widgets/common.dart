@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/health_profession.dart';
+import '../models/mission_equipment.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/professional_profile_validation.dart';
@@ -22,7 +23,6 @@ import 'mission_location_details.dart';
 import 'native_interactions.dart';
 import 'operation_context_badge.dart';
 import 'mobilization_design_system.dart';
-import 'professional_rpps_verification.dart';
 import 'v5_controls.dart';
 import 'v5_form_system.dart';
 
@@ -879,9 +879,31 @@ class NeedCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _ProfessionQuotaRows(need: need, emphasized: true),
-          if (need.equipment
-              .where((item) => item.trim().isNotEmpty)
-              .isNotEmpty) ...[
+          if (need.equipmentByProfession case final selection?
+              when selection.isNotEmpty) ...[
+            _MissionCardSectionDivider(harmonized: harmonized),
+            _MissionCardSectionTitle(
+              'MATÉRIEL DEMANDÉ',
+              harmonized: harmonized,
+            ),
+            const SizedBox(height: 10),
+            for (final profession in HealthProfessionRegistry.values)
+              if (selection.containsKey(profession.id)) ...[
+                Text(
+                  profession.missionLabel,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                for (final label in MissionEquipment.labelsFor(
+                  selection,
+                  profession.id,
+                ))
+                  Text('• $label'),
+                const SizedBox(height: 8),
+              ],
+          ] else if (need.equipmentByProfession == null &&
+              need.equipment
+                  .where((item) => item.trim().isNotEmpty)
+                  .isNotEmpty) ...[
             _MissionCardSectionDivider(harmonized: harmonized),
             _MissionCardSectionTitle(
               'MATÉRIEL DEMANDÉ',
@@ -1022,6 +1044,13 @@ class NeedCard extends StatelessWidget {
     final matchingProfession = preferredProfession == null
         ? null
         : HealthProfessionRegistry.byId(preferredProfession!.canonicalId!);
+    final matchingEquipment =
+        need.equipmentByProfession == null || matchingProfession == null
+        ? const <String>[]
+        : MissionEquipment.labelsFor(
+            need.equipmentByProfession!,
+            matchingProfession.id,
+          );
     final visibleProfessions =
         matchingProfession != null &&
             need.professionQuotas.quotaFor(matchingProfession.id).hasActivity
@@ -1029,6 +1058,24 @@ class NeedCard extends StatelessWidget {
         : professionsStillNeeded.isEmpty
         ? professionsWithActivity.take(1).toList(growable: false)
         : professionsStillNeeded.take(1).toList(growable: false);
+    final contextualMultiProfession =
+        professionalJourney &&
+        professionsWithActivity
+                .where(
+                  (profession) =>
+                      need.professionQuotas.quotaFor(profession.id).required >
+                      0,
+                )
+                .length >
+            1 &&
+        matchingProfession != null &&
+        need.professionQuotas.quotaFor(matchingProfession.id).required > 0;
+    final contextualQuota = contextualMultiProfession
+        ? need.professionQuotas.quotaFor(matchingProfession.id).required
+        : 0;
+    final contextualProfessionLabel = contextualMultiProfession
+        ? '${matchingProfession.missionLabel} · $contextualQuota ${contextualQuota == 1 ? 'place' : 'places'}'
+        : null;
     final past = isMissionPast(need);
     final impactType = need.isCancelled || !need.isActive
         ? ImpactBannerType.cancelled
@@ -1078,14 +1125,16 @@ class NeedCard extends StatelessWidget {
         professionalPalette: professionalJourney,
       ),
       professionTitle: professionalJourney
-          ? 'Profession recherchée'
+          ? contextualMultiProfession
+                ? 'Votre profession recherchée'
+                : 'Profession recherchée'
           : remaining > 0
           ? 'Qui est attendu ?'
           : 'Qui s’est mobilisé ?',
       professions: [
         for (final profession in visibleProfessions)
           ProfessionChip(
-            label: profession.missionLabel,
+            label: contextualProfessionLabel ?? profession.missionLabel,
             professionalPalette: professionalJourney,
             state: need.professionQuotas.quotaFor(profession.id).isCovered
                 ? ProfessionChipState.covered
@@ -1114,6 +1163,16 @@ class NeedCard extends StatelessWidget {
             ),
             MissionLocationDetails(location: location, compact: true),
             const _MissionCardSectionDivider(harmonized: true),
+            if (matchingEquipment.isNotEmpty) ...[
+              const _MissionCardSectionTitle(
+                'Matériel à prévoir pour votre intervention',
+                harmonized: true,
+                professionalHome: true,
+              ),
+              const SizedBox(height: 10),
+              for (final label in matchingEquipment) Text('• $label'),
+              const _MissionCardSectionDivider(harmonized: true),
+            ],
             const _MissionCardSectionTitle(
               'Répartition des renforts',
               harmonized: true,
@@ -1121,10 +1180,36 @@ class NeedCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _ProfessionQuotaRows(need: need),
-            if (equipment.isNotEmpty) ...[
+            if (need.equipmentByProfession case final selection?
+                when selection.keys.any(
+                  (id) => id != matchingProfession?.id,
+                )) ...[
               const _MissionCardSectionDivider(harmonized: true),
               const _MissionCardSectionTitle(
-                'Matériel à prévoir',
+                'Autres matériels demandés',
+                harmonized: true,
+                professionalHome: true,
+              ),
+              const SizedBox(height: 10),
+              for (final profession in HealthProfessionRegistry.values)
+                if (profession.id != matchingProfession?.id &&
+                    selection.containsKey(profession.id)) ...[
+                  Text(
+                    profession.missionLabel,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  for (final label in MissionEquipment.labelsFor(
+                    selection,
+                    profession.id,
+                  ))
+                    Text('• $label'),
+                  const SizedBox(height: 8),
+                ],
+            ] else if (need.equipmentByProfession == null &&
+                equipment.isNotEmpty) ...[
+              const _MissionCardSectionDivider(harmonized: true),
+              const _MissionCardSectionTitle(
+                'Matériel demandé',
                 harmonized: true,
                 professionalHome: true,
               ),

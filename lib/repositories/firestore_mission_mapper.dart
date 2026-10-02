@@ -1,11 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/need.dart';
+import '../models/mission_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../utils/french_date_time.dart';
 import 'coordination_repository.dart';
 
 abstract final class FirestoreMissionMapper {
+  static Map<String, Object?> _equipmentByProfessionField(MissionDraft draft) =>
+      draft.equipmentByProfession == null
+      ? const {}
+      : {'requestedEquipmentByProfession': draft.equipmentByProfession};
+
   static Map<String, Object?> toUpdateCallableData({
     required String missionId,
     required MissionDraft draft,
@@ -18,9 +24,25 @@ abstract final class FirestoreMissionMapper {
       'requiredByProfession': draft.requiredByProfession,
       'priority': draft.priority.serializedValue,
       'equipment': List<String>.of(draft.equipment),
+      ..._equipmentByProfessionField(draft),
       'details': draft.details,
     };
   }
+
+  static Map<String, Object?> toCreateCallableData({
+    required String mobilizationId,
+    required MissionDraft draft,
+  }) => {
+    'mobilizationId': mobilizationId,
+    'locationId': draft.location.id,
+    'startAtMillis': draft.startAt.millisecondsSinceEpoch,
+    'endAtMillis': draft.endAt.millisecondsSinceEpoch,
+    'requiredByProfession': draft.requiredByProfession,
+    'priority': draft.priority.serializedValue,
+    'requestedEquipmentByProfession': draft.equipmentByProfession ?? const {},
+    'details': draft.details,
+    'idempotencyKey': draft.idempotencyKey,
+  };
 
   static Map<String, dynamic> cancellationUpdate({
     required String cancelledBy,
@@ -55,6 +77,7 @@ abstract final class FirestoreMissionMapper {
       'endAt': Timestamp.fromDate(draft.endAt),
       ...quotas.toMissionUpdate(),
       'requestedEquipment': List<String>.of(draft.equipment),
+      ..._equipmentByProfessionField(draft),
       'priority': draft.priority.serializedValue,
       'details': draft.details.trim(),
       'status': NeedStatus.critical.name,
@@ -72,6 +95,13 @@ abstract final class FirestoreMissionMapper {
     final startAt = _dateTime(data['startAt']);
     final endAt = _dateTime(data['endAt']);
     final quotas = ProfessionQuotas.fromMissionData(data);
+    final equipmentByProfession =
+        data.containsKey('requestedEquipmentByProfession')
+        ? MissionEquipment.fromFirestore(
+            data['requestedEquipmentByProfession'],
+            quotas.requiredByProfession,
+          )
+        : null;
     final mk = quotas.quotaFor('physiotherapist');
     final pp = quotas.quotaFor('podiatrist');
     return CoordinationNeed(
@@ -100,11 +130,14 @@ abstract final class FirestoreMissionMapper {
       requiredPodiatrists: pp.required,
       registeredPodiatrists: pp.registered,
       professionQuotas: quotas,
-      equipment: List<String>.from(
-        data['requestedEquipment'] as List? ??
-            data['equipment'] as List? ??
-            const [],
-      ),
+      equipment: equipmentByProfession == null
+          ? List<String>.from(
+              data['requestedEquipment'] as List? ??
+                  data['equipment'] as List? ??
+                  const [],
+            )
+          : MissionEquipment.globalLabels(equipmentByProfession),
+      equipmentByProfession: equipmentByProfession,
       priority: NeedPriority.fromFirestore(data['priority']),
       details: data['details'] as String?,
       isActive: data['isActive'] as bool? ?? true,

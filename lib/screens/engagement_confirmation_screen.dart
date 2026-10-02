@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
+import '../models/mission_equipment.dart';
 import '../repositories/coordination_repository.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/mission_location_details.dart';
@@ -35,6 +36,12 @@ class EngagementConfirmationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final requestedEquipment = need.equipmentByProfession == null
+        ? need.equipment
+        : MissionEquipment.labelsFor(
+            need.equipmentByProfession!,
+            profession.canonicalId!,
+          );
     return Scaffold(
       backgroundColor: colors.canvas,
       body: SafeArea(
@@ -66,7 +73,9 @@ class EngagementConfirmationScreen extends StatelessWidget {
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: _ConfirmationVisuals.orangeSoft,
-                              borderRadius: BorderRadius.circular(V5Radius.card),
+                              borderRadius: BorderRadius.circular(
+                                V5Radius.card,
+                              ),
                             ),
                             child: const Text(
                               '❤️',
@@ -165,10 +174,12 @@ class EngagementConfirmationScreen extends StatelessWidget {
                               const _ConfirmationDivider(),
                               _ConfirmationDetail(
                                 icon: Icons.medical_services_outlined,
-                                label: 'Matériel demandé',
-                                value: need.equipment.isEmpty
+                                label: need.equipmentByProfession == null
+                                    ? 'Matériel demandé'
+                                    : 'Matériel pour votre intervention',
+                                value: requestedEquipment.isEmpty
                                     ? 'Aucun matériel demandé'
-                                    : need.equipment.join(' • '),
+                                    : requestedEquipment.join(' • '),
                               ),
                             ],
                           ),

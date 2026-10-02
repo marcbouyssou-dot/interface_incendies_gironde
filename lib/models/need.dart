@@ -129,6 +129,7 @@ class CoordinationNeed {
     required this.requiredPodiatrists,
     required this.registeredPodiatrists,
     required this.equipment,
+    this.equipmentByProfession,
     this.priority = NeedPriority.standard,
     this.mobilizationId,
     this.locationId,
@@ -156,6 +157,7 @@ class CoordinationNeed {
   final int requiredPodiatrists;
   final int registeredPodiatrists;
   final List<String> equipment;
+  final Map<String, List<String>>? equipmentByProfession;
   final NeedPriority priority;
   final String? mobilizationId;
   final String? locationId;
@@ -216,6 +218,7 @@ class CoordinationNeed {
       registeredPodiatrists:
           registeredPodiatrists ?? this.registeredPodiatrists,
       equipment: equipment,
+      equipmentByProfession: equipmentByProfession,
       priority: priority,
       mobilizationId: mobilizationId,
       locationId: locationId,

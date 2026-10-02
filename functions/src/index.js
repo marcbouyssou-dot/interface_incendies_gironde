@@ -47,12 +47,19 @@ import {
   updateMission as updateExistingMission,
 } from './update_mission.js';
 import {
+  createMission as createNewMission,
+  missionCreateId,
+  missionCreateMutation,
+  missionCreateRequestHash,
+} from './create_mission.js';
+import {
   canCoordinateMobilization,
 } from './coordinator_mobilization_access.js';
 import {
   canReadOrganizationMissionTeam,
   LEGACY_ORGANIZATION_ID,
   readOrganizationAuthorization,
+  resolveOrganizationAuthorization,
 } from './organization_authorization.js';
 import {verifyRpps} from './ans_rpps_verification.js';
 import {
@@ -370,6 +377,15 @@ export const updateMission = onCall(
     callerUid: request.auth?.uid,
     data: request.data,
     services: missionUpdateServices({firestore: getFirestore()}),
+  })),
+);
+
+export const createMission = onCall(
+  {region: 'europe-west1'},
+  async (request) => missionUpdateCallable(() => createNewMission({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: missionCreateServices({firestore: getFirestore()}),
   })),
 );
 
@@ -1172,6 +1188,101 @@ export function missionUpdateServices({firestore}) {
           timestampFromMillis: (value) => new Date(value),
         });
         transaction.update(missionRef, mutation.fields);
+        return {missionId};
+      });
+    },
+  };
+}
+
+export function missionCreateServices({firestore}) {
+  return {
+    async commitMissionCreate({callerUid, request}) {
+      const missionId = missionCreateId(callerUid, request.idempotencyKey);
+      return firestore.runTransaction(async (transaction) => {
+        const roleRef = firestore.collection('roles').doc(callerUid);
+        const mobilizationRef = firestore.collection('mobilizations')
+          .doc(request.mobilizationId);
+        const locationRef = firestore.collection('locations').doc(request.locationId);
+        const missionRef = firestore.collection('missions').doc(missionId);
+        const assignmentRef = firestore.collection('mobilizationAssignments')
+          .doc(`${request.mobilizationId}_${callerUid}`);
+        const configRef = firestore.collection('platform').doc('config');
+        const [role, mobilization, location, existing, assignment, config] =
+          await Promise.all([
+            transaction.get(roleRef),
+            transaction.get(mobilizationRef),
+            transaction.get(locationRef),
+            transaction.get(missionRef),
+            transaction.get(assignmentRef),
+            transaction.get(configRef),
+          ]);
+        const mobilizationData = mobilization.exists ? mobilization.data() : null;
+        const roleData = role.exists ? role.data() : null;
+        let organizationAuthorized = false;
+        if (mobilizationData?.status === 'active') {
+          const operationId = mobilizationData.operationId;
+          if (operationId === undefined) {
+            const membershipRef = firestore.collection('organizationMemberships')
+              .doc(`${LEGACY_ORGANIZATION_ID}_${callerUid}`);
+            const membership = await transaction.get(membershipRef);
+            organizationAuthorized = resolveOrganizationAuthorization({
+              organizationId: LEGACY_ORGANIZATION_ID,
+              uid: callerUid,
+              membership: membership.exists ? membership.data() : null,
+              legacyRole: roleData,
+            }).hasOrganizationAccess;
+          } else if (typeof operationId === 'string'
+              && operationId !== '' && !operationId.includes('/')) {
+            const operation = await transaction.get(
+              firestore.collection('operations').doc(operationId),
+            );
+            const ownerId = operation.exists
+              ? operation.data().ownerOrganizationId : null;
+            if (operation.exists && ownerId === undefined) {
+              organizationAuthorized = true;
+            } else if (typeof ownerId === 'string'
+                && ownerId !== '' && !ownerId.includes('/')) {
+              const membership = await transaction.get(
+                firestore.collection('organizationMemberships')
+                  .doc(`${ownerId}_${callerUid}`),
+              );
+              organizationAuthorized = resolveOrganizationAuthorization({
+                organizationId: ownerId,
+                uid: callerUid,
+                membership: membership.exists ? membership.data() : null,
+              }).hasActiveMembership;
+            }
+          }
+        }
+        const mutation = missionCreateMutation({
+          callerUid,
+          missionId,
+          request,
+          callerRole: roleData,
+          coordinatorAuthorized: canCoordinateMobilization({
+            uid: callerUid,
+            role: roleData,
+            assignment: assignment.exists ? assignment.data() : null,
+            mobilization: mobilizationData,
+            platformConfig: config.exists ? config.data() : null,
+          }),
+          organizationAuthorized,
+          mobilization: mobilizationData,
+          location: location.exists ? location.data() : null,
+          serverTimestamp: FieldValue.serverTimestamp(),
+          timestampFromMillis: (value) => new Date(value),
+        });
+        if (existing.exists) {
+          const prior = existing.data();
+          if (prior.createdBy !== callerUid
+              || prior.creationRequestHash !== missionCreateRequestHash(request)) {
+            throw new MissionUpdateError(
+              'already-exists', 'Cette demande de création a déjà été utilisée.',
+            );
+          }
+          return {missionId};
+        }
+        transaction.create(missionRef, mutation.fields);
         return {missionId};
       });
     },

@@ -6,6 +6,161 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/firestore_mission_mapper.dart';
 
 void main() {
+  test(
+    'create callable carries only business inputs and stable request key',
+    () {
+      final draft = MissionDraft(
+        location: places.first,
+        startAt: DateTime(2026, 10, 4, 8),
+        endAt: DateTime(2026, 10, 4, 12),
+        requiredByProfession: const {
+          'physiotherapist': 3,
+          'podiatrist': 1,
+          'physician': 1,
+          'nurse': 2,
+        },
+        equipment: const [],
+        equipmentByProfession: const {
+          'physiotherapist': ['massage_table'],
+          'podiatrist': ['podiatry_equipment'],
+          'physician': ['stethoscope'],
+          'nurse': ['care_equipment'],
+        },
+        idempotencyKey: '0123456789abcdef0123456789abcdef',
+        details: 'Recette',
+      );
+      final first = FirestoreMissionMapper.toCreateCallableData(
+        mobilizationId: 'incendies-gironde-2026',
+        draft: draft,
+      );
+      final retry = FirestoreMissionMapper.toCreateCallableData(
+        mobilizationId: 'incendies-gironde-2026',
+        draft: draft,
+      );
+      expect(first, retry);
+      expect(first['requiredByProfession'], {
+        'physiotherapist': 3,
+        'podiatrist': 1,
+        'physician': 1,
+        'nurse': 2,
+        'veterinarian': 0,
+        'other_health_professional': 0,
+      });
+      expect(
+        first['requestedEquipmentByProfession'],
+        draft.equipmentByProfession,
+      );
+      expect(first.keys.toSet(), {
+        'mobilizationId',
+        'locationId',
+        'startAtMillis',
+        'endAtMillis',
+        'requiredByProfession',
+        'priority',
+        'requestedEquipmentByProfession',
+        'details',
+        'idempotencyKey',
+      });
+      for (final forbidden in [
+        'createdBy',
+        'authorId',
+        'status',
+        'createdAt',
+        'updatedAt',
+        'requestedEquipment',
+        'role',
+        'locationName',
+      ]) {
+        expect(first.containsKey(forbidden), isFalse);
+      }
+    },
+  );
+
+  test(
+    'new four-profession equipment round-trips with a global projection',
+    () {
+      final draft = MissionDraft(
+        location: places.first,
+        startAt: DateTime(2026, 10, 4, 8),
+        endAt: DateTime(2026, 10, 4, 12),
+        requiredByProfession: const {
+          'physiotherapist': 3,
+          'podiatrist': 1,
+          'physician': 1,
+          'nurse': 2,
+        },
+        equipment: const [],
+        equipmentByProfession: const {
+          'physiotherapist': ['massage_table', 'massage_cream_oil'],
+          'podiatrist': ['podiatry_equipment'],
+          'physician': ['stethoscope'],
+          'nurse': ['dressing_equipment'],
+        },
+        details: '',
+      );
+      final data = FirestoreMissionMapper.toFirestore(
+        id: 'multi-equipment',
+        mobilizationId: 'test-mobilization',
+        draft: draft,
+        serverTimestamp: Timestamp.fromDate(DateTime(2026, 10, 1)),
+        createdBy: 'manager-uid',
+      );
+      final mission = FirestoreMissionMapper.fromFirestore(
+        id: 'multi-equipment',
+        data: data,
+      );
+      final update = FirestoreMissionMapper.toUpdateCallableData(
+        missionId: 'multi-equipment',
+        draft: draft,
+      );
+
+      expect(
+        data['requestedEquipmentByProfession'],
+        draft.equipmentByProfession,
+      );
+      expect(data['requestedEquipment'], [
+        'Table de massage',
+        'Crèmes / huiles de massage',
+        'Matériel de podologie',
+        'Stéthoscope',
+        'Matériel de pansement',
+      ]);
+      expect(
+        update['requestedEquipmentByProfession'],
+        draft.equipmentByProfession,
+      );
+      expect(update['equipment'], data['requestedEquipment']);
+      expect(mission.equipmentByProfession, draft.equipmentByProfession);
+      expect(mission.equipment, data['requestedEquipment']);
+    },
+  );
+
+  test('legacy global equipment is never assigned to a profession', () {
+    final mission = FirestoreMissionMapper.fromFirestore(
+      id: 'legacy-equipment',
+      data: const {
+        'requiredMk': 1,
+        'requestedEquipment': ['Tables', 'Sac historique'],
+      },
+    );
+    expect(mission.equipmentByProfession, isNull);
+    expect(mission.equipment, ['Tables', 'Sac historique']);
+    final edit = MissionDraft(
+      location: places.first,
+      startAt: DateTime(2026, 10, 4, 8),
+      endAt: DateTime(2026, 10, 4, 12),
+      requiredPhysiotherapists: 1,
+      equipment: mission.equipment,
+      details: '',
+    );
+    final update = FirestoreMissionMapper.toUpdateCallableData(
+      missionId: mission.id,
+      draft: edit,
+    );
+    expect(update.containsKey('requestedEquipmentByProfession'), isFalse);
+    expect(update['equipment'], mission.equipment);
+  });
+
   test('a newly serialized mission can be read by the Firestore parser', () {
     final start = DateTime(2026, 7, 30, 22);
     final end = DateTime(2026, 7, 31, 2);

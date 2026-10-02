@@ -62,6 +62,16 @@ test('mission update is a v2 callable without notification secrets', () => {
   assert.equal(endpoint.secrets, undefined);
 });
 
+test('mission create is a v2 callable without notification secrets', () => {
+  const endpoint = discoverExport({
+    GCLOUD_PROJECT: 'mobilisation-sante',
+  }, 'createMission');
+
+  assert.equal(endpoint.callable, true);
+  assert.deepEqual(endpoint.region, ['europe-west1']);
+  assert.equal(endpoint.secrets, undefined);
+});
+
 test('RPPS verification is callable without secret during discovery', () => {
   const endpoint = discoverExport({
     FUNCTIONS_EMULATOR: 'true',

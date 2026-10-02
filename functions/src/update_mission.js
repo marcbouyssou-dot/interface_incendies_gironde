@@ -1,4 +1,5 @@
 import {isCanonicalBlankText, parseResponsibleAccess} from './responsible_access.js';
+import {normalizeMissionEquipment, globalMissionEquipmentLabels} from './mission_equipment.js';
 
 const PROFESSIONS = Object.freeze([
   'physiotherapist',
@@ -53,7 +54,9 @@ export async function updateMission({callerUid, data, services}) {
 export function validateMissionUpdateRequest(data) {
   if (!isPlainObject(data)
       || (!hasExactlyKeys(data, REQUEST_KEYS)
-        && !hasExactlyKeys(data, [...REQUEST_KEYS, 'priority']))) {
+        && !hasExactlyKeys(data, [...REQUEST_KEYS, 'priority'])
+        && !hasExactlyKeys(data, [...REQUEST_KEYS, 'requestedEquipmentByProfession'])
+        && !hasExactlyKeys(data, [...REQUEST_KEYS, 'priority', 'requestedEquipmentByProfession']))) {
     throw invalidArgument();
   }
   const missionId = requiredText(data.missionId, 200);
@@ -64,7 +67,26 @@ export function validateMissionUpdateRequest(data) {
   const requiredByProfession = validateRequiredQuotas(
     data.requiredByProfession,
   );
-  const equipment = validateEquipment(data.equipment);
+  const equipment = validateEquipment(
+    data.equipment,
+    Object.hasOwn(data, 'requestedEquipmentByProfession') ? 30 : 20,
+  );
+  let equipmentByProfession;
+  if (Object.hasOwn(data, 'requestedEquipmentByProfession')) {
+    try {
+      equipmentByProfession = normalizeMissionEquipment(
+        data.requestedEquipmentByProfession,
+        requiredByProfession,
+      );
+    } catch {
+      throw invalidArgument();
+    }
+    const projection = globalMissionEquipmentLabels(equipmentByProfession);
+    if (equipment.length !== projection.length ||
+        equipment.some((item, index) => item !== projection[index])) {
+      throw invalidArgument();
+    }
+  }
   const details = optionalText(data.details, 2000);
   const priority = data.priority === undefined
     ? null
@@ -76,6 +98,7 @@ export function validateMissionUpdateRequest(data) {
     endAtMillis,
     requiredByProfession,
     equipment,
+    ...(equipmentByProfession === undefined ? {} : {equipmentByProfession}),
     details,
     ...(priority === null ? {} : {priority}),
   });
@@ -139,6 +162,15 @@ export function missionUpdateMutation({
     );
   }
   const registeredByProfession = registeredQuotas(mission);
+  const missionHasProfessionEquipment =
+    Object.hasOwn(mission, 'requestedEquipmentByProfession');
+  if (missionHasProfessionEquipment !==
+      Object.hasOwn(request, 'equipmentByProfession')) {
+    throw new MissionUpdateError(
+      'failed-precondition',
+      'Le matériel de cette mission nécessite une version compatible.',
+    );
+  }
   const confirmedByProfession = confirmedEngagementCounts(engagements);
   for (const profession of PROFESSIONS) {
     const minimum = Math.max(
@@ -167,7 +199,12 @@ export function missionUpdateMutation({
     requiredPp: request.requiredByProfession.podiatrist,
     registeredMk: registeredByProfession.physiotherapist,
     registeredPp: registeredByProfession.podiatrist,
-    requestedEquipment: [...request.equipment],
+    requestedEquipment: request.equipmentByProfession === undefined
+      ? [...request.equipment]
+      : globalMissionEquipmentLabels(request.equipmentByProfession),
+    ...(request.equipmentByProfession === undefined ? {} : {
+      requestedEquipmentByProfession: request.equipmentByProfession,
+    }),
     details: request.details,
     ...(request.priority === undefined ? {} : {priority: request.priority}),
     status: coverageStatus(
@@ -251,7 +288,7 @@ function confirmedEngagementCounts(engagements) {
   return result;
 }
 
-function validateRequiredQuotas(value) {
+export function validateRequiredQuotas(value) {
   if (!isPlainObject(value)
       || !hasExactlyKeys(value, PROFESSIONS)) {
     throw invalidArgument();
@@ -270,8 +307,8 @@ function validateRequiredQuotas(value) {
   return Object.freeze(result);
 }
 
-function validateEquipment(value) {
-  if (!Array.isArray(value) || value.length > 20) throw invalidArgument();
+function validateEquipment(value, limit) {
+  if (!Array.isArray(value) || value.length > limit) throw invalidArgument();
   const result = value.map((item) => requiredText(item, 100));
   if (new Set(result).size !== result.length) throw invalidArgument();
   return Object.freeze(result);
@@ -300,14 +337,14 @@ function storedCounter(value) {
   return value;
 }
 
-function requiredStoredText(value, message) {
+export function requiredStoredText(value, message) {
   if (typeof value !== 'string' || isCanonicalBlankText(value)) {
     throw new MissionUpdateError('failed-precondition', message);
   }
   return value.trim();
 }
 
-function requiredText(value, maxLength) {
+export function requiredText(value, maxLength) {
   if (
     typeof value !== 'string'
     || value.length > maxLength
@@ -318,33 +355,33 @@ function requiredText(value, maxLength) {
   return value.trim();
 }
 
-function optionalText(value, maxLength) {
+export function optionalText(value, maxLength) {
   if (typeof value !== 'string' || value.length > maxLength) {
     throw invalidArgument();
   }
   return isCanonicalBlankText(value) ? '' : value.trim();
 }
 
-function requiredPriority(value) {
+export function requiredPriority(value) {
   if (typeof value !== 'string' || !PRIORITIES.includes(value)) {
     throw invalidArgument();
   }
   return value;
 }
 
-function timestampMillis(value) {
+export function timestampMillis(value) {
   if (!Number.isSafeInteger(value) || value <= 0) throw invalidArgument();
   return value;
 }
 
-function hasExactlyKeys(value, expected) {
+export function hasExactlyKeys(value, expected) {
   const keys = Object.keys(value).sort();
   const sortedExpected = [...expected].sort();
   return keys.length === sortedExpected.length
     && sortedExpected.every((key, index) => key === keys[index]);
 }
 
-function isPlainObject(value) {
+export function isPlainObject(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }

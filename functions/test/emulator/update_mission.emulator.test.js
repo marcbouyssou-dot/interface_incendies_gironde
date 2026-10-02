@@ -77,7 +77,7 @@ async function createUser(roleDocument, {assignCoordinator = true} = {}) {
   return {uid, email, password};
 }
 
-async function callable(user) {
+async function callable(user, name = 'updateMission') {
   const app = initializeApp(
     {projectId, apiKey: 'fake-api-key'},
     unique('mission-client'),
@@ -88,7 +88,29 @@ async function callable(user) {
   if (user) await signInWithEmailAndPassword(auth, user.email, user.password);
   const functions = getFunctions(app, 'europe-west1');
   connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-  return httpsCallable(functions, 'updateMission');
+  return httpsCallable(functions, name);
+}
+
+function createRequest(locationId, overrides = {}) {
+  return {
+    mobilizationId: activeMobilizationId,
+    locationId,
+    startAtMillis: defaultMissionStart,
+    endAtMillis: defaultMissionEnd,
+    requiredByProfession: {
+      ...quotas(3, 1), physician: 1, nurse: 2,
+    },
+    priority: 'standard',
+    requestedEquipmentByProfession: {
+      physiotherapist: ['massage_table'],
+      podiatrist: ['podiatry_equipment'],
+      physician: ['stethoscope'],
+      nurse: ['care_equipment'],
+    },
+    details: 'Recette émulateur',
+    idempotencyKey: unique('creation-request-0123456789'),
+    ...overrides,
+  };
 }
 
 async function seedLocation(id, overrides = {}) {
@@ -172,6 +194,74 @@ before(async () => {
 after(async () => {
   await Promise.all(clientApps.map((app) => deleteApp(app)));
   await deleteAdminApp(adminApp);
+});
+
+test('createMission creates one server-owned Bassens mission despite a retry', async () => {
+  const site = unique('bassens');
+  await seedLocation(site);
+  const user = await createUser(managerRole([site]));
+  const create = await callable(user, 'createMission');
+  const payload = createRequest(site);
+  const first = await create(payload);
+  const second = await create(payload);
+  assert.equal(first.data.missionId, second.data.missionId);
+  const stored = (await db.collection('missions').doc(first.data.missionId).get()).data();
+  assert.equal(stored.createdBy, user.uid);
+  assert.equal(stored.requiredByProfession.physiotherapist, 3);
+  assert.equal(stored.requiredByProfession.podiatrist, 1);
+  assert.equal(stored.requiredByProfession.physician, 1);
+  assert.equal(stored.requiredByProfession.nurse, 2);
+  assert.deepEqual(stored.requestedEquipment, [
+    'Table de massage', 'Matériel de podologie', 'Stéthoscope', 'Matériel de soins',
+  ]);
+  assert.equal(stored.status, 'critical');
+  assert.equal(stored.createdAt.toMillis(), stored.updatedAt.toMillis());
+  await assertCode(() => create({...payload, details: 'Changed'}), 'already-exists');
+  const update = await callable(user);
+  await update(updateRequest(first.data.missionId, site, {
+    requiredByProfession: {...quotas(4, 1), physician: 1, nurse: 2},
+    equipment: ['Table de massage', 'Stéthoscope'],
+    requestedEquipmentByProfession: {
+      physiotherapist: ['massage_table'], physician: ['stethoscope'],
+    },
+  }));
+  const edited = (await db.collection('missions').doc(first.data.missionId).get()).data();
+  assert.deepEqual(edited.requestedEquipment, ['Table de massage', 'Stéthoscope']);
+  assert.equal(edited.createdBy, user.uid);
+});
+
+test('createMission rejects unauthenticated, professional, forbidden site and forged fields', async () => {
+  const site = unique('bassens');
+  const forbidden = unique('forbidden');
+  await seedLocation(site);
+  await seedLocation(forbidden);
+  const anonymous = await callable(null, 'createMission');
+  await assertCode(() => anonymous(createRequest(site)), 'unauthenticated');
+  const professional = await callable(await createUser(null), 'createMission');
+  await assertCode(() => professional(createRequest(site)), 'permission-denied');
+  const manager = await callable(await createUser(managerRole([site])), 'createMission');
+  await assertCode(() => manager(createRequest(forbidden)), 'permission-denied');
+  await assertCode(() => manager(createRequest(site, {status: 'complete'})),
+    'invalid-argument');
+  await assertCode(() => manager(createRequest(site, {createdBy: 'forged'})),
+    'invalid-argument');
+  await assertCode(() => manager(createRequest(site, {role: 'coordinator'})),
+    'invalid-argument');
+});
+
+test('assigned coordinator can create while coordinator without assignment cannot', async () => {
+  const site = unique('site');
+  await seedLocation(site);
+  const assigned = await callable(await createUser(coordinatorRole()), 'createMission');
+  const created = await assigned(createRequest(site));
+  assert.equal(typeof created.data.missionId, 'string');
+  const anotherMobilizationId = unique('mobilization');
+  await db.collection('mobilizations').doc(anotherMobilizationId).set({
+    id: anotherMobilizationId, status: 'active', territoryId: 'gironde',
+  });
+  await assertCode(() => assigned(createRequest(site, {
+    mobilizationId: anotherMobilizationId,
+  })), 'permission-denied');
 });
 
 test('anonymous, professional and inactive coordinator are refused', async () => {

@@ -149,6 +149,55 @@ void main() {
     expect(created.requiredPodiatrists, 0);
   });
 
+  test(
+    'mock create and edit retain contextual equipment without flattening it',
+    () async {
+      final repository = MockCoordinationRepository(
+        initialMissions: const [],
+        initialLocations: [places.first],
+      );
+      final start = DateTime.now().add(const Duration(days: 2));
+      MissionDraft draft(Map<String, List<String>> selected) => MissionDraft(
+        location: places.first,
+        startAt: start,
+        endAt: start.add(const Duration(hours: 4)),
+        requiredByProfession: const {
+          'physiotherapist': 3,
+          'podiatrist': 1,
+          'physician': 1,
+          'nurse': 2,
+        },
+        equipment: const [],
+        equipmentByProfession: selected,
+        details: '',
+      );
+      final id = await repository.createMission(
+        draft({
+          'physiotherapist': ['massage_table'],
+          'nurse': ['dressing_equipment'],
+        }),
+      );
+      expect((await repository.getMission(id))?.equipmentByProfession, {
+        'physiotherapist': ['massage_table'],
+        'nurse': ['dressing_equipment'],
+      });
+
+      await repository.updateMission(
+        id,
+        draft({
+          'physiotherapist': ['massage_table'],
+          'nurse': ['blood_pressure_monitor'],
+        }),
+      );
+      final edited = await repository.getMission(id);
+      expect(edited?.equipmentByProfession, {
+        'physiotherapist': ['massage_table'],
+        'nurse': ['blood_pressure_monitor'],
+      });
+      expect(edited?.equipment, ['Table de massage', 'Tensiomètre']);
+    },
+  );
+
   test('a new mock engagement starts confirmed', () async {
     final mission = needs.first;
     final repository = MockCoordinationRepository(

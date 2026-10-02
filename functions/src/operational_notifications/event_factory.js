@@ -13,7 +13,7 @@ export const EVENT_TYPES = Object.freeze([
 const MISSION_SIGNIFICANT_FIELDS = Object.freeze([
   'locationId', 'locationName', 'startAt', 'endAt',
   'requiredByProfession', 'requiredMk', 'requiredPp',
-  'requestedEquipment', 'details',
+  'requestedEquipment', 'requestedEquipmentByProfession', 'details',
 ]);
 
 export function missionCreatedEvents({mission, sourceEventId, occurredAt}) {

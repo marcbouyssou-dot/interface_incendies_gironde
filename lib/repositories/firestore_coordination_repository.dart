@@ -30,6 +30,7 @@ import 'firestore_admin_invitation_repository.dart';
 import 'firestore_location_mapper.dart';
 import 'firestore_location_administration_repository.dart';
 import 'firestore_mission_mapper.dart';
+import 'mission_api.dart';
 import 'mission_cancellation_completion.dart';
 import 'firestore_operation_read_repository.dart';
 import 'firestore_organization_read_repository.dart';
@@ -258,6 +259,7 @@ class FirestoreCoordinationRepository
     FirebaseAuth? responsibleAuth,
     FirebaseFunctions? responsibleFunctions,
     FirebaseFunctions? volunteerFunctions,
+    MissionApi? missionApi,
   }) : _mobilizationProvider = mobilizationProvider,
        _responsibleFirestore = responsibleFirestore ?? _firestore,
        _responsibleAuth = responsibleAuth ?? _auth,
@@ -276,6 +278,7 @@ class FirestoreCoordinationRepository
     _identityResolver = FirebaseUserDisplayIdentityResolver(
       functions: _responsibleFunctions,
     );
+    _missionApi = missionApi ?? FirebaseMissionApi(_responsibleFunctions);
   }
 
   final FirebaseFirestore _firestore;
@@ -285,6 +288,7 @@ class FirestoreCoordinationRepository
   final FirebaseAuth _responsibleAuth;
   final FirebaseFunctions _responsibleFunctions;
   final FirebaseFunctions _volunteerFunctions;
+  late final MissionApi _missionApi;
   late final UserDisplayIdentityResolver _identityResolver;
   late final PublicMobilizationReadRepository _publicMobilizationRepository =
       PublicMobilizationReadRepository(
@@ -1296,55 +1300,27 @@ class FirestoreCoordinationRepository
         'Vous devez vous connecter pour déclarer un besoin.',
       );
     }
-    final role = await _responsibleFirestore
-        .collection('roles')
-        .doc(user.uid)
-        .get();
-    final roleData = role.data();
-    if (!role.exists || roleData == null) {
-      throw const RepositoryException('Votre compte responsable est inactif.');
-    }
-    final access = parseResponsibleAccessDocument(
-      uid: user.uid,
-      data: roleData,
-    );
-    if (!access.active) {
-      throw const RepositoryException('Votre compte responsable est inactif.');
-    }
-    if (!access.canManage(draft.location.id)) {
-      throw const RepositoryException(
-        'Votre compte n’est pas autorisé à publier pour ce lieu.',
-      );
-    }
-    final reference = _responsibleFirestore.collection('missions').doc();
-    debugPrint('Publication Firestore mission : début');
-    debugPrint('Identifiant mission généré : ${reference.id}');
     try {
-      await reference.set(
-        FirestoreMissionMapper.toFirestore(
-          id: reference.id,
-          mobilizationId: mobilizationId,
-          draft: draft,
-          serverTimestamp: FieldValue.serverTimestamp(),
-          createdBy: user.uid,
-        ),
-      );
-      debugPrint('Publication Firestore mission réussie : ${reference.id}');
-      return reference.id;
-    } on FirebaseException catch (error, stackTrace) {
-      if (error.code == 'permission-denied') {
-        debugPrint(
-          'Publication Firestore refusée (permission-denied). '
-          'Vérifier les règles de la collection missions.',
-        );
-      }
-      debugPrint('Erreur Firestore createMission : $error');
+      return await _missionApi
+          .createMission(
+            FirestoreMissionMapper.toCreateCallableData(
+              mobilizationId: mobilizationId,
+              draft: draft,
+            ),
+          )
+          .timeout(const Duration(seconds: 15));
+    } on FirebaseFunctionsException catch (error, stackTrace) {
+      debugPrint('Échec createMission (${error.code})');
       debugPrintStack(stackTrace: stackTrace);
+      throw RepositoryException(_missionCreateMessage(error.code));
+    } on RepositoryException {
       rethrow;
     } catch (error, stackTrace) {
-      debugPrint('Erreur createMission : $error');
+      debugPrint('Échec createMission : $error');
       debugPrintStack(stackTrace: stackTrace);
-      rethrow;
+      throw const RepositoryException(
+        'La mission n’a pas pu être publiée. Réessayez.',
+      );
     }
   }
 
@@ -2220,6 +2196,18 @@ class FirestoreCoordinationRepository
           'updatedAt': FieldValue.serverTimestamp(),
         });
   }
+
+  static String _missionCreateMessage(String code) => switch (code) {
+    'permission-denied' =>
+      'Votre compte n’est pas autorisé à publier pour ce lieu.',
+    'failed-precondition' =>
+      'La mission ne peut pas être publiée avec ces informations.',
+    'invalid-argument' => 'Les informations de la mission sont invalides.',
+    'unauthenticated' => 'Vous devez vous connecter pour déclarer un besoin.',
+    'already-exists' =>
+      'Cette demande a déjà été utilisée. Vérifiez les missions publiées.',
+    _ => 'La mission n’a pas pu être publiée. Réessayez.',
+  };
 
   static String _missionUpdateMessage(String code) => switch (code) {
     'permission-denied' =>

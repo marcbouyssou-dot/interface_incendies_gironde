@@ -7,7 +7,7 @@ void main() {
   test('les quatre libellés de navigation restent courts', () {
     expect(MobSanteJourney.values.map((journey) => journey.title), [
       'Professionnel',
-      'Responsable',
+      'Responsable de site',
       'Coordinateur',
       'Administrateur',
     ]);

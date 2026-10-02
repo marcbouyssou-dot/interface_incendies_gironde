@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
+import '../models/mission_equipment.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../theme/v5_foundation.dart';
@@ -15,8 +16,10 @@ import '../widgets/v5_controls.dart';
 
 enum _EngagementPeriod { upcoming, current, past }
 
-typedef _EngagementItem =
-    ({CoordinationNeed mission, EngagementInfo engagement});
+typedef _EngagementItem = ({
+  CoordinationNeed mission,
+  EngagementInfo engagement,
+});
 
 class ProfessionalEngagementsScreen extends StatefulWidget {
   const ProfessionalEngagementsScreen({super.key});
@@ -330,8 +333,7 @@ class _EngagementCards extends StatelessWidget {
           engagement: items[index].engagement,
           location: responsePlaceForNeed(items[index].mission, locations),
         ),
-        if (index < items.length - 1)
-          const SizedBox(height: V5Spacing.sm),
+        if (index < items.length - 1) const SizedBox(height: V5Spacing.sm),
       ],
     ],
   );
@@ -351,6 +353,12 @@ class _EngagementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
+    final requestedEquipment = mission.equipmentByProfession == null
+        ? mission.equipment
+        : MissionEquipment.labelsFor(
+            mission.equipmentByProfession!,
+            engagement.profession.canonicalId!,
+          );
     return V5Card(
       padding: const EdgeInsets.fromLTRB(16, 15, 16, 10),
       boxShadow: V5Elevation.level1(colors),
@@ -404,12 +412,12 @@ class _EngagementCard extends StatelessWidget {
               ),
               children: [
                 MissionLocationDetails(location: location, compact: true),
-                if (mission.equipment.isNotEmpty) ...[
+                if (requestedEquipment.isNotEmpty) ...[
                   const SizedBox(height: V5Spacing.xs),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'Matériel : ${mission.equipment.join(' • ')}',
+                      'Matériel : ${requestedEquipment.join(' • ')}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),

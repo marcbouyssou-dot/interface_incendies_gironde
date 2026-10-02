@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/app_notification.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/profession_quotas.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/services/professional_verification_service.dart';
@@ -117,6 +118,38 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pump();
+  }
+
+  Future<void> bringIntoTapArea(WidgetTester tester, Finder finder) async {
+    for (var attempt = 0; attempt < 12; attempt++) {
+      final centerY = tester.getCenter(finder).dy;
+      if (centerY >= 80 && centerY <= 760) return;
+      await tester.drag(
+        find.byKey(const PageStorageKey('create')),
+        Offset(0, centerY < 80 ? 360 : -360),
+      );
+      await tester.pumpAndSettle();
+    }
+    fail('Le contrôle reste hors écran : $finder');
+  }
+
+  Future<void> selectEquipment(
+    WidgetTester tester,
+    String professionId,
+    String equipmentId,
+  ) async {
+    final profession = find.byKey(
+      Key('mission-equipment-profession-$professionId'),
+    );
+    await bringIntoTapArea(tester, profession);
+    await tester.tap(profession);
+    await tester.pumpAndSettle();
+    final equipment = find.byKey(
+      Key('mission-equipment-$professionId-$equipmentId'),
+    );
+    await bringIntoTapArea(tester, equipment);
+    await tester.tap(equipment);
+    await tester.pumpAndSettle();
   }
 
   Future<void> completeRequiredFields(
@@ -336,6 +369,160 @@ void main() {
       'veterinarian': 0,
       'other_health_professional': 0,
     });
+  });
+
+  testWidgets('review and confirmation show each multi-profession quota', (
+    tester,
+  ) async {
+    final repository = _MissionRepository();
+    await pumpForm(tester, repository);
+    await completeRequiredFields(tester, addQuota: false);
+    for (var index = 0; index < 3; index++) {
+      await incrementQuota(tester, 'physiotherapist');
+    }
+    await incrementQuota(tester, 'podiatrist');
+    await incrementQuota(tester, 'physician');
+    await incrementQuota(tester, 'nurse');
+    await incrementQuota(tester, 'nurse');
+
+    void expectSummary() {
+      expect(find.text('Professionnels recherchés'), findsOneWidget);
+      for (final (label, count) in [
+        ('Masseur-kinésithérapeute', 3),
+        ('Pédicure-podologue', 1),
+        ('Médecin', 1),
+        ('Infirmier', 2),
+      ]) {
+        final row = find
+            .ancestor(of: find.text(label), matching: find.byType(Row))
+            .first;
+        expect(
+          find.descendant(of: row, matching: find.text('× $count')),
+          findsOneWidget,
+        );
+      }
+      expect(find.text('Total'), findsOneWidget);
+      expect(find.text('7 professionnels'), findsOneWidget);
+      expect(find.text('Vétérinaire'), findsNothing);
+      expect(find.text('Autre professionnel de santé'), findsNothing);
+    }
+
+    await openReview(tester);
+    expectSummary();
+    await tester.tap(find.byKey(const Key('publish-mission')));
+    await tester.pumpAndSettle();
+    expectSummary();
+    expect(repository.calls, 1);
+  });
+
+  testWidgets('mono-profession summary uses singular total', (tester) async {
+    await pumpForm(tester, _MissionRepository());
+    await completeRequiredFields(tester);
+    await openReview(tester);
+
+    expect(find.text('Professionnels recherchés'), findsOneWidget);
+    expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
+    expect(find.text('× 1'), findsOneWidget);
+    expect(find.text('1 professionnel'), findsOneWidget);
+    expect(find.text('Pédicure-podologue'), findsNothing);
+  });
+
+  testWidgets(
+    'equipment tabs retain four-profession selections and publish them',
+    (tester) async {
+      final repository = _MissionRepository();
+      await pumpForm(tester, repository);
+      await completeRequiredFields(tester, addQuota: false);
+      for (var index = 0; index < 3; index++) {
+        await incrementQuota(tester, 'physiotherapist');
+      }
+      await incrementQuota(tester, 'podiatrist');
+      await incrementQuota(tester, 'physician');
+      await incrementQuota(tester, 'nurse');
+      await incrementQuota(tester, 'nurse');
+
+      expect(
+        find.byKey(const Key('mission-equipment-profession-veterinarian')),
+        findsNothing,
+      );
+      await selectEquipment(tester, 'physiotherapist', 'massage_table');
+      await selectEquipment(tester, 'physiotherapist', 'massage_cream_oil');
+      await selectEquipment(tester, 'podiatrist', 'podiatry_equipment');
+      await selectEquipment(tester, 'physician', 'stethoscope');
+      await selectEquipment(tester, 'nurse', 'dressing_equipment');
+      final mkTab = find.byKey(
+        const Key('mission-equipment-profession-physiotherapist'),
+      );
+      await bringIntoTapArea(tester, mkTab);
+      await tester.tap(mkTab);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<V5ChoiceChip>(
+              find.byKey(
+                const Key('mission-equipment-physiotherapist-massage_table'),
+              ),
+            )
+            .selected,
+        isTrue,
+      );
+      await openReview(tester);
+      expect(find.text('Matériel à prévoir'), findsOneWidget);
+      for (final label in [
+        '• Table de massage',
+        '• Crèmes / huiles de massage',
+        '• Matériel de podologie',
+        '• Stéthoscope',
+        '• Matériel de pansement',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      final publish = find.byKey(const Key('publish-mission'));
+      await tester.scrollUntilVisible(
+        publish,
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(publish);
+      await tester.pumpAndSettle();
+      await tester.tap(publish);
+      await tester.pumpAndSettle();
+      expect(repository.lastDraft?.equipmentByProfession, {
+        'physiotherapist': ['massage_table', 'massage_cream_oil'],
+        'podiatrist': ['podiatry_equipment'],
+        'physician': ['stethoscope'],
+        'nurse': ['dressing_equipment'],
+      });
+      expect(repository.lastDraft?.equipment, [
+        'Table de massage',
+        'Crèmes / huiles de massage',
+        'Matériel de podologie',
+        'Stéthoscope',
+        'Matériel de pansement',
+      ]);
+    },
+  );
+
+  testWidgets('removing a quota removes only its equipment selection', (
+    tester,
+  ) async {
+    final repository = _MissionRepository();
+    await pumpForm(tester, repository);
+    await completeRequiredFields(tester, addQuota: false);
+    await incrementQuota(tester, 'physiotherapist');
+    await incrementQuota(tester, 'nurse');
+    await selectEquipment(tester, 'physiotherapist', 'massage_table');
+    await selectEquipment(tester, 'nurse', 'dressing_equipment');
+    final remove = find.byKey(const Key('nurse-remove'));
+    await bringIntoTapArea(tester, remove);
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    await publishReviewedNeed(tester);
+
+    expect(repository.lastDraft?.equipmentByProfession, {
+      'physiotherapist': ['massage_table'],
+    });
+    expect(repository.lastDraft?.equipment, ['Table de massage']);
   });
 
   testWidgets('changing and clearing one quota preserves the others', (
@@ -642,7 +829,71 @@ void main() {
     expect(repository.lastDraft?.location.id, location.id);
     expect(repository.lastDraft?.requiredPhysiotherapists, 2);
     expect(repository.lastDraft?.priority, NeedPriority.crisis);
+    expect(repository.lastDraft?.equipment, ['Tables', 'Huiles']);
+    expect(repository.lastDraft?.equipmentByProfession, isNull);
     expect(find.text('Mission mise à jour.'), findsOneWidget);
+  });
+
+  testWidgets('editing a contextual mission preserves each equipment group', (
+    tester,
+  ) async {
+    final location = places.first;
+    final start = DateTime.now().add(const Duration(days: 2));
+    final mission = CoordinationNeed(
+      id: 'contextual-mission-to-edit',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: 'À venir',
+      time: '08:00 — 12:00',
+      startAt: DateTime(start.year, start.month, start.day, 8),
+      endAt: DateTime(start.year, start.month, start.day, 12),
+      requiredPhysiotherapists: 3,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 1,
+      registeredPodiatrists: 0,
+      professionQuotas: ProfessionQuotas.fromMaps(
+        requiredByProfession: const {
+          'physiotherapist': 3,
+          'podiatrist': 1,
+          'physician': 1,
+          'nurse': 2,
+        },
+        registeredByProfession: const {},
+      ),
+      equipment: const ['Table de massage', 'Matériel de pansement'],
+      equipmentByProfession: const {
+        'physiotherapist': ['massage_table'],
+        'nurse': ['dressing_equipment'],
+      },
+      createdBy: 'manager',
+    );
+    final repository = _MissionRepository(locations: [location]);
+    await pumpForm(tester, repository, mission: mission);
+    await bringIntoTapArea(
+      tester,
+      find.byKey(const Key('mission-equipment-profession-physiotherapist')),
+    );
+    expect(
+      tester
+          .widget<V5ChoiceChip>(
+            find.byKey(
+              const Key('mission-equipment-physiotherapist-massage_table'),
+            ),
+          )
+          .selected,
+      isTrue,
+    );
+    await bringIntoTapArea(tester, find.byKey(const Key('update-mission')));
+    await tester.tap(find.byKey(const Key('update-mission')));
+    await tester.pumpAndSettle();
+
+    expect(repository.updateCalls, 1);
+    expect(
+      repository.lastDraft?.equipmentByProfession,
+      mission.equipmentByProfession,
+    );
+    expect(repository.lastDraft?.equipment, mission.equipment);
   });
 
   testWidgets('editing a multi-day mission keeps its end date offset', (

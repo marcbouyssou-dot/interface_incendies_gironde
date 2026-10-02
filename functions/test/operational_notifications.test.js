@@ -92,6 +92,25 @@ test('a counter-only mission write does not fabricate a mission.updated event', 
   assert.deepEqual(events, []);
 });
 
+test('moving shared equipment between professions is a significant update', () => {
+  const events = missionUpdatedEvents({
+    before: {
+      ...baseMission,
+      requestedEquipment: ['Tensiomètre'],
+      requestedEquipmentByProfession: {physician: ['blood_pressure_monitor']},
+    },
+    after: {
+      ...baseMission,
+      requestedEquipment: ['Tensiomètre'],
+      requestedEquipmentByProfession: {nurse: ['blood_pressure_monitor']},
+    },
+    sourceEventId: 'equipment-moved',
+    occurredAt: timestamp(now),
+  });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].eventType, 'mission.updated');
+});
+
 test('inactive or already cancelled documents do not emit publication events', () => {
   assert.deepEqual(missionCreatedEvents({
     mission: {...baseMission, isActive: false},
