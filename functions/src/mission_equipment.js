@@ -25,6 +25,14 @@ const LABELS = Object.freeze({
   other_equipment: 'Autre matériel',
 });
 
+// A site inventory accepts only concrete items from the shared catalog.
+export const SITE_EQUIPMENT_IDS = Object.freeze(
+  Object.keys(LABELS).filter((id) => ![
+    'other_equipment', 'other_veterinary_equipment',
+    'profession_specific_equipment',
+  ].includes(id)),
+);
+
 const CATALOG = Object.freeze({
   physiotherapist: ['massage_table', 'massage_cream_oil', 'massage_gun',
     'pressotherapy_boots', 'other_equipment'],

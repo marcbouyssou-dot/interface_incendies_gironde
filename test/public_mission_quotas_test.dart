@@ -142,6 +142,7 @@ void main() {
         'physiotherapist': ['massage_table'],
         'nurse': ['dressing_equipment'],
       },
+      availableEquipmentOnSite: const ['stethoscope'],
       professionQuotas: ProfessionQuotas.fromMaps(
         requiredByProfession: const {
           'physiotherapist': 3,
@@ -163,9 +164,13 @@ void main() {
       height: 1800,
     );
 
-    expect(find.text('Votre profession recherchée'), findsOneWidget);
-    expect(find.text('Masseur-kinésithérapeute · 3 places'), findsOneWidget);
-    expect(find.text('Répartition des renforts'), findsOneWidget);
+    expect(find.text('Votre profession'), findsOneWidget);
+    expect(
+      find.text('Masseur-kinésithérapeute · 3 places recherchées'),
+      findsOneWidget,
+    );
+    expect(find.text('Équipe recherchée'), findsOneWidget);
+    expect(find.text('Répartition des renforts'), findsNothing);
     for (final label in [
       'Masseur-kinésithérapeute',
       'Pédicure-podologue',
@@ -178,17 +183,29 @@ void main() {
     expect(find.text('0 / 1'), findsNWidgets(2));
     expect(find.text('0 / 2'), findsOneWidget);
     expect(
-      find.text('Matériel à prévoir pour votre intervention'),
+      find.text('Matériel à apporter pour votre intervention'),
       findsOneWidget,
     );
     expect(find.text('• Table de massage'), findsOneWidget);
+    expect(find.text('Matériel disponible sur site'), findsOneWidget);
+    expect(find.text('• Stéthoscope'), findsOneWidget);
     expect(find.text('Autres matériels demandés'), findsOneWidget);
     expect(find.text('• Matériel de pansement'), findsOneWidget);
     expect(
+      tester.getTopLeft(find.text('Équipe recherchée')).dy,
+      lessThan(
+        tester
+            .getTopLeft(
+              find.text('Matériel à apporter pour votre intervention'),
+            )
+            .dy,
+      ),
+    );
+    expect(
       tester
-          .getTopLeft(find.text('Matériel à prévoir pour votre intervention'))
+          .getTopLeft(find.text('Matériel à apporter pour votre intervention'))
           .dy,
-      lessThan(tester.getTopLeft(find.text('Répartition des renforts')).dy),
+      lessThan(tester.getTopLeft(find.text('Matériel disponible sur site')).dy),
     );
     expect(tester.takeException(), isNull);
 
@@ -202,8 +219,11 @@ void main() {
       ),
       height: 1800,
     );
-    expect(find.text('Votre profession recherchée'), findsOneWidget);
-    expect(find.text('Pédicure-podologue · 1 place'), findsOneWidget);
+    expect(find.text('Votre profession'), findsOneWidget);
+    expect(
+      find.text('Pédicure-podologue · 1 place recherchée'),
+      findsOneWidget,
+    );
 
     await pump(
       tester,
@@ -216,12 +236,49 @@ void main() {
       height: 1800,
     );
     expect(
-      find.text('Matériel à prévoir pour votre intervention'),
+      find.text('Matériel à apporter pour votre intervention'),
       findsOneWidget,
     );
     expect(find.text('• Matériel de pansement'), findsOneWidget);
     expect(find.text('• Table de massage'), findsOneWidget);
   });
+
+  testWidgets(
+    'unresolved professional profile shows every profession, never an arbitrary first',
+    (tester) async {
+      await pump(
+        tester,
+        NeedCard(
+          need: mission,
+          professionalHome: true,
+          professionalJourney: true,
+          preferredProfession: null,
+        ),
+        height: 1800,
+      );
+      expect(find.text('Votre profession'), findsNothing);
+      expect(find.text('Professions recherchées'), findsOneWidget);
+      expect(find.text('Équipe recherchée'), findsOneWidget);
+      for (final label in [
+        'Masseur-kinésithérapeute ×4',
+        'Pédicure-podologue ×2',
+        'Médecin ×1',
+        'Infirmier ×2',
+        'Vétérinaire ×2',
+        'Autre professionnel de santé ×3',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(
+        find.text('Matériel disponible sur site non renseigné'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Matériel à apporter pour votre intervention'),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('mono-profession professional card keeps its existing label', (
     tester,
@@ -248,12 +305,11 @@ void main() {
       ),
     );
 
-    expect(find.text('Profession recherchée'), findsOneWidget);
-    expect(find.text('Votre profession recherchée'), findsNothing);
+    expect(find.text('Votre profession'), findsOneWidget);
     expect(find.text('Masseur-kinésithérapeute'), findsWidgets);
     expect(find.text('Matériel demandé'), findsOneWidget);
     expect(find.text('Tables'), findsOneWidget);
-    expect(find.textContaining('place'), findsNothing);
+    expect(find.textContaining('place recherchée'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

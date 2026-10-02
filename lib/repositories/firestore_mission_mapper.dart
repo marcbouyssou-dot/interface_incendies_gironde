@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/need.dart';
 import '../models/mission_equipment.dart';
+import '../models/site_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../utils/french_date_time.dart';
 import 'coordination_repository.dart';
@@ -138,6 +139,9 @@ abstract final class FirestoreMissionMapper {
             )
           : MissionEquipment.globalLabels(equipmentByProfession),
       equipmentByProfession: equipmentByProfession,
+      availableEquipmentOnSite: SiteEquipment.fromFirestore(
+        data['availableEquipmentOnSite'],
+      ),
       priority: NeedPriority.fromFirestore(data['priority']),
       details: data['details'] as String?,
       isActive: data['isActive'] as bool? ?? true,

@@ -25,6 +25,7 @@ import 'operation_context_badge.dart';
 import 'mobilization_design_system.dart';
 import 'v5_controls.dart';
 import 'v5_form_system.dart';
+import 'site_equipment_items.dart';
 
 class PageContainer extends StatelessWidget {
   const PageContainer({super.key, required this.child});
@@ -1035,12 +1036,7 @@ class NeedCard extends StatelessWidget {
               need.professionQuotas.quotaFor(profession.id).hasActivity,
         )
         .toList(growable: false);
-    final professionsStillNeeded = professionsWithActivity
-        .where(
-          (profession) =>
-              !need.professionQuotas.quotaFor(profession.id).isCovered,
-        )
-        .toList(growable: false);
+
     final matchingProfession = preferredProfession == null
         ? null
         : HealthProfessionRegistry.byId(preferredProfession!.canonicalId!);
@@ -1051,30 +1047,22 @@ class NeedCard extends StatelessWidget {
             need.equipmentByProfession!,
             matchingProfession.id,
           );
-    final visibleProfessions =
-        matchingProfession != null &&
-            need.professionQuotas.quotaFor(matchingProfession.id).hasActivity
-        ? [matchingProfession]
-        : professionsStillNeeded.isEmpty
-        ? professionsWithActivity.take(1).toList(growable: false)
-        : professionsStillNeeded.take(1).toList(growable: false);
-    final contextualMultiProfession =
-        professionalJourney &&
-        professionsWithActivity
-                .where(
-                  (profession) =>
-                      need.professionQuotas.quotaFor(profession.id).required >
-                      0,
-                )
-                .length >
-            1 &&
+    final profileProfessionIsRequired =
         matchingProfession != null &&
         need.professionQuotas.quotaFor(matchingProfession.id).required > 0;
-    final contextualQuota = contextualMultiProfession
+    final visibleProfessions = profileProfessionIsRequired
+        ? [matchingProfession]
+        : professionsWithActivity
+              .where(
+                (profession) =>
+                    need.professionQuotas.quotaFor(profession.id).required > 0,
+              )
+              .toList(growable: false);
+    final contextualQuota = profileProfessionIsRequired
         ? need.professionQuotas.quotaFor(matchingProfession.id).required
         : 0;
-    final contextualProfessionLabel = contextualMultiProfession
-        ? '${matchingProfession.missionLabel} · $contextualQuota ${contextualQuota == 1 ? 'place' : 'places'}'
+    final contextualProfessionLabel = profileProfessionIsRequired
+        ? '${matchingProfession.missionLabel} · $contextualQuota ${contextualQuota == 1 ? 'place recherchée' : 'places recherchées'}'
         : null;
     final past = isMissionPast(need);
     final impactType = need.isCancelled || !need.isActive
@@ -1125,16 +1113,20 @@ class NeedCard extends StatelessWidget {
         professionalPalette: professionalJourney,
       ),
       professionTitle: professionalJourney
-          ? contextualMultiProfession
-                ? 'Votre profession recherchée'
-                : 'Profession recherchée'
+          ? profileProfessionIsRequired
+                ? 'Votre profession'
+                : 'Professions recherchées'
           : remaining > 0
           ? 'Qui est attendu ?'
           : 'Qui s’est mobilisé ?',
       professions: [
         for (final profession in visibleProfessions)
           ProfessionChip(
-            label: contextualProfessionLabel ?? profession.missionLabel,
+            label:
+                contextualProfessionLabel ??
+                (professionalJourney
+                    ? '${profession.missionLabel} ×${need.professionQuotas.quotaFor(profession.id).required}'
+                    : profession.missionLabel),
             professionalPalette: professionalJourney,
             state: need.professionQuotas.quotaFor(profession.id).isCovered
                 ? ProfessionChipState.covered
@@ -1163,9 +1155,17 @@ class NeedCard extends StatelessWidget {
             ),
             MissionLocationDetails(location: location, compact: true),
             const _MissionCardSectionDivider(harmonized: true),
+            const _MissionCardSectionTitle(
+              'Équipe recherchée',
+              harmonized: true,
+              professionalHome: true,
+            ),
+            const SizedBox(height: 10),
+            _ProfessionQuotaRows(need: need),
+            const _MissionCardSectionDivider(harmonized: true),
             if (matchingEquipment.isNotEmpty) ...[
               const _MissionCardSectionTitle(
-                'Matériel à prévoir pour votre intervention',
+                'Matériel à apporter pour votre intervention',
                 harmonized: true,
                 professionalHome: true,
               ),
@@ -1174,19 +1174,21 @@ class NeedCard extends StatelessWidget {
               const _MissionCardSectionDivider(harmonized: true),
             ],
             const _MissionCardSectionTitle(
-              'Répartition des renforts',
+              'Matériel disponible sur site',
               harmonized: true,
               professionalHome: true,
             ),
             const SizedBox(height: 10),
-            _ProfessionQuotaRows(need: need),
+            SiteEquipmentItems(equipment: need.availableEquipmentOnSite),
             if (need.equipmentByProfession case final selection?
                 when selection.keys.any(
                   (id) => id != matchingProfession?.id,
                 )) ...[
               const _MissionCardSectionDivider(harmonized: true),
-              const _MissionCardSectionTitle(
-                'Autres matériels demandés',
+              _MissionCardSectionTitle(
+                matchingProfession == null
+                    ? 'Matériel à apporter par profession'
+                    : 'Autres matériels demandés',
                 harmonized: true,
                 professionalHome: true,
               ),
@@ -2017,9 +2019,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   List<ProfessionalIdType> get _professionalIdTypeOptions {
     final requiredType = requiredProfessionalIdType(_profession);
-    return requiredType == null
-        ? ProfessionalIdType.values
-        : [requiredType];
+    return requiredType == null ? ProfessionalIdType.values : [requiredType];
   }
 
   List<ProfessionalEquipmentDefinition> get _equipmentOptions =>
@@ -2502,9 +2502,8 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 isExpanded: true,
                                 decoration: InputDecoration(
                                   labelText: 'Identifiant professionnel *',
-                                  helperText: professionAllowsNoIdentifier(
-                                    _profession,
-                                  )
+                                  helperText:
+                                      professionAllowsNoIdentifier(_profession)
                                       ? null
                                       : 'Obligatoire pour participer.',
                                   prefixIcon: const Icon(Icons.badge_outlined),
@@ -3152,7 +3151,9 @@ class _ProfileSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final gaps = ProfessionalProfileValidation.engagementGapsForProfile(profile);
+    final gaps = ProfessionalProfileValidation.engagementGapsForProfile(
+      profile,
+    );
     final phoneMissing = gaps.contains(EngagementProfileGap.phone);
     final emailMissing = gaps.contains(EngagementProfileGap.email);
     final identifierMissing = gaps.contains(
@@ -3250,7 +3251,8 @@ class _ProfileSummary extends StatelessWidget {
               child: _ProfileSummaryItem(
                 key: const Key('profile-summary-identifier'),
                 icon: Icons.badge_outlined,
-                label: profile.effectiveProfessionalIdType ==
+                label:
+                    profile.effectiveProfessionalIdType ==
                         ProfessionalIdType.none
                     ? 'Identifiant professionnel'
                     : profile.effectiveProfessionalIdType.label,

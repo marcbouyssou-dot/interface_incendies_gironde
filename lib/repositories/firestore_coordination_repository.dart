@@ -12,6 +12,7 @@ import '../models/mobilization.dart';
 import '../models/need.dart';
 import '../models/platform_administrator_access.dart';
 import '../models/professional_equipment.dart';
+import '../models/site_equipment.dart';
 import '../models/professional_profile_validation.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
@@ -1269,6 +1270,34 @@ class FirestoreCoordinationRepository
       debugPrintStack(stackTrace: stackTrace);
       throw const RepositoryException(
         'Le statut n’a pas pu être mis à jour. Réessayez.',
+      );
+    }
+  }
+
+  @override
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  ) async {
+    final user = _responsibleAuth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw const RepositoryException('Session responsable requise.');
+    }
+    final normalized = SiteEquipment.normalize(equipmentIds);
+    try {
+      await _responsibleFunctions
+          .httpsCallable('updateSiteEquipment')
+          .call<Object?>({
+            'locationId': locationId,
+            'availableEquipment': normalized,
+          })
+          .timeout(const Duration(seconds: 15));
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'permission-denied') {
+        throw const RepositoryException('Accès au lieu refusé.');
+      }
+      throw const RepositoryException(
+        'Le matériel du site n’a pas pu être enregistré. Réessayez.',
       );
     }
   }

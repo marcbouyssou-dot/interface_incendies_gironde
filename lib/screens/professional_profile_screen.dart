@@ -497,7 +497,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                   ),
                   const SizedBox(height: V5Spacing.sm),
                   _ProfileSection(
-                    title: 'Matériel disponible',
+                    title: 'Mon matériel disponible',
                     icon: Icons.medical_services_outlined,
                     children: [
                       _ProfileValue(
@@ -1507,7 +1507,7 @@ class _ProfessionalProfileEditorState
               const SizedBox(height: V5Spacing.sm),
               if (_showsEquipment)
               V5Section(
-                title: 'Matériel disponible',
+                title: 'Mon matériel disponible',
                 leading: const Icon(Icons.medical_services_outlined),
                 child: Column(
                   children: [

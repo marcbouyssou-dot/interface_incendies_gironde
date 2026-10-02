@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 
 import {parseResponsibleAccess} from './responsible_access.js';
 import {globalMissionEquipmentLabels, normalizeMissionEquipment} from './mission_equipment.js';
+import {normalizeSiteEquipment, SiteEquipmentError} from './site_equipment.js';
 import {
   MissionUpdateError as MissionWriteError,
   hasExactlyKeys,
@@ -113,6 +114,17 @@ export function missionCreateMutation({
       || location.isOperational === false) {
     throw new MissionWriteError('failed-precondition', 'Le lieu sélectionné est inactif.');
   }
+  let siteEquipment;
+  if (Object.hasOwn(location, 'availableEquipment')) {
+    try {
+      siteEquipment = normalizeSiteEquipment(location.availableEquipment);
+    } catch (error) {
+      if (error instanceof SiteEquipmentError) {
+        throw new MissionWriteError('failed-precondition', 'Matériel du site invalide.');
+      }
+      throw error;
+    }
+  }
   const registeredByProfession = Object.fromEntries(
     Object.keys(request.requiredByProfession).map((profession) => [profession, 0]),
   );
@@ -132,6 +144,7 @@ export function missionCreateMutation({
     registeredMk: 0,
     registeredPp: 0,
     requestedEquipmentByProfession: request.equipmentByProfession,
+    ...(siteEquipment === undefined ? {} : {availableEquipmentOnSite: siteEquipment}),
     requestedEquipment: globalMissionEquipmentLabels(request.equipmentByProfession),
     priority: request.priority,
     details: request.details,

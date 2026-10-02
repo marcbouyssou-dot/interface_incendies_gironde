@@ -87,6 +87,12 @@ class ReadOnlyPreviewCoordinationRepository implements CoordinationRepository {
     required EngagementStatus status,
   }) => _blocked();
   @override
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  ) => _blocked();
+
+  @override
   Future<String> createMission(MissionDraft draft) => _blocked();
   @override
   Future<void> updateMission(String missionId, MissionDraft draft) =>

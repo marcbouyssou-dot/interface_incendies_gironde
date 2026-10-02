@@ -230,6 +230,26 @@ test('createMission creates one server-owned Bassens mission despite a retry', a
   assert.equal(edited.createdBy, user.uid);
 });
 
+test('mission publication snapshots site inventory and later site edits do not rewrite it', async () => {
+  const site = unique('snapshot-site');
+  await seedLocation(site, {availableEquipment: ['massage_table', 'stethoscope']});
+  const manager = await createUser(managerRole([site]));
+  const create = await callable(manager, 'createMission');
+  const editSite = await callable(manager, 'updateSiteEquipment');
+  const payload = createRequest(site);
+  await assertCode(() => create({...payload, availableEquipmentOnSite: ['care_equipment']}),
+    'invalid-argument');
+  const missionId = (await create(payload)).data.missionId;
+  const missionRef = db.collection('missions').doc(missionId);
+  assert.deepEqual((await missionRef.get()).data().availableEquipmentOnSite,
+    ['massage_table', 'stethoscope']);
+  await editSite({locationId: site, availableEquipment: ['care_equipment']});
+  assert.deepEqual((await missionRef.get()).data().availableEquipmentOnSite,
+    ['massage_table', 'stethoscope']);
+  assert.deepEqual((await db.collection('locations').doc(site).get()).data().availableEquipment,
+    ['care_equipment']);
+});
+
 test('createMission rejects unauthenticated, professional, forbidden site and forged fields', async () => {
   const site = unique('bassens');
   const forbidden = unique('forbidden');

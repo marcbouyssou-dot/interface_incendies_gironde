@@ -17,6 +17,7 @@ import '../utils/app_page_route.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
+import '../widgets/site_equipment_items.dart';
 import '../widgets/responsible_diffusion_summary.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
@@ -739,8 +740,8 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     const SizedBox(height: 20),
                     V5Section(
                       title: _isEditing
-                          ? 'Informations complémentaires'
-                          : '6. Informations complémentaires',
+                          ? 'Matériel à apporter'
+                          : '6. Matériel à apporter',
                       leading: const Icon(Icons.medical_services_outlined),
                       child:
                           _isEditing &&
@@ -879,6 +880,21 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                                 ),
                               ],
                             ),
+                    ),
+                    const SizedBox(height: 20),
+                    V5Section(
+                      title: 'Matériel disponible sur site',
+                      leading: const Icon(Icons.home_work_outlined),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_selectedLocation?.name ?? 'Choisissez un lieu'),
+                          const SizedBox(height: 8),
+                          SiteEquipmentItems(
+                            equipment: _selectedLocation?.availableEquipment,
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 20),
                     V5TextField(
@@ -1057,33 +1073,47 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
               RepositoryScope.of(context).createMission(draft));
       if (!mounted) return;
       debugPrint('Publication mission confirmée : $id');
+      CoordinationNeed? savedMission;
+      try {
+        savedMission = await RepositoryScope.of(
+          context,
+        ).getMission(id).timeout(const Duration(seconds: 10));
+      } catch (_) {
+        // La publication a réussi : une lecture manquée ne doit pas la relancer.
+      }
+      if (!mounted) return;
       widget.onMissionPublished?.call(
-        CoordinationNeed(
-          id: id,
-          mobilizationId: widget.mobilizationId,
-          locationId: draft.location.id,
-          place: draft.location.name,
-          group: draft.location.group,
-          date: FrenchDateTime.date(draft.startAt),
-          time: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
-          startAt: draft.startAt,
-          endAt: draft.endAt,
-          requiredPhysiotherapists: draft.requiredPhysiotherapists,
-          registeredPhysiotherapists: 0,
-          requiredPodiatrists: draft.requiredPodiatrists,
-          registeredPodiatrists: 0,
-          professionQuotas: draft.professionQuotas,
-          equipment: List.of(draft.equipment),
-          equipmentByProfession: draft.equipmentByProfession,
-          priority: draft.priority,
-          details: draft.details.trim(),
-          createdBy: access.uid,
-        ),
+        savedMission ??
+            CoordinationNeed(
+              id: id,
+              mobilizationId: widget.mobilizationId,
+              locationId: draft.location.id,
+              place: draft.location.name,
+              group: draft.location.group,
+              date: FrenchDateTime.date(draft.startAt),
+              time: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
+              startAt: draft.startAt,
+              endAt: draft.endAt,
+              requiredPhysiotherapists: draft.requiredPhysiotherapists,
+              registeredPhysiotherapists: 0,
+              requiredPodiatrists: draft.requiredPodiatrists,
+              registeredPodiatrists: 0,
+              professionQuotas: draft.professionQuotas,
+              equipment: List.of(draft.equipment),
+              equipmentByProfession: draft.equipmentByProfession,
+              priority: draft.priority,
+              details: draft.details.trim(),
+              createdBy: access.uid,
+            ),
       );
       setState(() {
         _publishing = false;
         _reviewDraft = null;
-        _publishedMission = _PublishedMission(id: id, draft: draft);
+        _publishedMission = _PublishedMission(
+          id: id,
+          draft: draft,
+          savedMission: savedMission,
+        );
       });
     } on RepositoryException catch (error, stackTrace) {
       debugPrint('Enregistrement mission refusé : $error');
@@ -1610,9 +1640,14 @@ class _ResponsibleLoginHeader extends StatelessWidget {
 }
 
 class _PublishedMission {
-  const _PublishedMission({required this.id, required this.draft});
+  const _PublishedMission({
+    required this.id,
+    required this.draft,
+    required this.savedMission,
+  });
   final String id;
   final MissionDraft draft;
+  final CoordinationNeed? savedMission;
 }
 
 class _MissionFormValidationError {
@@ -1730,6 +1765,8 @@ class _MissionPublishedView extends StatelessWidget {
           const SizedBox(height: 24),
           _MissionDraftSummary(
             draft: draft,
+            published: true,
+            savedMission: mission.savedMission,
             status: diffusionRepository == null
                 ? 'En attente de diffusion'
                 : null,
@@ -1759,10 +1796,17 @@ class _MissionPublishedView extends StatelessWidget {
 }
 
 class _MissionDraftSummary extends StatelessWidget {
-  const _MissionDraftSummary({required this.draft, this.status});
+  const _MissionDraftSummary({
+    required this.draft,
+    this.status,
+    this.published = false,
+    this.savedMission,
+  });
 
   final MissionDraft draft;
   final String? status;
+  final bool published;
+  final CoordinationNeed? savedMission;
 
   @override
   Widget build(BuildContext context) {
@@ -1812,7 +1856,7 @@ class _MissionDraftSummary extends StatelessWidget {
                 when equipmentByProfession.isNotEmpty) ...[
               const SizedBox(height: 14),
               Text(
-                'Matériel à prévoir',
+                'Matériel à apporter',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 8),
@@ -1837,6 +1881,22 @@ class _MissionDraftSummary extends StatelessWidget {
                 value: draft.equipment.join(' • '),
               ),
             ],
+            const SizedBox(height: 14),
+            Text(
+              'Matériel disponible sur site',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(draft.location.name),
+            const SizedBox(height: 6),
+            if (!published)
+              SiteEquipmentItems(equipment: draft.location.availableEquipment)
+            else if (savedMission case final mission?)
+              SiteEquipmentItems(equipment: mission.availableEquipmentOnSite)
+            else
+              const Text(
+                'Matériel du site indisponible. Consultez la mission.',
+              ),
             const SizedBox(height: 14),
             _SummaryLine(label: 'Lieu', value: draft.location.name),
             const SizedBox(height: 14),

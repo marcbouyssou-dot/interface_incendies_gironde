@@ -96,6 +96,12 @@ abstract interface class CoordinationRepository
     required EngagementStatus status,
   });
 
+  /// Changes only the current inventory of an authorized site.
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  );
+
   Future<String> createMission(MissionDraft draft);
 
   Future<void> updateMission(String missionId, MissionDraft draft);

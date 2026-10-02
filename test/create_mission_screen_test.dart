@@ -11,6 +11,7 @@ import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/services/professional_verification_service.dart';
 import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
+import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_location_administration_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
@@ -24,7 +25,7 @@ import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 void main() {
   Future<void> pumpForm(
     WidgetTester tester,
-    _MissionRepository repository, {
+    CoordinationRepository repository, {
     CoordinationNeed? mission,
     bool requireSiteManagerScope = false,
   }) async {
@@ -181,9 +182,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> tapPublish(WidgetTester tester) async {
+    final button = find.byKey(const Key('publish-mission'));
+    await tester.scrollUntilVisible(
+      button,
+      300,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('need-review')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+  }
+
   Future<void> publishReviewedNeed(WidgetTester tester) async {
     await openReview(tester);
-    await tester.tap(find.byKey(const Key('publish-mission')));
+    await tapPublish(tester);
     await tester.pumpAndSettle();
   }
 
@@ -204,6 +219,73 @@ void main() {
     await tester.tap(find.text(priority.label).last);
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'form and review distinguish site inventory from equipment to bring',
+    (tester) async {
+      final original = places.first;
+      final location = ResponsePlace(
+        id: original.id,
+        name: original.name,
+        type: original.type,
+        group: original.group,
+        activeNeeds: original.activeNeeds,
+        availableEquipment: const ['stethoscope'],
+      );
+      await pumpForm(tester, _MissionRepository(locations: [location]));
+      await completeRequiredFields(tester);
+      final formScrollable = find
+          .descendant(
+            of: find.byKey(const PageStorageKey('create')),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.scrollUntilVisible(
+        find.text('• Stéthoscope'),
+        300,
+        scrollable: formScrollable,
+      );
+      expect(find.text('6. Matériel à apporter'), findsOneWidget);
+      expect(find.text('Matériel disponible sur site'), findsOneWidget);
+      expect(find.byKey(const Key('site-equipment-stethoscope')), findsNothing);
+      await openReview(tester);
+      expect(find.text('Matériel disponible sur site'), findsOneWidget);
+      expect(find.text('• Stéthoscope'), findsOneWidget);
+    },
+  );
+
+  testWidgets('publication displays the saved snapshot after a site change', (
+    tester,
+  ) async {
+    final original = places.first;
+    final location = ResponsePlace(
+      id: original.id,
+      name: original.name,
+      type: original.type,
+      group: original.group,
+      activeNeeds: original.activeNeeds,
+      availableEquipment: const ['stethoscope'],
+    );
+    final repository = _ConcurrentSiteChangeRepository(location);
+    await pumpForm(tester, repository);
+    await completeRequiredFields(tester, selectLocation: false);
+    await openReview(tester);
+    expect(find.text('• Stéthoscope'), findsOneWidget);
+
+    await tapPublish(tester);
+    await tester.pumpAndSettle();
+
+    expect(repository.createCalls, 1);
+    expect(repository.lastDraft?.location.availableEquipment, ['stethoscope']);
+    expect(
+      repository.debugMission('mock-mission-1')?.availableEquipmentOnSite,
+      ['massage_table'],
+    );
+    expect(repository.debugMission('mock-mission-2'), isNull);
+    expect(find.text('Votre besoin est publié.'), findsOneWidget);
+    expect(find.text('• Table de massage'), findsOneWidget);
+    expect(find.text('• Stéthoscope'), findsNothing);
+  });
 
   testWidgets('date and both time pickers open and retain their choices', (
     tester,
@@ -301,7 +383,8 @@ void main() {
           '3. Où ?',
           '4. Quand ?',
           '5. Priorité',
-          '6. Informations complémentaires',
+          '6. Matériel à apporter',
+          'Matériel disponible sur site',
         ],
       );
       expect(find.text('2. Combien ?'), findsOneWidget);
@@ -311,7 +394,21 @@ void main() {
 
       expect(repository.calls, 0);
       expect(find.text('Résumé du besoin'), findsOneWidget);
+      final reviewScrollable = find.descendant(
+        of: find.byKey(const Key('need-review')),
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('publish-mission')),
+        300,
+        scrollable: reviewScrollable,
+      );
       expect(find.text('Publier le besoin'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('edit-need-from-review')),
+        -300,
+        scrollable: reviewScrollable,
+      );
       await tester.tap(find.byKey(const Key('edit-need-from-review')));
       await tester.pumpAndSettle();
       expect(find.text('Exprimer un besoin'), findsOneWidget);
@@ -319,7 +416,7 @@ void main() {
       expect(repository.calls, 0);
 
       await openReview(tester);
-      await tester.tap(find.byKey(const Key('publish-mission')));
+      await tapPublish(tester);
       await tester.pump();
 
       expect(repository.calls, 1);
@@ -334,7 +431,7 @@ void main() {
       repository.complete();
       await tester.pumpAndSettle();
       expect(find.text('Votre besoin est publié.'), findsOneWidget);
-      expect(find.text(places.first.name), findsOneWidget);
+      expect(find.text(places.first.name), findsNWidgets(2));
       expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
       expect(find.text('En attente de diffusion'), findsOneWidget);
     },
@@ -409,7 +506,7 @@ void main() {
 
     await openReview(tester);
     expectSummary();
-    await tester.tap(find.byKey(const Key('publish-mission')));
+    await tapPublish(tester);
     await tester.pumpAndSettle();
     expectSummary();
     expect(repository.calls, 1);
@@ -467,7 +564,7 @@ void main() {
         isTrue,
       );
       await openReview(tester);
-      expect(find.text('Matériel à prévoir'), findsOneWidget);
+      expect(find.text('Matériel à apporter'), findsOneWidget);
       for (final label in [
         '• Table de massage',
         '• Crèmes / huiles de massage',
@@ -607,7 +704,7 @@ void main() {
     expect(find.text('Exprimer un besoin'), findsOneWidget);
     expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
     expect(find.byKey(const Key('mission-location')), findsNothing);
-    expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Mérignac'), findsNWidgets(2));
     expect(find.text(places.first.name), findsNothing);
 
     await completeRequiredFields(tester, selectLocation: false);
@@ -702,7 +799,7 @@ void main() {
     );
     await pumpForm(tester, repository, requireSiteManagerScope: true);
     expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
-    expect(find.text(operational.first.name), findsOneWidget);
+    expect(find.text(operational.first.name), findsNWidgets(2));
     expect(find.text(operational.last.name), findsNothing);
   });
 
@@ -811,7 +908,7 @@ void main() {
 
     expect(find.text('Modifier la mission'), findsOneWidget);
     expect(find.text('Enregistrer les modifications'), findsOneWidget);
-    expect(find.text(location.name), findsOneWidget);
+    expect(find.text(location.name), findsNWidgets(2));
     expect(find.text('08:00'), findsOneWidget);
     expect(find.text('12:00'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
@@ -990,7 +1087,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Modifier la mission'), findsOneWidget);
-    expect(find.text(location.name), findsOneWidget);
+    expect(find.text(location.name), findsNWidgets(2));
     expect(find.text('08:00'), findsOneWidget);
     expect(find.text('12:00'), findsOneWidget);
     expect(find.text('Consigne conservée'), findsOneWidget);
@@ -1171,6 +1268,12 @@ class _MissionRepository implements CoordinationRepository {
   Future<void> cancelMission(String missionId, String? reason) async {}
 
   @override
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> availableEquipment,
+  ) async => throw UnimplementedError();
+
+  @override
   Future<void> updateMission(String missionId, MissionDraft draft) async {
     updateCalls++;
     updatedMissionId = missionId;
@@ -1245,4 +1348,29 @@ class _MissionRepository implements CoordinationRepository {
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) async => EngagementCreationResult.created;
+}
+
+class _ConcurrentSiteChangeRepository extends MockCoordinationRepository {
+  _ConcurrentSiteChangeRepository(ResponsePlace location)
+    : super(
+        initialMissions: const [],
+        initialLocations: [location],
+        responsibleAccess: ResponsibleAccess(
+          uid: 'site-manager-snapshot',
+          role: ResponsibleRole.siteManager,
+          locationIds: {location.id},
+          active: true,
+        ),
+      );
+
+  int createCalls = 0;
+  MissionDraft? lastDraft;
+
+  @override
+  Future<String> createMission(MissionDraft draft) async {
+    createCalls++;
+    lastDraft = draft;
+    await updateSiteEquipment(draft.location.id, const ['massage_table']);
+    return super.createMission(draft);
+  }
 }

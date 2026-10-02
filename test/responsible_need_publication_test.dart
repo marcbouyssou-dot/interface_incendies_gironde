@@ -44,7 +44,7 @@ void main() {
 
       expect(find.byKey(const Key('mission-location')), findsNothing);
       expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
-      expect(find.text(center.name), findsOneWidget);
+      expect(find.text(center.name), findsNWidgets(2));
 
       await _chooseDate(tester);
       await _chooseTime(tester, const Key('mission-start-time'));
@@ -65,7 +65,14 @@ void main() {
       await tester.tap(find.byKey(const Key('review-mission')));
       await tester.pumpAndSettle();
       final publishButton = find.byKey(const Key('publish-mission'));
-      await tester.ensureVisible(publishButton);
+      await tester.scrollUntilVisible(
+        publishButton,
+        300,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('need-review')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(publishButton);
       await tester.pumpAndSettle();
@@ -74,6 +81,12 @@ void main() {
       expect(repository.lastDraft?.location.id, center.id);
       expect(find.text('Votre besoin est publié.'), findsOneWidget);
 
+      await tester.scrollUntilVisible(
+        find.text('Voir le besoin'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Voir le besoin'));
       await tester.pumpAndSettle();
       await tester.drag(

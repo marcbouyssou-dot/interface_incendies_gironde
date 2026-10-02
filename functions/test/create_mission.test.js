@@ -148,3 +148,32 @@ test('same request key produces same document; different key or payload is disti
   assert.notEqual(missionCreateRequestHash(parsed), missionCreateRequestHash(
     validateMissionCreateRequest(request({details: 'Changed'}))));
 });
+
+
+test('publication captures site inventory and preserves absent versus empty', () => {
+  const withEquipment = mutation({location: {
+    name: 'Bassens', group: 'bordeauxMetropole', active: true,
+    availableEquipment: ['stethoscope', 'massage_table', 'massage_table'],
+  }}).fields;
+  assert.deepEqual(withEquipment.availableEquipmentOnSite,
+    ['massage_table', 'stethoscope']);
+  const withoutInventory = mutation().fields;
+  assert.equal(Object.hasOwn(withoutInventory, 'availableEquipmentOnSite'), false);
+  const explicitNone = mutation({location: {
+    name: 'Bassens', group: 'bordeauxMetropole', active: true,
+    availableEquipment: [],
+  }}).fields;
+  assert.deepEqual(explicitNone.availableEquipmentOnSite, []);
+  const clientInjection = request({availableEquipmentOnSite: ['massage_table']});
+  assertCode(() => validateMissionCreateRequest(clientInjection), 'invalid-argument');
+  assertCode(() => mutation({location: {
+    name: 'Bassens', group: 'bordeauxMetropole', active: true,
+    availableEquipment: ['invalid'],
+  }}), 'failed-precondition');
+  // Changing the source after publication cannot mutate the snapshot object.
+  const site = {name: 'Bassens', group: 'bordeauxMetropole', active: true,
+    availableEquipment: ['massage_table']};
+  const published = mutation({location: site}).fields;
+  site.availableEquipment = ['stethoscope'];
+  assert.deepEqual(published.availableEquipmentOnSite, ['massage_table']);
+});

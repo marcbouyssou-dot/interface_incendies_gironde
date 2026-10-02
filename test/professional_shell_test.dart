@@ -104,7 +104,7 @@ void main() {
     );
     final missionProfession = find.descendant(
       of: firstMission,
-      matching: find.text('Profession recherchée'),
+      matching: find.text('Professions recherchées'),
     );
     final missionUrgency = find.byKey(
       const Key('mission-priority-mission-merignac'),
@@ -796,7 +796,7 @@ void main() {
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
-    expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Mérignac'), findsNWidgets(2));
     expect(find.text('Perspective'), findsNothing);
     expect(find.text('Centre géré'), findsOneWidget);
     expect(find.text('Identité'), findsNothing);
@@ -1311,9 +1311,13 @@ void main() {
     final developmentSettings = find.byKey(
       const Key('responsible-development-settings'),
     );
-    await tester.drag(
-      find.byKey(const PageStorageKey('responsible-profile')),
-      const Offset(0, -360),
+    await tester.scrollUntilVisible(
+      developmentSettings,
+      350,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('responsible-profile')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(developmentSettings);

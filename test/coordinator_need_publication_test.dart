@@ -19,13 +19,19 @@ void main() {
 
       await _pumpCoordinator(tester, repository);
       await _openAndCompleteForm(tester, location);
-      await tester.tap(find.byKey(const Key('publish-mission')));
+      await _tapPublish(tester);
       await tester.pumpAndSettle();
 
       expect(repository.createCalls, 1);
       expect(repository.lastDraft?.location.id, location.id);
       expect(find.text('Votre besoin est publié.'), findsOneWidget);
 
+      await tester.scrollUntilVisible(
+        find.text('Voir le besoin'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Voir le besoin'));
       await tester.pumpAndSettle();
 
@@ -74,7 +80,7 @@ void main() {
 
       await _pumpCoordinator(tester, repository);
       await _openAndCompleteForm(tester, location);
-      await tester.tap(find.byKey(const Key('publish-mission')));
+      await _tapPublish(tester);
       await tester.pumpAndSettle();
 
       expect(repository.createCalls, 1);
@@ -85,6 +91,20 @@ void main() {
       );
     },
   );
+}
+
+Future<void> _tapPublish(WidgetTester tester) async {
+  final button = find.byKey(const Key('publish-mission'));
+  await tester.scrollUntilVisible(
+    button,
+    300,
+    scrollable: find.descendant(
+      of: find.byKey(const Key('need-review')),
+      matching: find.byType(Scrollable),
+    ),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(button);
 }
 
 Future<void> _pumpCoordinator(

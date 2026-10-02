@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/need.dart';
+import '../models/site_equipment.dart';
 
 abstract final class FirestoreLocationMapper {
   static ResponsePlace fromFirestore({
@@ -26,6 +27,9 @@ abstract final class FirestoreLocationMapper {
       contactName: data['contactName'] as String?,
       contactPhone: data['contactPhone'] as String?,
       managingOrganizationId: data['managingOrganizationId'] as String?,
+      availableEquipment: SiteEquipment.fromFirestore(
+        data['availableEquipment'],
+      ),
       isOperational: data['isOperational'] as bool? ?? true,
       isEnabled: data['active'] as bool? ?? true,
     );

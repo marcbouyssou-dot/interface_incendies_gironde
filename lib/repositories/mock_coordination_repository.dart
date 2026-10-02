@@ -5,6 +5,7 @@ import '../models/admin_location.dart';
 import '../models/app_notification.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
+import '../models/site_equipment.dart';
 import '../models/professional_profile_validation.dart';
 import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
@@ -619,6 +620,7 @@ class MockCoordinationRepository
             type: location.type,
             group: location.group,
             activeNeeds: previous?.activeNeeds ?? 0,
+            availableEquipment: previous?.availableEquipment,
             structuredAddress: LocationAddress(
               addressLine1: location.addressLine1,
               addressLine2: location.addressLine2,
@@ -646,6 +648,38 @@ class MockCoordinationRepository
           );
         }),
       );
+    _locationUpdates.add(List.unmodifiable(_locations));
+  }
+
+  @override
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  ) async {
+    final access = _responsibleAccess;
+    if (access == null || !access.active || !access.canManage(locationId)) {
+      throw const RepositoryException('Accès au lieu refusé.');
+    }
+    final index = _locations.indexWhere(
+      (location) => location.id == locationId,
+    );
+    if (index < 0) throw const RepositoryException('Lieu introuvable.');
+    final location = _locations[index];
+    _locations[index] = ResponsePlace(
+      id: location.id,
+      name: location.name,
+      type: location.type,
+      group: location.group,
+      activeNeeds: location.activeNeeds,
+      address: location.address,
+      structuredAddress: location.structuredAddress,
+      contactName: location.contactName,
+      contactPhone: location.contactPhone,
+      managingOrganizationId: location.managingOrganizationId,
+      isOperational: location.isOperational,
+      isEnabled: location.isEnabled,
+      availableEquipment: SiteEquipment.normalize(equipmentIds),
+    );
     _locationUpdates.add(List.unmodifiable(_locations));
   }
 
@@ -679,6 +713,9 @@ class MockCoordinationRepository
       professionQuotas: draft.professionQuotas,
       equipment: List.of(draft.equipment),
       equipmentByProfession: draft.equipmentByProfession,
+      availableEquipmentOnSite: _locations
+          .firstWhere((location) => location.id == draft.location.id)
+          .availableEquipment,
       priority: draft.priority,
       details: draft.details,
       createdBy: _responsibleAccess?.uid,
@@ -756,6 +793,7 @@ class MockCoordinationRepository
       professionQuotas: quotas,
       equipment: List.of(draft.equipment),
       equipmentByProfession: draft.equipmentByProfession,
+      availableEquipmentOnSite: mission.availableEquipmentOnSite,
       priority: draft.priority,
       details: draft.details.trim(),
       isActive: mission.isActive,

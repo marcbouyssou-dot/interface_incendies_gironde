@@ -718,7 +718,7 @@ void main() {
       find.byKey(const Key('professional-profile-first-name')),
       findsNothing,
     );
-    expect(find.text('Matériel disponible'), findsWidgets);
+    expect(find.text('Mon matériel disponible'), findsWidgets);
   });
 
   testWidgets(
@@ -1117,7 +1117,19 @@ Future<void> _enterProfessionalPerspective(
   final settings = access.roles.contains(ResponsibleRole.coordinator)
       ? find.byKey(const Key('open-development-settings'))
       : find.byKey(const Key('responsible-development-settings'));
-  await tester.ensureVisible(settings);
+  if (access.roles.contains(ResponsibleRole.coordinator)) {
+    await tester.ensureVisible(settings);
+  } else {
+    await tester.scrollUntilVisible(
+      settings,
+      350,
+      scrollable: find.descendant(
+        of: find.byKey(const PageStorageKey('responsible-profile')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+  }
+  await tester.pumpAndSettle();
   await tester.tap(settings);
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('role-preview-selector')));

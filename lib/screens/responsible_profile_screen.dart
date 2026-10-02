@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
-import '../models/responsible_access.dart';
+import '../models/site_equipment.dart';
+import '../repositories/coordination_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/v5_foundation.dart';
@@ -171,6 +172,15 @@ class _ResponsibleProfileContent extends StatelessWidget {
                               _ProfileLine(label: 'Centre', value: location),
                           ],
                   ),
+                  if (access != null && !access!.isCoordinator)
+                    for (final locationId in access!.locationIds)
+                      if (locationById[locationId] case final location?) ...[
+                        const SizedBox(height: V5Spacing.xxl),
+                        _SiteEquipmentEditor(
+                          key: ValueKey('site-equipment-${location.id}'),
+                          location: location,
+                        ),
+                      ],
                   const SizedBox(height: V5Spacing.xxl),
                   OutlinedButton.icon(
                     key: const Key('responsible-notification-center'),
@@ -211,6 +221,135 @@ class _ResponsibleProfileContent extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SiteEquipmentEditor extends StatefulWidget {
+  const _SiteEquipmentEditor({super.key, required this.location});
+
+  final ResponsePlace location;
+
+  @override
+  State<_SiteEquipmentEditor> createState() => _SiteEquipmentEditorState();
+}
+
+class _SiteEquipmentEditorState extends State<_SiteEquipmentEditor> {
+  late List<String>? _current;
+  late Set<String> _selected;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.location.availableEquipment;
+    _selected = {...?_current};
+  }
+
+  @override
+  void didUpdateWidget(covariant _SiteEquipmentEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!listEquals(
+          oldWidget.location.availableEquipment,
+          widget.location.availableEquipment,
+        ) &&
+        !_saving) {
+      _current = widget.location.availableEquipment;
+      _selected = {...?_current};
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final normalized = SiteEquipment.normalize(_selected);
+      await RepositoryScope.of(
+        context,
+      ).updateSiteEquipment(widget.location.id, normalized);
+      if (mounted) {
+        setState(() {
+          _current = normalized;
+          _selected = normalized.toSet();
+        });
+      }
+    } on RepositoryException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Le matériel du site n’a pas pu être enregistré.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _current;
+    final changed =
+        current == null ||
+        _selected.length != current.length ||
+        !_selected.containsAll(current);
+    return V5Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'MATÉRIEL DISPONIBLE SUR SITE',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: V5Spacing.sm),
+          Text(widget.location.name),
+          const SizedBox(height: V5Spacing.sm),
+          if (current == null)
+            const Text('Matériel disponible sur site non renseigné')
+          else if (current.isEmpty)
+            const Text('Aucun matériel disponible sur site'),
+          const SizedBox(height: V5Spacing.sm),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final item in SiteEquipment.catalog)
+                FilterChip(
+                  key: Key('site-equipment-${item.id}'),
+                  label: Text(item.label),
+                  selected: _selected.contains(item.id),
+                  onSelected: _saving
+                      ? null
+                      : (selected) => setState(() {
+                          if (selected) {
+                            _selected.add(item.id);
+                          } else {
+                            _selected.remove(item.id);
+                          }
+                        }),
+                ),
+            ],
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: V5Spacing.sm),
+            Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: V5Spacing.md),
+          FilledButton(
+            key: Key('save-site-equipment-${widget.location.id}'),
+            onPressed: _saving || !changed ? null : _save,
+            child: Text(
+              _saving ? 'Enregistrement…' : 'Enregistrer le matériel du site',
             ),
           ),
         ],

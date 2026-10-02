@@ -42,6 +42,11 @@ import {
   manageLocation as manageAdminLocation,
 } from './location_administration.js';
 import {
+  SiteEquipmentError,
+  siteEquipmentMutation,
+  updateSiteEquipment as updateSiteEquipmentRequest,
+} from './site_equipment.js';
+import {
   MissionUpdateError,
   missionUpdateMutation,
   updateMission as updateExistingMission,
@@ -369,6 +374,15 @@ export const manageLocation = onCall(
       data: request.data,
       services: locationAdministrationServices({firestore: getFirestore()}),
     })),
+);
+
+export const updateSiteEquipment = onCall(
+  {region: 'europe-west1'},
+  async (request) => siteEquipmentCallable(() => updateSiteEquipmentRequest({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: siteEquipmentServices({firestore: getFirestore()}),
+  })),
 );
 
 export const updateMission = onCall(
@@ -1194,6 +1208,28 @@ export function missionUpdateServices({firestore}) {
   };
 }
 
+export function siteEquipmentServices({firestore}) {
+  return {
+    async commitSiteEquipment({callerUid, request}) {
+      return firestore.runTransaction(async (transaction) => {
+        const roleRef = firestore.collection('roles').doc(callerUid);
+        const locationRef = firestore.collection('locations').doc(request.locationId);
+        const [role, location] = await Promise.all([
+          transaction.get(roleRef), transaction.get(locationRef),
+        ]);
+        const fields = siteEquipmentMutation({
+          request,
+          role: role.exists ? role.data() : null,
+          location: location.exists ? location.data() : null,
+        });
+        transaction.update(locationRef, fields);
+        return {locationId: request.locationId,
+          availableEquipment: fields.availableEquipment};
+      });
+    },
+  };
+}
+
 export function missionCreateServices({firestore}) {
   return {
     async commitMissionCreate({callerUid, request}) {
@@ -1334,6 +1370,20 @@ async function locationAdministrationCallable(action) {
       type: error?.constructor?.name ?? 'Unknown',
     });
     throw new HttpsError('internal', 'La gestion du lieu a échoué.');
+  }
+}
+
+async function siteEquipmentCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof SiteEquipmentError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('SITE_EQUIPMENT_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError('internal', 'Le matériel du site n’a pas pu être enregistré.');
   }
 }
 
