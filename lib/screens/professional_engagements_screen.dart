@@ -96,6 +96,7 @@ class _ProfessionalEngagementCollectionState
   final Map<String, StreamSubscription<EngagementInfo?>> _subscriptions = {};
   final Map<String, EngagementInfo?> _engagements = {};
   final Set<String> _waiting = {};
+  final Set<String> _failed = {};
   _EngagementPeriod _period = _EngagementPeriod.upcoming;
 
   @override
@@ -128,6 +129,7 @@ class _ProfessionalEngagementCollectionState
       unawaited(_subscriptions.remove(id)?.cancel());
       _engagements.remove(id);
       _waiting.remove(id);
+      _failed.remove(id);
     }
     for (final id in ids) {
       if (_subscriptions.containsKey(id)) continue;
@@ -139,6 +141,7 @@ class _ProfessionalEngagementCollectionState
               if (!mounted) return;
               setState(() {
                 _waiting.remove(id);
+                _failed.remove(id);
                 _engagements[id] = engagement;
               });
             },
@@ -146,7 +149,8 @@ class _ProfessionalEngagementCollectionState
               if (!mounted) return;
               setState(() {
                 _waiting.remove(id);
-                _engagements[id] = null;
+                _failed.add(id);
+                _engagements.remove(id);
               });
             },
           );
@@ -217,17 +221,7 @@ class _ProfessionalEngagementCollectionState
                 ],
               ),
             ),
-            if (_waiting.isNotEmpty && allEngagements.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(child: V5ActivityIndicator()),
-              )
-            else if (visible.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _EngagementEmptyState(period: _period),
-              )
-            else
+            if (visible.isNotEmpty)
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
@@ -251,6 +245,21 @@ class _ProfessionalEngagementCollectionState
                   separatorBuilder: (_, _) =>
                       const SizedBox(height: V5Spacing.sm),
                 ),
+              )
+            else if (_failed.isNotEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EngagementLoadError(),
+              )
+            else if (_waiting.isNotEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: V5ActivityIndicator()),
+              )
+            else
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EngagementEmptyState(period: _period),
               ),
           ],
         );
