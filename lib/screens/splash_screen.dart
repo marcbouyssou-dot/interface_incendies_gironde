@@ -8,12 +8,8 @@ import '../utils/system_theme.dart';
 import '../widgets/brand_mark.dart';
 
 abstract final class _SplashVisuals {
-  // The splash is a deliberate branded hero moment, not a content screen:
-  // it uses V5Colors.light.brand/onBrand full-bleed rather than the
-  // canvas/textPrimary tokens every other screen builds on. This muted
-  // tone has no equivalent in V5Colors (which has no "secondary text on a
-  // dark brand background" token) and is scoped to this screen only.
-  static const onBrandMuted = Color(0xFFD9E3F1);
+  static const title = Color(0xFF10233E);
+  static const subtitle = Color(0xFF556070);
 }
 
 typedef SplashVisualPreparation = Future<void> Function(BuildContext context);
@@ -64,7 +60,7 @@ class _SplashScreenState extends State<SplashScreen> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: AppTheme.splashSystemUiOverlayStyle,
       child: Scaffold(
-        backgroundColor: V5Colors.light.brand,
+        backgroundColor: V5Colors.light.canvas,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -120,11 +116,7 @@ class _SplashIdentity extends StatelessWidget {
           key: Key('splash-product-name'),
           textAlign: TextAlign.center,
           style: TextStyle(
-            // Matches V5Colors.light.onBrand; kept as a literal because
-            // instance field access on a ThemeExtension isn't a constant
-            // expression, and this widget tree stays const for a screen
-            // rendered before the first frame.
-            color: Colors.white,
+            color: _SplashVisuals.title,
             fontSize: 38,
             height: 1.15,
             letterSpacing: -0.8,
@@ -137,7 +129,7 @@ class _SplashIdentity extends StatelessWidget {
           key: Key('splash-mobilization-subtitle'),
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: _SplashVisuals.onBrandMuted,
+            color: _SplashVisuals.subtitle,
             fontSize: 20,
             height: 1.4,
             fontWeight: FontWeight.w400,
@@ -158,7 +150,7 @@ class _SplashPictogram extends StatelessWidget {
     return const BrandMark(
       key: Key('splash-pictogram'),
       size: 216,
-      onDarkBackground: true,
+      onDarkBackground: false,
     );
   }
 }
@@ -173,7 +165,7 @@ class _InstitutionalSignature extends StatelessWidget {
       key: Key('splash-institutional-signature'),
       textAlign: TextAlign.center,
       style: TextStyle(
-        color: _SplashVisuals.onBrandMuted,
+        color: _SplashVisuals.subtitle,
         fontSize: 14,
         height: 1.4,
         letterSpacing: 1.6,

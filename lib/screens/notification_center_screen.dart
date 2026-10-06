@@ -229,11 +229,13 @@ class NotificationCenterScreen extends StatefulWidget {
     this.pushGateway,
     this.targetedPushTestService,
     this.initialNotificationId,
+    this.contextLabel,
   });
 
   final PushNotificationGateway? pushGateway;
   final TargetedPushTestService? targetedPushTestService;
   final String? initialNotificationId;
+  final String? contextLabel;
 
   @override
   State<NotificationCenterScreen> createState() =>
@@ -826,9 +828,19 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                   ),
                   const SizedBox(width: V5Spacing.xs),
                   Expanded(
-                    child: Text(
-                      'Notifications',
-                      style: Theme.of(context).textTheme.headlineMedium,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (widget.contextLabel case final label?)
+                          Text(
+                            label,
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        Text(
+                          'Notifications',
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+                      ],
                     ),
                   ),
                   if (unread > 0)

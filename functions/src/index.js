@@ -47,12 +47,24 @@ import {
   updateMission as updateExistingMission,
 } from './update_mission.js';
 import {
+  createMission as createNewMission,
+  missionCreateId,
+  missionCreateMutation,
+  missionCreateRequestHash,
+} from './create_mission.js';
+import {
+  SiteEquipmentError,
+  siteEquipmentMutation,
+  updateSiteEquipment as updateSiteEquipmentRequest,
+} from './site_equipment.js';
+import {
   canCoordinateMobilization,
 } from './coordinator_mobilization_access.js';
 import {
   canReadOrganizationMissionTeam,
   LEGACY_ORGANIZATION_ID,
   readOrganizationAuthorization,
+  resolveOrganizationAuthorization,
 } from './organization_authorization.js';
 import {verifyRpps} from './ans_rpps_verification.js';
 import {
@@ -373,6 +385,24 @@ export const updateMission = onCall(
   })),
 );
 
+export const createMission = onCall(
+  {region: 'europe-west1'},
+  async (request) => missionUpdateCallable(() => createNewMission({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: missionCreateServices({firestore: getFirestore()}),
+  })),
+);
+
+export const updateSiteEquipment = onCall(
+  {region: 'europe-west1'},
+  async (request) => siteEquipmentCallable(() => updateSiteEquipmentRequest({
+    callerUid: request.auth?.uid,
+    data: request.data,
+    services: siteEquipmentServices({firestore: getFirestore()}),
+  })),
+);
+
 const platformCallableOptions = Object.freeze({
   region: 'europe-west1',
   enforceAppCheck: true,
@@ -646,6 +676,11 @@ export function adminServices({
       const snapshot = await firestore.collection('roles').doc(uid).get();
       return snapshot.exists ? snapshot.data() : null;
     },
+    async isPlatformAdministrator(uid) {
+      const snapshot = await firestore
+        .collection('platformAdministrators').doc(uid).get();
+      return snapshot.exists && snapshot.data()?.active === true;
+    },
     async getInvitation(id) {
       const snapshot = await firestore
         .collection('adminInvitations')
@@ -673,15 +708,21 @@ export function adminServices({
           .doc(invitationId);
         const roleRef = firestore.collection('roles').doc(targetUid);
         const callerRoleRef = firestore.collection('roles').doc(createdBy);
-        const [invitationSnapshot, roleSnapshot, callerRoleSnapshot] =
-          await Promise.all([
-            transaction.get(invitationRef),
-            transaction.get(roleRef),
-            transaction.get(callerRoleRef),
-          ]);
+        const callerAdminRef = firestore
+          .collection('platformAdministrators').doc(createdBy);
+        const [invitationSnapshot, roleSnapshot, callerRoleSnapshot,
+          callerAdminSnapshot] = await Promise.all([
+          transaction.get(invitationRef),
+          transaction.get(roleRef),
+          transaction.get(callerRoleRef),
+          transaction.get(callerAdminRef),
+        ]);
+        const callerIsAdministrator = callerAdminSnapshot.exists
+          && callerAdminSnapshot.data()?.active === true;
         if (
-          !callerRoleSnapshot.exists
-          || !hasActiveCoordinatorRole(callerRoleSnapshot.data())
+          !callerIsAdministrator
+          && (!callerRoleSnapshot.exists
+            || !hasActiveCoordinatorRole(callerRoleSnapshot.data()))
         ) {
           throw new ProvisioningError(
             'permission-denied',
@@ -689,7 +730,18 @@ export function adminServices({
           );
         }
         const current = invitationSnapshot.data();
+        if (current?.role === 'coordinator' && !callerIsAdministrator) {
+          throw new ProvisioningError(
+            'permission-denied', 'Accès Administrateur MobSanté requis.');
+        }
         const existingRole = roleSnapshot.exists ? roleSnapshot.data() : null;
+        if (!callerIsAdministrator && existingRole !== null
+          && (existingRole.role === 'coordinator'
+            || (Array.isArray(existingRole.roles)
+              && existingRole.roles.includes('coordinator')))) {
+          throw new ProvisioningError(
+            'permission-denied', 'Accès Administrateur MobSanté requis.');
+        }
         if (
           invitationSnapshot.exists
           && current.status === 'accepted'
@@ -867,14 +919,21 @@ export function responsibleAccessAdministrationServices({firestore, auth}) {
     }) {
       return firestore.runTransaction(async (transaction) => {
         const callerRef = firestore.collection('roles').doc(callerUid);
+        const callerAdminRef = firestore
+          .collection('platformAdministrators').doc(callerUid);
         const targetRef = firestore.collection('roles').doc(targetUid);
-        const [callerSnapshot, targetSnapshot] = await Promise.all([
-          transaction.get(callerRef),
-          transaction.get(targetRef),
-        ]);
+        const [callerSnapshot, callerAdminSnapshot, targetSnapshot] =
+          await Promise.all([
+            transaction.get(callerRef),
+            transaction.get(callerAdminRef),
+            transaction.get(targetRef),
+          ]);
+        const callerIsAdministrator = callerAdminSnapshot.exists
+          && callerAdminSnapshot.data()?.active === true;
         if (
-          !callerSnapshot.exists
-          || !hasActiveCoordinatorRole(callerSnapshot.data())
+          !callerIsAdministrator
+          && (!callerSnapshot.exists
+            || !hasActiveCoordinatorRole(callerSnapshot.data()))
         ) {
           throw new ResponsibleAccessAdministrationError(
             'permission-denied',
@@ -888,13 +947,20 @@ export function responsibleAccessAdministrationServices({firestore, auth}) {
           );
         }
         const existing = targetSnapshot.data();
+        let existingAccess;
         try {
-          parseResponsibleAccess(existing);
+          existingAccess = parseResponsibleAccess(existing);
         } catch {
           throw new ResponsibleAccessAdministrationError(
             'failed-precondition',
             'Le compte responsable existant est invalide.',
           );
+        }
+        if (!callerIsAdministrator
+          && (roles.includes('coordinator')
+            || existingAccess.roles.includes('coordinator'))) {
+          throw new ResponsibleAccessAdministrationError(
+            'permission-denied', 'Accès Administrateur MobSanté requis.');
         }
         transaction.set(targetRef, {
           ...existing,
@@ -903,6 +969,7 @@ export function responsibleAccessAdministrationServices({firestore, auth}) {
           locationIds: [...locationIds],
           active,
           schemaVersion,
+          updatedBy: callerUid,
           updatedAt: FieldValue.serverTimestamp(),
         }, {merge: false});
         return {
@@ -963,16 +1030,23 @@ export function adminInvitationManagementServices({firestore}) {
     }) {
       return firestore.runTransaction(async (transaction) => {
         const callerRef = firestore.collection('roles').doc(callerUid);
+        const callerAdminRef = firestore
+          .collection('platformAdministrators').doc(callerUid);
         const invitationRef = firestore
           .collection('adminInvitations')
           .doc(invitationId);
-        const [callerSnapshot, invitationSnapshot] = await Promise.all([
-          transaction.get(callerRef),
-          transaction.get(invitationRef),
-        ]);
+        const [callerSnapshot, callerAdminSnapshot, invitationSnapshot] =
+          await Promise.all([
+            transaction.get(callerRef),
+            transaction.get(callerAdminRef),
+            transaction.get(invitationRef),
+          ]);
+        const callerIsAdministrator = callerAdminSnapshot.exists
+          && callerAdminSnapshot.data()?.active === true;
         if (
-          !callerSnapshot.exists
-          || !hasActiveCoordinatorRole(callerSnapshot.data())
+          !callerIsAdministrator
+          && (!callerSnapshot.exists
+            || !hasActiveCoordinatorRole(callerSnapshot.data()))
         ) {
           throw new AdminInvitationManagementError(
             'permission-denied',
@@ -984,6 +1058,12 @@ export function adminInvitationManagementServices({firestore}) {
             'not-found',
             'Invitation introuvable.',
           );
+        }
+        if (!callerIsAdministrator
+          && (invitationSnapshot.data().role === 'coordinator'
+            || (action === 'update' && update.role === 'coordinator'))) {
+          throw new AdminInvitationManagementError(
+            'permission-denied', 'Accès Administrateur MobSanté requis.');
         }
         const mutation = invitationManagementMutation({
           invitation: invitationSnapshot.data(),
@@ -1178,6 +1258,123 @@ export function missionUpdateServices({firestore}) {
   };
 }
 
+export function siteEquipmentServices({firestore}) {
+  return {
+    async commitSiteEquipment({callerUid, request}) {
+      return firestore.runTransaction(async (transaction) => {
+        const roleRef = firestore.collection('roles').doc(callerUid);
+        const locationRef = firestore.collection('locations').doc(request.locationId);
+        const [role, location] = await Promise.all([
+          transaction.get(roleRef), transaction.get(locationRef),
+        ]);
+        const fields = siteEquipmentMutation({
+          request,
+          role: role.exists ? role.data() : null,
+          location: location.exists ? location.data() : null,
+        });
+        transaction.update(locationRef, fields);
+        return {locationId: request.locationId};
+      });
+    },
+  };
+}
+
+export function missionCreateServices({firestore}) {
+  return {
+    async commitMissionCreate({callerUid, request}) {
+      const missionId = missionCreateId(callerUid, request.idempotencyKey);
+      return firestore.runTransaction(async (transaction) => {
+        const roleRef = firestore.collection('roles').doc(callerUid);
+        const mobilizationRef = firestore.collection('mobilizations')
+          .doc(request.mobilizationId);
+        const locationRef = firestore.collection('locations').doc(request.locationId);
+        const missionRef = firestore.collection('missions').doc(missionId);
+        const assignmentRef = firestore.collection('mobilizationAssignments')
+          .doc(`${request.mobilizationId}_${callerUid}`);
+        const configRef = firestore.collection('platform').doc('config');
+        const [role, mobilization, location, existing, assignment, config] =
+          await Promise.all([
+            transaction.get(roleRef),
+            transaction.get(mobilizationRef),
+            transaction.get(locationRef),
+            transaction.get(missionRef),
+            transaction.get(assignmentRef),
+            transaction.get(configRef),
+          ]);
+        const mobilizationData = mobilization.exists ? mobilization.data() : null;
+        const roleData = role.exists ? role.data() : null;
+        let organizationAuthorized = false;
+        if (mobilizationData?.status === 'active') {
+          const operationId = mobilizationData.operationId;
+          if (operationId === undefined) {
+            const membership = await transaction.get(
+              firestore.collection('organizationMemberships')
+                .doc(`${LEGACY_ORGANIZATION_ID}_${callerUid}`),
+            );
+            organizationAuthorized = resolveOrganizationAuthorization({
+              organizationId: LEGACY_ORGANIZATION_ID,
+              uid: callerUid,
+              membership: membership.exists ? membership.data() : null,
+              legacyRole: roleData,
+            }).hasOrganizationAccess;
+          } else if (typeof operationId === 'string'
+              && operationId !== '' && !operationId.includes('/')) {
+            const operation = await transaction.get(
+              firestore.collection('operations').doc(operationId),
+            );
+            const ownerId = operation.exists
+              ? operation.data().ownerOrganizationId : null;
+            if (operation.exists && ownerId === undefined) {
+              organizationAuthorized = true;
+            } else if (typeof ownerId === 'string'
+                && ownerId !== '' && !ownerId.includes('/')) {
+              const membership = await transaction.get(
+                firestore.collection('organizationMemberships')
+                  .doc(`${ownerId}_${callerUid}`),
+              );
+              organizationAuthorized = resolveOrganizationAuthorization({
+                organizationId: ownerId,
+                uid: callerUid,
+                membership: membership.exists ? membership.data() : null,
+              }).hasActiveMembership;
+            }
+          }
+        }
+        const mutation = missionCreateMutation({
+          callerUid,
+          missionId,
+          request,
+          callerRole: roleData,
+          coordinatorAuthorized: canCoordinateMobilization({
+            uid: callerUid,
+            role: roleData,
+            assignment: assignment.exists ? assignment.data() : null,
+            mobilization: mobilizationData,
+            platformConfig: config.exists ? config.data() : null,
+          }),
+          organizationAuthorized,
+          mobilization: mobilizationData,
+          location: location.exists ? location.data() : null,
+          serverTimestamp: FieldValue.serverTimestamp(),
+          timestampFromMillis: (value) => new Date(value),
+        });
+        if (existing.exists) {
+          const prior = existing.data();
+          if (prior.createdBy !== callerUid
+              || prior.creationRequestHash !== missionCreateRequestHash(request)) {
+            throw new MissionUpdateError(
+              'already-exists', 'Cette demande de création a déjà été utilisée.',
+            );
+          }
+          return {missionId};
+        }
+        transaction.create(missionRef, mutation.fields);
+        return {missionId};
+      });
+    },
+  };
+}
+
 async function responsibleAccessCallable(action) {
   try {
     return await action();
@@ -1237,6 +1434,21 @@ async function missionUpdateCallable(action) {
       type: error?.constructor?.name ?? 'Unknown',
     });
     throw new HttpsError('internal', 'La mission n’a pas pu être mise à jour.');
+  }
+}
+
+async function siteEquipmentCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof SiteEquipmentError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('SITE_EQUIPMENT_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError(
+      'internal', 'Le matériel du site n’a pas pu être enregistré.');
   }
 }
 

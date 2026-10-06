@@ -38,6 +38,31 @@ const _blankLocationIdVectors = <String>[
 void main() {
   final now = DateTime.now().toUtc();
 
+  test(
+    'new invitation validity accepts 14 through 90 days and rejects excess',
+    () {
+      for (final days in [14, 30, 60, 90]) {
+        AdminInvitationDraft(
+          email: 'responsable@example.fr',
+          displayName: 'Responsable',
+          locationIds: const ['site-a'],
+          expiresAt: now.add(Duration(days: days)),
+        ).validate(now: now);
+      }
+      for (final days in [-1, 0, 91]) {
+        expect(
+          () => AdminInvitationDraft(
+            email: 'responsable@example.fr',
+            displayName: 'Responsable',
+            locationIds: const ['site-a'],
+            expiresAt: now.add(Duration(days: days)),
+          ).validate(now: now),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+
   AdminInvitationDraft draft() => AdminInvitationDraft(
     email: ' RESPONSABLE@EXEMPLE.FR ',
     displayName: ' Camille Martin ',
@@ -726,6 +751,25 @@ void main() {
     expect(result.emailDelivery, 'pending');
     expect(result.alreadyProvisioned, isFalse);
   });
+
+  test(
+    'firestore repository rejects overlong reactivation before write',
+    () async {
+      final source = _FakeInvitationDataSource(now: now);
+      final repository = FirestoreAdminInvitationRepository(
+        dataSource: source,
+        now: () => now,
+      );
+      await expectLater(
+        repository.reactivateInvitation(
+          'historical',
+          now.add(const Duration(days: 91)),
+        ),
+        throwsFormatException,
+      );
+      expect(source.roleReads, 0);
+    },
+  );
 }
 
 Map<String, Object?> _invitationData({required DateTime now}) => {

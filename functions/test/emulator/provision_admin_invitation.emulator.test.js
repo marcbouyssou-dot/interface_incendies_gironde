@@ -143,6 +143,12 @@ async function coordinator(options = {}) {
   });
 }
 
+async function administrator() {
+  const uid = unique('administrator');
+  await db.collection('platformAdministrators').doc(uid).set({active: true});
+  return client({uid});
+}
+
 async function assertCallableCode(action, expected) {
   await assert.rejects(action, (error) => {
     assert.equal(error.code, `functions/${expected}`);
@@ -168,7 +174,8 @@ async function assertNoProvisioningEffects({callable, id, value, code}) {
 before(() => {
   assert.equal(process.env.GCLOUD_PROJECT, projectId);
   assert.equal(process.env.FIREBASE_AUTH_EMULATOR_HOST, '127.0.0.1:9099');
-  assert.equal(process.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:8080');
+  assert.equal(process.env.FIRESTORE_EMULATOR_HOST,
+    `127.0.0.1:${process.env.MOBSANTE_TEST_FIRESTORE_PORT ?? 8080}`);
 });
 
 after(async () => {
@@ -596,7 +603,7 @@ test('existing account with compatible role is accepted', async () => {
 });
 
 test('existing coordinator receives site manager additively', async () => {
-  const callable = await coordinator();
+  const callable = await administrator();
   const targetEmail = email('existing-coordinator');
   const target = await adminAuth.createUser({email: targetEmail});
   await db.collection('roles').doc(target.uid).set({
@@ -615,7 +622,7 @@ test('existing coordinator receives site manager additively', async () => {
 });
 
 test('existing site manager receives coordinator without losing metadata', async () => {
-  const callable = await coordinator();
+  const callable = await administrator();
   const targetEmail = email('manager-to-coordinator');
   const target = await adminAuth.createUser({email: targetEmail});
   const createdAt = Timestamp.fromDate(new Date('2026-01-02T03:04:05Z'));
@@ -645,7 +652,7 @@ test('existing site manager receives coordinator without losing metadata', async
 });
 
 test('legacy coordinator wildcard becomes cumulative without wildcard', async () => {
-  const callable = await coordinator();
+  const callable = await administrator();
   const targetEmail = email('wildcard-coordinator');
   const target = await adminAuth.createUser({email: targetEmail});
   await db.collection('roles').doc(target.uid).set({
@@ -663,7 +670,7 @@ test('legacy coordinator wildcard becomes cumulative without wildcard', async ()
 });
 
 test('existing cumulative V2 role merges a new center idempotently', async () => {
-  const callable = await coordinator();
+  const callable = await administrator();
   const targetEmail = email('cumulative');
   const target = await adminAuth.createUser({email: targetEmail});
   await db.collection('roles').doc(target.uid).set({
@@ -786,7 +793,7 @@ test('inactive existing role is refused without deleting Auth', async () => {
   const targetEmail = email('inactive-role');
   const target = await adminAuth.createUser({email: targetEmail});
   await db.collection('roles').doc(target.uid).set({
-    role: 'coordinator', locationIds: [], active: false,
+    role: 'site_manager', locationIds: ['merignac'], active: false,
   });
   const id = unique('inactive-role');
   await seedInvitation(id, {email: targetEmail});
@@ -802,7 +809,7 @@ test('inactive existing role is refused without deleting Auth', async () => {
 });
 
 test('malformed existing role is refused without mutation or Auth deletion', async () => {
-  const callable = await coordinator();
+  const callable = await administrator();
   const targetEmail = email('malformed-role');
   const target = await adminAuth.createUser({email: targetEmail});
   const malformed = {
@@ -846,7 +853,7 @@ test('concurrent center invitations merge without lost update', async () => {
 });
 
 test('concurrent role invitations merge into a cumulative account', async () => {
-  const callable = await coordinator();
+  const callable = await administrator();
   const targetEmail = email('concurrent-roles');
   const target = await adminAuth.createUser({email: targetEmail});
   const coordinatorId = unique('role-coordinator');

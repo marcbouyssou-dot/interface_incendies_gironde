@@ -67,7 +67,8 @@ async function client(user) {
   const functions = getFunctions(app, 'europe-west1');
   connectFunctionsEmulator(functions, '127.0.0.1', 5001);
   const firestore = getFirestore(app);
-  connectFirestoreEmulator(firestore, '127.0.0.1', 8080);
+  connectFirestoreEmulator(firestore, '127.0.0.1',
+    Number(process.env.MOBSANTE_TEST_FIRESTORE_PORT ?? 8080));
   return {
     firestore,
     recordConsulted: httpsCallable(

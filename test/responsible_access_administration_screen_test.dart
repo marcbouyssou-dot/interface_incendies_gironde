@@ -53,25 +53,20 @@ void main() {
     await tester.tap(find.byKey(const Key('responsible-accounts-section')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Coordinateur Test'), findsOneWidget);
+    expect(find.text('Coordinateur Test'), findsNothing);
     expect(find.text('Responsable Test'), findsOneWidget);
-    expect(find.text('Responsable Cumulatif'), findsOneWidget);
-    expect(find.text('Coordinateur'), findsOneWidget);
-    expect(find.text('Responsable'), findsOneWidget);
-    expect(find.text('Coordinateur et responsable'), findsOneWidget);
-    expect(find.text('Actif'), findsNWidgets(2));
-    expect(find.text('Inactif'), findsOneWidget);
+    expect(find.text('Responsable Cumulatif'), findsNothing);
+    expect(find.text("Coordinateur d'action"), findsNothing);
+    expect(find.text('Responsable de site'), findsWidgets);
+    expect(find.text('Actif'), findsOneWidget);
+    expect(find.text('Inactif'), findsNothing);
     expect(
-      tester
-          .widget<OutlinedButton>(
-            find.byKey(const Key('manage-responsible-coordinator')),
-          )
-          .onPressed,
-      isNull,
+      find.byKey(const Key('manage-responsible-coordinator')),
+      findsNothing,
     );
     expect(
-      find.text('Votre propre accès doit être géré par un autre coordinateur.'),
-      findsOneWidget,
+      find.byKey(const Key('manage-responsible-cumulative')),
+      findsNothing,
     );
     expect(
       tester
@@ -91,7 +86,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('coordinator role clears locations and saves a strict update', (
+  testWidgets('coordinator assignment is absent from access choices', (
     tester,
   ) async {
     final repository = _RecordingRepository();
@@ -103,14 +98,13 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('responsible-role-choice')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Coordinateur').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('save-responsible-access')));
-    await tester.pumpAndSettle();
-
-    expect(repository.calls, 1);
-    expect(repository.lastUpdate!.roles, [ResponsibleRole.coordinator]);
-    expect(repository.lastUpdate!.locationIds, isEmpty);
+    expect(find.text("Coordinateur d'action"), findsNothing);
+    expect(
+      find.text("Coordinateur d'action et responsable de site"),
+      findsNothing,
+    );
+    expect(find.text('Responsable de site'), findsWidgets);
+    expect(repository.calls, 0);
   });
 
   testWidgets('deactivation is explicit and preserves the account', (
@@ -142,23 +136,16 @@ void main() {
     expect(account.uid, 'manager');
   });
 
-  testWidgets('site manager and cumulative roles require a centre locally', (
-    tester,
-  ) async {
+  testWidgets('site manager role remains the only choice', (tester) async {
     final repository = _RecordingRepository();
     await _openForm(tester, repository: repository);
 
-    await _chooseRole(tester, 'Coordinateur');
-    await _chooseRole(tester, 'Responsable');
+    await _chooseRole(tester, 'Responsable de site');
+    expect(find.text("Coordinateur d'action"), findsNothing);
     await tester.tap(find.byKey(const Key('save-responsible-access')));
-    await tester.pump();
-    expect(find.text('Sélectionnez au moins un centre.'), findsOneWidget);
-    expect(repository.calls, 0);
-
-    await _chooseRole(tester, 'Coordinateur et responsable');
-    await tester.tap(find.byKey(const Key('save-responsible-access')));
-    await tester.pump();
-    expect(repository.calls, 0);
+    await tester.pumpAndSettle();
+    expect(repository.calls, 1);
+    expect(repository.lastUpdate!.roles, [ResponsibleRole.siteManager]);
   });
 
   testWidgets(

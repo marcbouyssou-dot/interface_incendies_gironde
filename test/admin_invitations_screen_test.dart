@@ -337,7 +337,7 @@ void main() {
     );
   });
 
-  testWidgets('coordinator invitation has no location restriction', (
+  testWidgets('coordinator cannot select a coordinator invitation', (
     tester,
   ) async {
     final invitationsRepository = MockAdminInvitationRepository(now: () => now);
@@ -345,27 +345,10 @@ void main() {
     await pumpApp(tester, invitationRepository: invitationsRepository);
     await openInvitations(tester);
     await openInvitationForm(tester);
-    await enterInvitationText(
-      tester,
-      const Key('invitation-display-name'),
-      'Coordination Gironde',
-    );
-    await enterInvitationText(
-      tester,
-      const Key('invitation-email'),
-      'coord@example.fr',
-    );
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur').last);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('location-search')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('create-admin-invitation')));
-    await tester.pumpAndSettle();
-    final created =
-        (await invitationsRepository.watchInvitations().first).single;
-    expect(created.role, AdminInvitationDraft.coordinatorRole);
-    expect(created.locationIds, isEmpty);
+    expect(find.text("Coordinateur d'action"), findsNothing);
+    expect(find.text('Responsable de site'), findsWidgets);
+    expect(find.byKey(const Key('location-search')), findsOneWidget);
   });
 
   testWidgets(
@@ -521,9 +504,10 @@ void main() {
       const Key('invitation-email'),
       'coord-test@mobsante.fr',
     );
-    await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur').last);
-    await tester.pumpAndSettle();
+    final location = places.where((place) => place.isOperational).first;
+    await revealInvitationControl(tester, const Key('location-search'));
+    await tester.tap(find.byKey(Key('invitation-location-${location.id}')));
+    await tester.pump();
 
     final submitFinder = find.byKey(const Key('create-admin-invitation'));
     await tester.tap(submitFinder);
@@ -548,13 +532,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('role and validity choices keep their existing behavior', (
+  testWidgets('only Responsable and 14/30/60/90-day choices are offered', (
     tester,
   ) async {
     await pumpApp(tester);
     await openInvitations(tester);
     await openInvitationForm(tester);
 
+    final validity = tester.widget<V5SelectField<int>>(
+      find.byKey(const Key('invitation-expiration')),
+    );
+    expect(validity.value, 14);
+    expect(validity.options.map((option) => option.value), [14, 30, 60, 90]);
     await tapInvitationControl(tester, const Key('invitation-expiration'));
     await tester.tap(find.text('14 jours').last);
     await tester.pumpAndSettle();
@@ -569,13 +558,8 @@ void main() {
     expect(find.text('14 jours'), findsOneWidget);
 
     await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur').last);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('location-search')), findsNothing);
-
-    await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Responsable').last);
-    await tester.pumpAndSettle();
+    expect(find.text("Coordinateur d'action"), findsNothing);
+    expect(find.text('Responsable de site'), findsWidgets);
     expect(find.byKey(const Key('location-search')), findsOneWidget);
     expect(find.text('14 jours'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -691,6 +675,11 @@ void main() {
     await tester.tap(find.byKey(const Key('reactivate-invitation-cancelled')));
     await tester.pumpAndSettle();
     expect(find.text('Réactiver cette invitation ?'), findsOneWidget);
+    final validity = tester.widget<V5SelectField<int>>(
+      find.byKey(const Key('reactivate-expiration')),
+    );
+    expect(validity.value, 14);
+    expect(validity.options.map((option) => option.value), [14, 30, 60, 90]);
     await tester.tap(find.byKey(const Key('confirm-reactivate-invitation')));
     await tester.pumpAndSettle();
 
@@ -741,17 +730,14 @@ void main() {
       const Key('invitation-display-name'),
       'Responsable modifié',
     );
-    await tapInvitationControl(tester, const Key('invitation-role'));
-    await tester.tap(find.text('Coordinateur').last);
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-admin-invitation')));
     await tester.pumpAndSettle();
 
     final updated = await repository.getInvitation('cancelled');
     expect(updated?.email, 'cancelled@example.fr');
     expect(updated?.displayName, 'Responsable modifié');
-    expect(updated?.role, AdminInvitationDraft.coordinatorRole);
-    expect(updated?.locationIds, isEmpty);
+    expect(updated?.role, AdminInvitationDraft.siteManagerRole);
+    expect(updated?.locationIds, {'merignac'});
     expect(updated?.status, AdminInvitationStatus.cancelled);
   });
 

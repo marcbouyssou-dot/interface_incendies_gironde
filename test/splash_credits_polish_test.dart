@@ -11,9 +11,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
-        MaterialApp(
-          home: SplashScreen(prepareVisuals: (_) async {}),
-        ),
+        MaterialApp(home: SplashScreen(prepareVisuals: (_) async {})),
       );
       await tester.pump();
       await tester.pumpAndSettle();
@@ -24,28 +22,23 @@ void main() {
       Size(390, 844), // standard mobile
       Size(1024, 1366), // tall desktop/tablet — where empty space was worse
     ]) {
-      testWidgets(
-        'renders without overflow at ${size.width.toInt()}x'
-        '${size.height.toInt()}',
-        (tester) async {
-          await pumpSplash(tester, size);
+      testWidgets('renders without overflow at ${size.width.toInt()}x'
+          '${size.height.toInt()}', (tester) async {
+        await pumpSplash(tester, size);
 
-          expect(
-            find.byKey(const Key('splash-composed-identity')),
-            findsOneWidget,
-          );
-          expect(tester.takeException(), isNull);
-        },
-      );
+        expect(
+          find.byKey(const Key('splash-composed-identity')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
     }
 
-    testWidgets('background uses the real V5 brand token, not a one-off color', (
-      tester,
-    ) async {
+    testWidgets('background uses the light V5 canvas', (tester) async {
       await pumpSplash(tester, const Size(390, 844));
 
       final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-      expect(scaffold.backgroundColor, V5Colors.light.brand);
+      expect(scaffold.backgroundColor, V5Colors.light.canvas);
     });
 
     testWidgets('shares the same BrandMark widget as the rest of the app', (
@@ -72,16 +65,13 @@ void main() {
       Size(390, 844), // standard mobile
       Size(1024, 1366), // tall desktop/tablet
     ]) {
-      testWidgets(
-        'renders without overflow at ${size.width.toInt()}x'
-        '${size.height.toInt()}',
-        (tester) async {
-          await pumpCredits(tester, size);
+      testWidgets('renders without overflow at ${size.width.toInt()}x'
+          '${size.height.toInt()}', (tester) async {
+        await pumpCredits(tester, size);
 
-          expect(find.byKey(const Key('credits-screen')), findsOneWidget);
-          expect(tester.takeException(), isNull);
-        },
-      );
+        expect(find.byKey(const Key('credits-screen')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
     }
 
     testWidgets(
@@ -114,7 +104,10 @@ void main() {
     ) async {
       await pumpCredits(tester, const Size(390, 844));
 
-      expect(find.text('Application conçue par Marc Bouyssou.'), findsOneWidget);
+      expect(
+        find.text('Application conçue par Marc Bouyssou.'),
+        findsOneWidget,
+      );
       expect(find.text('Remerciements'), findsOneWidget);
     });
   });

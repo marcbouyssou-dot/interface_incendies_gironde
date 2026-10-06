@@ -5,6 +5,7 @@ import {
 } from './admin_invitation_validation.js';
 
 const ACTIONS = new Set(['cancel', 'reactivate', 'update', 'delete']);
+const MAX_VALIDITY_MS = 90 * 24 * 60 * 60 * 1000;
 
 export class AdminInvitationManagementError extends Error {
   constructor(code, message, options = {}) {
@@ -52,6 +53,10 @@ export function validateManagementRequest(data, {now = new Date()} = {}) {
         'failed-precondition',
         'La nouvelle date d’expiration doit être future.',
       );
+    }
+    if (expiresAt.getTime() > now.getTime() + MAX_VALIDITY_MS) {
+      throw new AdminInvitationManagementError(
+        'invalid-argument', 'La validité ne peut dépasser 90 jours.');
     }
     return Object.freeze({
       invitationId: data.invitationId,
@@ -121,6 +126,10 @@ export function invitationManagementMutation({
         'failed-precondition',
         'La nouvelle date d’expiration doit être future.',
       );
+    }
+    if (expiresAt.getTime() > now.getTime() + MAX_VALIDITY_MS) {
+      throw new AdminInvitationManagementError(
+        'invalid-argument', 'La validité ne peut dépasser 90 jours.');
     }
     const safeExpiration = new Date(expiresAt.getTime());
     return Object.freeze({

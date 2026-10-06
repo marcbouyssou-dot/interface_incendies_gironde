@@ -6,11 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/app_notification.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
+import 'package:interface_incendies_gironde/models/profession_quotas.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/services/professional_verification_service.dart';
 import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_admin_invitation_repository.dart';
+import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_location_administration_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_responsible_access_administration_repository.dart';
 import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
@@ -23,7 +25,7 @@ import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 void main() {
   Future<void> pumpForm(
     WidgetTester tester,
-    _MissionRepository repository, {
+    CoordinationRepository repository, {
     CoordinationNeed? mission,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -115,6 +117,36 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> bringIntoTapArea(WidgetTester tester, Finder finder) async {
+    for (var attempt = 0; attempt < 16; attempt++) {
+      final centerY = tester.getCenter(finder).dy;
+      if (centerY >= 80 && centerY <= 760) return;
+      await tester.drag(
+        find.byKey(const PageStorageKey('create')),
+        Offset(0, centerY < 80 ? 360 : -360),
+      );
+      await tester.pumpAndSettle();
+    }
+    fail('Le contrôle reste hors écran : $finder');
+  }
+
+  Future<void> selectEquipment(
+    WidgetTester tester,
+    String professionId,
+    String equipmentId,
+  ) async {
+    final profession = find.byKey(
+      Key('mission-equipment-profession-$professionId'),
+    );
+    await bringIntoTapArea(tester, profession);
+    await tester.tap(profession);
+    await tester.pumpAndSettle();
+    final equipment = find.byKey(Key('mission-equipment-$equipmentId'));
+    await bringIntoTapArea(tester, equipment);
+    await tester.tap(equipment);
+    await tester.pumpAndSettle();
+  }
+
   Future<void> completeRequiredFields(
     WidgetTester tester, {
     bool selectLocation = true,
@@ -140,13 +172,26 @@ void main() {
 
   Future<void> openReview(WidgetTester tester) async {
     await revealReviewButton(tester);
-    await tester.tap(find.byKey(const Key('review-mission')));
+    final button = find.byKey(const Key('review-mission'));
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
     await tester.pumpAndSettle();
   }
 
   Future<void> publishReviewedNeed(WidgetTester tester) async {
     await openReview(tester);
-    await tester.tap(find.byKey(const Key('publish-mission')));
+    final button = find.byKey(const Key('publish-mission'));
+    await tester.scrollUntilVisible(
+      button,
+      300,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('need-review')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(button);
     await tester.pumpAndSettle();
   }
 
@@ -244,7 +289,8 @@ void main() {
           '3. Où ?',
           '4. Quand ?',
           '5. Priorité',
-          '6. Informations complémentaires',
+          '6. Matériel à apporter',
+          'Matériel disponible sur site',
         ],
       );
       expect(find.text('2. Combien ?'), findsOneWidget);
@@ -277,42 +323,265 @@ void main() {
       repository.complete();
       await tester.pumpAndSettle();
       expect(find.text('Votre besoin est publié.'), findsOneWidget);
-      expect(find.text(places.first.name), findsOneWidget);
+      expect(find.text(places.first.name), findsWidgets);
       expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
       expect(find.text('En attente de diffusion'), findsOneWidget);
     },
   );
 
-  testWidgets('a new need keeps exactly one profession', (tester) async {
+  testWidgets(
+    'a new need keeps independent profession quotas through publication',
+    (tester) async {
+      final repository = _MissionRepository();
+      await pumpForm(tester, repository);
+
+      expect(find.text('1. De quoi avez-vous besoin ?'), findsOneWidget);
+      expect(find.text('2. Combien ?'), findsOneWidget);
+      expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
+      expect(find.text('Pédicure-podologue'), findsOneWidget);
+      expect(find.text('Médecin'), findsOneWidget);
+      expect(find.text('Infirmier'), findsOneWidget);
+      expect(find.text('Vétérinaire'), findsOneWidget);
+      expect(find.text('Autre professionnel de santé'), findsOneWidget);
+      expect(find.text('0'), findsNWidgets(6));
+      expect(
+        find.text('Définissez un nombre indépendant pour chaque profession.'),
+        findsOneWidget,
+      );
+
+      await completeRequiredFields(tester, addQuota: false);
+      await incrementQuota(tester, 'physiotherapist');
+      await incrementQuota(tester, 'physiotherapist');
+      await incrementQuota(tester, 'nurse');
+      await incrementQuota(tester, 'physician');
+
+      expect(
+        tester.getSemantics(find.byKey(const Key('physiotherapist-add'))).value,
+        '2 masseur-kinésithérapeutes demandés',
+      );
+      expect(
+        tester.getSemantics(find.byKey(const Key('nurse-add'))).value,
+        '1 infirmier demandé',
+      );
+      expect(
+        tester.getSemantics(find.byKey(const Key('physician-add'))).value,
+        '1 médecin demandé',
+      );
+
+      await openReview(tester);
+      expect(
+        find.text('Masseur-kinésithérapeute, Médecin, Infirmier'),
+        findsOneWidget,
+      );
+      expect(find.text('4'), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(const Key('publish-mission')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('publish-mission')));
+      await tester.pumpAndSettle();
+
+      expect(repository.calls, 1);
+      expect(repository.lastDraft?.requiredByProfession, {
+        'physiotherapist': 2,
+        'podiatrist': 0,
+        'physician': 1,
+        'nurse': 1,
+        'veterinarian': 0,
+        'other_health_professional': 0,
+      });
+      expect(find.text('Votre besoin est publié.'), findsOneWidget);
+      expect(
+        find.text('Masseur-kinésithérapeute, Médecin, Infirmier'),
+        findsOneWidget,
+      );
+      expect(find.text('4'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'adding another profession retains compatible selected equipment',
+    (tester) async {
+      final repository = _MissionRepository();
+      await pumpForm(tester, repository);
+      await completeRequiredFields(tester);
+
+      final massageTable = find.byKey(
+        const Key('mission-equipment-massage_table'),
+      );
+      await tester.ensureVisible(massageTable);
+      await tester.pumpAndSettle();
+      await tester.tap(massageTable);
+      await tester.pumpAndSettle();
+
+      final nurseAdd = find.byKey(const Key('nurse-add'));
+      await tester.ensureVisible(nurseAdd);
+      await tester.pumpAndSettle();
+      await tester.tap(nurseAdd);
+      await tester.pump();
+      await publishReviewedNeed(tester);
+
+      expect(repository.lastDraft?.requiredByProfession['physiotherapist'], 1);
+      expect(repository.lastDraft?.requiredByProfession['nurse'], 1);
+      expect(repository.lastDraft?.equipment, contains('Table de massage'));
+    },
+  );
+
+  testWidgets(
+    'MK, nurse, and physician equipment survive switching and publication',
+    (tester) async {
+      final repository = _MissionRepository();
+      await pumpForm(tester, repository);
+      await completeRequiredFields(tester, addQuota: false);
+      await incrementQuota(tester, 'physiotherapist');
+      await incrementQuota(tester, 'physiotherapist');
+      await incrementQuota(tester, 'nurse');
+      await incrementQuota(tester, 'physician');
+
+      await selectEquipment(tester, 'physiotherapist', 'massage_table');
+      await selectEquipment(tester, 'nurse', 'dressing_equipment');
+      await selectEquipment(tester, 'physician', 'stethoscope');
+      final mkTab = find.byKey(
+        const Key('mission-equipment-profession-physiotherapist'),
+      );
+      await bringIntoTapArea(tester, mkTab);
+      await tester.tap(mkTab);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<V5ChoiceChip>(
+              find.byKey(const Key('mission-equipment-massage_table')),
+            )
+            .selected,
+        isTrue,
+      );
+
+      await openReview(tester);
+      expect(find.text('Matériel à apporter'), findsOneWidget);
+      for (final label in [
+        '• Table de massage',
+        '• Stéthoscope',
+        '• Matériel de pansement',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      final publish = find.byKey(const Key('publish-mission'));
+      await tester.scrollUntilVisible(
+        publish,
+        300,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('need-review')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(publish);
+      await tester.pumpAndSettle();
+
+      expect(repository.lastDraft?.requiredByProfession['physiotherapist'], 2);
+      expect(repository.lastDraft?.requiredByProfession['nurse'], 1);
+      expect(repository.lastDraft?.requiredByProfession['physician'], 1);
+      expect(repository.lastDraft?.equipmentByProfession, {
+        'physiotherapist': ['massage_table'],
+        'physician': ['stethoscope'],
+        'nurse': ['dressing_equipment'],
+      });
+      expect(repository.lastDraft?.equipment, [
+        'Table de massage',
+        'Stéthoscope',
+        'Matériel de pansement',
+      ]);
+      expect(find.text('Votre besoin est publié.'), findsOneWidget);
+    },
+  );
+
+  testWidgets('zeroing nurse quota removes only nurse equipment', (
+    tester,
+  ) async {
     final repository = _MissionRepository();
     await pumpForm(tester, repository);
-
-    expect(find.text('1. De quoi avez-vous besoin ?'), findsOneWidget);
-    expect(find.text('2. Combien ?'), findsOneWidget);
-    expect(find.text('Masseur-kinésithérapeute'), findsOneWidget);
-    expect(find.text('Pédicure-podologue'), findsOneWidget);
-    expect(find.text('Médecin'), findsOneWidget);
-    expect(find.text('Infirmier'), findsOneWidget);
-    expect(find.text('Vétérinaire'), findsOneWidget);
-    expect(find.text('Autre professionnel de santé'), findsOneWidget);
-    expect(find.text('0'), findsNWidgets(6));
-
     await completeRequiredFields(tester, addQuota: false);
-    await incrementQuota(tester, 'physician');
+    await incrementQuota(tester, 'physiotherapist');
     await incrementQuota(tester, 'nurse');
-    await incrementQuota(tester, 'nurse');
+    await selectEquipment(tester, 'physiotherapist', 'massage_table');
+    await selectEquipment(tester, 'nurse', 'dressing_equipment');
+    final remove = find.byKey(const Key('nurse-remove'));
+    await bringIntoTapArea(tester, remove);
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
     await publishReviewedNeed(tester);
-
-    expect(repository.calls, 1);
-    expect(repository.lastDraft?.requiredByProfession, {
-      'physiotherapist': 0,
-      'podiatrist': 0,
-      'physician': 0,
-      'nurse': 2,
-      'veterinarian': 0,
-      'other_health_professional': 0,
+    expect(repository.lastDraft?.equipmentByProfession, {
+      'physiotherapist': ['massage_table'],
     });
+    expect(repository.lastDraft?.equipment, ['Table de massage']);
   });
+
+  testWidgets(
+    'form and review distinguish site inventory from equipment to bring',
+    (tester) async {
+      final original = places.first;
+      final location = ResponsePlace(
+        id: original.id,
+        name: original.name,
+        type: original.type,
+        group: original.group,
+        activeNeeds: original.activeNeeds,
+        availableEquipment: const ['stethoscope'],
+      );
+      await pumpForm(tester, _MissionRepository(locations: [location]));
+      await completeRequiredFields(tester);
+      final siteItem = find.text('• Stéthoscope');
+      await tester.scrollUntilVisible(
+        siteItem,
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('6. Matériel à apporter'), findsOneWidget);
+      expect(find.text('Matériel disponible sur site'), findsOneWidget);
+      await openReview(tester);
+      expect(find.text('Matériel disponible sur site'), findsOneWidget);
+      expect(find.text('• Stéthoscope'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'confirmation displays saved site snapshot after an inventory change',
+    (tester) async {
+      final original = places.first;
+      final location = ResponsePlace(
+        id: original.id,
+        name: original.name,
+        type: original.type,
+        group: original.group,
+        activeNeeds: original.activeNeeds,
+        availableEquipment: const ['stethoscope'],
+      );
+      final repository = _ConcurrentSiteChangeRepository(location);
+      await pumpForm(tester, repository);
+      await completeRequiredFields(tester, selectLocation: false);
+      await openReview(tester);
+      expect(find.text('• Stéthoscope'), findsOneWidget);
+      final publish = find.byKey(const Key('publish-mission'));
+      await tester.scrollUntilVisible(
+        publish,
+        300,
+        scrollable: find.descendant(
+          of: find.byKey(const Key('need-review')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(publish);
+      await tester.pumpAndSettle();
+      expect(repository.createCalls, 1);
+      expect(repository.lastDraft?.location.availableEquipment, [
+        'stethoscope',
+      ]);
+      expect(repository.savedMission?.availableEquipmentOnSite, [
+        'massage_table',
+      ]);
+      expect(find.text('Votre besoin est publié.'), findsOneWidget);
+      expect(find.text('• Table de massage'), findsOneWidget);
+      expect(find.text('• Stéthoscope'), findsNothing);
+    },
+  );
 
   testWidgets('publication persists the selected priority', (tester) async {
     final repository = _MissionRepository();
@@ -364,7 +633,7 @@ void main() {
     expect(find.text('Exprimer un besoin'), findsOneWidget);
     expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
     expect(find.byKey(const Key('mission-location')), findsNothing);
-    expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Mérignac'), findsWidgets);
     expect(find.text(places.first.name), findsNothing);
 
     await completeRequiredFields(tester, selectLocation: false);
@@ -516,7 +785,7 @@ void main() {
 
     expect(find.text('Modifier la mission'), findsOneWidget);
     expect(find.text('Enregistrer les modifications'), findsOneWidget);
-    expect(find.text(location.name), findsOneWidget);
+    expect(find.text(location.name), findsWidgets);
     expect(find.text('08:00'), findsOneWidget);
     expect(find.text('12:00'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
@@ -534,7 +803,75 @@ void main() {
     expect(repository.lastDraft?.location.id, location.id);
     expect(repository.lastDraft?.requiredPhysiotherapists, 2);
     expect(repository.lastDraft?.priority, NeedPriority.crisis);
+    expect(repository.lastDraft?.equipment, ['Tables', 'Huiles']);
+    expect(repository.lastDraft?.equipmentByProfession, isNull);
     expect(find.text('Mission mise à jour.'), findsOneWidget);
+  });
+
+  testWidgets('editing a contextual mission retains equipment groups', (
+    tester,
+  ) async {
+    final location = places.first;
+    final start = DateTime.now().add(const Duration(days: 2));
+    final mission = CoordinationNeed(
+      id: 'contextual-mission-to-edit',
+      locationId: location.id,
+      place: location.name,
+      group: location.group,
+      date: 'À venir',
+      time: '08:00 — 12:00',
+      startAt: DateTime(start.year, start.month, start.day, 8),
+      endAt: DateTime(start.year, start.month, start.day, 12),
+      requiredPhysiotherapists: 2,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      professionQuotas: ProfessionQuotas.fromMaps(
+        requiredByProfession: const {
+          'physiotherapist': 2,
+          'nurse': 1,
+          'physician': 1,
+        },
+        registeredByProfession: const {},
+      ),
+      equipment: const [
+        'Table de massage',
+        'Stéthoscope',
+        'Matériel de pansement',
+      ],
+      equipmentByProfession: const {
+        'physiotherapist': ['massage_table'],
+        'physician': ['stethoscope'],
+        'nurse': ['dressing_equipment'],
+      },
+    );
+    final repository = _MissionRepository(locations: [location]);
+    await pumpForm(tester, repository, mission: mission);
+    final mkTab = find.byKey(
+      const Key('mission-equipment-profession-physiotherapist'),
+    );
+    await tester.ensureVisible(mkTab);
+    await tester.tap(mkTab);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<V5ChoiceChip>(
+            find.byKey(const Key('mission-equipment-massage_table')),
+          )
+          .selected,
+      isTrue,
+    );
+    final update = find.byKey(const Key('update-mission'));
+    await tester.ensureVisible(update);
+    await tester.pumpAndSettle();
+    await tester.tap(update);
+    await tester.pumpAndSettle();
+    expect(repository.updateCalls, 1);
+    expect(
+      repository.lastDraft?.equipmentByProfession,
+      mission.equipmentByProfession,
+    );
+    expect(repository.lastDraft?.equipment, mission.equipment);
   });
 
   testWidgets('return from edit mode closes the form without writing', (
@@ -582,7 +919,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Modifier la mission'), findsOneWidget);
-    expect(find.text(location.name), findsOneWidget);
+    expect(find.text(location.name), findsWidgets);
     expect(find.text('08:00'), findsOneWidget);
     expect(find.text('12:00'), findsOneWidget);
     expect(find.text('Consigne conservée'), findsOneWidget);
@@ -702,6 +1039,12 @@ class _MissionRepository implements CoordinationRepository {
 
   @override
   Future<CoordinationNeed?> getMission(String missionId) async => null;
+
+  @override
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  ) async {}
 
   @override
   Stream<List<AppNotification>> watchNotifications() => Stream.value(const []);
@@ -837,4 +1180,32 @@ class _MissionRepository implements CoordinationRepository {
     List<String> equipment = const [],
     String? otherEquipmentDetails,
   }) async => EngagementCreationResult.created;
+}
+
+class _ConcurrentSiteChangeRepository extends MockCoordinationRepository {
+  _ConcurrentSiteChangeRepository(ResponsePlace location)
+    : super(
+        initialMissions: const [],
+        initialLocations: [location],
+        responsibleAccess: ResponsibleAccess(
+          uid: 'site-manager-snapshot',
+          role: ResponsibleRole.siteManager,
+          locationIds: {location.id},
+          active: true,
+        ),
+      );
+
+  int createCalls = 0;
+  MissionDraft? lastDraft;
+  CoordinationNeed? savedMission;
+
+  @override
+  Future<String> createMission(MissionDraft draft) async {
+    createCalls++;
+    lastDraft = draft;
+    await updateSiteEquipment(draft.location.id, const ['massage_table']);
+    final id = await super.createMission(draft);
+    savedMission = await getMission(id);
+    return id;
+  }
 }

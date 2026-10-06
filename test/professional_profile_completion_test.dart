@@ -196,7 +196,9 @@ void main() {
       await tester.tap(find.byKey(const Key('edit-professional-profile')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('professional-profile-profession')));
+      await tester.tap(
+        find.byKey(const Key('professional-profile-profession')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Autre professionnel de santé').last);
       await tester.pumpAndSettle();
@@ -265,7 +267,17 @@ void main() {
     await _pumpApp(tester, repository);
     await _openProfessionalProfile(tester);
     expect(find.text('Profil complet'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Adresse professionnelle à compléter'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Adresse professionnelle à compléter'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('edit-professional-profile')),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('edit-professional-profile')));
     await tester.pumpAndSettle();
 
@@ -295,6 +307,11 @@ void main() {
     await tester.tap(find.byKey(const Key('save-professional-profile')));
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.text('nina.modifiee@example.fr'),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('nina.modifiee@example.fr'), findsOneWidget);
     final saved = await repository.getVolunteerProfile();
     expect(saved?.email, 'nina.modifiee@example.fr');
@@ -315,7 +332,9 @@ void main() {
     await _openProfessionalProfile(tester);
     expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('edit-professional-profile')));
+    await tester.tap(
+      find.byKey(const Key('edit-professional-profile-primary')),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('professional-profile-id-value')),
@@ -343,7 +362,9 @@ void main() {
     await _openProfessionalProfile(tester);
     expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('edit-professional-profile')));
+    await tester.tap(
+      find.byKey(const Key('edit-professional-profile-primary')),
+    );
     await tester.pumpAndSettle();
     final profession = find.byKey(const Key('professional-profile-profession'));
     await tester.tap(profession);
@@ -397,7 +418,9 @@ void main() {
         await _enterProfessionalPerspective(tester, access);
         expect(find.byType(ProfessionalShell), findsOneWidget);
         await _openProfessionalProfile(tester);
-        await tester.tap(find.byKey(const Key('edit-professional-profile')));
+        await tester.tap(
+          find.byKey(const Key('edit-professional-profile-primary')),
+        );
         await tester.pumpAndSettle();
         await tester.enterText(
           find.byKey(const Key('professional-profile-email')),
@@ -472,12 +495,17 @@ Future<void> _enterProfessionalPerspective(
   final settings = access.roles.contains(ResponsibleRole.coordinator)
       ? find.byKey(const Key('open-development-settings'))
       : find.byKey(const Key('responsible-development-settings'));
-  await tester.ensureVisible(settings);
+  await tester.scrollUntilVisible(
+    settings,
+    350,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
   await tester.tap(settings);
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('role-preview-selector')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Professionnel').last);
+  await tester.tap(find.text('Professionnel de santé').last);
   await tester.pumpAndSettle();
   Navigator.of(tester.element(find.text('Mode Développement'))).pop();
   await tester.pumpAndSettle();

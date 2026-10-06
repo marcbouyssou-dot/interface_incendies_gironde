@@ -349,7 +349,7 @@ class _CoordinatorLine extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Coordinateur',
+              "Coordinateur d'action",
               style: Theme.of(
                 context,
               ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),

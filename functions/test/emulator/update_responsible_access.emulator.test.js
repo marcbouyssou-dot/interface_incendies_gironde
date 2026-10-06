@@ -168,13 +168,13 @@ test('legacy target is converted to strict V2 and metadata is preserved', async 
   const beforeAuth = await adminAuth.getUser(target.uid);
   const callable = await client(caller);
   await callable.update(payload(target.uid, {
-    roles: ['coordinator', 'site_manager'],
+    roles: ['site_manager'],
     locationIds: ['langon', 'merignac'],
     active: false,
   }));
   const value = (await db.collection('roles').doc(target.uid).get()).data();
-  assert.equal(value.role, 'coordinator');
-  assert.deepEqual(value.roles, ['coordinator', 'site_manager']);
+  assert.equal(value.role, 'site_manager');
+  assert.deepEqual(value.roles, ['site_manager']);
   assert.deepEqual(value.locationIds, ['langon', 'merignac']);
   assert.equal(value.active, false);
   assert.equal(value.schemaVersion, 2);
@@ -231,7 +231,7 @@ test('concurrent valid updates are atomic and last committed state is complete',
   const target = await createUser(managerRole());
   const callable = await client(caller);
   const first = payload(target.uid, {
-    roles: ['coordinator'], locationIds: [], active: true,
+    roles: ['site_manager'], locationIds: ['bazas'], active: true,
   });
   const second = payload(target.uid, {
     roles: ['site_manager'], locationIds: ['langon'], active: false,
@@ -239,7 +239,7 @@ test('concurrent valid updates are atomic and last committed state is complete',
   await Promise.all([callable.update(first), callable.update(second)]);
   const value = (await db.collection('roles').doc(target.uid).get()).data();
   const states = [
-    ['coordinator', 'coordinator', true, ''],
+    ['site_manager', 'site_manager', true, 'bazas'],
     ['site_manager', 'site_manager', false, 'langon'],
   ];
   assert.ok(states.some(([role, onlyRole, active, location]) =>

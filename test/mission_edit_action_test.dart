@@ -85,7 +85,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Modifier la mission'), findsOneWidget);
     expect(find.byKey(const Key('update-mission')), findsOneWidget);
-    expect(find.text(location.name), findsOneWidget);
+    expect(find.text(location.name), findsWidgets);
     expect(
       find.descendant(
         of: find.byKey(const Key('mission-date')),

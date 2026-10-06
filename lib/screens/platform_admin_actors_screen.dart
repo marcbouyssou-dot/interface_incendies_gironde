@@ -28,6 +28,7 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
   late Future<PlatformActorDirectoryViewData> _directory;
   final _searchController = TextEditingController();
   PlatformActorKind _kind = PlatformActorKind.professional;
+  bool _showAdministrators = false;
   PlatformActorFilter _filter = const PlatformActorFilter();
   bool _exporting = false;
 
@@ -165,57 +166,69 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
                   const SizedBox(height: V5Spacing.lg),
                   _ActorKindSelector(
                     selected: _kind,
-                    onSelected: (value) => setState(() => _kind = value),
+                    showAdministrators: _showAdministrators,
+                    onSelected: (value) => setState(() {
+                      _kind = value;
+                      _showAdministrators = false;
+                    }),
+                    onSelectAdministrators: () =>
+                        setState(() => _showAdministrators = true),
                   ),
                   const SizedBox(height: V5Spacing.md),
-                  TextField(
-                    key: const Key('platform-actor-search'),
-                    controller: _searchController,
-                    textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      labelText: 'Rechercher',
-                      hintText: 'Nom, mission, opération…',
-                      prefixIcon: Icon(Icons.search_rounded),
+                  if (!_showAdministrators) ...[
+                    TextField(
+                      key: const Key('platform-actor-search'),
+                      controller: _searchController,
+                      textInputAction: TextInputAction.search,
+                      decoration: const InputDecoration(
+                        labelText: 'Rechercher',
+                        hintText: 'Nom, mission, opération…',
+                        prefixIcon: Icon(Icons.search_rounded),
+                      ),
+                      onChanged: (value) => setState(
+                        () => _filter = _filter.copyWith(search: value),
+                      ),
                     ),
-                    onChanged: (value) => setState(
-                      () => _filter = _filter.copyWith(search: value),
-                    ),
-                  ),
-                  const SizedBox(height: V5Spacing.sm),
-                  Wrap(
-                    spacing: V5Spacing.sm,
-                    runSpacing: V5Spacing.sm,
-                    children: [
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 44),
-                        child: OutlinedButton.icon(
-                          key: const Key('platform-actor-filters'),
-                          onPressed: () => _openFilters(directory),
-                          icon: const Icon(Icons.tune_rounded),
-                          label: Text(
-                            _filter.activeCount == 0
-                                ? 'Filtrer'
-                                : 'Filtres (${_filter.activeCount})',
+                    const SizedBox(height: V5Spacing.sm),
+                    Wrap(
+                      spacing: V5Spacing.sm,
+                      runSpacing: V5Spacing.sm,
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 44),
+                          child: OutlinedButton.icon(
+                            key: const Key('platform-actor-filters'),
+                            onPressed: () => _openFilters(directory),
+                            icon: const Icon(Icons.tune_rounded),
+                            label: Text(
+                              _filter.activeCount == 0
+                                  ? 'Filtrer'
+                                  : 'Filtres (${_filter.activeCount})',
+                            ),
                           ),
                         ),
-                      ),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(minHeight: 44),
-                        child: OutlinedButton.icon(
-                          key: const Key('platform-actor-export'),
-                          onPressed: actorCount == 0 || _exporting
-                              ? null
-                              : () => _export(directory),
-                          icon: const Icon(Icons.download_outlined),
-                          label: Text(
-                            _exporting ? 'Export en cours…' : 'Exporter',
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 44),
+                          child: OutlinedButton.icon(
+                            key: const Key('platform-actor-export'),
+                            onPressed: actorCount == 0 || _exporting
+                                ? null
+                                : () => _export(directory),
+                            icon: const Icon(Icons.download_outlined),
+                            label: Text(
+                              _exporting ? 'Export en cours…' : 'Exporter',
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: V5Spacing.lg),
-                  ..._actorCards(directory),
+                      ],
+                    ),
+                    const SizedBox(height: V5Spacing.lg),
+                    ..._actorCards(directory),
+                  ] else
+                    const Text(
+                      'L’annuaire des Administrateurs MobSanté n’est pas disponible ici.',
+                      key: Key('platform-admin-actors-admin-unavailable'),
+                    ),
                 ],
               ),
             ),
@@ -288,23 +301,40 @@ class _PlatformAdminActorsScreenState extends State<PlatformAdminActorsScreen> {
 }
 
 class _ActorKindSelector extends StatelessWidget {
-  const _ActorKindSelector({required this.selected, required this.onSelected});
+  const _ActorKindSelector({
+    required this.selected,
+    required this.showAdministrators,
+    required this.onSelected,
+    required this.onSelectAdministrators,
+  });
 
   final PlatformActorKind selected;
+  final bool showAdministrators;
   final ValueChanged<PlatformActorKind> onSelected;
+  final VoidCallback onSelectAdministrators;
 
   @override
   Widget build(BuildContext context) => Wrap(
     spacing: V5Spacing.sm,
     runSpacing: V5Spacing.sm,
     children: [
-      for (final kind in PlatformActorKind.values)
+      for (final kind in const [
+        PlatformActorKind.professional,
+        PlatformActorKind.manager,
+        PlatformActorKind.coordinator,
+      ])
         ChoiceChip(
           key: Key('platform-actor-kind-${kind.name}'),
-          selected: kind == selected,
+          selected: !showAdministrators && kind == selected,
           onSelected: (_) => onSelected(kind),
           label: Text(kind.label),
         ),
+      ChoiceChip(
+        key: const Key('platform-actor-kind-administrator'),
+        selected: showAdministrators,
+        onSelected: (_) => onSelectAdministrators(),
+        label: const Text('Administrateurs MobSanté'),
+      ),
     ],
   );
 }
@@ -341,7 +371,9 @@ class _CoordinatorActorCard extends StatelessWidget {
     key: Key('coordinator-${actor.uid}'),
     icon: Icons.hub_outlined,
     title: actor.displayName,
-    subtitle: actor.active ? 'Coordinateur actif' : 'Coordinateur inactif',
+    subtitle: actor.active
+        ? "Coordinateur d'action actif"
+        : "Coordinateur d'action inactif",
     statusActive: actor.active,
     facts: [
       '${actor.operations.length} opération(s)',
@@ -362,7 +394,9 @@ class _ManagerActorCard extends StatelessWidget {
     key: Key('manager-${actor.uid}'),
     icon: Icons.local_hospital_outlined,
     title: actor.displayName,
-    subtitle: actor.active ? 'Responsable actif' : 'Responsable inactif',
+    subtitle: actor.active
+        ? 'Responsable de site actif'
+        : 'Responsable de site inactif',
     statusActive: actor.active,
     facts: [
       '${actor.locations.length} établissement(s)',
@@ -728,7 +762,9 @@ class PlatformCoordinatorDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _ActorDetailScaffold(
     title: actor.displayName,
-    subtitle: actor.active ? 'Coordinateur actif' : 'Coordinateur inactif',
+    subtitle: actor.active
+        ? "Coordinateur d'action actif"
+        : "Coordinateur d'action inactif",
     children: [
       _DetailFacts(
         values: [
@@ -762,7 +798,9 @@ class PlatformManagerDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _ActorDetailScaffold(
     title: actor.displayName,
-    subtitle: actor.active ? 'Responsable actif' : 'Responsable inactif',
+    subtitle: actor.active
+        ? 'Responsable de site actif'
+        : 'Responsable de site inactif',
     children: [
       _DetailFacts(
         values: [
@@ -797,6 +835,11 @@ class _ActorDetailScaffold extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(V5Spacing.lg),
         children: [
+          Text(
+            'Administrateur MobSanté',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: V5Spacing.sm),
           Text(title, style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: V5Spacing.xs),
           Text(

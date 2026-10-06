@@ -4,12 +4,12 @@ import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/widgets/professional_page_header.dart';
 
 void main() {
-  test('les quatre libellés de navigation restent courts', () {
+  test('the four user-facing journey labels use canonical role names', () {
     expect(MobSanteJourney.values.map((journey) => journey.title), [
-      'Professionnel',
-      'Responsable',
-      'Coordinateur',
-      'Administrateur',
+      'Professionnel de santé',
+      'Responsable de site',
+      "Coordinateur d'action",
+      'Administrateur MobSanté',
     ]);
   });
 
@@ -46,6 +46,15 @@ void main() {
     expect(text.data, isNot(contains('\n')));
     expect(text.maxLines, 1);
     expect(find.byKey(const Key('mobsante-slogan-one-line')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('brand-logo-slot'))).width, 42);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('mobsante-product-name')))
+          .style
+          ?.fontSize,
+      19,
+    );
+    expect(text.style?.fontSize, 12.5);
     expect(tester.takeException(), isNull);
   });
 

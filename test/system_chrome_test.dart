@@ -104,7 +104,7 @@ void main() {
     _expectOnlyLightApplicationChrome(tester);
   });
 
-  testWidgets('splash exits from navy chrome to the light application chrome', (
+  testWidgets('splash and application keep light system chrome', (
     tester,
   ) async {
     final startup = Completer<CoordinationRepository>();
@@ -125,28 +125,96 @@ void main() {
     _expectOnlyLightApplicationChrome(tester);
   });
 
-  test('PWA paints navy before CSS and restores application chrome later', () {
+  test('PWA paints light splash and iPhone safe areas from first frame', () {
     final index = File('web/index.html').readAsStringSync();
     final manifest = File('web/manifest.json').readAsStringSync();
 
-    expect(index, contains('<meta name="theme-color" content="#10233E">'));
+    expect(index, contains('<meta name="theme-color" content="#F6F7F8">'));
+    expect(
+      index,
+      contains('<meta name="apple-mobile-web-app-capable" content="yes">'),
+    );
+    expect(
+      index,
+      contains(
+        '<meta name="apple-mobile-web-app-status-bar-style" content="default">',
+      ),
+    );
     expect(
       index,
       contains(
         '<html class="mobsante-splash-active" '
-        'style="background-color: #10233E;">',
+        'style="background-color: #F6F7F8;">',
       ),
     );
-    expect(index, contains('<body style="background-color: #10233E;">'));
+    expect(index, contains('<body style="background-color: #F6F7F8;">'));
     expect(index, contains('background: #F6F7F8;'));
-    expect(index, contains('html.mobsante-splash-active body'));
+    expect(index, isNot(contains('html.mobsante-splash-active body')));
     expect(index, contains('#startup-splash'));
-    expect(index, contains('visibility: hidden'));
+    final nativeSplash = RegExp(
+      r'#startup-splash\s*\{([^}]*)\}',
+      dotAll: true,
+    ).firstMatch(index);
+    expect(nativeSplash, isNotNull);
+    expect(nativeSplash!.group(1), contains('background: #F6F7F8;'));
+    expect(nativeSplash.group(1), isNot(contains('background: #10233E;')));
+    final contentRule = RegExp(
+      r'\.startup-splash__content\s*\{([^}]*)\}',
+      dotAll: true,
+    ).firstMatch(index);
+    expect(contentRule, isNotNull);
+    expect(contentRule!.group(1), isNot(contains('visibility: hidden')));
+    expect(
+      index,
+      isNot(contains('html.mobsante-splash-composed .startup-splash__content')),
+    );
+    expect(index, contains('<h1 class="startup-splash__title">MobSanté</h1>'));
+    expect(
+      index,
+      contains('<p class="startup-splash__subtitle">Incendies Gironde</p>'),
+    );
+    expect(index, contains('class="startup-splash__signature">URPS MK NA'));
+    final imagesRule = RegExp(
+      r'\.startup-splash__pictogram,\s*'
+      r'\.startup-splash__mobilization-symbol\s*\{([^}]*)\}',
+      dotAll: true,
+    ).firstMatch(index);
+    expect(imagesRule, isNotNull);
+    expect(imagesRule!.group(1), contains('visibility: hidden'));
+    final readyRule = RegExp(
+      r'\.startup-splash__image-ready\s*\{([^}]*)\}',
+      dotAll: true,
+    ).firstMatch(index);
+    expect(readyRule, isNotNull);
+    expect(readyRule!.group(1), contains('visibility: visible'));
+    expect(index, contains('image.naturalWidth > 0'));
+    expect(index, contains('images.forEach(revealImage)'));
+    expect(index, isNot(contains('Promise.all(images.map')));
     expect(index, contains('mobsante-splash-composed'));
     expect(index, contains('image.decode()'));
     expect(index, contains('mobsante-native-splash-composed'));
     expect(index, contains('padding: var(--startup-splash-safe-block) 28px;'));
     expect(manifest, contains('"theme_color": "#F6F7F8"'));
+    expect(manifest, contains('"background_color": "#F6F7F8"'));
+    final systemTheme = File(
+      'lib/utils/system_theme_web.dart',
+    ).readAsStringSync();
+    expect(systemTheme, isNot(contains("'black-translucent'")));
+    expect(systemTheme, isNot(contains("'#0D1622'")));
+  });
+
+  test('MapLibre and Flutter bootstrap defer in dependency order', () {
+    final index = File('web/index.html').readAsStringSync();
+    const mapScript =
+        '<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js" defer></script>';
+    const bootstrapScript =
+        '<script src="flutter_bootstrap.js" defer></script>';
+
+    expect(index, contains(mapScript));
+    expect(index, contains(bootstrapScript));
+    expect(index.indexOf(mapScript), lessThan(index.indexOf(bootstrapScript)));
+    expect(index, isNot(contains('maplibre-gl.js"></script>')));
+    expect(index, isNot(contains('flutter_bootstrap.js" async')));
   });
 
   test('iPhone safe areas cannot recenter the native splash', () {
@@ -191,6 +259,7 @@ void main() {
       final systemTheme = File(
         'lib/utils/system_theme_web.dart',
       ).readAsStringSync();
+      final index = File('web/index.html').readAsStringSync();
 
       expect(splashScreen, isNot(contains('dismissNativeStartupSplash();')));
       expect(
@@ -200,6 +269,7 @@ void main() {
       expect(appShell, contains('revealApplication();'));
       expect(systemTheme, contains('if (_applicationRevealed)'));
       expect(systemTheme, contains('_applyPendingApplicationChrome();'));
+      expect(index, isNot(contains('splash.remove()')));
       expect(
         RegExp(r'dismissNativeStartupSplash\(\);').allMatches(systemTheme),
         hasLength(1),
@@ -227,7 +297,10 @@ void _expectOnlyLightApplicationChrome(WidgetTester tester) {
   final styles = _systemStyles(tester);
   expect(styles, contains(AppTheme.lightSystemUiOverlayStyle));
   expect(styles, isNot(contains(AppTheme.darkSystemUiOverlayStyle)));
-  expect(styles, isNot(contains(AppTheme.splashSystemUiOverlayStyle)));
+  expect(
+    AppTheme.splashSystemUiOverlayStyle,
+    AppTheme.lightSystemUiOverlayStyle,
+  );
   final style = AppTheme.lightSystemUiOverlayStyle;
   expect(style.statusBarColor, Colors.transparent);
   expect(style.systemNavigationBarColor, V5Colors.light.canvas);

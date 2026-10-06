@@ -21,7 +21,7 @@ class PlatformAdminPerspectiveSection extends StatelessWidget {
         children: [
           PerspectiveOption(
             key: const Key('perspective-professional'),
-            label: 'Professionnel',
+            label: 'Professionnel de santé',
             selected:
                 controller.perspective == CrossRolePerspective.professional,
             onTap: controller.showProfessional,
@@ -29,7 +29,7 @@ class PlatformAdminPerspectiveSection extends StatelessWidget {
           ),
           PerspectiveOption(
             key: const Key('perspective-responsible'),
-            label: 'Responsable',
+            label: 'Responsable de site',
             selected:
                 controller.perspective == CrossRolePerspective.responsible,
             onTap: () => _showResponsiblePreview(
@@ -41,7 +41,7 @@ class PlatformAdminPerspectiveSection extends StatelessWidget {
           ),
           PerspectiveOption(
             key: const Key('perspective-coordinator'),
-            label: 'Coordinateur',
+            label: "Coordinateur d'action",
             selected:
                 controller.perspective == CrossRolePerspective.coordinator,
             onTap: controller.showCoordinator,
@@ -49,7 +49,7 @@ class PlatformAdminPerspectiveSection extends StatelessWidget {
           ),
           PerspectiveOption(
             key: const Key('perspective-platform-admin'),
-            label: 'Administrateur',
+            label: 'Administrateur MobSanté',
             selected: controller.perspective == CrossRolePerspective.actual,
             onTap: controller.showActualRole,
             accentColor: accent,
@@ -105,14 +105,14 @@ class SiteManagerPerspectiveSection extends StatelessWidget {
       children: [
         PerspectiveOption(
           key: const Key('perspective-site-manager'),
-          label: 'Responsable',
+          label: 'Responsable de site',
           selected: controller.perspective != CrossRolePerspective.professional,
           onTap: controller.showActualRole,
           accentColor: accent,
         ),
         PerspectiveOption(
           key: const Key('perspective-professional'),
-          label: 'Professionnel',
+          label: 'Professionnel de santé',
           selected: controller.perspective == CrossRolePerspective.professional,
           onTap: controller.showProfessional,
           accentColor: accent,
@@ -146,7 +146,7 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
       children: [
         PerspectiveOption(
           key: const Key('perspective-coordinator'),
-          label: 'Coordinateur',
+          label: "Coordinateur d'action",
           selected: controller.perspective == CrossRolePerspective.actual,
           accentColor: accentColor,
           onTap: () {
@@ -156,14 +156,14 @@ class CoordinatorPerspectiveSection extends StatelessWidget {
         ),
         PerspectiveOption(
           key: const Key('perspective-responsible'),
-          label: 'Responsable',
+          label: 'Responsable de site',
           selected: controller.perspective == CrossRolePerspective.responsible,
           accentColor: accentColor,
           onTap: () => _selectResponsibleCenter(context, controller),
         ),
         PerspectiveOption(
           key: const Key('perspective-professional'),
-          label: 'Professionnel',
+          label: 'Professionnel de santé',
           selected: controller.perspective == CrossRolePerspective.professional,
           accentColor: accentColor,
           onTap: () {
@@ -314,7 +314,7 @@ class CrossRolePreviewBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     if (compact) {
-      final previewTitle = title ?? 'Prévisualisation Professionnel';
+      final previewTitle = title ?? 'Prévisualisation Professionnel de santé';
       final identity = Semantics(
         label: '$previewTitle. Rôle réel : $label.',
         child: ExcludeSemantics(

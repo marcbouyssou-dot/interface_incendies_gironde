@@ -21,6 +21,7 @@ import 'mission_card.dart';
 import 'mission_location_details.dart';
 import 'native_interactions.dart';
 import 'operation_context_badge.dart';
+import 'professional_mission_equipment.dart';
 import 'mobilization_design_system.dart';
 import 'v5_controls.dart';
 import 'v5_form_system.dart';
@@ -1020,8 +1021,15 @@ class NeedCard extends StatelessWidget {
         ? null
         : HealthProfessionRegistry.byId(preferredProfession!.canonicalId!);
     final visibleProfessions =
-        matchingProfession != null &&
-            need.professionQuotas.quotaFor(matchingProfession.id).hasActivity
+        professionalJourney && preferredProfession != null
+        ? (matchingProfession != null &&
+                  need.professionQuotas
+                      .quotaFor(matchingProfession.id)
+                      .hasActivity
+              ? [matchingProfession]
+              : <HealthProfessionDefinition>[])
+        : matchingProfession != null &&
+              need.professionQuotas.quotaFor(matchingProfession.id).hasActivity
         ? [matchingProfession]
         : professionsStillNeeded.isEmpty
         ? professionsWithActivity.take(1).toList(growable: false)
@@ -1114,7 +1122,14 @@ class NeedCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _ProfessionQuotaRows(need: need),
-            if (equipment.isNotEmpty) ...[
+            if (professionalJourney && preferredProfession != null) ...[
+              const _MissionCardSectionDivider(harmonized: true),
+              ProfessionalMissionEquipment(
+                mission: need,
+                profession: preferredProfession!,
+                showTeam: true,
+              ),
+            ] else if (!professionalJourney && equipment.isNotEmpty) ...[
               const _MissionCardSectionDivider(harmonized: true),
               const _MissionCardSectionTitle(
                 'Matériel à prévoir',
@@ -1892,7 +1907,10 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
     return quota.required > 0 && quota.registered < quota.required;
   }
 
-  bool get _hasAvailableProfession => _professions.any(_isAvailable);
+  bool get _hasAvailableProfession =>
+      _profile?.hasVerifiedProfessionalIdentity == true
+      ? _isAvailable(_profile!.profession)
+      : _professions.any(_isAvailable);
 
   bool get _isVeterinarian => _profession == VolunteerProfession.veterinarian;
 
@@ -2056,14 +2074,18 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
           _otherEquipmentController.text = otherEquipment.join(', ');
         }
         final profileProfessionAvailable = _isAvailable(profile.profession);
-        if (profileProfessionAvailable) {
+        if (profile.hasVerifiedProfessionalIdentity ||
+            profileProfessionAvailable) {
           _profession = profile.profession;
         }
         _applyProfessionalIdentifierTypeForProfession();
       }
       setState(() {
         _profile = profile;
-        _editingProfile = profile == null || !_isAvailable(profile.profession);
+        _editingProfile =
+            profile == null ||
+            (!profile.hasVerifiedProfessionalIdentity &&
+                !_isAvailable(profile.profession));
         _loadingProfile = false;
         _profileError = null;
       });
@@ -2253,7 +2275,12 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                         icon: Icons.medical_services_outlined,
                         child: RadioGroup<VolunteerProfession>(
                           groupValue: _profession,
-                          onChanged: (value) => _selectProfession(value!),
+                          onChanged: (value) {
+                            if (_profile?.hasVerifiedProfessionalIdentity !=
+                                true) {
+                              _selectProfession(value!);
+                            }
+                          },
                           child: Column(
                             children: [
                               for (final profession in _professions)
@@ -2274,7 +2301,12 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                             horizontal: 8,
                                           ),
                                       value: profession,
-                                      enabled: _isAvailable(profession),
+                                      enabled:
+                                          _isAvailable(profession) &&
+                                          (_profile?.hasVerifiedProfessionalIdentity !=
+                                                  true ||
+                                              profession ==
+                                                  _profile!.profession),
                                       title: Text(profession.label),
                                       subtitle: _isAvailable(profession)
                                           ? null
@@ -2376,9 +2408,8 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
                                 isExpanded: true,
                                 decoration: InputDecoration(
                                   labelText: 'Identifiant professionnel *',
-                                  helperText: professionAllowsNoIdentifier(
-                                    _profession,
-                                  )
+                                  helperText:
+                                      professionAllowsNoIdentifier(_profession)
                                       ? null
                                       : 'Obligatoire pour participer.',
                                   prefixIcon: const Icon(Icons.badge_outlined),
@@ -3026,7 +3057,9 @@ class _ProfileSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
-    final gaps = ProfessionalProfileValidation.engagementGapsForProfile(profile);
+    final gaps = ProfessionalProfileValidation.engagementGapsForProfile(
+      profile,
+    );
     final phoneMissing = gaps.contains(EngagementProfileGap.phone);
     final emailMissing = gaps.contains(EngagementProfileGap.email);
     final identifierMissing = gaps.contains(
@@ -3124,7 +3157,8 @@ class _ProfileSummary extends StatelessWidget {
               child: _ProfileSummaryItem(
                 key: const Key('profile-summary-identifier'),
                 icon: Icons.badge_outlined,
-                label: profile.effectiveProfessionalIdType ==
+                label:
+                    profile.effectiveProfessionalIdType ==
                         ProfessionalIdType.none
                     ? 'Identifiant professionnel'
                     : profile.effectiveProfessionalIdType.label,

@@ -125,6 +125,16 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                 ),
                 children: [
                   const ProfessionalPageHeader(title: 'Mon profil'),
+                  const SizedBox(height: V5Spacing.md),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      key: const Key('edit-professional-profile-primary'),
+                      onPressed: () => _editProfile(profile),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Modifier mon profil'),
+                    ),
+                  ),
                   const SizedBox(height: V5Spacing.lg),
                   _ProfileSection(
                     title: 'Identité professionnelle',
@@ -819,37 +829,52 @@ class _ProfessionalProfileEditorState
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: V5Spacing.sm),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: V5TextField(
-                            key: const Key('professional-profile-postal-code'),
-                            label: 'Code postal',
-                            controller: _professionalPostalCode,
-                            focusNode: _professionalPostalCodeFocus,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(5),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final postal = V5TextField(
+                          key: const Key('professional-profile-postal-code'),
+                          label: 'Code postal',
+                          controller: _professionalPostalCode,
+                          focusNode: _professionalPostalCodeFocus,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(5),
+                          ],
+                          validator: _professionalPostalCodeValidator,
+                          onChanged: (_) => setState(() {}),
+                        );
+                        final city = V5TextField(
+                          key: const Key('professional-profile-city'),
+                          label: 'Ville',
+                          controller: _professionalCity,
+                          focusNode: _professionalCityFocus,
+                          textCapitalization: TextCapitalization.words,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(120),
+                          ],
+                          validator: _professionalCityValidator,
+                          onChanged: (_) => setState(() {}),
+                        );
+                        if (constraints.maxWidth < 300 ||
+                            MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+                          return Column(
+                            children: [
+                              postal,
+                              const SizedBox(height: V5Spacing.sm),
+                              city,
                             ],
-                            validator: _professionalPostalCodeValidator,
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                        const SizedBox(width: V5Spacing.xs),
-                        Expanded(
-                          child: V5TextField(
-                            key: const Key('professional-profile-city'),
-                            label: 'Ville',
-                            controller: _professionalCity,
-                            focusNode: _professionalCityFocus,
-                            textCapitalization: TextCapitalization.words,
-                            maxLength: 120,
-                            validator: _professionalCityValidator,
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                      ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 3, child: postal),
+                            const SizedBox(width: V5Spacing.xs),
+                            Expanded(flex: 2, child: city),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: V5Spacing.sm),
                     V5TextField(

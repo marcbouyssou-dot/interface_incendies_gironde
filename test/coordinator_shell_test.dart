@@ -13,6 +13,20 @@ import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 
 void main() {
+  void expectBrandedCoordinatorHeader(WidgetTester tester) {
+    expect(find.byKey(const Key('brand-logo-slot')), findsOneWidget);
+    expect(find.text('MobSanté'), findsOneWidget);
+    expect(
+      find.text('Le bon professionnel, au bon endroit, au bon moment.'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('mobsante-journey-title-coordinator')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  }
+
   testWidgets('coordinator journey exposes four territorial V5 tabs', (
     tester,
   ) async {
@@ -24,6 +38,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorShell), findsOneWidget);
+    expectBrandedCoordinatorHeader(tester);
     expect(find.byType(CoordinatorCockpitScreen), findsOneWidget);
     expect(find.byType(CoordinatorBottomNavigation), findsOneWidget);
     expect(find.text('Gironde'), findsOneWidget);
@@ -46,6 +61,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorTerritoryScreen), findsOneWidget);
+    expectBrandedCoordinatorHeader(tester);
     expect(
       find.text(
         'Situation aujourd’hui et à venir : secteurs stables, sous surveillance ou critiques.',
@@ -79,6 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorActorsScreen), findsOneWidget);
+    expectBrandedCoordinatorHeader(tester);
     expect(
       find.text(
         'Responsables, professionnels mobilisés et lieux du dispositif.',
@@ -95,7 +112,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorMoreScreen), findsOneWidget);
-    expect(find.text('Coordination'), findsOneWidget);
+    expectBrandedCoordinatorHeader(tester);
+    expect(find.text('Coordination'), findsNothing);
     expect(find.text('Changer de perspective'), findsNothing);
     expect(find.byKey(const Key('perspective-professional')), findsNothing);
     expect(find.text('Statistiques globales'), findsOneWidget);
@@ -107,10 +125,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CoordinatorProfileScreen), findsOneWidget);
+    expectBrandedCoordinatorHeader(tester);
     expect(find.text('Coordinateur MobSanté'), findsOneWidget);
-    expect(find.text('Coordinateur territorial'), findsOneWidget);
+    expect(find.text("Coordinateur d'action"), findsNWidgets(2));
+    expect(find.text('Mon profil'), findsOneWidget);
+    expect(find.text('Rôle'), findsOneWidget);
+    expect(find.text('Périmètre'), findsOneWidget);
     expect(find.text('Périmètre départemental'), findsOneWidget);
+    expect(find.text('coordinateur@example.test'), findsOneWidget);
+    expect(find.byKey(const Key('coordinator-profile-back')), findsOneWidget);
     expect(find.text('mock-coordinator'), findsNothing);
+    await tester.tap(find.byKey(const Key('coordinator-profile-back')));
+    await tester.pumpAndSettle();
+    expect(find.byType(CoordinatorMoreScreen), findsOneWidget);
+  });
+
+  testWidgets('Coordinator identity stays aligned without desktop overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const FireCoordinationApp());
+    await tester.pumpAndSettle();
+
+    for (final tab in ['Cockpit', 'Territoire', 'Acteurs', 'Plus']) {
+      if (tab != 'Cockpit') {
+        await tester.tap(find.text(tab).first);
+        await tester.pumpAndSettle();
+      }
+      expectBrandedCoordinatorHeader(tester);
+      expect(find.byType(CoordinatorBottomNavigation), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('brand-logo-slot'))).dx,
+        greaterThan(100),
+      );
+    }
   });
 
   testWidgets('territory statistics use the shared temporal vocabulary', (

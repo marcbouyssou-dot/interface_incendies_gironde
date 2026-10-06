@@ -11,6 +11,8 @@ import 'package:interface_incendies_gironde/widgets/mission_location_details.dar
 import 'package:interface_incendies_gironde/widgets/native_interactions.dart';
 import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
+import 'support/verified_professional_profile.dart';
+
 void main() {
   testWidgets('compact V5 buttons keep a minimum 44 point hitbox', (
     tester,
@@ -40,7 +42,10 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         FireCoordinationApp(
-          repository: MockCoordinationRepository(responsibleAccess: null),
+          repository: MockCoordinationRepository(
+            responsibleAccess: null,
+            initialProfiles: {'mock-volunteer': verifiedMkProfile()},
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -214,12 +219,13 @@ Future<void> _pumpCreateNeedRoute(
     final cockpit = find.byKey(const PageStorageKey('coordinator-cockpit'));
     for (
       var attempt = 0;
-      attempt < 8 && find.byKey(opener).evaluate().isEmpty;
+      attempt < 24 && find.byKey(opener).evaluate().isEmpty;
       attempt++
     ) {
       await tester.drag(cockpit, const Offset(0, -360));
       await tester.pumpAndSettle();
     }
+    expect(find.byKey(opener), findsOneWidget);
   }
   await tester.ensureVisible(find.byKey(opener));
   await tester.pumpAndSettle();

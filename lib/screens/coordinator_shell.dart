@@ -233,7 +233,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
   @override
   Widget build(BuildContext context) {
     return RolePreviewDebugOverlay(
-      journeyLabel: 'Coordinateur',
+      journeyLabel: "Coordinateur d'action",
       child: Scaffold(
         key: const Key('coordinator-shell'),
         backgroundColor: context.v5Colors.canvas,

@@ -23,6 +23,7 @@ import '../utils/app_page_route.dart';
 import '../utils/operation_presentation.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import '../widgets/perspective_switcher.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
@@ -290,6 +291,7 @@ class _PlatformAdminOperationsScreenState
     Navigator.of(context).push(
       AppPageRoute<void>(
         builder: (_) => Scaffold(
+          appBar: const V5SecondaryNavigationBar(title: 'Mobilisations'),
           body: SafeArea(
             child: PlatformAdminMobilizationScreen(
               platformRepository: widget.platformRepository,
@@ -446,6 +448,11 @@ class _PlatformOperationDetailScreenState
                         V5Spacing.xxxl,
                       ),
                       children: [
+                        Text(
+                          'Administrateur MobSanté',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                        const SizedBox(height: V5Spacing.sm),
                         if (_busy) ...[
                           const LinearProgressIndicator(),
                           const SizedBox(height: V5Spacing.md),
@@ -559,7 +566,7 @@ class _PlatformOperationDetailScreenState
           message: operation.name,
           content: V5SelectField<String>(
             key: const Key('operation-coordinator-select'),
-            label: 'Coordinateur actif',
+            label: "Coordinateur d'action actif",
             value: selectedUid,
             options: coordinators
                 .map(
@@ -1716,7 +1723,7 @@ class _OperationCoordinatorSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return _OperationDetailSection(
       key: const Key('operation-coordinator-section'),
-      title: 'Coordinateur',
+      title: "Coordinateur d'action",
       icon: Icons.supervisor_account_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1996,13 +2003,13 @@ class _OperationFutureJourneysSection extends StatelessWidget {
       builder: (context, locationSnapshot) => Column(
         children: [
           _OperationJourneyTile(
-            key: const Key('future-view-as-coordinator'),
-            icon: Icons.dashboard_outlined,
-            label: 'Coordinateur',
+            key: const Key('future-view-as-professional'),
+            icon: Icons.medical_services_outlined,
+            label: 'Professionnel de santé',
             onTap: () {
               CrossRolePerspectiveScope.of(
                 context,
-              ).showCoordinatorForOperation(_previewContext);
+              ).showProfessionalForOperation(_previewContext);
               _closeOperationDetail(context);
             },
           ),
@@ -2010,19 +2017,19 @@ class _OperationFutureJourneysSection extends StatelessWidget {
           _OperationJourneyTile(
             key: const Key('future-view-as-responsible'),
             icon: Icons.apartment_outlined,
-            label: 'Responsable',
+            label: 'Responsable de site',
             onTap: () =>
                 _openResponsible(context, locationSnapshot.data ?? const []),
           ),
           const Divider(height: 1),
           _OperationJourneyTile(
-            key: const Key('future-view-as-professional'),
-            icon: Icons.medical_services_outlined,
-            label: 'Professionnel',
+            key: const Key('future-view-as-coordinator'),
+            icon: Icons.dashboard_outlined,
+            label: "Coordinateur d'action",
             onTap: () {
               CrossRolePerspectiveScope.of(
                 context,
-              ).showProfessionalForOperation(_previewContext);
+              ).showCoordinatorForOperation(_previewContext);
               _closeOperationDetail(context);
             },
           ),

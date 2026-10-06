@@ -9,7 +9,6 @@ import '../repositories/responsible_access_administration_repository_scope.dart'
 import '../theme/coordinator_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/professional_page_header.dart';
-import '../widgets/v5_secondary_navigation.dart';
 import 'coordinator_overview_screen.dart';
 
 class CoordinatorMoreScreen extends StatefulWidget {
@@ -118,7 +117,10 @@ class _CoordinatorMoreContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const MobSantePageHeader(title: 'Coordination'),
+                  const MobSanteJourneyHeader(
+                    journey: MobSanteJourney.coordinator,
+                    showSubtitle: false,
+                  ),
                   const SizedBox(height: V5Spacing.xxl),
                   _MoreGroup(
                     children: [
@@ -297,53 +299,102 @@ class _CoordinatorProfileScreenState extends State<CoordinatorProfileScreen> {
               final account = accountsSnapshot.data
                   ?.where((candidate) => candidate.uid == access?.uid)
                   .firstOrNull;
-              final displayName = account?.identityLabel ?? 'Coordinateur';
+              final displayName =
+                  account?.identityLabel ?? MobSanteJourney.coordinator.title;
               return Scaffold(
                 backgroundColor: colors.canvas,
-                appBar: const V5SecondaryNavigationBar(title: 'Profil'),
                 body: SafeArea(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(V5Spacing.xl),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 520),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(V5Spacing.lg),
-                          decoration: BoxDecoration(
-                            color: colors.surfaceElevated,
-                            borderRadius: BorderRadius.circular(V5Radius.card),
-                          ),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                    children: [
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 520),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                displayName,
-                                key: const Key('coordinator-profile-name'),
-                                style: Theme.of(context).textTheme.titleMedium,
+                              BackButton(
+                                key: const Key('coordinator-profile-back'),
+                                onPressed: () => Navigator.of(context).pop(),
                               ),
-                              const SizedBox(height: V5Spacing.xs),
-                              Text(
-                                'Coordinateur territorial',
-                                style: Theme.of(context).textTheme.bodyMedium,
+                              const SizedBox(height: V5Spacing.sm),
+                              const MobSanteJourneyHeader(
+                                journey: MobSanteJourney.coordinator,
+                                showSubtitle: false,
                               ),
-                              const SizedBox(height: V5Spacing.xxs),
-                              Text(
-                                'Périmètre départemental',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              if (account?.email case final email?) ...[
-                                const SizedBox(height: V5Spacing.xs),
-                                Text(
-                                  email,
-                                  style: Theme.of(context).textTheme.bodySmall,
+                              const SizedBox(height: V5Spacing.lg),
+                              const MobSantePageHeader(title: 'Mon profil'),
+                              const SizedBox(height: V5Spacing.lg),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(V5Spacing.lg),
+                                decoration: BoxDecoration(
+                                  color: colors.surfaceElevated,
+                                  borderRadius: BorderRadius.circular(
+                                    V5Radius.card,
+                                  ),
                                 ),
-                              ],
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      displayName,
+                                      key: const Key(
+                                        'coordinator-profile-name',
+                                      ),
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: V5Spacing.md),
+                                    Text(
+                                      'Rôle',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelMedium,
+                                    ),
+                                    Text(
+                                      MobSanteJourney.coordinator.title,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                    ),
+                                    const SizedBox(height: V5Spacing.sm),
+                                    Text(
+                                      'Périmètre',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelMedium,
+                                    ),
+                                    Text(
+                                      'Périmètre départemental',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                    if (account?.email case final email?) ...[
+                                      const SizedBox(height: V5Spacing.sm),
+                                      Text(
+                                        'Email',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelMedium,
+                                      ),
+                                      Text(
+                                        email,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               );

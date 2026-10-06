@@ -63,6 +63,7 @@ function firebasePasswordResetLink(settings) {
 
 function harness({
   callerRole = {role: 'coordinator', active: true, locationIds: []},
+  callerIsAdministrator = false,
   invitationValue = invitation(),
   user,
   role,
@@ -89,6 +90,9 @@ function harness({
     authLookups: 0,
   };
   const services = {
+    async isPlatformAdministrator() {
+      return callerIsAdministrator;
+    },
     async getRole(uid) {
       return uid === 'coord' ? state.callerRole : state.role;
     },
@@ -335,12 +339,25 @@ test('active coordinator provisions a new account and site manager role', async 
   assert.equal('activationLink' in result, false);
 });
 
-test('coordinator role is created without locations', async () => {
+test('administrator creates a coordinator role without locations', async () => {
   const {state} = await provision({
+    callerIsAdministrator: true,
     invitationValue: invitation({role: 'coordinator', locationIds: []}),
   });
   assert.deepEqual(state.commits[0].role.locationIds, []);
   assert.equal(state.commits[0].role.role, 'coordinator');
+});
+
+test('coordinator cannot provision a historical coordinator invitation', async () => {
+  const value = harness({
+    invitationValue: invitation({role: 'coordinator', locationIds: []}),
+  });
+  await rejectsCode(() => provisionAdminInvitation({
+    invitationId: 'invitation-a', callerUid: 'coord',
+    services: value.services, notificationService: value.notificationService,
+    appUrl, now,
+  }), 'permission-denied');
+  assert.equal(value.state.authLookups, 0);
 });
 
 test('unknown invitation is refused', async () => {
@@ -559,6 +576,7 @@ test('existing coordinator receives the site manager role additively', async () 
 
 test('existing site manager receives coordinator without losing locations', async () => {
   const {state} = await provision({
+    callerIsAdministrator: true,
     invitationValue: invitation({role: 'coordinator', locationIds: []}),
     user: {
       uid: 'existing-uid',

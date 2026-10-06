@@ -5,6 +5,7 @@ import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/perspective_switcher.dart';
+import '../widgets/professional_page_header.dart';
 import '../widgets/v5_form_system.dart';
 import 'notification_center_screen.dart';
 import 'platform_admin_profile_screen.dart';
@@ -35,8 +36,10 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
     };
     Navigator.of(context).push(
       AppPageRoute<void>(
-        builder: (_) =>
-            NotificationCenterScreen(targetedPushTestService: service),
+        builder: (_) => NotificationCenterScreen(
+          targetedPushTestService: service,
+          contextLabel: 'Administrateur MobSanté',
+        ),
       ),
     );
   }
@@ -104,34 +107,12 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Semantics(
-                    header: true,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Administrateur',
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: accent,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                        const SizedBox(height: V5Spacing.sm),
-                        Text(
-                          'Plus',
-                          style: Theme.of(context).textTheme.headlineLarge,
-                        ),
-                        const SizedBox(height: V5Spacing.xs),
-                        Text(
-                          'Gérez votre session et prévisualisez les parcours.',
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(color: colors.textSecondary),
-                        ),
-                      ],
-                    ),
+                  const MobSanteJourneyHeader(
+                    journey: MobSanteJourney.administrator,
+                    pageTitle: 'Plus',
+                    showSubtitle: false,
                   ),
-                  const SizedBox(height: V5Spacing.xxl),
+                  const SizedBox(height: V5Spacing.lg),
                   const PlatformAdminPerspectiveSection(),
                   const SizedBox(height: V5Spacing.xxl),
                   _MoreGroup(

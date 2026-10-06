@@ -246,10 +246,14 @@ class FirestoreAdminInvitationRepository implements AdminInvitationRepository {
     String invitationId,
     DateTime expiresAt,
   ) async {
-    if (!expiresAt.isAfter(_now())) {
+    final now = _now();
+    if (!expiresAt.isAfter(now)) {
       throw const FormatException(
         'La nouvelle date d’expiration doit être future.',
       );
+    }
+    if (expiresAt.isAfter(now.add(AdminInvitationDraft.maxValidity))) {
+      throw const FormatException('La validité ne peut dépasser 90 jours.');
     }
     await _requireCoordinator();
     await _dataSource.manageInvitation({

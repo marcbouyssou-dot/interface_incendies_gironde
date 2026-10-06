@@ -56,6 +56,11 @@ void main() {
         actions.map((action) => action.priority),
         orderedEquals([600, 500, 400, 300, 200, 100]),
       );
+      final titles = actions.map((action) => action.title).toList();
+      expect(
+        titles.indexOf('Nommer un responsable'),
+        lessThan(titles.indexOf('Nommer le coordinateur')),
+      );
     });
 
     test('ne déduit pas un responsable manquant sans annuaire fiable', () {

@@ -9,10 +9,10 @@ enum MobSanteJourney { professional, responsible, coordinator, administrator }
 
 extension MobSanteJourneyIdentity on MobSanteJourney {
   String get title => switch (this) {
-    MobSanteJourney.professional => 'Professionnel',
-    MobSanteJourney.responsible => 'Responsable',
-    MobSanteJourney.coordinator => 'Coordinateur',
-    MobSanteJourney.administrator => 'Administrateur',
+    MobSanteJourney.professional => 'Professionnel de santé',
+    MobSanteJourney.responsible => 'Responsable de site',
+    MobSanteJourney.coordinator => "Coordinateur d'action",
+    MobSanteJourney.administrator => 'Administrateur MobSanté',
   };
 
   String get subtitle => switch (this) {
@@ -31,6 +31,7 @@ class MobSanteJourneyHeader extends StatelessWidget {
     required this.journey,
     this.pageTitle,
     this.pageTitleKey = const Key('role-page-title'),
+    this.showSubtitle = true,
   });
 
   static const slogan = 'Le bon professionnel, au bon endroit, au bon moment.';
@@ -38,6 +39,7 @@ class MobSanteJourneyHeader extends StatelessWidget {
   final MobSanteJourney journey;
   final String? pageTitle;
   final Key pageTitleKey;
+  final bool showSubtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +60,7 @@ class MobSanteJourneyHeader extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const BrandMark(size: 36),
+                  const BrandMark(size: 42),
                   const SizedBox(width: V5Spacing.sm),
                   Expanded(
                     child: Column(
@@ -67,11 +69,12 @@ class MobSanteJourneyHeader extends StatelessWidget {
                         Text(
                           AppIdentity.productName,
                           key: const Key('mobsante-product-name'),
-                          style: Theme.of(context).textTheme.titleMedium
+                          style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(
                                 color: colors.textPrimary,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.2,
+                                fontSize: 19,
                               ),
                         ),
                         const SizedBox(height: 1),
@@ -86,9 +89,9 @@ class MobSanteJourneyHeader extends StatelessWidget {
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     color: colors.textSecondary,
-                                    fontSize: constraints.maxWidth < 320
-                                        ? 10.5
-                                        : 11,
+                                    fontSize: constraints.maxWidth < 285
+                                        ? 11.5
+                                        : 12.5,
                                     height: 1.22,
                                   ),
                             );
@@ -121,14 +124,16 @@ class MobSanteJourneyHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: V5Spacing.xxs),
-          Text(
-            journey.subtitle,
-            key: Key('mobsante-journey-subtitle-${journey.name}'),
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
-          ),
+          if (showSubtitle) ...[
+            const SizedBox(height: V5Spacing.xxs),
+            Text(
+              journey.subtitle,
+              key: Key('mobsante-journey-subtitle-${journey.name}'),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
+            ),
+          ],
           if (visiblePageTitle?.isNotEmpty == true) ...[
             const SizedBox(height: V5Spacing.md),
             _AnimatedHeaderTitle(
@@ -163,9 +168,10 @@ class ProfessionalPageHeader extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) => MobSantePageHeader(
-    title: title,
-    titleKey: const Key('professional-page-title'),
+  Widget build(BuildContext context) => MobSanteJourneyHeader(
+    journey: MobSanteJourney.professional,
+    pageTitle: title,
+    pageTitleKey: const Key('professional-page-title'),
   );
 }
 

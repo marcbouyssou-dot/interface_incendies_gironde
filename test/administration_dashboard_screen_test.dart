@@ -50,9 +50,10 @@ void main() {
     if (access == null && accessError == null) {
       await tester.tap(find.text('Profil'));
       await tester.pumpAndSettle();
-      await tester.drag(
-        find.byKey(const PageStorageKey('professional-profile')),
-        const Offset(0, -900),
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('open-responsible-access')),
+        250,
+        scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('open-responsible-access')));
@@ -75,7 +76,7 @@ void main() {
     expect(find.byKey(const Key('admin-invitations-entry')), findsNothing);
   });
 
-  testWidgets('single-site manager opens a form without a location field', (
+  testWidgets('single-site manager opens a form with a locked location', (
     tester,
   ) async {
     final bazas = places.singleWhere((location) => location.name == 'Bazas');
@@ -103,10 +104,16 @@ void main() {
     await tester.tap(find.byKey(const Key('responsible-needs-create')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Créer un besoin'), findsOneWidget);
-    expect(find.byKey(const Key('mission-location-locked')), findsNothing);
+    expect(find.text('Exprimer un besoin'), findsOneWidget);
+    expect(find.byKey(const Key('mission-location-locked')), findsOneWidget);
     expect(find.byKey(const Key('mission-location')), findsNothing);
-    expect(find.text('Lieu · Bazas'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('mission-location-locked')),
+        matching: find.text('Bazas'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -124,8 +131,8 @@ void main() {
 
       await tester.tap(find.text('Profil'));
       await tester.pumpAndSettle();
-      expect(find.text(places[0].name), findsOneWidget);
-      expect(find.text(places[1].name), findsOneWidget);
+      expect(find.text(places[0].name), findsWidgets);
+      expect(find.text(places[1].name), findsWidgets);
       expect(find.text('Tous les centres'), findsNothing);
     },
   );
@@ -437,7 +444,7 @@ void main() {
       expect(FocusManager.instance.primaryFocus, isNotNull);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(find.text('Créer un besoin'), findsOneWidget);
+      expect(find.text('Exprimer un besoin'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

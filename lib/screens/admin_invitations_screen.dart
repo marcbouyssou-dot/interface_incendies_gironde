@@ -239,6 +239,10 @@ class _CoordinatorInvitationsContentState
           builder: (context, snapshot) {
             final invitations = snapshot.data
                 ?.where((invitation) => invitation.isUnused)
+                .where(
+                  (invitation) =>
+                      invitation.role == AdminInvitationDraft.siteManagerRole,
+                )
                 .toList(growable: false);
             return LayoutBuilder(
               builder: (context, constraints) {
@@ -306,6 +310,12 @@ class _CoordinatorInvitationsContentState
                                 }
                                 return Column(
                                   children: accountSnapshot.data!
+                                      .where(
+                                        (account) =>
+                                            !account.access.roles.contains(
+                                              ResponsibleRole.coordinator,
+                                            ),
+                                      )
                                       .map(
                                         (account) => Padding(
                                           padding: const EdgeInsets.only(
@@ -419,7 +429,7 @@ class _CoordinatorInvitationsContentState
   }
 
   Future<void> _reactivate(AdminInvitation invitation) async {
-    var expirationDays = 7;
+    var expirationDays = 14;
     final selectedDays = await showV5Dialog<int>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -430,12 +440,13 @@ class _CoordinatorInvitationsContentState
             label: 'Nouvelle validité',
             value: expirationDays,
             options: const [
-              V5SelectOption(value: 1, label: '24 heures'),
-              V5SelectOption(value: 7, label: '7 jours'),
               V5SelectOption(value: 14, label: '14 jours'),
+              V5SelectOption(value: 30, label: '30 jours'),
+              V5SelectOption(value: 60, label: '60 jours'),
+              V5SelectOption(value: 90, label: '90 jours'),
             ],
             onChanged: (value) =>
-                setDialogState(() => expirationDays = value ?? 7),
+                setDialogState(() => expirationDays = value ?? 14),
           ),
           actions: [
             V5DialogAction(
@@ -668,10 +679,10 @@ class _ResponsibleAccountCard extends StatelessWidget {
     final access = account.access;
     final isSelf = account.uid == currentUid;
     final roleLabel = access.isCumulative
-        ? 'Coordinateur et responsable'
+        ? "Coordinateur d'action et responsable de site"
         : access.roles.contains(ResponsibleRole.coordinator)
-        ? 'Coordinateur'
-        : 'Responsable';
+        ? "Coordinateur d'action"
+        : 'Responsable de site';
     final locations =
         access.locationIds
             .map((id) => locationsById[id]?.name ?? 'Lieu indisponible')
@@ -942,8 +953,8 @@ class _InvitationCard extends StatelessWidget {
             _ManagementDetailLine(
               icon: Icons.admin_panel_settings_outlined,
               text: invitation.role == AdminInvitationDraft.coordinatorRole
-                  ? 'Coordinateur'
-                  : 'Responsable',
+                  ? "Coordinateur d'action"
+                  : 'Responsable de site',
             ),
             const SizedBox(height: V5Spacing.xs),
             _ManagementDetailLine(
@@ -1160,7 +1171,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
   final _emailController = TextEditingController();
   final Set<String> _selectedLocations = {};
   late String _role;
-  int _expirationDays = 7;
+  int _expirationDays = 14;
   bool _submitting = false;
 
   bool get _hasValidIdentity =>
@@ -1264,11 +1275,7 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                         options: const [
                           V5SelectOption(
                             value: AdminInvitationDraft.siteManagerRole,
-                            label: 'Responsable',
-                          ),
-                          V5SelectOption(
-                            value: AdminInvitationDraft.coordinatorRole,
-                            label: 'Coordinateur',
+                            label: 'Responsable de site',
                           ),
                         ],
                         onChanged: (value) => setState(() {
@@ -1286,12 +1293,13 @@ class _AdminInvitationFormScreenState extends State<AdminInvitationFormScreen> {
                           value: _expirationDays,
                           leading: const Icon(Icons.schedule_outlined),
                           options: const [
-                            V5SelectOption(value: 1, label: '24 heures'),
-                            V5SelectOption(value: 7, label: '7 jours'),
                             V5SelectOption(value: 14, label: '14 jours'),
+                            V5SelectOption(value: 30, label: '30 jours'),
+                            V5SelectOption(value: 60, label: '60 jours'),
+                            V5SelectOption(value: 90, label: '90 jours'),
                           ],
                           onChanged: (value) =>
-                              setState(() => _expirationDays = value ?? 7),
+                              setState(() => _expirationDays = value ?? 14),
                         ),
                       ],
                       if (_role == AdminInvitationDraft.siteManagerRole) ...[

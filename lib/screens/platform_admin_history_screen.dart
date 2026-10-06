@@ -619,6 +619,11 @@ class PlatformAdminHistoryDetailScreen extends StatelessWidget {
           ),
           children: [
             Text(
+              'Administrateur MobSanté',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: V5Spacing.sm),
+            Text(
               operation.name,
               key: const Key('platform-history-detail-title'),
               style: Theme.of(context).textTheme.headlineMedium,
@@ -656,7 +661,7 @@ class PlatformAdminHistoryDetailScreen extends StatelessWidget {
             _HistoryDetailLine(
               key: const Key('platform-history-detail-coordinator'),
               icon: Icons.supervisor_account_outlined,
-              label: 'Coordinateur',
+              label: "Coordinateur d'action",
               value: entry.coordinatorUid ?? 'Non nommé',
             ),
             const SizedBox(height: V5Spacing.xxl),

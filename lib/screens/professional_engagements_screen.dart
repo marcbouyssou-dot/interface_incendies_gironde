@@ -12,6 +12,7 @@ import '../utils/mission_timing.dart';
 import '../widgets/common.dart';
 import '../widgets/mission_location_details.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/professional_mission_equipment.dart';
 import '../widgets/v5_controls.dart';
 
 enum _EngagementPeriod { upcoming, current, past }
@@ -346,16 +347,11 @@ class _EngagementCard extends StatelessWidget {
               ),
               children: [
                 MissionLocationDetails(location: location, compact: true),
-                if (mission.equipment.isNotEmpty) ...[
-                  const SizedBox(height: V5Spacing.xs),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Matériel : ${mission.equipment.join(' • ')}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                ],
+                const SizedBox(height: V5Spacing.sm),
+                ProfessionalMissionEquipment(
+                  mission: mission,
+                  profession: engagement.profession,
+                ),
                 EngagementCancellationButton(
                   need: mission,
                   engagement: engagement,

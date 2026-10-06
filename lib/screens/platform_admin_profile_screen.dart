@@ -4,6 +4,7 @@ import '../services/platform_administration_service.dart';
 import '../theme/platform_admin_identity.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/professional_page_header.dart';
+import '../widgets/v5_secondary_navigation.dart';
 import '../widgets/v5_controls.dart';
 
 /// Minimal identity screen for the Platform Administrator role. Shows only
@@ -23,44 +24,60 @@ class PlatformAdminProfileScreen extends StatelessWidget {
     final colors = context.v5Colors;
     final accent = PlatformAdminIdentity.accent(context);
     final email = administrationService.currentUserEmail;
-    return ColoredBox(
-      color: colors.canvas,
-      child: ListView(
-        key: const PageStorageKey('platform-admin-profile'),
-        padding: const EdgeInsets.fromLTRB(20, 22, 20, 40),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      backgroundColor: colors.canvas,
+      body: SafeArea(
+        child: Column(
+          children: [
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: V5BackButton(key: Key('platform-admin-profile-back')),
+            ),
+            Expanded(
+              child: ListView(
+                key: const PageStorageKey('platform-admin-profile'),
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 40),
                 children: [
-                  const MobSantePageHeader(title: 'Mon profil'),
-                  const SizedBox(height: V5Spacing.xxl),
-                  Text(
-                    'Identité',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: V5Spacing.sm),
-                  _ProfileGroup(
-                    children: [
-                      _ProfileLine(
-                        label: 'Rôle',
-                        value: 'Administrateur plateforme',
-                        accent: accent,
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const MobSanteJourneyHeader(
+                            journey: MobSanteJourney.administrator,
+                            pageTitle: 'Mon profil',
+                            showSubtitle: false,
+                          ),
+                          const SizedBox(height: V5Spacing.xxl),
+                          Text(
+                            'Identité',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: V5Spacing.sm),
+                          _ProfileGroup(
+                            children: [
+                              _ProfileLine(
+                                label: 'Rôle',
+                                value: 'Administrateur MobSanté',
+                                accent: accent,
+                              ),
+                              _ProfileLine(
+                                label: 'Email',
+                                value: email ?? 'Non renseigné',
+                                accent: accent,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      _ProfileLine(
-                        label: 'Email',
-                        value: email ?? 'Non renseigné',
-                        accent: accent,
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

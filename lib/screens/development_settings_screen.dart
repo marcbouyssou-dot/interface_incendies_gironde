@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
@@ -12,14 +11,16 @@ class DevelopmentSettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final controller = RolePreviewScope.of(context);
-    final mode = kDebugMode ? controller.mode : RolePreviewMode.automatic;
+    final mode = showRecipeSwitcher
+        ? controller.mode
+        : RolePreviewMode.automatic;
     return Scaffold(
       appBar: const V5SecondaryNavigationBar(title: 'Réglages'),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(V5Spacing.xl),
           children: [
-            if (kDebugMode) ...[
+            if (showRecipeSwitcher) ...[
               Text(
                 'Mode Développement',
                 style: Theme.of(context).textTheme.headlineSmall,
@@ -35,12 +36,13 @@ class DevelopmentSettingsScreen extends StatelessWidget {
               const SizedBox(height: V5Spacing.xl),
               DropdownButtonFormField<RolePreviewMode>(
                 key: const Key('role-preview-selector'),
+                isExpanded: true,
                 initialValue: mode,
                 decoration: const InputDecoration(
                   labelText: 'Parcours affiché',
                 ),
                 items: [
-                  for (final option in RolePreviewMode.values)
+                  for (final option in controller.availableModes)
                     DropdownMenuItem(value: option, child: Text(option.label)),
                 ],
                 onChanged: (value) {
@@ -49,7 +51,7 @@ class DevelopmentSettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: V5Spacing.xxl),
             ],
-            if (!kDebugMode)
+            if (!showRecipeSwitcher)
               Text(
                 'Aucun réglage supplémentaire n’est disponible pour le moment.',
                 style: Theme.of(context).textTheme.bodyMedium,

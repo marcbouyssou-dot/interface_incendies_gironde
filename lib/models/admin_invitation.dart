@@ -98,6 +98,7 @@ class AdminInvitationDraft {
   static const coordinatorRole = 'coordinator';
   static const maxLocationIds = 65;
   static const maxEmailLength = 255;
+  static const maxValidity = Duration(days: 90);
   static const _rulesListSeparator = '\u001f';
 
   final String email;
@@ -128,6 +129,9 @@ class AdminInvitationDraft {
     );
     if (!expiresAt.isAfter(now)) {
       throw const FormatException('La date d’expiration doit être future.');
+    }
+    if (expiresAt.isAfter(now.add(maxValidity))) {
+      throw const FormatException('La validité ne peut dépasser 90 jours.');
     }
   }
 }

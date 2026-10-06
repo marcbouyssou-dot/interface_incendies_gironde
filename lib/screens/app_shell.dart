@@ -22,6 +22,7 @@ import '../repositories/organization_scoped_platform_read_repository.dart';
 import '../repositories/platform_actor_read_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../repositories/platform_runtime.dart';
+import '../repositories/recipe_admin_runtime.dart';
 import '../repositories/platform_read_repository.dart';
 import '../repositories/read_only_preview_coordination_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
@@ -778,9 +779,12 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final previewMode = kDebugMode
+    final previewMode = showRecipeSwitcher
         ? RolePreviewScope.of(context).mode
         : RolePreviewMode.automatic;
+    final recipeAdminPreview =
+        previewMode == RolePreviewMode.administrator &&
+        widget.platformRuntime is RecipeAdminRuntime;
     final perspectiveController = CrossRolePerspectiveScope.of(context);
     final automaticJourney = !_accessResolved || _accessResolutionFailed
         ? _AppJourney.coordinator
@@ -795,13 +799,16 @@ class _AppShellState extends State<AppShell> {
       RolePreviewMode.professional => _AppJourney.professional,
       RolePreviewMode.responsible => _AppJourney.responsible,
       RolePreviewMode.coordinator => _AppJourney.coordinator,
+      RolePreviewMode.administrator =>
+        recipeAdminPreview ? _AppJourney.platformAdmin : automaticJourney,
       RolePreviewMode.automatic => automaticJourney,
     };
     final isPlatformAdministrator =
         (_platformAdministratorResolved &&
             (_platformAdministrator?.active ?? false)) ||
         _platformAdministrationSessionExpired;
-    var displayedJourney = isPlatformAdministrator
+    final adminPerspectiveHost = isPlatformAdministrator || recipeAdminPreview;
+    var displayedJourney = adminPerspectiveHost
         ? switch (perspectiveController.perspective) {
             CrossRolePerspective.actual => _AppJourney.platformAdmin,
             CrossRolePerspective.professional => _AppJourney.professional,
@@ -811,7 +818,7 @@ class _AppShellState extends State<AppShell> {
         : journey;
     var crossRolePreview = false;
     crossRolePreview =
-        isPlatformAdministrator &&
+        adminPerspectiveHost &&
         perspectiveController.perspective != CrossRolePerspective.actual;
     final operationPreviewContext = crossRolePreview
         ? perspectiveController.operationContext
@@ -909,29 +916,36 @@ class _AppShellState extends State<AppShell> {
                     : multiMutationRepository,
                 operationRepository: operationRepository,
               ),
-      _AppJourney.platformAdmin => PlatformAdminShell(
-        initialIndex: widget.initialIndex == 3 ? 4 : 0,
-        platformRepository: platformRepository!,
-        mobilizationProvider: mobilizationProvider!,
-        administrationRepository:
-            widget.platformRuntime!.platformAdministrationReadRepository,
-        administrationService:
-            widget.platformRuntime!.platformAdministrationService,
-        operationRepository: operationRepository,
-        missionRepository: multiReadRepository,
-        locationStream: locationStream,
-        actorRepository: widget.platformRuntime is PlatformActorRuntime
-            ? (widget.platformRuntime! as PlatformActorRuntime)
-                  .platformActorReadRepository
-            : const NoPlatformActorReadRepository(),
-        onSignOut: _signOutPlatformAdministrator,
+      _AppJourney.platformAdmin => RolePreviewDebugOverlay(
+        journeyLabel: 'Administrateur MobSanté',
+        child: PlatformAdminShell(
+          initialIndex: widget.initialIndex == 3 ? 4 : 0,
+          platformRepository: platformRepository!,
+          mobilizationProvider: mobilizationProvider!,
+          administrationRepository:
+              widget.platformRuntime!.platformAdministrationReadRepository,
+          administrationService:
+              widget.platformRuntime!.platformAdministrationService,
+          operationRepository: operationRepository,
+          missionRepository: multiReadRepository,
+          locationStream: locationStream,
+          actorRepository: widget.platformRuntime is PlatformActorRuntime
+              ? (widget.platformRuntime! as PlatformActorRuntime)
+                    .platformActorReadRepository
+              : const NoPlatformActorReadRepository(),
+          onSignOut: recipeAdminPreview
+              ? () async => RolePreviewScope.of(
+                  context,
+                ).select(RolePreviewMode.automatic)
+              : _signOutPlatformAdministrator,
+        ),
       ),
     };
     final previewedJourney = switch (perspectiveController.perspective) {
-      CrossRolePerspective.professional => 'Professionnel',
-      CrossRolePerspective.responsible => 'Responsable',
-      CrossRolePerspective.coordinator => 'Coordinateur',
-      CrossRolePerspective.actual => 'Administrateur',
+      CrossRolePerspective.professional => 'Professionnel de santé',
+      CrossRolePerspective.responsible => 'Responsable de site',
+      CrossRolePerspective.coordinator => "Coordinateur d'action",
+      CrossRolePerspective.actual => 'Administrateur MobSanté',
     };
     final framedShell = crossRolePreview
         ? _PlatformAdminPreviewFrame(
@@ -1096,11 +1110,11 @@ class _PlatformAdminPreviewFrame extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
             child: CrossRolePreviewBanner(
-              label: 'Administrateur',
+              label: 'Administrateur MobSanté',
               title: operationName == null
                   ? 'Prévisualisation $journey'
                   : 'Prévisualisation $journey · $operationName',
-              exitLabel: 'Retour Administrateur',
+              exitLabel: 'Retour Administrateur MobSanté',
               onExit: onExit,
               compact: true,
             ),

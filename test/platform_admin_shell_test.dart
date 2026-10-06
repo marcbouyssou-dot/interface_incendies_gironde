@@ -268,7 +268,7 @@ void main() {
     expect(find.byType(PlatformAdminShell), findsOneWidget);
     expect(find.byKey(const Key('platform-admin-shell')), findsOneWidget);
     expect(find.byType(ProfessionalShell), findsNothing);
-    expect(find.text('Administrateur'), findsOneWidget);
+    expect(find.text('Administrateur MobSanté'), findsOneWidget);
     expect(find.text('Préparez et pilotez les mobilisations.'), findsOneWidget);
   });
 
@@ -514,7 +514,7 @@ void main() {
       expect(find.byType(shell), findsOneWidget);
       expect(find.text('Prévisualisation $title'), findsOneWidget);
       expect(find.text('Votre rôle : Administrateur'), findsNothing);
-      expect(find.text('Retour Administrateur'), findsOneWidget);
+      expect(find.text('Retour Administrateur MobSanté'), findsOneWidget);
       expect(
         tester
             .getSize(find.byKey(const Key('cross-role-preview-banner')))
@@ -538,21 +538,21 @@ void main() {
     expect(find.byKey(const Key('perspective-platform-admin')), findsOneWidget);
     await preview(
       option: const Key('perspective-professional'),
-      title: 'Professionnel',
+      title: 'Professionnel de santé',
       shell: ProfessionalShell,
     );
 
     await openMore();
     await preview(
       option: const Key('perspective-responsible'),
-      title: 'Responsable',
+      title: 'Responsable de site',
       shell: ResponsibleShell,
     );
 
     await openMore();
     await preview(
       option: const Key('perspective-coordinator'),
-      title: 'Coordinateur',
+      title: "Coordinateur d'action",
       shell: CoordinatorShell,
     );
   });
@@ -595,7 +595,10 @@ void main() {
         find.byKey(const PageStorageKey('coordinator-cockpit')),
         findsOneWidget,
       );
-      expect(find.text('Prévisualisation Coordinateur'), findsOneWidget);
+      expect(
+        find.text("Prévisualisation Coordinateur d'action"),
+        findsOneWidget,
+      );
       expect(repository.allActiveRequests, greaterThan(0));
       expect(repository.mobilizationRequests, isEmpty);
       expect(
@@ -646,7 +649,7 @@ void main() {
 
       await openAdminPerspective(const Key('perspective-responsible'));
       expect(find.byKey(const Key('responsible-home')), findsOneWidget);
-      expect(find.text('Prévisualisation Responsable'), findsOneWidget);
+      expect(find.text('Prévisualisation Responsable de site'), findsOneWidget);
       await tester.tap(find.text('Besoins').last);
       await tester.pumpAndSettle();
       expect(
@@ -681,7 +684,10 @@ void main() {
 
       await openAdminPerspective(const Key('perspective-professional'));
       expect(find.byType(ProfessionalShell), findsOneWidget);
-      expect(find.text('Prévisualisation Professionnel'), findsOneWidget);
+      expect(
+        find.text('Prévisualisation Professionnel de santé'),
+        findsOneWidget,
+      );
       expect(find.text('Votre rôle : Administrateur'), findsNothing);
       await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
       await tester.pumpAndSettle();
@@ -748,6 +754,27 @@ void main() {
           260,
           scrollable: find.byType(Scrollable).first,
         );
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .getTopLeft(find.byKey(const Key('future-view-as-professional')))
+              .dy,
+          lessThan(
+            tester
+                .getTopLeft(find.byKey(const Key('future-view-as-responsible')))
+                .dy,
+          ),
+        );
+        expect(
+          tester
+              .getTopLeft(find.byKey(const Key('future-view-as-responsible')))
+              .dy,
+          lessThan(
+            tester
+                .getTopLeft(find.byKey(const Key('future-view-as-coordinator')))
+                .dy,
+          ),
+        );
       }
 
       Future<void> preview({
@@ -774,32 +801,32 @@ void main() {
           find.text('Prévisualisation $role · ${_previewOperation.name}'),
           findsOneWidget,
         );
-        expect(find.text(outsideLocation.name), findsNothing);
+        expect(find.textContaining(outsideLocation.name), findsNothing);
         if (shell == ResponsibleShell) {
-          expect(find.text(secondLocation.name), findsNothing);
-          expect(find.text(firstLocation.name), findsWidgets);
+          expect(find.textContaining(secondLocation.name), findsNothing);
+          expect(find.textContaining(firstLocation.name), findsWidgets);
         }
         expect(repository.lastObservedAccess, isNull);
 
         await tester.tap(find.byKey(const Key('exit-cross-role-preview')));
         await tester.pumpAndSettle();
         expect(find.byType(PlatformAdminShell), findsOneWidget);
-        expect(find.text('Retour Administrateur'), findsNothing);
+        expect(find.text('Retour Administrateur MobSanté'), findsNothing);
       }
 
       await preview(
         key: const Key('future-view-as-responsible'),
-        role: 'Responsable',
+        role: 'Responsable de site',
         shell: ResponsibleShell,
       );
       await preview(
         key: const Key('future-view-as-professional'),
-        role: 'Professionnel',
+        role: 'Professionnel de santé',
         shell: ProfessionalShell,
       );
       await preview(
         key: const Key('future-view-as-coordinator'),
-        role: 'Coordinateur',
+        role: "Coordinateur d'action",
         shell: CoordinatorShell,
       );
 
@@ -1002,10 +1029,10 @@ void main() {
     final professionalPreview = find.byKey(
       const Key('perspective-professional'),
     );
-    await tester.ensureVisible(professionalPreview);
-    await tester.drag(
-      find.byKey(const PageStorageKey('platform-admin-more')),
-      const Offset(0, -160),
+    await Scrollable.ensureVisible(
+      tester.element(professionalPreview),
+      alignment: 0.5,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
     );
     await tester.pumpAndSettle();
     await tester.tap(professionalPreview);
@@ -1022,14 +1049,17 @@ void main() {
 
     await tester.tap(find.text('Plus').last);
     await tester.pumpAndSettle();
-    final notifications = find.byKey(
-      const Key('platform-admin-notifications'),
-    );
+    final notifications = find.byKey(const Key('platform-admin-notifications'));
     expect(notifications, findsOneWidget);
 
     await tester.tap(notifications);
     await tester.pumpAndSettle();
     expect(find.byType(NotificationCenterScreen), findsOneWidget);
+    expect(find.text('Administrateur MobSanté'), findsWidgets);
+    await tester.tap(find.byKey(const Key('notification-center-close')));
+    await tester.pumpAndSettle();
+    expect(find.byType(NotificationCenterScreen), findsNothing);
+    expect(find.byKey(const Key('platform-admin-profile')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1046,98 +1076,93 @@ void main() {
     await tester.tap(profile);
     await tester.pumpAndSettle();
     expect(find.byType(PlatformAdminProfileScreen), findsOneWidget);
-    expect(find.text('Administrateur plateforme'), findsOneWidget);
+    expect(
+      find.byKey(const Key('mobsante-journey-title-administrator')),
+      findsOneWidget,
+    );
+    expect(find.text('Administrateur MobSanté'), findsWidgets);
     // NoPlatformAdministrationService (the default test double) exposes no
     // email — the screen must show that honestly, never a fabricated value.
     expect(find.text('Non renseigné'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('platform-admin-profile-back')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PlatformAdminProfileScreen), findsNothing);
+    expect(find.byKey(const Key('platform-admin-sign-out')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'Notifications never exposes the admin diagnostic card to an '
-    'unauthorized role',
-    (tester) async {
-      await _pumpPlatformAdmin(tester);
+  testWidgets('Notifications never exposes the admin diagnostic card to an '
+      'unauthorized role', (tester) async {
+    await _pumpPlatformAdmin(tester);
 
-      await tester.tap(find.text('Plus').last);
-      await tester.pumpAndSettle();
-      // The Plus menu itself no longer has a separate "Diagnostic push"
-      // entry — Notifications is the single, shared destination.
-      expect(find.byKey(const Key('platform-admin-diagnostic')), findsNothing);
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    // The Plus menu itself no longer has a separate "Diagnostic push"
+    // entry — Notifications is the single, shared destination.
+    expect(find.byKey(const Key('platform-admin-diagnostic')), findsNothing);
 
-      await tester.tap(find.byKey(const Key('platform-admin-notifications')));
-      await tester.pumpAndSettle();
-      expect(find.byType(NotificationCenterScreen), findsOneWidget);
-      // NoPlatformAdministrationService (default test double) does not
-      // implement TargetedPushTestService: the diagnostic card must be
-      // absent, not just hidden behind a missing menu entry.
-      expect(
-        find.byKey(const Key('send-targeted-push-test')),
-        findsNothing,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await tester.tap(find.byKey(const Key('platform-admin-notifications')));
+    await tester.pumpAndSettle();
+    expect(find.byType(NotificationCenterScreen), findsOneWidget);
+    // NoPlatformAdministrationService (default test double) does not
+    // implement TargetedPushTestService: the diagnostic card must be
+    // absent, not just hidden behind a missing menu entry.
+    expect(find.byKey(const Key('send-targeted-push-test')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
-  testWidgets(
-    'Notifications exposes the admin diagnostic card when the role '
-    'supports it',
-    (tester) async {
-      await tester.pumpWidget(
-        FireCoordinationApp(
-          repository: _RecordingCoordinationRepository(),
-          platformRuntime: _MultiPreviewRuntime(
-            administrationService: const _DiagnosticCapableAdministrationService(),
-          ),
+  testWidgets('Notifications exposes the admin diagnostic card when the role '
+      'supports it', (tester) async {
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: _RecordingCoordinationRepository(),
+        platformRuntime: _MultiPreviewRuntime(
+          administrationService:
+              const _DiagnosticCapableAdministrationService(),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Plus').last);
-      await tester.pumpAndSettle();
-      final notifications = find.byKey(
-        const Key('platform-admin-notifications'),
-      );
-      expect(notifications, findsOneWidget);
-      await tester.ensureVisible(notifications);
-      await tester.pumpAndSettle();
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    final notifications = find.byKey(const Key('platform-admin-notifications'));
+    expect(notifications, findsOneWidget);
+    await tester.ensureVisible(notifications);
+    await tester.pumpAndSettle();
 
-      await tester.tap(notifications);
-      await tester.pumpAndSettle();
-      expect(find.byType(NotificationCenterScreen), findsOneWidget);
-      expect(find.text('Diagnostic administrateur'), findsOneWidget);
-      expect(
-        find.byKey(const Key('send-targeted-push-test')),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await tester.tap(notifications);
+    await tester.pumpAndSettle();
+    expect(find.byType(NotificationCenterScreen), findsOneWidget);
+    expect(find.text('Diagnostic administrateur'), findsOneWidget);
+    expect(find.byKey(const Key('send-targeted-push-test')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
-  testWidgets(
-    "Profil shows the diagnostic-capable admin's real email",
-    (tester) async {
-      await tester.pumpWidget(
-        FireCoordinationApp(
-          repository: _RecordingCoordinationRepository(),
-          platformRuntime: _MultiPreviewRuntime(
-            administrationService: const _DiagnosticCapableAdministrationService(),
-          ),
+  testWidgets("Profil shows the diagnostic-capable admin's real email", (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: _RecordingCoordinationRepository(),
+        platformRuntime: _MultiPreviewRuntime(
+          administrationService:
+              const _DiagnosticCapableAdministrationService(),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Plus').last);
-      await tester.pumpAndSettle();
-      final profile = find.byKey(const Key('platform-admin-profile'));
-      await tester.ensureVisible(profile);
-      await tester.pumpAndSettle();
-      await tester.tap(profile);
-      await tester.pumpAndSettle();
-      expect(find.text('admin@example.test'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await tester.tap(find.text('Plus').last);
+    await tester.pumpAndSettle();
+    final profile = find.byKey(const Key('platform-admin-profile'));
+    await tester.ensureVisible(profile);
+    await tester.pumpAndSettle();
+    await tester.tap(profile);
+    await tester.pumpAndSettle();
+    expect(find.text('admin@example.test'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<void> _pumpPlatformAdmin(
@@ -1414,7 +1439,8 @@ CoordinationNeed _previewMission(ResponsePlace location) => CoordinationNeed(
   requiredPodiatrists: 0,
   registeredPodiatrists: 0,
   equipment: const [],
-  startAt: DateTime.utc(2026, 8, 20, 12),
+  startAt: _tomorrowAt(12),
+  endAt: _tomorrowAt(16),
   updatedAt: DateTime.utc(2026, 8, 18, 12),
 );
 
@@ -1432,7 +1458,8 @@ CoordinationNeed _secondPreviewMission(ResponsePlace location) =>
       requiredPodiatrists: 0,
       registeredPodiatrists: 0,
       equipment: const [],
-      startAt: DateTime.utc(2026, 8, 20, 16),
+      startAt: _tomorrowAt(16),
+      endAt: _tomorrowAt(20),
       updatedAt: DateTime.utc(2026, 8, 18, 12),
     );
 
@@ -1450,9 +1477,15 @@ CoordinationNeed _otherPreviewMission(ResponsePlace location) =>
       requiredPodiatrists: 0,
       registeredPodiatrists: 0,
       equipment: const [],
-      startAt: DateTime.utc(2026, 8, 21, 9),
+      startAt: _tomorrowAt(9),
+      endAt: _tomorrowAt(12),
       updatedAt: DateTime.utc(2026, 8, 18, 12),
     );
+
+DateTime _tomorrowAt(int hour) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day + 1, hour);
+}
 
 final _gironde = Territory(
   id: 'gironde',

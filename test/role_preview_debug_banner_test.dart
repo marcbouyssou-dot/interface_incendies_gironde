@@ -10,6 +10,22 @@ import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/screens/responsible_shell.dart';
 
 void main() {
+  test('recipe switcher needs debug or an explicit recipe build flag', () {
+    expect(
+      shouldShowRecipeSwitcher(isDebugBuild: true, recipeModeEnabled: false),
+      isTrue,
+    );
+    expect(
+      shouldShowRecipeSwitcher(isDebugBuild: false, recipeModeEnabled: true),
+      isTrue,
+    );
+    expect(
+      shouldShowRecipeSwitcher(isDebugBuild: false, recipeModeEnabled: false),
+      isFalse,
+    );
+    expect(showRecipeSwitcher, isTrue);
+  });
+
   Future<void> pumpApp(
     WidgetTester tester,
     MockCoordinationRepository repository,
@@ -21,42 +37,73 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> selectViaBanner(WidgetTester tester, RolePreviewMode mode) async {
+  Future<void> selectViaBanner(
+    WidgetTester tester,
+    RolePreviewMode mode,
+  ) async {
     await tester.tap(find.byKey(const Key('role-preview-banner')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(Key('role-preview-banner-option-${mode.name}')));
+    await tester.tap(
+      find.byKey(Key('role-preview-banner-option-${mode.name}')),
+    );
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
-    'role preview banner switches shells in 1-2 taps and returns to automatic',
-    (tester) async {
-      final repository = MockCoordinationRepository(responsibleAccess: null);
-      await pumpApp(tester, repository);
+  testWidgets('vertical RECETTE tab switches all four recipe perspectives', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(responsibleAccess: null);
+    await pumpApp(tester, repository);
 
-      // 1) starts on the real automatic journey (no access => Professional).
-      expect(find.byType(ProfessionalShell), findsOneWidget);
-      expect(find.text('MODE RECETTE · Parcours : Professionnel'), findsOneWidget);
+    // 1) starts on the real automatic journey (no access => Professional).
+    expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.text('RECETTE'), findsOneWidget);
+    final semantics = tester.getSemantics(
+      find.byKey(const Key('role-preview-banner')),
+    );
+    expect(semantics.label, 'Changer le parcours de prévisualisation');
+    expect(semantics.value, 'Parcours actuel : Professionnel de santé');
+    expect(semantics.flagsCollection.isButton, isTrue);
 
-      // 2) one tap on the banner + one tap on an option = shell switches.
-      await selectViaBanner(tester, RolePreviewMode.coordinator);
-      expect(find.byType(CoordinatorShell), findsOneWidget);
-      expect(find.byType(ProfessionalShell), findsNothing);
-      expect(find.text('MODE RECETTE · Parcours : Coordinateur'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('role-preview-banner')));
+    await tester.pumpAndSettle();
+    for (final mode in RolePreviewScope.of(
+      tester.element(find.byKey(const Key('role-preview-banner'))),
+    ).availableModes) {
+      expect(
+        find.byKey(Key('role-preview-banner-option-${mode.name}')),
+        findsOneWidget,
+      );
+    }
+    expect(
+      find.byKey(const Key('role-preview-banner-option-administrator')),
+      findsNothing,
+    );
+    Navigator.of(tester.element(find.text("Coordinateur d'action"))).pop();
+    await tester.pumpAndSettle();
 
-      await selectViaBanner(tester, RolePreviewMode.responsible);
-      expect(find.byType(ResponsibleShell), findsOneWidget);
-      expect(find.byType(CoordinatorShell), findsNothing);
-      expect(find.text('MODE RECETTE · Parcours : Responsable'), findsOneWidget);
+    // 2) one tap on the banner + one tap on an option = shell switches.
+    await selectViaBanner(tester, RolePreviewMode.coordinator);
+    expect(find.byType(CoordinatorShell), findsOneWidget);
+    expect(find.byType(ProfessionalShell), findsNothing);
+    expect(find.text('RECETTE'), findsOneWidget);
 
-      // 3) back to Automatique restores the real (unmodified) journey.
-      await selectViaBanner(tester, RolePreviewMode.automatic);
-      expect(find.byType(ProfessionalShell), findsOneWidget);
-      expect(find.byType(ResponsibleShell), findsNothing);
-      expect(find.text('MODE RECETTE · Parcours : Professionnel'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await selectViaBanner(tester, RolePreviewMode.responsible);
+    expect(find.byType(ResponsibleShell), findsOneWidget);
+    expect(find.byType(CoordinatorShell), findsNothing);
+    expect(find.text('RECETTE'), findsOneWidget);
+
+    await selectViaBanner(tester, RolePreviewMode.professional);
+    expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.byType(ResponsibleShell), findsNothing);
+
+    // 3) back to Automatique restores the real (unmodified) journey.
+    await selectViaBanner(tester, RolePreviewMode.automatic);
+    expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.byType(ResponsibleShell), findsNothing);
+    expect(find.text('RECETTE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'role preview banner never elevates a real site manager and never edits real access',

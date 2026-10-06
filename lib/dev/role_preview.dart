@@ -1,33 +1,65 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-enum RolePreviewMode { automatic, professional, responsible, coordinator }
+enum RolePreviewMode {
+  automatic,
+  professional,
+  responsible,
+  coordinator,
+  administrator,
+}
+
+const bool recipeModeEnabled = bool.fromEnvironment('MOBSANTE_RECIPE_MODE');
+
+bool shouldShowRecipeSwitcher({
+  required bool isDebugBuild,
+  required bool recipeModeEnabled,
+}) => isDebugBuild || recipeModeEnabled;
+
+const bool showRecipeSwitcher = kDebugMode || recipeModeEnabled;
 
 extension RolePreviewModeLabel on RolePreviewMode {
   String get label => switch (this) {
     RolePreviewMode.automatic => 'Automatique',
-    RolePreviewMode.professional => 'Professionnel',
-    RolePreviewMode.responsible => 'Responsable',
-    RolePreviewMode.coordinator => 'Coordinateur',
+    RolePreviewMode.professional => 'Professionnel de santé',
+    RolePreviewMode.responsible => 'Responsable de site',
+    RolePreviewMode.coordinator => "Coordinateur d'action",
+    RolePreviewMode.administrator => 'Administrateur MobSanté',
   };
 }
 
 class RolePreviewController extends ChangeNotifier {
+  RolePreviewController({this.administratorAvailable = false});
+
+  final bool administratorAvailable;
   RolePreviewMode _mode = RolePreviewMode.automatic;
 
   RolePreviewMode get mode => _mode;
 
+  Iterable<RolePreviewMode> get availableModes => RolePreviewMode.values.where(
+    (mode) => mode != RolePreviewMode.administrator || administratorAvailable,
+  );
+
   void select(RolePreviewMode mode) {
-    if (!kDebugMode || mode == _mode) return;
+    if (!showRecipeSwitcher ||
+        (mode == RolePreviewMode.administrator && !administratorAvailable) ||
+        mode == _mode) {
+      return;
+    }
     _mode = mode;
     notifyListeners();
   }
 }
 
 class RolePreviewScope extends StatefulWidget {
-  const RolePreviewScope({super.key, required this.child});
+  const RolePreviewScope({
+    super.key,
+    required this.child,
+    this.administratorAvailable = false,
+  });
 
   final Widget child;
+  final bool administratorAvailable;
 
   static RolePreviewController of(BuildContext context) {
     final scope = context
@@ -41,7 +73,26 @@ class RolePreviewScope extends StatefulWidget {
 }
 
 class _RolePreviewScopeState extends State<RolePreviewScope> {
-  final _controller = RolePreviewController();
+  late RolePreviewController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = RolePreviewController(
+      administratorAvailable: widget.administratorAvailable,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant RolePreviewScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.administratorAvailable != widget.administratorAvailable) {
+      _controller.dispose();
+      _controller = RolePreviewController(
+        administratorAvailable: widget.administratorAvailable,
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -58,9 +109,9 @@ class _RolePreviewInherited extends InheritedNotifier<RolePreviewController> {
   const _RolePreviewInherited({required super.notifier, required super.child});
 }
 
-/// Debug-only overlay: floats a [RolePreviewDebugBanner] on top of [child]
+/// Recipe overlay: floats a [RolePreviewDebugBanner] on top of [child]
 /// so any shell can offer 1-2-tap journey switching without duplicating
-/// layout. Renders exactly [child], unchanged, outside kDebugMode.
+/// layout. Renders exactly [child] when the switcher is disabled.
 ///
 /// This is a pure display affordance around [RolePreviewController] — the
 /// single existing source of truth for the previewed journey. It never
@@ -79,23 +130,17 @@ class RolePreviewDebugOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return child;
+    if (!showRecipeSwitcher) return child;
     return Stack(
       children: [
         child,
         Positioned(
-          top: 0,
-          left: 12,
-          right: 12,
+          top: 112,
+          right: 0,
           child: SafeArea(
             bottom: false,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: RolePreviewDebugBanner(currentJourneyLabel: journeyLabel),
-              ),
-            ),
+            left: false,
+            child: RolePreviewDebugBanner(currentJourneyLabel: journeyLabel),
           ),
         ),
       ],
@@ -103,9 +148,9 @@ class RolePreviewDebugOverlay extends StatelessWidget {
   }
 }
 
-/// Debug-only pill showing "MODE RECETTE — Parcours : {journey}"; a tap
+/// Recipe tab showing "RECETTE"; a tap
 /// opens a picker over [RolePreviewMode.values] and calls
-/// [RolePreviewController.select]. Renders nothing outside kDebugMode.
+/// [RolePreviewController.select]. Renders nothing when disabled.
 /// Selecting a mode only ever changes which shell is displayed — see
 /// [RolePreviewController.select] and its call site in app_shell.dart,
 /// which is the sole place the previewed journey is consumed.
@@ -116,50 +161,57 @@ class RolePreviewDebugBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return const SizedBox.shrink();
+    if (!showRecipeSwitcher) return const SizedBox.shrink();
     final controller = RolePreviewScope.of(context);
     final active = controller.mode != RolePreviewMode.automatic;
     final displayLabel = active ? controller.mode.label : currentJourneyLabel;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: const Key('role-preview-banner'),
-        borderRadius: BorderRadius.circular(999),
-        onTap: () => _openPicker(context, controller),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: active ? Colors.deepOrange : Colors.black87,
-            borderRadius: BorderRadius.circular(999),
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: 'Changer le parcours de prévisualisation',
+      value: 'Parcours actuel : $displayLabel',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const Key('role-preview-banner'),
+          borderRadius: const BorderRadius.horizontal(
+            left: Radius.circular(14),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.bug_report_outlined,
-                size: 14,
-                color: Colors.white,
+          onTap: () => _openPicker(context, controller),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 10),
+            decoration: BoxDecoration(
+              color: active ? Colors.deepOrange : const Color(0xFF384454),
+              borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(14),
               ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  'MODE RECETTE · Parcours : $displayLabel',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 8,
+                  offset: Offset(-2, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.tune_rounded, size: 15, color: Colors.white),
+                const SizedBox(height: 5),
+                const RotatedBox(
+                  quarterTurns: 1,
+                  child: Text(
+                    'RECETTE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(
-                Icons.expand_more_rounded,
-                size: 16,
-                color: Colors.white70,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -183,7 +235,7 @@ class RolePreviewDebugBanner extends StatelessWidget {
                 ),
               ),
             ),
-            for (final mode in RolePreviewMode.values)
+            for (final mode in controller.availableModes)
               ListTile(
                 key: Key('role-preview-banner-option-${mode.name}'),
                 title: Text(mode.label),

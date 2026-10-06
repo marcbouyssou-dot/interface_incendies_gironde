@@ -14,6 +14,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/operation_presentation.dart';
 import '../utils/runtime_stream_diagnostics.dart';
 import '../widgets/operational_territory_map.dart';
+import '../widgets/professional_page_header.dart';
 import '../widgets/territory_components.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
@@ -273,6 +274,11 @@ class _CockpitContentState extends State<_CockpitContent> {
                 ),
                 sliver: SliverList.list(
                   children: [
+                    const MobSanteJourneyHeader(
+                      journey: MobSanteJourney.coordinator,
+                      showSubtitle: false,
+                    ),
+                    const SizedBox(height: V5Spacing.lg),
                     if (widget.mobilizations.length > 1) ...[
                       V5SelectField<String>(
                         key: const Key('coordinator-mobilization-selector'),

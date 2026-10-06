@@ -4,6 +4,7 @@ import '../data/mock_data.dart';
 import '../models/admin_location.dart';
 import '../models/app_notification.dart';
 import '../models/need.dart';
+import '../models/site_equipment.dart';
 import '../models/professional_equipment.dart';
 import '../models/professional_profile_validation.dart';
 import '../models/profession_quotas.dart';
@@ -641,11 +642,47 @@ class MockCoordinationRepository
             ),
             contactName: location.contactName,
             contactPhone: location.contactPhone,
+            availableEquipment: previous?.availableEquipment,
             isOperational: location.isOperational,
             isEnabled: location.active,
           );
         }),
       );
+    _locationUpdates.add(List.unmodifiable(_locations));
+  }
+
+  @override
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  ) async {
+    final access = _responsibleAccess;
+    final index = _locations.indexWhere(
+      (location) => location.id == locationId,
+    );
+    if (access == null || !access.active || !access.canManage(locationId)) {
+      throw const RepositoryException('Accès au lieu refusé.');
+    }
+    if (index < 0) throw const RepositoryException('Lieu introuvable.');
+    final location = _locations[index];
+    if (!location.isEnabled || !location.isOperational) {
+      throw const RepositoryException('Lieu inactif.');
+    }
+    _locations[index] = ResponsePlace(
+      id: location.id,
+      name: location.name,
+      type: location.type,
+      group: location.group,
+      activeNeeds: location.activeNeeds,
+      address: location.address,
+      structuredAddress: location.structuredAddress,
+      contactName: location.contactName,
+      contactPhone: location.contactPhone,
+      managingOrganizationId: location.managingOrganizationId,
+      availableEquipment: SiteEquipment.normalize(equipmentIds),
+      isOperational: location.isOperational,
+      isEnabled: location.isEnabled,
+    );
     _locationUpdates.add(List.unmodifiable(_locations));
   }
 
@@ -678,6 +715,10 @@ class MockCoordinationRepository
       registeredPodiatrists: 0,
       professionQuotas: draft.professionQuotas,
       equipment: List.of(draft.equipment),
+      equipmentByProfession: draft.equipmentByProfession,
+      availableEquipmentOnSite: _locations
+          .firstWhere((location) => location.id == draft.location.id)
+          .availableEquipment,
       priority: draft.priority,
       details: draft.details,
       createdBy: _responsibleAccess?.uid,
@@ -693,6 +734,12 @@ class MockCoordinationRepository
     final index = _missions.indexWhere((mission) => mission.id == missionId);
     if (index < 0) throw const RepositoryException('Mission introuvable.');
     final mission = _missions[index];
+    if ((mission.equipmentByProfession == null) !=
+        (draft.equipmentByProfession == null)) {
+      throw const RepositoryException(
+        'Le matériel de cette mission nécessite une version compatible.',
+      );
+    }
     final sourceLocationId = mission.locationId;
     if (access == null ||
         !access.active ||
@@ -754,6 +801,8 @@ class MockCoordinationRepository
       registeredPodiatrists: pp.registered,
       professionQuotas: quotas,
       equipment: List.of(draft.equipment),
+      equipmentByProfession: draft.equipmentByProfession,
+      availableEquipmentOnSite: mission.availableEquipmentOnSite,
       priority: draft.priority,
       details: draft.details.trim(),
       isActive: mission.isActive,

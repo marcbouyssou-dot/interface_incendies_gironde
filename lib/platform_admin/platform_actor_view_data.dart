@@ -2,9 +2,9 @@ enum PlatformActorKind { professional, coordinator, manager }
 
 extension PlatformActorKindLabel on PlatformActorKind {
   String get label => switch (this) {
-    PlatformActorKind.professional => 'Professionnels',
-    PlatformActorKind.coordinator => 'Coordinateurs',
-    PlatformActorKind.manager => 'Responsables',
+    PlatformActorKind.professional => 'Professionnels de santé',
+    PlatformActorKind.coordinator => "Coordinateurs d'action",
+    PlatformActorKind.manager => 'Responsables de site',
   };
 }
 

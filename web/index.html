@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html class="mobsante-splash-active" style="background-color: #10233E;">
+<html class="mobsante-splash-active" style="background-color: #F6F7F8;">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -21,11 +21,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="MobSanté — Interface de mobilisation des professionnels de santé">
   <meta name="application-name" content="MobSanté">
-  <meta name="theme-color" content="#10233E">
+  <meta name="theme-color" content="#F6F7F8">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="MobSanté">
   <link rel="apple-touch-icon" sizes="192x192" href="icons/Icon-192.png">
   <link rel="preload" href="assets/assets/branding/mobsante_pictogram_transparent.png" as="image" fetchpriority="high">
@@ -37,7 +38,7 @@
   <title>MobSanté — Incendies Gironde</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
-  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js" defer></script>
   <style>
     .maplibregl-map {
       touch-action: none;
@@ -50,11 +51,6 @@
       margin: 0;
       background: #F6F7F8;
       overflow: hidden;
-    }
-
-    html.mobsante-splash-active,
-    html.mobsante-splash-active body {
-      background: #10233E;
     }
 
     #startup-splash {
@@ -71,18 +67,22 @@
       place-items: center;
       padding: var(--startup-splash-safe-block) 28px;
       overflow: hidden;
-      background: #10233E;
-      color: #FFFFFF;
+      background: #F6F7F8;
+      color: #10233E;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     .startup-splash__content {
       width: min(100%, 420px);
       text-align: center;
+    }
+
+    .startup-splash__pictogram,
+    .startup-splash__mobilization-symbol {
       visibility: hidden;
     }
 
-    html.mobsante-splash-composed .startup-splash__content {
+    .startup-splash__image-ready {
       visibility: visible;
     }
 
@@ -120,7 +120,7 @@
 
     .startup-splash__subtitle {
       margin: 10px 0 0;
-      color: #D9E3F1;
+      color: #556070;
       font-size: 20px;
       font-weight: 600;
       line-height: 1.25;
@@ -132,7 +132,7 @@
       align-items: center;
       gap: 16px;
       margin-top: 58px;
-      color: #58A5FF;
+      color: #3567A6;
       font-size: 14px;
       font-weight: 800;
       letter-spacing: 3.2px;
@@ -144,12 +144,12 @@
       content: "";
       flex: 1;
       height: 1px;
-      background: rgba(255, 255, 255, .24);
+      background: rgba(16, 35, 62, .24);
     }
 
   </style>
 </head>
-<body style="background-color: #10233E;">
+<body style="background-color: #F6F7F8;">
   <div id="startup-splash" aria-hidden="true">
     <div class="startup-splash__content">
       <div class="startup-splash__logo">
@@ -178,32 +178,29 @@
     (() => {
       const splash = document.getElementById('startup-splash');
       const images = Array.from(splash.querySelectorAll('img'));
-      const decodeImage = (image) => {
+      const revealImage = (image) => {
         const decode = () => typeof image.decode === 'function'
           ? image.decode().catch(() => {})
           : Promise.resolve();
-        if (image.complete) return decode();
-        return new Promise((resolve) => {
-          image.addEventListener('load', () => decode().then(resolve), {
-            once: true,
-          });
-          image.addEventListener('error', resolve, { once: true });
+        const show = () => decode().then(() => {
+          if (splash.isConnected && image.naturalWidth > 0) {
+            image.classList.add('startup-splash__image-ready');
+          }
         });
+        if (image.complete) return show();
+        image.addEventListener('load', show, { once: true });
       };
 
-      Promise.all(images.map(decodeImage)).then(() => {
-        requestAnimationFrame(() => {
-          if (!splash.isConnected) return;
-          document.documentElement.classList.add(
-            'mobsante-splash-composed',
-          );
-          performance.mark('mobsante-native-splash-composed');
-          performance.measure(
-            'mobsante-native-splash-composition',
-            'mobsante-launch-shell-visible',
-            'mobsante-native-splash-composed',
-          );
-        });
+      images.forEach(revealImage);
+      requestAnimationFrame(() => {
+        if (!splash.isConnected) return;
+        document.documentElement.classList.add('mobsante-splash-composed');
+        performance.mark('mobsante-native-splash-composed');
+        performance.measure(
+          'mobsante-native-splash-composition',
+          'mobsante-launch-shell-visible',
+          'mobsante-native-splash-composed',
+        );
       });
     })();
   </script>
@@ -215,6 +212,6 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="flutter_bootstrap.js" defer></script>
 </body>
 </html>

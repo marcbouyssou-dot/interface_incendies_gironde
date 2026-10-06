@@ -15,6 +15,7 @@ import 'repositories/organization_repository_scope.dart';
 import 'repositories/repository_scope.dart';
 import 'repositories/responsible_access_administration_repository_scope.dart';
 import 'repositories/platform_runtime.dart';
+import 'repositories/recipe_admin_runtime.dart';
 import 'screens/app_shell.dart';
 import 'services/professional_verification_service.dart';
 import 'services/organization_context_controller.dart';
@@ -81,6 +82,9 @@ class FireCoordinationApp extends StatelessWidget {
                     .responsibleAccessAdministrationRepository,
                 child: CrossRolePerspectiveScope(
                   child: RolePreviewScope(
+                    administratorAvailable:
+                        showRecipeSwitcher &&
+                        resolvedPlatformRuntime is RecipeAdminRuntime,
                     child: MaterialApp(
                       title: AppIdentity.productName,
                       debugShowCheckedModeBanner: false,

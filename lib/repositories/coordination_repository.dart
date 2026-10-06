@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import '../models/need.dart';
+import '../models/mission_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
 import '../models/volunteer_profile.dart';
@@ -94,6 +97,11 @@ abstract interface class CoordinationRepository
   });
 
   Future<String> createMission(MissionDraft draft);
+
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  );
 
   Future<void> updateMission(String missionId, MissionDraft draft);
 
@@ -291,7 +299,9 @@ class MissionDraft {
     int requiredPodiatrists = 0,
     Map<String, int>? requiredByProfession,
     this.priority = NeedPriority.standard,
-    required this.equipment,
+    required List<String> equipment,
+    Map<String, List<String>>? equipmentByProfession,
+    String? idempotencyKey,
     required this.details,
   }) : professionQuotas = requiredByProfession == null
            ? ProfessionQuotas.fromLegacyMkPp(
@@ -303,14 +313,27 @@ class MissionDraft {
            : ProfessionQuotas.fromMaps(
                requiredByProfession: requiredByProfession,
                registeredByProfession: const {},
-             );
+             ),
+       idempotencyKey = idempotencyKey ?? newMissionIdempotencyKey() {
+    this.equipmentByProfession = equipmentByProfession == null
+        ? null
+        : MissionEquipment.normalize(
+            equipmentByProfession,
+            professionQuotas.requiredByProfession,
+          );
+    this.equipment = this.equipmentByProfession == null
+        ? List.unmodifiable(equipment)
+        : MissionEquipment.globalLabels(this.equipmentByProfession!);
+  }
 
   final ResponsePlace location;
   final DateTime startAt;
   final DateTime endAt;
   final ProfessionQuotas professionQuotas;
   final NeedPriority priority;
-  final List<String> equipment;
+  late final List<String> equipment;
+  late final Map<String, List<String>>? equipmentByProfession;
+  final String idempotencyKey;
   final String details;
 
   Map<String, int> get requiredByProfession =>
@@ -319,6 +342,14 @@ class MissionDraft {
       professionQuotas.quotaFor('physiotherapist').required;
   int get requiredPodiatrists =>
       professionQuotas.quotaFor('podiatrist').required;
+}
+
+String newMissionIdempotencyKey() {
+  final random = Random.secure();
+  return List<int>.generate(
+    16,
+    (_) => random.nextInt(256),
+  ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }
 
 class MissionSchedule {

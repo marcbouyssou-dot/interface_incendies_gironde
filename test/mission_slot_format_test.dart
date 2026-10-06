@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/profession_quotas.dart';
-import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/firestore_mission_mapper.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/screens/engagement_confirmation_screen.dart';
@@ -12,24 +11,29 @@ import 'package:interface_incendies_gironde/theme/app_theme.dart';
 import 'package:interface_incendies_gironde/utils/french_date_time.dart';
 import 'package:interface_incendies_gironde/widgets/responsible_mission_card.dart';
 
-CoordinationNeed _need(DateTime start, DateTime end) => CoordinationNeed(
-  id: 'slot-mission',
-  place: 'Centre fictif de Langon',
-  group: TerritorialGroup.medoc,
-  date: FrenchDateTime.date(start),
-  time: FrenchDateTime.timeRange(start, end),
-  startAt: start,
-  endAt: end,
-  requiredPhysiotherapists: 0,
-  registeredPhysiotherapists: 0,
-  requiredPodiatrists: 0,
-  registeredPodiatrists: 0,
-  professionQuotas: ProfessionQuotas.fromMaps(
-    requiredByProfession: const {'other_health_professional': 1},
-    registeredByProfession: const {},
-  ),
-  equipment: const [],
-);
+import 'support/verified_professional_profile.dart';
+
+CoordinationNeed _need(DateTime start, DateTime end, {bool mk = false}) =>
+    CoordinationNeed(
+      id: 'slot-mission',
+      place: 'Centre fictif de Langon',
+      group: TerritorialGroup.medoc,
+      date: FrenchDateTime.date(start),
+      time: FrenchDateTime.timeRange(start, end),
+      startAt: start,
+      endAt: end,
+      requiredPhysiotherapists: mk ? 1 : 0,
+      registeredPhysiotherapists: 0,
+      requiredPodiatrists: 0,
+      registeredPodiatrists: 0,
+      professionQuotas: ProfessionQuotas.fromMaps(
+        requiredByProfession: mk
+            ? const {'physiotherapist': 1}
+            : const {'other_health_professional': 1},
+        registeredByProfession: const {},
+      ),
+      equipment: const [],
+    );
 
 void main() {
   group('FrenchDateTime.timeRange', () {
@@ -130,26 +134,20 @@ void main() {
         tester,
       ) async {
         await setSize(tester);
-        final need = _need(start, end);
+        final need = _need(start, end, mk: true);
         final repository = MockCoordinationRepository(
           responsibleAccess: null,
           initialMissions: [need],
           initialLocations: const [],
-          initialProfiles: const {
-            'mock-volunteer': VolunteerProfile(
-              uid: 'mock-volunteer',
-              firstName: 'Test',
-              lastName: 'iPhone',
-              phone: '0600000000',
-              email: 'test.iphone@example.fr',
-              profession: VolunteerProfession.otherHealthProfessional,
-              professionalIdType: ProfessionalIdType.none,
-              professionalIdValue: '',
-            ),
-          },
+          initialProfiles: {'mock-volunteer': verifiedMkProfile()},
         );
         await tester.pumpWidget(FireCoordinationApp(repository: repository));
         await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.textContaining(need.time),
+          150,
+          scrollable: find.byType(Scrollable).first,
+        );
         expect(find.textContaining(need.time), findsWidgets);
         expect(tester.takeException(), isNull);
 

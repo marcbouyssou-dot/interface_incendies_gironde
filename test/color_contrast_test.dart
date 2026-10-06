@@ -106,7 +106,10 @@ void main() {
     );
     await tester.pumpWidget(FireCoordinationApp(repository: repository));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('responsible-create-need')));
+    final createNeed = find.byKey(const Key('responsible-create-need'));
+    await tester.ensureVisible(createNeed);
+    await tester.pumpAndSettle();
+    await tester.tap(createNeed);
     await tester.pumpAndSettle();
 
     await _chooseDate(tester);
@@ -125,6 +128,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final publishButton = find.byKey(const Key('publish-mission'));
+    await tester.scrollUntilVisible(
+      publishButton,
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     final publishContainer = tester.widget<AnimatedContainer>(
       find.descendant(
         of: publishButton,

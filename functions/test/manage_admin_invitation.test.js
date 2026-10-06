@@ -76,6 +76,28 @@ test('refuses malformed updates and non-future reactivation dates', () => {
   }, {now}), 'failed-precondition');
 });
 
+test('reactivation accepts 14/30/60/90 days and rejects excess or invalid dates', () => {
+  for (const days of [14, 30, 60, 90]) {
+    assert.equal(validateManagementRequest({
+      invitationId: 'invitation', action: 'reactivate',
+      expiresAtMillis: now.getTime() + days * 86_400_000,
+    }, {now}).expiresAt.getTime(), now.getTime() + days * 86_400_000);
+  }
+  for (const days of [-1, 0, 91]) {
+    assertCode(() => validateManagementRequest({
+      invitationId: 'invitation', action: 'reactivate',
+      expiresAtMillis: now.getTime() + days * 86_400_000,
+    }, {now}), days === 91 ? 'invalid-argument' : 'failed-precondition');
+  }
+  assertCode(() => validateManagementRequest({
+    invitationId: 'invitation', action: 'reactivate', expiresAtMillis: NaN,
+  }, {now}), 'invalid-argument');
+  assertCode(() => invitationManagementMutation({
+    invitation: invitation({status: 'cancelled'}), action: 'reactivate',
+    expiresAt: new Date(now.getTime() + 91 * 86_400_000), now,
+  }), 'invalid-argument');
+});
+
 test('cancel only updates an active pending invitation', () => {
   assert.deepEqual(invitationManagementMutation({
     invitation: invitation(), action: 'cancel', now,

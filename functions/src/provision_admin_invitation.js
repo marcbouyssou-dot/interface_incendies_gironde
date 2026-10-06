@@ -43,7 +43,9 @@ export async function provisionAdminInvitation({
   const activationUrl = buildActivationUrl(appUrl);
 
   const callerRole = await services.getRole(callerUid);
-  if (!hasActiveCoordinatorRole(callerRole)) {
+  const callerIsAdministrator =
+    (await services.isPlatformAdministrator?.(callerUid)) === true;
+  if (!hasActiveCoordinatorRole(callerRole) && !callerIsAdministrator) {
     throw new ProvisioningError(
       'permission-denied',
       'Accès coordinateur actif requis.',
@@ -59,6 +61,10 @@ export async function provisionAdminInvitation({
     invitation = validateProvisionableAdminInvitation(rawInvitation, {now});
   } catch (error) {
     throw normalizedInvitationValidationError(error);
+  }
+  if (invitation.role === 'coordinator' && !callerIsAdministrator) {
+    throw new ProvisioningError(
+      'permission-denied', 'Accès Administrateur MobSanté requis.');
   }
   let alreadyProvisioned = invitation.status === 'accepted'
     && typeof invitation.acceptedUid === 'string';

@@ -75,13 +75,15 @@ abstract final class ProfessionalProfileValidation {
     return null;
   }
 
-  /// Single definition of "this profile can attempt an engagement".
+  /// Field readiness for the engagement form.
   ///
   /// It is a superset of what `createEngagement()` and the Firestore rules
   /// refuse (valid email, complete identifier, CPTS length, equipment
   /// details), plus the identity fields every profile form already requires
   /// (first name, last name, phone). An empty result therefore guarantees the
-  /// engagement is not refused for a missing profile field.
+  /// engagement is not refused for a missing profile field. Verified identity
+  /// is a separate prerequisite checked by [VolunteerProfile.hasVerifiedProfessionalIdentity]
+  /// and by Firestore rules.
   static List<EngagementProfileGap> engagementGaps({
     required String? firstName,
     required String? lastName,

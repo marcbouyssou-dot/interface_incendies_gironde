@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'dev/role_preview.dart';
 import 'firebase_bootstrap.dart';
 import 'firebase_startup_gate.dart';
 import 'repositories/mock_coordination_repository.dart';
+import 'repositories/recipe_admin_runtime.dart';
 import 'screens/admin_account_activation_screen.dart';
 
 bool isAdminActivationPath(Uri uri) =>
@@ -33,7 +35,12 @@ class MobSanteEntry extends StatelessWidget {
                 initialNotificationId: uri.queryParameters['notification'],
               )
             : FireCoordinationApp(
-                repository: MockCoordinationRepository.instance,
+                repository: recipeModeEnabled
+                    ? RecipeAdminCoordinationRepository.instance
+                    : MockCoordinationRepository.instance,
+                platformRuntime: recipeModeEnabled
+                    ? RecipeAdminRuntime.instance
+                    : null,
                 initialNotificationId: uri.queryParameters['notification'],
               ));
   }

@@ -148,6 +148,11 @@ class _TerritoryContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const MobSanteJourneyHeader(
+                        journey: MobSanteJourney.coordinator,
+                        showSubtitle: false,
+                      ),
+                      const SizedBox(height: V5Spacing.lg),
                       const MobSantePageHeader(title: 'Territoire'),
                       const SizedBox(height: V5Spacing.lg),
                       Text(

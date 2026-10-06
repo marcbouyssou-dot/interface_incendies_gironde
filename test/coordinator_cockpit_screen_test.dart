@@ -83,9 +83,22 @@ void main() {
 
     await tester.pumpWidget(const FireCoordinationApp());
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('cockpit-map-location-bordeauxMetropole-mérignac')),
+    final merignac = places.firstWhere((place) => place.name == 'Mérignac');
+    final missionCenter = find.byKey(
+      Key('cockpit-map-location-${merignac.id}'),
     );
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const Key('cockpit-operational-map'))),
+      alignment: 0.5,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+    );
+    await Scrollable.ensureVisible(
+      tester.element(missionCenter),
+      alignment: 0.5,
+      alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(missionCenter);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('cockpit-map-selection-card')), findsOneWidget);
@@ -576,6 +589,10 @@ void main() {
       await tester.pumpWidget(const FireCoordinationApp());
       await tester.pumpAndSettle();
 
+      await _scrollCockpitUntil(
+        tester,
+        find.bySemanticsLabel(RegExp(r'Situation critique.*Gironde')),
+      );
       expect(
         find.bySemanticsLabel(RegExp(r'Situation critique.*Gironde')),
         findsOneWidget,

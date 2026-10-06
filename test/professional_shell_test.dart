@@ -19,6 +19,8 @@ import 'package:interface_incendies_gironde/widgets/coordinator_bottom_navigatio
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 
+import 'support/verified_professional_profile.dart';
+
 void main() {
   Future<void> selectPreview(WidgetTester tester, String label) async {
     await tester.tap(find.byKey(const Key('role-preview-selector')));
@@ -38,7 +40,10 @@ void main() {
   ) async {
     await tester.pumpWidget(
       FireCoordinationApp(
-        repository: MockCoordinationRepository(responsibleAccess: null),
+        repository: MockCoordinationRepository(
+          responsibleAccess: null,
+          initialProfiles: {'mock-volunteer': verifiedMkProfile()},
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -46,7 +51,7 @@ void main() {
     expect(find.byType(ProfessionalShell), findsOneWidget);
     expect(find.byType(V5BottomNavigation), findsOneWidget);
     expect(find.text('MobSanté'), findsOneWidget);
-    expect(find.text('Professionnel'), findsOneWidget);
+    expect(find.text('Professionnel de santé'), findsOneWidget);
     expect(
       find.text('Trouvez rapidement où vous pouvez être utile.'),
       findsOneWidget,
@@ -211,58 +216,61 @@ void main() {
       find.text('Votre profil professionnel sera bientôt disponible ici.'),
       findsNothing,
     );
-    await tester.drag(
-      find.byKey(const PageStorageKey('professional-profile')),
-      const Offset(0, -900),
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('open-responsible-access')),
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('open-responsible-access')), findsOneWidget);
   });
 
-  testWidgets('professional engagement card uses the shared V5Card/V5StatusPill', (
-    tester,
-  ) async {
-    const engagement = EngagementInfo(
-      missionId: 'engagement-card-mission',
-      volunteerId: 'mock-volunteer',
-      profession: VolunteerProfession.mk,
-      status: EngagementStatus.confirmed,
-    );
-    final repository = MockCoordinationRepository(
-      initialMissions: const [
-        CoordinationNeed(
-          id: 'engagement-card-mission',
-          locationId: 'site-a',
-          place: 'Site A',
-          group: TerritorialGroup.medoc,
-          date: 'Aujourd’hui',
-          time: '08:00 — 12:00',
-          requiredPhysiotherapists: 1,
-          registeredPhysiotherapists: 0,
-          requiredPodiatrists: 0,
-          registeredPodiatrists: 0,
-          equipment: [],
-          createdBy: 'mock-coordinator',
-        ),
-      ],
-      initialLocations: const [],
-      responsibleAccess: null,
-    );
-    repository.engagements['engagement-card-mission'] = engagement;
+  testWidgets(
+    'professional engagement card uses the shared V5Card/V5StatusPill',
+    (tester) async {
+      const engagement = EngagementInfo(
+        missionId: 'engagement-card-mission',
+        volunteerId: 'mock-volunteer',
+        profession: VolunteerProfession.mk,
+        status: EngagementStatus.confirmed,
+      );
+      final repository = MockCoordinationRepository(
+        initialMissions: const [
+          CoordinationNeed(
+            id: 'engagement-card-mission',
+            locationId: 'site-a',
+            place: 'Site A',
+            group: TerritorialGroup.medoc,
+            date: 'Aujourd’hui',
+            time: '08:00 — 12:00',
+            requiredPhysiotherapists: 1,
+            registeredPhysiotherapists: 0,
+            requiredPodiatrists: 0,
+            registeredPodiatrists: 0,
+            equipment: [],
+            createdBy: 'mock-coordinator',
+          ),
+        ],
+        initialLocations: const [],
+        responsibleAccess: null,
+        initialProfiles: {'mock-volunteer': verifiedMkProfile()},
+      );
+      repository.engagements['engagement-card-mission'] = engagement;
 
-    await tester.pumpWidget(FireCoordinationApp(repository: repository));
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Engagements'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Engagements'));
+      await tester.pumpAndSettle();
 
-    expect(find.byType(V5Card), findsOneWidget);
-    final pill = tester.widget<V5StatusPill>(find.byType(V5StatusPill));
-    expect(pill.tone, V5StatusTone.success);
-    expect(pill.label, EngagementStatus.confirmed.label);
-    expect(find.text(EngagementStatus.confirmed.label), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.byType(V5Card), findsOneWidget);
+      final pill = tester.widget<V5StatusPill>(find.byType(V5StatusPill));
+      expect(pill.tone, V5StatusTone.success);
+      expect(pill.label, EngagementStatus.confirmed.label);
+      expect(find.text(EngagementStatus.confirmed.label), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('professional mission empty state repeats its active period', (
     tester,
@@ -272,6 +280,7 @@ void main() {
         repository: MockCoordinationRepository(
           initialMissions: const [],
           responsibleAccess: null,
+          initialProfiles: {'mock-volunteer': verifiedMkProfile()},
         ),
       ),
     );
@@ -336,7 +345,7 @@ void main() {
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.byType(ResponsibleShell), findsOneWidget);
     expect(find.byType(ResponsibleHomeScreen), findsOneWidget);
-    expect(find.text('Responsable'), findsOneWidget);
+    expect(find.text('Responsable de site'), findsOneWidget);
     expect(
       find.text('Organisez la couverture de votre établissement.'),
       findsOneWidget,
@@ -498,7 +507,7 @@ void main() {
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
-    expect(find.text('Mérignac'), findsOneWidget);
+    expect(find.text('Mérignac'), findsWidgets);
     expect(find.text('Perspective'), findsNothing);
     expect(find.text('Centre géré'), findsOneWidget);
     expect(find.text('Identité'), findsNothing);
@@ -846,15 +855,15 @@ void main() {
 
     expect(find.text('Mode Développement'), findsOneWidget);
     expect(find.text('Automatique'), findsOneWidget);
-    await selectPreview(tester, 'Professionnel');
+    await selectPreview(tester, 'Professionnel de santé');
     await closeSettings(tester);
     expect(find.byType(ProfessionalShell), findsOneWidget);
     expect(
-      find.text('1 mission urgente nécessite votre attention.'),
+      find.byKey(const Key('professional-verification-cta')),
       findsOneWidget,
     );
     expect(find.byKey(const Key('mission-coverage-overview')), findsNothing);
-    expect(find.text('Voir les détails'), findsWidgets);
+    expect(find.text('Voir les détails'), findsNothing);
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();
@@ -870,7 +879,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('open-development-settings')));
     await tester.pumpAndSettle();
-    await selectPreview(tester, 'Responsable');
+    await selectPreview(tester, 'Responsable de site');
     await closeSettings(tester);
 
     expect(find.byType(ProfessionalShell), findsNothing);
@@ -898,14 +907,15 @@ void main() {
     final developmentSettings = find.byKey(
       const Key('responsible-development-settings'),
     );
-    await tester.drag(
-      find.byKey(const PageStorageKey('responsible-profile')),
-      const Offset(0, -360),
+    await tester.scrollUntilVisible(
+      developmentSettings,
+      350,
+      scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
     await tester.tap(developmentSettings);
     await tester.pumpAndSettle();
-    await selectPreview(tester, 'Coordinateur');
+    await selectPreview(tester, "Coordinateur d'action");
     await closeSettings(tester);
 
     expect(find.byType(CoordinatorShell), findsOneWidget);

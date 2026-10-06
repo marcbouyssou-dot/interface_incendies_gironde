@@ -10,6 +10,7 @@ import '../models/app_notification.dart';
 import '../models/mobilization_context.dart';
 import '../models/mobilization.dart';
 import '../models/need.dart';
+import '../models/site_equipment.dart';
 import '../models/platform_administrator_access.dart';
 import '../models/professional_equipment.dart';
 import '../models/professional_profile_validation.dart';
@@ -1316,35 +1317,60 @@ class FirestoreCoordinationRepository
         'Votre compte n’est pas autorisé à publier pour ce lieu.',
       );
     }
-    final reference = _responsibleFirestore.collection('missions').doc();
-    debugPrint('Publication Firestore mission : début');
-    debugPrint('Identifiant mission généré : ${reference.id}');
     try {
-      await reference.set(
-        FirestoreMissionMapper.toFirestore(
-          id: reference.id,
-          mobilizationId: mobilizationId,
-          draft: draft,
-          serverTimestamp: FieldValue.serverTimestamp(),
-          createdBy: user.uid,
-        ),
-      );
-      debugPrint('Publication Firestore mission réussie : ${reference.id}');
-      return reference.id;
-    } on FirebaseException catch (error, stackTrace) {
-      if (error.code == 'permission-denied') {
-        debugPrint(
-          'Publication Firestore refusée (permission-denied). '
-          'Vérifier les règles de la collection missions.',
-        );
+      final response = await _responsibleFunctions
+          .httpsCallable('createMission')
+          .call<Map<dynamic, dynamic>>(
+            FirestoreMissionMapper.toCreateCallableData(
+              mobilizationId: mobilizationId,
+              draft: draft,
+            ),
+          )
+          .timeout(const Duration(seconds: 15));
+      final id = response.data['missionId'];
+      if (id is! String || id.isEmpty) {
+        throw const FormatException('Réponse de publication invalide.');
       }
-      debugPrint('Erreur Firestore createMission : $error');
+      return id;
+    } on FirebaseFunctionsException catch (error, stackTrace) {
+      debugPrint('Échec createMission (${error.code})');
       debugPrintStack(stackTrace: stackTrace);
+      throw RepositoryException(_missionCreateMessage(error.code));
+    } on RepositoryException {
       rethrow;
     } catch (error, stackTrace) {
       debugPrint('Erreur createMission : $error');
       debugPrintStack(stackTrace: stackTrace);
-      rethrow;
+      throw const RepositoryException(
+        'La mission n’a pas pu être publiée. Réessayez.',
+      );
+    }
+  }
+
+  @override
+  Future<void> updateSiteEquipment(
+    String locationId,
+    List<String> equipmentIds,
+  ) async {
+    final user = _responsibleAuth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw const RepositoryException('Session responsable requise.');
+    }
+    final normalized = SiteEquipment.normalize(equipmentIds);
+    try {
+      await _responsibleFunctions
+          .httpsCallable('updateSiteEquipment')
+          .call<Object?>({
+            'locationId': locationId,
+            'availableEquipment': normalized,
+          })
+          .timeout(const Duration(seconds: 15));
+    } on FirebaseFunctionsException catch (error) {
+      throw RepositoryException(_siteEquipmentMessage(error.code));
+    } catch (_) {
+      throw const RepositoryException(
+        'Le matériel du site n’a pas pu être enregistré.',
+      );
     }
   }
 
@@ -1471,6 +1497,16 @@ class FirestoreCoordinationRepository
             final existingProfile = existingVolunteerData == null
                 ? null
                 : _profileFromFirestore(uid, existingVolunteerData);
+            if (existingProfile?.hasVerifiedProfessionalIdentity != true) {
+              throw const RepositoryException(
+                'Vérifiez votre identité professionnelle avant de participer.',
+              );
+            }
+            if (existingProfile!.profession != profession) {
+              throw const RepositoryException(
+                'La profession de la mission doit correspondre à votre profil vérifié.',
+              );
+            }
             final data = snapshot.data()!;
             final mobilizationId = requireMatchingMobilizationId(
               mission: data,
@@ -2220,6 +2256,27 @@ class FirestoreCoordinationRepository
           'updatedAt': FieldValue.serverTimestamp(),
         });
   }
+
+  static String _siteEquipmentMessage(String code) => switch (code) {
+    'permission-denied' => 'Accès au lieu refusé.',
+    'not-found' => 'Lieu introuvable.',
+    'failed-precondition' => 'Lieu inactif.',
+    'invalid-argument' => 'Matériel du site invalide.',
+    'unauthenticated' => 'Session responsable requise.',
+    _ => 'Le matériel du site n’a pas pu être enregistré.',
+  };
+
+  static String _missionCreateMessage(String code) => switch (code) {
+    'permission-denied' =>
+      'Votre compte n’est pas autorisé à publier pour ce lieu.',
+    'failed-precondition' =>
+      'La mission ne peut pas être publiée avec ces informations.',
+    'invalid-argument' => 'Les informations de la mission sont invalides.',
+    'unauthenticated' => 'Vous devez vous connecter pour déclarer un besoin.',
+    'already-exists' =>
+      'Cette demande a déjà été utilisée. Vérifiez les missions publiées.',
+    _ => 'La mission n’a pas pu être publiée. Réessayez.',
+  };
 
   static String _missionUpdateMessage(String code) => switch (code) {
     'permission-denied' =>

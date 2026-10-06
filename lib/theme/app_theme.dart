@@ -51,11 +51,11 @@ abstract final class AppTheme {
 
   static const splashSystemUiOverlayStyle = SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    statusBarBrightness: Brightness.dark,
-    systemNavigationBarColor: AppColors.navy,
-    systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarDividerColor: AppColors.navy,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: Color(0xFFF6F7F8),
+    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarDividerColor: Color(0xFFF6F7F8),
     systemStatusBarContrastEnforced: false,
     systemNavigationBarContrastEnforced: false,
   );
@@ -69,7 +69,7 @@ abstract final class AppTheme {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: splashSystemUiOverlayStyle,
       child: ColoredBox(
-        color: AppColors.navy,
+        color: V5Colors.light.canvas,
         child: child ?? const SizedBox.shrink(),
       ),
     );

@@ -138,8 +138,8 @@ test('update, cancel and reactivate preserve identity and the document', async (
     invitationId: id,
     action: 'update',
     displayName: 'Nouveau responsable',
-    role: 'coordinator',
-    locationIds: [],
+    role: 'site_manager',
+    locationIds: ['merignac'],
   });
   await manage({invitationId: id, action: 'cancel'});
   const expiresAtMillis = Date.now() + 14 * 86_400_000;
@@ -150,8 +150,8 @@ test('update, cancel and reactivate preserve identity and the document', async (
   assert.equal(after.createdBy, before.createdBy);
   assert.equal(after.createdAt.toMillis(), before.createdAt.toMillis());
   assert.equal(after.displayName, 'Nouveau responsable');
-  assert.equal(after.role, 'coordinator');
-  assert.deepEqual(after.locationIds, []);
+  assert.equal(after.role, 'site_manager');
+  assert.deepEqual(after.locationIds, ['merignac']);
   assert.equal(after.status, 'pending');
   assert.equal(after.acceptedAt, null);
   assert.equal(after.expiresAt.toMillis(), expiresAtMillis);
@@ -197,8 +197,8 @@ test('accepted invitations refuse update, cancellation, reactivation and delete'
       invitationId: id,
       action: 'update',
       displayName: 'Autre nom',
-      role: 'coordinator',
-      locationIds: [],
+      role: 'site_manager',
+      locationIds: ['merignac'],
     },
     {invitationId: id, action: 'delete'},
   ];

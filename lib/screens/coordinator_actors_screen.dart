@@ -157,6 +157,11 @@ class _CoordinatorActorsContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const MobSanteJourneyHeader(
+                    journey: MobSanteJourney.coordinator,
+                    showSubtitle: false,
+                  ),
+                  const SizedBox(height: V5Spacing.lg),
                   const MobSantePageHeader(title: 'Acteurs'),
                   const SizedBox(height: V5Spacing.xxl),
                   _ActorSectionHeader(

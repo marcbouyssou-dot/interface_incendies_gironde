@@ -1647,6 +1647,9 @@ service cloud.firestore {
           == request.auth.uid
         && getAfter(volunteerPath(request.auth.uid)).data.profession
           == profession
+        && isCompleteVerifiedProfile(
+          getAfter(volunteerPath(request.auth.uid)).data
+        )
         && hasParticipationProfessionalIdentifier(
           getAfter(volunteerPath(request.auth.uid)).data
         )
@@ -1764,6 +1767,9 @@ service cloud.firestore {
           == request.auth.uid
         && getAfter(volunteerPath(request.auth.uid)).data.profession
           == request.resource.data.profession
+        && isCompleteVerifiedProfile(
+          getAfter(volunteerPath(request.auth.uid)).data
+        )
         && mission.isActive == true
         && mission.status != 'cancelled'
         && request.time < mission.endAt
@@ -1967,23 +1973,28 @@ service cloud.firestore {
     }
 
     match /adminInvitations/{invitationId} {
-      allow read: if isCoordinator();
-      allow create: if isCoordinator()
+      allow read: if isCoordinator() || isPlatformAdministrator();
+      allow create: if (isCoordinator() || isPlatformAdministrator())
         && request.resource.data.keys().hasOnly([
           'email', 'displayName', 'role', 'locationIds', 'createdBy',
           'createdAt', 'expiresAt', 'status', 'acceptedAt'
         ])
         && isValidAdminInvitationEmail(request.resource.data.email)
         && isNonBlankCanonicalText(request.resource.data.displayName)
-        && request.resource.data.role in ['site_manager', 'coordinator']
+        && (request.resource.data.role == 'site_manager'
+          || (request.resource.data.role == 'coordinator'
+            && isPlatformAdministrator()))
         && hasValidInvitationScope(request.resource.data)
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.expiresAt is timestamp
         && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt
+          <= request.time + duration.value(90, 'd')
         && request.resource.data.status == 'pending'
         && request.resource.data.acceptedAt == null;
-      allow update: if isCoordinator()
+      allow update: if (isPlatformAdministrator()
+          || (isCoordinator() && resource.data.role == 'site_manager'))
         && resource.data.status == 'pending'
         && request.resource.data.status == 'cancelled'
         && request.resource.data

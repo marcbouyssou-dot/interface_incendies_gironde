@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:interface_incendies_gironde/config/app_identity.dart';
 import 'package:interface_incendies_gironde/models/executive_dashboard_snapshot.dart';
 import 'package:interface_incendies_gironde/models/mobilization.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
@@ -658,6 +659,19 @@ void main() {
             ? ThemeMode.dark
             : ThemeMode.light,
       );
+      final context = tester.element(
+        find.byKey(const Key('executive-dashboard-golden-root')),
+      );
+      await tester.runAsync(() async {
+        await Future.wait([
+          precacheImage(const AssetImage(AppIdentity.pictogramAsset), context),
+          precacheImage(
+            const AssetImage(AppIdentity.mobilizationSymbolAsset),
+            context,
+          ),
+        ]);
+      });
+      await tester.pumpAndSettle();
       await expectLater(
         find.byKey(const Key('executive-dashboard-golden-root')),
         matchesGoldenFile('../screenshots/${entry.key}.png'),
@@ -688,7 +702,9 @@ Future<void> _selectOperationCoordinator(
 }) async {
   final action = find.byKey(const Key('manage-operation-coordinator'));
   await _scrollTo(tester, action);
-  await tester.tap(action);
+  await Scrollable.ensureVisible(tester.element(action.first), alignment: 0.35);
+  await tester.pumpAndSettle();
+  await tester.tap(action.hitTestable().first);
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('operation-coordinator-select')));
   await tester.pumpAndSettle();

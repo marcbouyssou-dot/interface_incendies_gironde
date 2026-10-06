@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/professional_equipment.dart';
 import 'package:interface_incendies_gironde/models/professional_profile_validation.dart';
 import 'package:interface_incendies_gironde/models/profession_quotas.dart';
 import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/repository_scope.dart';
+import 'package:interface_incendies_gironde/theme/app_theme.dart';
+import 'package:interface_incendies_gironde/widgets/common.dart';
 
-CoordinationNeed _mission({String id = 'readiness-mission'}) =>
+import 'support/verified_professional_profile.dart';
+
+CoordinationNeed _mission({String id = 'readiness-mission', bool mk = false}) =>
     CoordinationNeed(
       id: id,
       place: 'Centre fictif de Langon',
@@ -18,15 +23,14 @@ CoordinationNeed _mission({String id = 'readiness-mission'}) =>
       time: '16:59 — 16:59',
       startAt: DateTime.now(),
       endAt: DateTime.now().add(const Duration(hours: 48)),
-      requiredPhysiotherapists: 0,
+      requiredPhysiotherapists: mk ? 1 : 0,
       registeredPhysiotherapists: 0,
       requiredPodiatrists: 0,
       registeredPodiatrists: 0,
       professionQuotas: ProfessionQuotas.fromMaps(
-        requiredByProfession: const {
-          'physiotherapist': 1,
-          'other_health_professional': 1,
-        },
+        requiredByProfession: mk
+            ? const {'physiotherapist': 1}
+            : const {'physiotherapist': 1, 'other_health_professional': 1},
         registeredByProfession: const {},
       ),
       equipment: const [],
@@ -86,12 +90,32 @@ class _FailingRepository extends MockCoordinationRepository {
 
 Future<void> _openSheet(
   WidgetTester tester,
-  MockCoordinationRepository repository,
-) async {
+  MockCoordinationRepository repository, {
+  CoordinationNeed? mission,
+}) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(FireCoordinationApp(repository: repository));
+  await tester.pumpWidget(
+    RepositoryScope(
+      repository: repository,
+      child: LiveCoordinationDataScope(
+        data: LiveCoordinationData(repository),
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: NeedCard(
+                need: mission ?? _mission(),
+                professionalHome: true,
+                professionalJourney: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
   await tester.pumpAndSettle();
   final action = find.text('Je me mobilise').first;
   await tester.ensureVisible(action);
@@ -211,8 +235,8 @@ void main() {
       expect(ProfessionalProfileValidation.isComplete(null), isFalse);
     });
 
-    test('no gap guarantees createEngagement is not refused for the profile '
-        '(readiness is a superset of the repository validation)', () async {
+    test('field readiness covers form validation in the mock repository '
+        '(verified identity is enforced separately)', () async {
       final professions = VolunteerProfession.values;
       final identifiers = <(ProfessionalIdType, String)>[
         (ProfessionalIdType.none, ''),
@@ -389,13 +413,16 @@ void main() {
     testWidgets('typing the missing email turns the banner green live', (
       tester,
     ) async {
+      final mission = _mission(mk: true);
       final repository = MockCoordinationRepository(
         responsibleAccess: null,
-        initialMissions: [_mission()],
+        initialMissions: [mission],
         initialLocations: const [],
-        initialProfiles: const {'mock-volunteer': _noEmailProfile},
+        initialProfiles: {
+          'mock-volunteer': verifiedMkProfile().copyWith(email: ''),
+        },
       );
-      await _openSheet(tester, repository);
+      await _openSheet(tester, repository, mission: mission);
 
       await tester.tap(find.text('Compléter mon profil'));
       await tester.pumpAndSettle();
@@ -483,13 +510,16 @@ void main() {
     Future<MockCoordinationRepository> openWithoutEmail(
       WidgetTester tester,
     ) async {
+      final mission = _mission(mk: true);
       final repository = MockCoordinationRepository(
         responsibleAccess: null,
-        initialMissions: [_mission()],
+        initialMissions: [mission],
         initialLocations: const [],
-        initialProfiles: const {'mock-volunteer': _noEmailProfile},
+        initialProfiles: {
+          'mock-volunteer': verifiedMkProfile().copyWith(email: ''),
+        },
       );
-      await _openSheet(tester, repository);
+      await _openSheet(tester, repository, mission: mission);
       await _tapConfirm(tester);
       await tester.ensureVisible(field('Email'));
       await tester.pumpAndSettle();

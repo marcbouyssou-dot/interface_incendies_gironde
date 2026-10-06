@@ -129,6 +129,54 @@ test('strict request validation accepts the six canonical quotas', () => {
   assert.ok(Object.isFrozen(value));
 });
 
+test('equipment by profession updates with its global projection', () => {
+  const selected = {
+    physiotherapist: ['massage_table', 'massage_cream_oil'],
+    physician: ['blood_pressure_monitor'],
+    nurse: ['blood_pressure_monitor', 'dressing_equipment'],
+  };
+  const payload = request({
+    requiredByProfession: quotas({physiotherapist: 3, physician: 1, nurse: 2}),
+    equipment: ['Table de massage', 'Crèmes / huiles de massage',
+      'Tensiomètre', 'Matériel de pansement'],
+    requestedEquipmentByProfession: selected,
+  });
+  const result = mutation({
+    request: payload,
+    mission: mission({requestedEquipmentByProfession: {
+      physiotherapist: ['massage_table'],
+    }}),
+  });
+  assert.deepEqual(result.fields.requestedEquipmentByProfession, selected);
+  assert.deepEqual(result.fields.requestedEquipment, payload.equipment);
+});
+
+test('equipment map rejects incompatible IDs, zero quotas, and stale projections', () => {
+  for (const selection of [
+    {physiotherapist: ['stethoscope']},
+    {podiatrist: ['adapted_seat']},
+    {doctor: ['stethoscope']},
+    {physiotherapist: []},
+  ]) {
+    assertCode(() => validateMissionUpdateRequest(request({
+      requestedEquipmentByProfession: selection,
+    })), 'invalid-argument');
+  }
+  assertCode(() => validateMissionUpdateRequest(request({
+    requestedEquipmentByProfession: {physiotherapist: ['massage_table']},
+    equipment: ['Incorrect projection'],
+  })), 'invalid-argument');
+});
+
+test('legacy and contextual missions cannot be mixed during edit', () => {
+  assertCode(() => mutation({
+    mission: mission({requestedEquipmentByProfession: {}}),
+  }), 'failed-precondition');
+  assertCode(() => mutation({
+    request: request({requestedEquipmentByProfession: {}, equipment: []}),
+  }), 'failed-precondition');
+});
+
 test('strict request validation refuses malformed schedules and payloads', () => {
   for (const value of [
     {...request(), unknown: true},

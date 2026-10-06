@@ -17,6 +17,8 @@ import 'package:interface_incendies_gironde/widgets/v5_controls.dart';
 import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 
+import 'support/verified_professional_profile.dart';
+
 void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized()
@@ -185,7 +187,10 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       FireCoordinationApp(
-        repository: MockCoordinationRepository(responsibleAccess: null),
+        repository: MockCoordinationRepository(
+          responsibleAccess: null,
+          initialProfiles: {'mock-volunteer': verifiedMkProfile()},
+        ),
       ),
     );
     await tester.pumpAndSettle();

@@ -24,6 +24,34 @@ void main() {
     expect(repository.loadCount, 1);
   });
 
+  testWidgets('présente les rôles dans la hiérarchie MobSanté', (tester) async {
+    await tester.pumpWidget(_app(_FakeActorRepository(_directory())));
+    await tester.pumpAndSettle();
+    final labels = tester
+        .widgetList<ChoiceChip>(find.byType(ChoiceChip))
+        .map((chip) => (chip.label as Text).data)
+        .toList();
+    expect(labels, [
+      'Professionnels de santé',
+      'Responsables de site',
+      "Coordinateurs d'action",
+      'Administrateurs MobSanté',
+    ]);
+    expect(PlatformActorKind.values, [
+      PlatformActorKind.professional,
+      PlatformActorKind.coordinator,
+      PlatformActorKind.manager,
+    ]);
+    await tester.tap(
+      find.byKey(const Key('platform-actor-kind-administrator')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('platform-admin-actors-admin-unavailable')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('recherche rapidement sans nouvelle lecture', (tester) async {
     final repository = _FakeActorRepository(_directory());
     await tester.pumpWidget(_app(repository));
@@ -47,7 +75,15 @@ void main() {
     await tester.pumpWidget(_app(_FakeActorRepository(_directory())));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('professional-professional-a')));
+    final actor = find.byKey(const Key('professional-professional-a'));
+    await tester.scrollUntilVisible(
+      actor,
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await Scrollable.ensureVisible(tester.element(actor), alignment: 0.5);
+    await tester.pumpAndSettle();
+    await tester.tap(actor);
     await tester.pumpAndSettle();
     expect(find.text('Historique des participations'), findsOneWidget);
     expect(find.text('Mission A'), findsOneWidget);
@@ -119,7 +155,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(PlatformAdminActorsScreen), findsOneWidget);
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -280));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('platform-actor-export')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(
       tester.getSize(find.byKey(const Key('platform-actor-export'))).height,

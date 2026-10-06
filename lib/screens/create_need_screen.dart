@@ -3,6 +3,7 @@ import 'package:flutter/semantics.dart';
 
 import '../models/health_profession.dart';
 import '../models/need.dart';
+import '../models/mission_equipment.dart';
 import '../models/professional_equipment.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/diffusion_read_repository.dart';
@@ -17,6 +18,7 @@ import '../utils/french_date_time.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
 import '../widgets/responsible_diffusion_summary.dart';
+import '../widgets/site_equipment_items.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
 
@@ -101,8 +103,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
   NeedPriority _priority = NeedPriority.standard;
-  final Set<String> _equipment = {};
-  final List<String> _equipmentProfessionHistory = [];
+  final Map<String, Set<String>> _equipmentByProfession = {};
+  final List<String> _legacyEquipment = [];
+  String? _selectedEquipmentProfessionId;
+  String _creationRequestKey = newMissionIdempotencyKey();
   final _detailsController = TextEditingController();
   bool _publishing = false;
   String? _errorMessage;
@@ -133,15 +137,13 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     for (final quota in mission.professionQuotas.values) {
       _requiredByProfession[quota.professionId] = quota.required;
     }
-    for (final profession in HealthProfessionRegistry.values) {
-      if (_requiredByProfession[profession.id]! > 0) {
-        _equipmentProfessionHistory.add(profession.id);
+    if (mission.equipmentByProfession case final selection?) {
+      for (final entry in selection.entries) {
+        _equipmentByProfession[entry.key] = entry.value.toSet();
       }
+    } else {
+      _legacyEquipment.addAll(mission.equipment);
     }
-    _equipment
-      ..clear()
-      ..addAll(mission.equipment);
-    _retainCompatibleEquipment();
     _detailsController.text = mission.details ?? '';
   }
 
@@ -285,8 +287,16 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       0,
       (total, quota) => total + quota,
     );
-    final equipmentProfession = _equipmentProfession;
-    final displayedEquipment = _displayedEquipment;
+    final activeEquipmentProfessions = HealthProfessionRegistry.values
+        .where((profession) => _requiredByProfession[profession.id]! > 0)
+        .toList(growable: false);
+    final selectedEquipmentProfession =
+        activeEquipmentProfessions
+            .where(
+              (profession) => profession.id == _selectedEquipmentProfessionId,
+            )
+            .firstOrNull ??
+        activeEquipmentProfessions.firstOrNull;
     final today = DateUtils.dateOnly(DateTime.now());
     final firstDate =
         _isEditing && _selectedDate != null && _selectedDate!.isBefore(today)
@@ -378,8 +388,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                             const SizedBox(height: V5Spacing.xs),
                           ],
                           Text(
-                            'Un besoin concerne une seule profession. Ajouter '
-                            'une autre profession remplace la sélection actuelle.',
+                            'Définissez un nombre indépendant pour chaque profession.',
                             style: TextStyle(
                               color: context.v5Colors.textSecondary,
                               fontSize: 12,
@@ -547,10 +556,30 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     const SizedBox(height: 20),
                     V5Section(
                       title: _isEditing
-                          ? 'Informations complémentaires'
-                          : '6. Informations complémentaires',
+                          ? 'Matériel à apporter'
+                          : '6. Matériel à apporter',
                       leading: const Icon(Icons.medical_services_outlined),
-                      child: equipmentProfession == null
+                      child:
+                          _isEditing &&
+                              widget.mission!.equipmentByProfession == null
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Matériel demandé (historique)',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Cette liste est globale et reste inchangée lors de cette édition.',
+                                ),
+                                if (_legacyEquipment.isNotEmpty)
+                                  Text(_legacyEquipment.join(' • ')),
+                              ],
+                            )
+                          : selectedEquipmentProfession == null
                           ? Padding(
                               key: Key('mission-equipment-empty'),
                               padding: EdgeInsets.symmetric(vertical: 2),
@@ -583,35 +612,85 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                const Text(
+                                  'Matériel attendu des professionnels, à apporter sur site.',
+                                ),
+                                const SizedBox(height: V5Spacing.sm),
+                                Wrap(
+                                  key: const Key(
+                                    'mission-equipment-profession-selector',
+                                  ),
+                                  spacing: 7,
+                                  runSpacing: 7,
+                                  children: [
+                                    for (final profession
+                                        in activeEquipmentProfessions)
+                                      V5ChoiceChip(
+                                        key: Key(
+                                          'mission-equipment-profession-${profession.id}',
+                                        ),
+                                        label: profession.missionLabel,
+                                        selected:
+                                            profession.id ==
+                                            selectedEquipmentProfession.id,
+                                        onSelected: _publishing
+                                            ? null
+                                            : (_) => setState(() {
+                                                _selectedEquipmentProfessionId =
+                                                    profession.id;
+                                              }),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: V5Spacing.sm),
                                 _EquipmentProfessionContext(
                                   professionLabel:
-                                      equipmentProfession.missionLabel,
+                                      selectedEquipmentProfession.missionLabel,
                                 ),
                                 const SizedBox(height: V5Spacing.sm),
                                 Wrap(
                                   spacing: 7,
                                   runSpacing: 7,
                                   children: [
-                                    for (final equipment in displayedEquipment)
+                                    for (final equipment
+                                        in ProfessionalEquipmentRegistry.forProfession(
+                                          selectedEquipmentProfession.id,
+                                        ))
                                       V5ChoiceChip(
                                         key: Key(
                                           'mission-equipment-${equipment.id}',
                                         ),
                                         label: equipment.label,
-                                        selected: _equipment.contains(
-                                          equipment.label,
-                                        ),
+                                        selected:
+                                            _equipmentByProfession[selectedEquipmentProfession
+                                                    .id]
+                                                ?.contains(equipment.id) ??
+                                            false,
                                         onSelected: _publishing
                                             ? null
                                             : (selected) => setState(() {
                                                 if (selected) {
-                                                  _equipment.add(
-                                                    equipment.label,
-                                                  );
+                                                  _equipmentByProfession
+                                                      .putIfAbsent(
+                                                        selectedEquipmentProfession
+                                                            .id,
+                                                        () => <String>{},
+                                                      )
+                                                      .add(equipment.id);
                                                 } else {
-                                                  _equipment.remove(
-                                                    equipment.label,
+                                                  final selectedIds =
+                                                      _equipmentByProfession[selectedEquipmentProfession
+                                                          .id];
+                                                  selectedIds?.remove(
+                                                    equipment.id,
                                                   );
+                                                  if (selectedIds?.isEmpty ??
+                                                      false) {
+                                                    _equipmentByProfession.remove(
+                                                      selectedEquipmentProfession
+                                                          .id,
+                                                    );
+                                                  }
                                                 }
                                               }),
                                       ),
@@ -619,6 +698,25 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                                 ),
                               ],
                             ),
+                    ),
+                    const SizedBox(height: 20),
+                    V5Section(
+                      title: 'Matériel disponible sur site',
+                      leading: const Icon(Icons.home_work_outlined),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Matériel déjà présent au lieu sélectionné.',
+                          ),
+                          const SizedBox(height: 8),
+                          Text(_selectedLocation?.name ?? 'Choisissez un lieu'),
+                          const SizedBox(height: 8),
+                          SiteEquipmentItems(
+                            equipment: _selectedLocation?.availableEquipment,
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 20),
                     V5TextField(
@@ -789,32 +887,47 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
               RepositoryScope.of(context).createMission(draft));
       if (!mounted) return;
       debugPrint('Publication mission confirmée : $id');
+      CoordinationNeed? savedMission;
+      try {
+        savedMission = await RepositoryScope.of(
+          context,
+        ).getMission(id).timeout(const Duration(seconds: 10));
+      } catch (_) {
+        // Publication succeeded; a failed read must not retry the write.
+      }
+      if (!mounted) return;
       widget.onMissionPublished?.call(
-        CoordinationNeed(
-          id: id,
-          mobilizationId: widget.mobilizationId,
-          locationId: draft.location.id,
-          place: draft.location.name,
-          group: draft.location.group,
-          date: FrenchDateTime.date(draft.startAt),
-          time: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
-          startAt: draft.startAt,
-          endAt: draft.endAt,
-          requiredPhysiotherapists: draft.requiredPhysiotherapists,
-          registeredPhysiotherapists: 0,
-          requiredPodiatrists: draft.requiredPodiatrists,
-          registeredPodiatrists: 0,
-          professionQuotas: draft.professionQuotas,
-          equipment: List.of(draft.equipment),
-          priority: draft.priority,
-          details: draft.details.trim(),
-          createdBy: access.uid,
-        ),
+        savedMission ??
+            CoordinationNeed(
+              id: id,
+              mobilizationId: widget.mobilizationId,
+              locationId: draft.location.id,
+              place: draft.location.name,
+              group: draft.location.group,
+              date: FrenchDateTime.date(draft.startAt),
+              time: FrenchDateTime.timeRange(draft.startAt, draft.endAt),
+              startAt: draft.startAt,
+              endAt: draft.endAt,
+              requiredPhysiotherapists: draft.requiredPhysiotherapists,
+              registeredPhysiotherapists: 0,
+              requiredPodiatrists: draft.requiredPodiatrists,
+              registeredPodiatrists: 0,
+              professionQuotas: draft.professionQuotas,
+              equipment: List.of(draft.equipment),
+              equipmentByProfession: draft.equipmentByProfession,
+              priority: draft.priority,
+              details: draft.details.trim(),
+              createdBy: access.uid,
+            ),
       );
       setState(() {
         _publishing = false;
         _reviewDraft = null;
-        _publishedMission = _PublishedMission(id: id, draft: draft);
+        _publishedMission = _PublishedMission(
+          id: id,
+          draft: draft,
+          savedMission: savedMission,
+        );
       });
     } on RepositoryException catch (error, stackTrace) {
       debugPrint('Enregistrement mission refusé : $error');
@@ -930,7 +1043,15 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       endAt: schedule.endAt,
       requiredByProfession: Map.of(_requiredByProfession),
       priority: _priority,
-      equipment: _equipment.toList(growable: false),
+      equipment: List.of(_legacyEquipment),
+      equipmentByProfession:
+          _isEditing && widget.mission!.equipmentByProfession == null
+          ? null
+          : {
+              for (final entry in _equipmentByProfession.entries)
+                entry.key: entry.value.toList(),
+            },
+      idempotencyKey: _creationRequestKey,
       details: _detailsController.text,
     );
   }
@@ -945,8 +1066,10 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
       for (final profession in _requiredByProfession.keys) {
         _requiredByProfession[profession] = 0;
       }
-      _equipmentProfessionHistory.clear();
-      _equipment.clear();
+      _selectedEquipmentProfessionId = null;
+      _equipmentByProfession.clear();
+      _legacyEquipment.clear();
+      _creationRequestKey = newMissionIdempotencyKey();
       _detailsController.clear();
       _errorMessage = null;
       _reviewDraft = null;
@@ -958,20 +1081,15 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
     final current = _requiredByProfession[professionId]!;
     final updated = current + delta;
     setState(() {
-      if (!_isEditing && delta > 0 && current == 0) {
-        for (final otherProfessionId in _requiredByProfession.keys) {
-          if (otherProfessionId != professionId) {
-            _requiredByProfession[otherProfessionId] = 0;
-          }
-        }
-        _equipmentProfessionHistory.removeWhere(
-          (otherProfessionId) => otherProfessionId != professionId,
-        );
-      }
       _requiredByProfession[professionId] = updated;
-      _equipmentProfessionHistory.remove(professionId);
-      if (updated > 0) _equipmentProfessionHistory.add(professionId);
-      _retainCompatibleEquipment();
+      if (updated == 0) {
+        _equipmentByProfession.remove(professionId);
+        if (_selectedEquipmentProfessionId == professionId) {
+          _selectedEquipmentProfessionId = null;
+        }
+      } else {
+        _selectedEquipmentProfessionId = professionId;
+      }
       _errorMessage = null;
     });
     final profession = HealthProfessionRegistry.byId(professionId);
@@ -982,78 +1100,6 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
         Directionality.of(context),
       );
     }
-  }
-
-  HealthProfessionDefinition? get _equipmentProfession {
-    for (final professionId in _equipmentProfessionHistory.reversed) {
-      if (_requiredByProfession[professionId]! > 0) {
-        return HealthProfessionRegistry.byId(professionId);
-      }
-    }
-    for (final profession in HealthProfessionRegistry.values.reversed) {
-      if (_requiredByProfession[profession.id]! > 0) return profession;
-    }
-    return null;
-  }
-
-  List<ProfessionalEquipmentDefinition> get _displayedEquipment {
-    final profession = _equipmentProfession;
-    if (profession == null) return const [];
-    final seenIds = <String>{};
-    final seenLabels = <String>{};
-    return ProfessionalEquipmentRegistry.forProfession(profession.id)
-        .where(
-          (equipment) =>
-              seenIds.add(equipment.id) &&
-              seenLabels.add(equipment.label.trim().toLowerCase()),
-        )
-        .toList(growable: false);
-  }
-
-  List<ProfessionalEquipmentDefinition> get _availableEquipment {
-    final activeProfessionIds = _requiredByProfession.entries
-        .where((entry) => entry.value > 0)
-        .map((entry) => entry.key)
-        .toSet();
-    final seenIds = <String>{};
-    final seenLabels = <String>{};
-    return ProfessionalEquipmentRegistry.values
-        .where(
-          (equipment) =>
-              equipment.professionIds.any(activeProfessionIds.contains) &&
-              seenIds.add(equipment.id) &&
-              seenLabels.add(equipment.label.trim().toLowerCase()),
-        )
-        .toList(growable: false);
-  }
-
-  void _retainCompatibleEquipment() {
-    final availableById = {
-      for (final equipment in _availableEquipment) equipment.id: equipment,
-    };
-    final retainedLabels = <String>{};
-    for (final value in _equipment) {
-      final definition = _equipmentDefinition(value);
-      if (definition != null && availableById.containsKey(definition.id)) {
-        retainedLabels.add(definition.label);
-      }
-    }
-    _equipment
-      ..clear()
-      ..addAll(retainedLabels);
-  }
-
-  static ProfessionalEquipmentDefinition? _equipmentDefinition(String value) {
-    final normalized = ProfessionalEquipmentRegistry.normalizeStoredValue(
-      value,
-    );
-    final byId = ProfessionalEquipmentRegistry.byId(normalized);
-    if (byId != null) return byId;
-    final normalizedLabel = value.trim().toLowerCase();
-    for (final equipment in ProfessionalEquipmentRegistry.values) {
-      if (equipment.label.toLowerCase() == normalizedLabel) return equipment;
-    }
-    return null;
   }
 
   static int _minutes(TimeOfDay value) => value.hour * 60 + value.minute;
@@ -1373,9 +1419,14 @@ class _ResponsibleLoginHeader extends StatelessWidget {
 }
 
 class _PublishedMission {
-  const _PublishedMission({required this.id, required this.draft});
+  const _PublishedMission({
+    required this.id,
+    required this.draft,
+    required this.savedMission,
+  });
   final String id;
   final MissionDraft draft;
+  final CoordinationNeed? savedMission;
 }
 
 class _MissionFormValidationError {
@@ -1493,6 +1544,8 @@ class _MissionPublishedView extends StatelessWidget {
           const SizedBox(height: 24),
           _MissionDraftSummary(
             draft: draft,
+            published: true,
+            savedMission: mission.savedMission,
             status: diffusionRepository == null
                 ? 'En attente de diffusion'
                 : null,
@@ -1522,10 +1575,17 @@ class _MissionPublishedView extends StatelessWidget {
 }
 
 class _MissionDraftSummary extends StatelessWidget {
-  const _MissionDraftSummary({required this.draft, this.status});
+  const _MissionDraftSummary({
+    required this.draft,
+    this.status,
+    this.published = false,
+    this.savedMission,
+  });
 
   final MissionDraft draft;
   final String? status;
+  final bool published;
+  final CoordinationNeed? savedMission;
 
   @override
   Widget build(BuildContext context) {
@@ -1548,6 +1608,50 @@ class _MissionDraftSummary extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             _SummaryLine(label: 'Quantité', value: '$quantity'),
+            if (draft.equipmentByProfession case final byProfession?
+                when byProfession.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                'Matériel à apporter',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 8),
+              for (final profession in professions)
+                if (byProfession.containsKey(profession.id)) ...[
+                  Text(
+                    profession.missionLabel,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  for (final label in MissionEquipment.labelsFor(
+                    byProfession,
+                    profession.id,
+                  ))
+                    Text('• $label'),
+                ],
+            ] else if (draft.equipmentByProfession == null &&
+                draft.equipment.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _SummaryLine(
+                label: 'Matériel demandé',
+                value: draft.equipment.join(' • '),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Text(
+              'Matériel disponible sur site',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(draft.location.name),
+            const SizedBox(height: 6),
+            if (!published)
+              SiteEquipmentItems(equipment: draft.location.availableEquipment)
+            else if (savedMission case final mission?)
+              SiteEquipmentItems(equipment: mission.availableEquipmentOnSite)
+            else
+              const Text(
+                'Matériel du site indisponible. Consultez la mission.',
+              ),
             const SizedBox(height: 14),
             _SummaryLine(label: 'Lieu', value: draft.location.name),
             const SizedBox(height: 14),

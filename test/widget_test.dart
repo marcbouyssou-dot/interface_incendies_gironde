@@ -13,6 +13,8 @@ import 'package:interface_incendies_gironde/screens/app_shell.dart';
 import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
+import 'support/verified_professional_profile.dart';
+
 void main() {
   Future<void> pumpIPhone(WidgetTester tester) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -92,7 +94,7 @@ void main() {
 
       expect(find.byType(AppShell), findsOneWidget);
       expect(find.byType(V5BottomNavigation), findsOneWidget);
-      expect(find.text('Professionnel'), findsOneWidget);
+      expect(find.text('Professionnel de santé'), findsOneWidget);
       expect(find.text('Missions à venir'), findsOneWidget);
       expect(find.text('Chargement des missions…'), findsOneWidget);
       expect(
@@ -144,7 +146,7 @@ void main() {
     }
 
     expect(find.byType(V5BottomNavigation), findsOneWidget);
-    expect(find.text('Professionnel'), findsOneWidget);
+    expect(find.text('Professionnel de santé'), findsOneWidget);
     expect(find.text('Missions à venir'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -426,7 +428,6 @@ class _DelayedMissionRepository extends MockCoordinationRepository {
 
   final _missions = StreamController<List<CoordinationNeed>>.broadcast();
   final _locations = StreamController<List<ResponsePlace>>.broadcast();
-  final _profile = Completer<VolunteerProfile?>();
 
   @override
   Stream<List<CoordinationNeed>> watchMissions() => _missions.stream;
@@ -435,12 +436,11 @@ class _DelayedMissionRepository extends MockCoordinationRepository {
   Stream<List<ResponsePlace>> watchLocations() => _locations.stream;
 
   @override
-  Future<VolunteerProfile?> getVolunteerProfile() => _profile.future;
+  Future<VolunteerProfile?> getVolunteerProfile() async => verifiedMkProfile();
 
   void publishStartupData() {
     _missions.add(needs);
     _locations.add(places);
-    _profile.complete();
   }
 
   Future<void> dispose() async {

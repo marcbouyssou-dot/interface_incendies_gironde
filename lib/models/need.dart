@@ -129,6 +129,8 @@ class CoordinationNeed {
     required this.requiredPodiatrists,
     required this.registeredPodiatrists,
     required this.equipment,
+    this.equipmentByProfession,
+    this.availableEquipmentOnSite,
     this.priority = NeedPriority.standard,
     this.mobilizationId,
     this.locationId,
@@ -156,6 +158,12 @@ class CoordinationNeed {
   final int requiredPodiatrists;
   final int registeredPodiatrists;
   final List<String> equipment;
+
+  /// Null identifies a legacy mission with global equipment.
+  final Map<String, List<String>>? equipmentByProfession;
+
+  /// Inventory captured when the mission was published.
+  final List<String>? availableEquipmentOnSite;
   final NeedPriority priority;
   final String? mobilizationId;
   final String? locationId;
@@ -216,6 +224,8 @@ class CoordinationNeed {
       registeredPodiatrists:
           registeredPodiatrists ?? this.registeredPodiatrists,
       equipment: equipment,
+      equipmentByProfession: equipmentByProfession,
+      availableEquipmentOnSite: availableEquipmentOnSite,
       priority: priority,
       mobilizationId: mobilizationId,
       locationId: locationId,
@@ -257,6 +267,7 @@ class ResponsePlace {
     this.contactName,
     this.contactPhone,
     this.managingOrganizationId,
+    this.availableEquipment,
     this.isOperational = true,
     this.isEnabled = true,
   });
@@ -275,6 +286,9 @@ class ResponsePlace {
   /// Une valeur absente conserve la compatibilité RC3 et est résolue vers
   /// `legacy-gironde` exclusivement par `LegacyOrganizationResolver`.
   final String? managingOrganizationId;
+
+  /// Null means not provided; an empty list means explicitly none.
+  final List<String>? availableEquipment;
   final bool isOperational;
   final bool isEnabled;
   final int activeNeeds;
