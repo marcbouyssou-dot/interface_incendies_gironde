@@ -24,6 +24,7 @@ import '../repositories/repository_scope.dart';
 import '../repositories/platform_runtime.dart';
 import '../repositories/recipe_admin_runtime.dart';
 import '../repositories/platform_read_repository.dart';
+import '../repositories/public_mission_discovery_repository.dart';
 import '../repositories/read_only_preview_coordination_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../services/professional_verification_service.dart';
@@ -63,12 +64,15 @@ class AppShell extends StatefulWidget {
         const FakeProfessionalVerificationService(),
     this.platformRuntime,
     this.initialNotificationId,
+    this.publicMissionDiscoveryRepository =
+        const EmptyPublicMissionDiscoveryRepository(),
   });
 
   final int initialIndex;
   final ProfessionalVerificationService professionalVerificationService;
   final PlatformRuntime? platformRuntime;
   final String? initialNotificationId;
+  final PublicMissionDiscoveryRepository publicMissionDiscoveryRepository;
 
   /// Never enabled by the application entry point outside regression tests.
   final bool useLegacyCoordinatorShellForTesting;
@@ -95,6 +99,7 @@ class _AppShellState extends State<AppShell> {
   StreamSubscription<String?>? _administrativeIdentitySubscription;
   StreamSubscription<List<CoordinationNeed>>? _missionsWarmupSubscription;
   StreamSubscription<List<ResponsePlace>>? _locationsWarmupSubscription;
+  bool _warmupStarted = false;
   StreamSubscription<PlatformAdministratorAccess?>?
   _platformAdministratorSubscription;
   ValueListenable<PlatformAdministrationSessionState>?
@@ -276,6 +281,7 @@ class _AppShellState extends State<AppShell> {
       unawaited(_administrativeIdentitySubscription?.cancel());
       unawaited(_missionsWarmupSubscription?.cancel());
       unawaited(_locationsWarmupSubscription?.cancel());
+      _warmupStarted = false;
       _liveData?.dispose();
       _disposePlatformAdminPreviewData();
       _repository = repository;
@@ -299,7 +305,9 @@ class _AppShellState extends State<AppShell> {
       } else {
         _administrativeIdentitySubscription = null;
       }
-      _prewarmMissionData();
+      if (repository is! VisitorOperationalReadGate) {
+        _prewarmMissionData();
+      }
     }
   }
 
@@ -458,6 +466,23 @@ class _AppShellState extends State<AppShell> {
       _accessResolutionFailed = false;
     });
     _syncOrganizationContext();
+    if (access?.hasPrivilegedAccess == true) {
+      _prewarmMissionData();
+    } else if (access == null) {
+      final repository = _repository!;
+      unawaited(
+        repository
+            .getVolunteerProfile()
+            .then((profile) {
+              if (mounted &&
+                  identical(_repository, repository) &&
+                  profile?.hasVerifiedProfessionalIdentity == true) {
+                _prewarmMissionData();
+              }
+            })
+            .catchError((Object _) {}),
+      );
+    }
   }
 
   void _handleAdministrativeUid(String? uid) {
@@ -475,6 +500,19 @@ class _AppShellState extends State<AppShell> {
       _accessResolutionFailed = true;
     });
     _syncOrganizationContext();
+  }
+
+  void _prewarmMissionData() {
+    if (_warmupStarted || _liveData == null) return;
+    _warmupStarted = true;
+    _missionsWarmupSubscription = _liveData!.watchMissions().listen((_) {
+      markStartupEvent('mobsante-missions-data-ready');
+      unawaited(_missionsWarmupSubscription?.cancel());
+    }, onError: (_, _) => unawaited(_missionsWarmupSubscription?.cancel()));
+    _locationsWarmupSubscription = _liveData!.watchLocations().listen((_) {
+      markStartupEvent('mobsante-locations-data-ready');
+      unawaited(_locationsWarmupSubscription?.cancel());
+    }, onError: (_, _) => unawaited(_locationsWarmupSubscription?.cancel()));
   }
 
   void _syncOrganizationContext() {
@@ -720,17 +758,6 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  void _prewarmMissionData() {
-    _missionsWarmupSubscription = _liveData!.watchMissions().listen((_) {
-      markStartupEvent('mobsante-missions-data-ready');
-      unawaited(_missionsWarmupSubscription?.cancel());
-    }, onError: (_, _) => unawaited(_missionsWarmupSubscription?.cancel()));
-    _locationsWarmupSubscription = _liveData!.watchLocations().listen((_) {
-      markStartupEvent('mobsante-locations-data-ready');
-      unawaited(_locationsWarmupSubscription?.cancel());
-    }, onError: (_, _) => unawaited(_locationsWarmupSubscription?.cancel()));
-  }
-
   void _scheduleApplicationReveal() {
     if (_applicationRevealScheduled) return;
     _applicationRevealScheduled = true;
@@ -887,6 +914,8 @@ class _AppShellState extends State<AppShell> {
         key: ValueKey(crossRolePreview ? 'admin-professional' : 'professional'),
         initialIndex: widget.initialIndex == 1 ? 2 : 0,
         verificationService: widget.professionalVerificationService,
+        publicMissionDiscoveryRepository:
+            widget.publicMissionDiscoveryRepository,
       ),
       _AppJourney.responsible => ResponsibleShell(
         key: ValueKey(crossRolePreview ? 'admin-responsible' : 'responsible'),

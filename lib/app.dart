@@ -15,6 +15,7 @@ import 'repositories/organization_repository_scope.dart';
 import 'repositories/repository_scope.dart';
 import 'repositories/responsible_access_administration_repository_scope.dart';
 import 'repositories/platform_runtime.dart';
+import 'repositories/public_mission_discovery_repository.dart';
 import 'repositories/recipe_admin_runtime.dart';
 import 'screens/app_shell.dart';
 import 'services/professional_verification_service.dart';
@@ -33,6 +34,7 @@ class FireCoordinationApp extends StatelessWidget {
     this.organizationContextController,
     this.initialNotificationId,
     this.diffusionReadRepository,
+    this.publicMissionDiscoveryRepository,
   });
 
   final CoordinationRepository? repository;
@@ -43,6 +45,7 @@ class FireCoordinationApp extends StatelessWidget {
   final OrganizationContextController? organizationContextController;
   final String? initialNotificationId;
   final DiffusionReadRepository? diffusionReadRepository;
+  final PublicMissionDiscoveryRepository? publicMissionDiscoveryRepository;
 
   /// Explicit regression harness for screens removed from the live V5 shell.
   final bool useLegacyCoordinatorShellForTesting;
@@ -108,6 +111,9 @@ class FireCoordinationApp extends StatelessWidget {
                         useLegacyCoordinatorShellForTesting:
                             useLegacyCoordinatorShellForTesting,
                         initialNotificationId: initialNotificationId,
+                        publicMissionDiscoveryRepository:
+                            publicMissionDiscoveryRepository ??
+                            const EmptyPublicMissionDiscoveryRepository(),
                       ),
                     ),
                   ),

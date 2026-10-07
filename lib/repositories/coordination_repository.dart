@@ -15,6 +15,10 @@ import 'responsible_access_administration_repository.dart';
 
 export '../models/responsible_access.dart';
 
+/// Live repositories with operational Firestore reads must wait for an
+/// authorized role or verified professional before prewarming those streams.
+abstract interface class VisitorOperationalReadGate {}
+
 abstract interface class MissionEngagementReadRepository {
   Stream<List<EngagementInfo>> watchMissionEngagements(String missionId);
 }

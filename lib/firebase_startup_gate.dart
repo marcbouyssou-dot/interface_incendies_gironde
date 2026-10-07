@@ -12,6 +12,7 @@ import 'repositories/coordination_repository.dart';
 import 'repositories/diffusion_read_repository.dart';
 import 'repositories/firestore_coordination_repository.dart';
 import 'repositories/firestore_platform_read_repository.dart';
+import 'repositories/public_mission_discovery_repository.dart';
 import 'services/current_mobilization_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/firebase_professional_verification_service.dart';
@@ -186,6 +187,12 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
             professionalVerificationService:
                 FirebaseProfessionalVerificationService(),
             diffusionReadRepository: _diffusionReadRepository,
+            publicMissionDiscoveryRepository:
+                snapshot.data is FirestoreCoordinationRepository
+                ? FirestorePublicMissionDiscoveryRepository(
+                    FirebaseFirestore.instance,
+                  )
+                : const EmptyPublicMissionDiscoveryRepository(),
             initialNotificationId: widget.initialNotificationId,
           );
         }

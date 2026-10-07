@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
 import '../models/volunteer_profile.dart';
+import '../models/public_mission_discovery.dart';
 import '../repositories/live_data_scope.dart';
+import '../repositories/public_mission_discovery_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
@@ -24,10 +26,13 @@ class ProfessionalShell extends StatefulWidget {
     super.key,
     this.initialIndex = 0,
     this.verificationService = const FakeProfessionalVerificationService(),
+    this.publicMissionDiscoveryRepository =
+        const EmptyPublicMissionDiscoveryRepository(),
   }) : assert(initialIndex >= 0 && initialIndex < 3);
 
   final int initialIndex;
   final ProfessionalVerificationService verificationService;
+  final PublicMissionDiscoveryRepository publicMissionDiscoveryRepository;
 
   @override
   State<ProfessionalShell> createState() => _ProfessionalShellState();
@@ -38,12 +43,25 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   final List<Widget?> _screens = List<Widget?>.filled(3, null);
   Object? _repositoryIdentity;
   Future<VolunteerProfile?>? _profile;
+  late Stream<List<PublicMissionDiscovery>> _publicMissions;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _screens[_currentIndex] = _createScreen(_currentIndex);
+    _publicMissions = widget.publicMissionDiscoveryRepository.watchMissions();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfessionalShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(
+      oldWidget.publicMissionDiscoveryRepository,
+      widget.publicMissionDiscoveryRepository,
+    )) {
+      _publicMissions = widget.publicMissionDiscoveryRepository.watchMissions();
+    }
   }
 
   @override
@@ -89,6 +107,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
         return _ProfessionalDiscoveryState(
           missions: _currentIndex == 0,
           onCompleteProfile: () => _selectTab(2),
+          publicMissions: _publicMissions,
         );
       }
       return NativeTabView(
@@ -162,10 +181,12 @@ class _ProfessionalDiscoveryState extends StatelessWidget {
   const _ProfessionalDiscoveryState({
     required this.missions,
     required this.onCompleteProfile,
+    required this.publicMissions,
   });
 
   final bool missions;
   final VoidCallback onCompleteProfile;
+  final Stream<List<PublicMissionDiscovery>> publicMissions;
 
   @override
   Widget build(BuildContext context) {
@@ -199,6 +220,48 @@ class _ProfessionalDiscoveryState extends StatelessWidget {
                       'MobSanté met en relation les professionnels de santé '
                       'avec les besoins sur le terrain.',
                       style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: V5Spacing.md),
+                    StreamBuilder<List<PublicMissionDiscovery>>(
+                      stream: publicMissions,
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return Text(
+                            snapshot.hasError
+                                ? 'Les missions ne sont pas disponibles pour le moment.'
+                                : 'Aucune mission à découvrir pour le moment.',
+                            key: const Key('public-discovery-empty'),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          );
+                        }
+                        return Column(
+                          key: const Key('public-mission-list'),
+                          children: [
+                            for (final item in snapshot.data!) ...[
+                              V5Card(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Besoin ${item.dateLabel.toLowerCase()}',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: V5Spacing.xs),
+                                    Text('Secteur ${item.sectorLabel}'),
+                                    Text(
+                                      'Professionnels recherchés : '
+                                      '${item.professionLabels.join(', ')}',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: V5Spacing.sm),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: V5Spacing.md),
                   ],

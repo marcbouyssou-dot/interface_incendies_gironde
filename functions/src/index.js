@@ -3,7 +3,7 @@ import {getAuth} from 'firebase-admin/auth';
 import {FieldValue, getFirestore, Timestamp} from 'firebase-admin/firestore';
 import {getMessaging} from 'firebase-admin/messaging';
 import {HttpsError, onCall} from 'firebase-functions/v2/https';
-import {onDocumentCreated, onDocumentUpdated} from 'firebase-functions/v2/firestore';
+import {onDocumentCreated, onDocumentUpdated, onDocumentWritten} from 'firebase-functions/v2/firestore';
 import {onSchedule} from 'firebase-functions/v2/scheduler';
 import {defineSecret, defineString} from 'firebase-functions/params';
 
@@ -129,6 +129,12 @@ import {
   fcmChainDiagnosticServices,
   FcmChainDiagnosticError,
 } from './fcm_chain_diagnostic.js';
+import {
+  reconcileAllPublicMissions,
+  reconcileMobilizationMissions,
+  reconcileOperationMissions,
+  reconcilePublicMission,
+} from './public_discovery/firestore_projector.js';
 
 export {
   createPublishedNeedDiffusion,
@@ -140,6 +146,35 @@ const operationalTriggerOptions = Object.freeze({
   region: 'europe-west1',
   retry: true,
 });
+
+// Deploy these exports explicitly during the future cutover. They never call
+// the operational notification event factory or messaging service.
+export const syncPublicMissionDiscovery = onDocumentWritten(
+  {region: 'europe-west1', document: 'missions/{missionId}'},
+  async (event) => reconcilePublicMission(getFirestore(), event.params.missionId),
+);
+
+export const syncPublicMobilizationDiscovery = onDocumentWritten(
+  {region: 'europe-west1', document: 'mobilizations/{mobilizationId}'},
+  async (event) => reconcileMobilizationMissions(
+    getFirestore(), event.params.mobilizationId,
+  ),
+);
+
+export const syncPublicOperationDiscovery = onDocumentWritten(
+  {region: 'europe-west1', document: 'operations/{operationId}'},
+  async (event) => reconcileOperationMissions(getFirestore(), event.params.operationId),
+);
+
+export const syncPublicLegacyDiscovery = onDocumentWritten(
+  {region: 'europe-west1', document: 'platform/config'},
+  async () => reconcileAllPublicMissions(getFirestore()),
+);
+
+export const refreshPublicMissionDiscovery = onSchedule(
+  {region: 'europe-west1', schedule: 'every 60 minutes'},
+  async () => reconcileAllPublicMissions(getFirestore()),
+);
 
 export const emitMissionPublished = onDocumentCreated(
   {...operationalTriggerOptions, document: 'missions/{missionId}'},

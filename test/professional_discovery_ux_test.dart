@@ -3,15 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/profession_quotas.dart';
+import 'package:interface_incendies_gironde/models/public_mission_discovery.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/public_mission_discovery_repository.dart';
 import 'package:interface_incendies_gironde/screens/professional_engagements_screen.dart';
 import 'package:interface_incendies_gironde/screens/slots_screen.dart';
 import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
 
 import 'support/verified_professional_profile.dart';
 
-class _UnavailableMissionsRepository extends MockCoordinationRepository {
+class _UnavailableMissionsRepository extends MockCoordinationRepository
+    implements VisitorOperationalReadGate {
   _UnavailableMissionsRepository() : super(responsibleAccess: null);
 
   int missionReads = 0;
@@ -27,6 +30,23 @@ class _UnavailableMissionsRepository extends MockCoordinationRepository {
   Stream<List<ResponsePlace>> watchLocations() {
     locationReads++;
     return Stream.error(StateError('Location data unavailable'));
+  }
+}
+
+class _PublicDiscoveryFixture implements PublicMissionDiscoveryRepository {
+  int reads = 0;
+
+  @override
+  Stream<List<PublicMissionDiscovery>> watchMissions() {
+    reads++;
+    return Stream.value(const [
+      PublicMissionDiscovery(
+        publicId: 'safe-public-id',
+        day: '2026-10-08',
+        sectorLabel: 'Bordeaux Métropole',
+        professions: ['physiotherapist', 'nurse'],
+      ),
+    ]);
   }
 }
 
@@ -136,6 +156,33 @@ void main() {
       );
     },
   );
+
+  testWidgets('unverified visitor sees only safe projected mission fields', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _UnavailableMissionsRepository();
+    final publicRepository = _PublicDiscoveryFixture();
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        publicMissionDiscoveryRepository: publicRepository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('public-mission-list')), findsOneWidget);
+    expect(find.text('Secteur Bordeaux Métropole'), findsOneWidget);
+    expect(find.textContaining('Masseur-kinésithérapeute'), findsOneWidget);
+    expect(find.textContaining('Infirmier'), findsOneWidget);
+    expect(find.text('Compléter mon profil'), findsOneWidget);
+    expect(find.text('Site de test'), findsNothing);
+    expect(repository.missionReads, 0);
+    expect(repository.locationReads, 0);
+    expect(publicRepository.reads, 1);
+  });
 
   testWidgets('verified screens retain mission, equipment and engagement UI', (
     tester,

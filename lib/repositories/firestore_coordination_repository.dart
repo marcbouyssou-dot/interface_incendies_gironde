@@ -250,7 +250,8 @@ class FirestoreCoordinationRepository
         MultiOperationPlatformRuntime,
         PlatformActorRuntime,
         OrganizationRuntime,
-        PlatformAccountAuthenticator {
+        PlatformAccountAuthenticator,
+        VisitorOperationalReadGate {
   FirestoreCoordinationRepository(
     this._firestore,
     this._auth, {

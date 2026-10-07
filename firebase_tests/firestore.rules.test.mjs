@@ -515,16 +515,37 @@ function volunteer(uid, overrides = {}) {
 }
 
 function verifiedVolunteer(uid, overrides = {}) {
+  const profession = canonicalProfession(overrides.profession ?? 'mk');
+  const verification = {
+    physiotherapist: {code: '70', label: 'Masseur-Kinésithérapeute'},
+    podiatrist: {code: '80', label: 'Pédicure-Podologue'},
+    physician: {code: '10', label: 'Médecin'},
+    nurse: {code: '60', label: 'Infirmier'},
+  }[profession];
   return volunteer(uid, {
     verificationStatus: 'verified',
     verificationSource: 'ans_rpps',
     verifiedFirstName: 'Alice',
     verifiedLastName: 'EXEMPLE',
-    verifiedProfessionCode: '70',
-    verifiedProfessionLabel: 'Masseur-Kinésithérapeute',
+    verifiedProfessionCode: verification?.code,
+    verifiedProfessionLabel: verification?.label,
     verifiedAt: Timestamp.now(),
     ...overrides,
   });
+}
+
+async function seedVerifiedProfessional(uid, profession = 'mk') {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), `volunteers/${uid}`),
+      verifiedVolunteer(uid, {profession}),
+    );
+  });
+}
+
+async function engageVerified(uid, profession = 'mk', missionChanges = {}) {
+  await seedVerifiedProfessional(uid, profession);
+  return engage(uid, profession, missionChanges, false);
 }
 
 async function engage(
@@ -534,7 +555,14 @@ async function engage(
   writeVolunteer = true,
 ) {
   const userDb = db(uid);
-  const missionSnapshot = await getDoc(doc(userDb, 'missions/mission-a'));
+  // Test setup needs the operational counters even when this caller is not
+  // allowed to read the mission. The write below is still evaluated by rules.
+  let missionSnapshot;
+  await env.withSecurityRulesDisabled(async (context) => {
+    missionSnapshot = await getDoc(doc(
+      context.firestore(), 'missions/mission-a',
+    ));
+  });
   const missionData = missionSnapshot.data();
   const volunteerSnapshot = await getDoc(doc(userDb, `volunteers/${uid}`));
   const registeredMk = missionData.registeredMk + (profession === 'mk' ? 1 : 0);
@@ -583,17 +611,8 @@ async function engageMission(uid, missionId, mobilizationId) {
   const missionReference = doc(userDb, `missions/${missionId}`);
   const missionSnapshot = await getDoc(missionReference);
   const missionData = missionSnapshot.data();
-  const volunteerReference = doc(userDb, `volunteers/${uid}`);
-  const volunteerSnapshot = await getDoc(volunteerReference);
   const registeredMk = missionData.registeredMk + 1;
   const batch = writeBatch(userDb);
-  batch.set(volunteerReference, {
-    ...volunteer(uid),
-    ...(volunteerSnapshot.exists()
-      ? {createdAt: volunteerSnapshot.data().createdAt}
-      : {}),
-    updatedAt: serverTimestamp(),
-  });
   batch.set(doc(userDb, `engagements/${missionId}_${uid}`), {
     missionId,
     mobilizationId,
@@ -635,8 +654,8 @@ async function reengage(uid, profession = 'mk', engagementChanges = {}) {
   const registeredPp = missionData.registeredPp + (profession === 'pp' ? 1 : 0);
   const batch = writeBatch(userDb);
   batch.set(doc(userDb, `volunteers/${uid}`), {
-    ...volunteer(uid, {profession}),
-    createdAt: volunteerData.createdAt,
+    ...volunteerData,
+    profession,
     updatedAt: serverTimestamp(),
   });
   batch.update(doc(userDb, `engagements/mission-a_${uid}`), {
@@ -736,20 +755,20 @@ async function seedJob0048CancellationMission(uid, overrides = {}) {
   });
 }
 
-test('locations: public read allowed, all writes denied', async () => {
+test('locations: visitor reads and all client writes denied', async () => {
   await seed();
-  assert.equal((await assertSucceeds(getDoc(doc(db(), 'locations/site-a')))).exists(), true);
-  assert.equal((await assertSucceeds(getDocs(collection(db(), 'locations')))).size, 2);
+  await assertFails(getDoc(doc(db(), 'locations/site-a')));
+  await assertFails(getDocs(collection(db(), 'locations')));
   await assertFails(setDoc(doc(db('u'), 'locations/new'), {name: 'x'}));
   await assertFails(updateDoc(doc(db('u'), 'locations/site-a'), {name: 'x'}));
   await assertFails(deleteDoc(doc(db('u'), 'locations/site-a')));
 });
 
-test('RC4.3B: legacy locations remain public for RC3 professionals', async () => {
+test('legacy locations require verified professional or administrative access', async () => {
   await seedOrganizationLocations();
 
-  await assertSucceeds(getDoc(doc(db(), 'locations/legacy-implicit')));
-  await assertSucceeds(getDoc(doc(db(), 'locations/legacy-explicit')));
+  await assertFails(getDoc(doc(db(), 'locations/legacy-implicit')));
+  await assertFails(getDoc(doc(db(), 'locations/legacy-explicit')));
   await assertSucceeds(getDoc(
     doc(db('legacy-coordinator'), 'locations/legacy-implicit'),
   ));
@@ -798,8 +817,7 @@ test('RC4.3B: platform admin is global and inactive membership is refused', asyn
     db('inactive-member'),
     'locations/site-organization-a',
   )));
-  // Le site legacy reste la projection publique RC3, indépendamment du rôle.
-  await assertSucceeds(getDoc(doc(
+  await assertFails(getDoc(doc(
     db('inactive-member'),
     'locations/legacy-implicit',
   )));
@@ -826,10 +844,51 @@ test('RC4.3B: no client identity gains a location write', async () => {
   }
 });
 
-test('missions: public active read and anonymous create denied', async () => {
+test('missions: visitor operational read and create denied', async () => {
   await seed();
-  await assertSucceeds(getDoc(doc(db(), 'missions/mission-a')));
+  await assertFails(getDoc(doc(db(), 'missions/mission-a')));
   await assertFails(setDoc(doc(db(), 'missions/new'), mission({id: 'new'})));
+});
+
+test('BETA-READY-003: projection access and operational access are separate', async () => {
+  await seed();
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'volunteers/unverified'), volunteer('unverified'));
+    await setDoc(doc(admin, 'volunteers/verified'), verifiedVolunteer('verified'));
+    await setDoc(doc(admin, 'platformAdministrators/admin'), {active: true});
+    await setDoc(doc(admin, 'publicMissionDiscovery/public-safe'), {
+      publicId: 'public-safe', day: '2026-10-08', sectorLabel: 'Médoc',
+      professions: ['physiotherapist'], status: 'open',
+    });
+  });
+
+  for (const uid of [null, 'unverified']) {
+    const visitor = db(uid);
+    await assertSucceeds(getDoc(doc(visitor, 'publicMissionDiscovery/public-safe')));
+    await assertSucceeds(getDocs(collection(visitor, 'publicMissionDiscovery')));
+    await assertFails(getDoc(doc(visitor, 'publicLocationDiscovery/site-a')));
+    await assertFails(getDoc(doc(visitor, 'missions/mission-a')));
+    await assertFails(getDoc(doc(visitor, 'locations/site-a')));
+    await assertFails(setDoc(doc(visitor, 'publicMissionDiscovery/forged'), {
+      publicId: 'forged', status: 'open',
+    }));
+    await assertFails(updateDoc(
+      doc(visitor, 'publicMissionDiscovery/public-safe'), {status: 'closed'},
+    ));
+    await assertFails(deleteDoc(doc(visitor, 'publicMissionDiscovery/public-safe')));
+  }
+
+  const professional = db('verified');
+  const operational = await assertSucceeds(getDoc(
+    doc(professional, 'missions/mission-a'),
+  ));
+  assert.equal(operational.data().locationId, 'site-a');
+  await assertSucceeds(getDoc(doc(professional, 'locations/site-a')));
+  for (const uid of ['manager', 'coord', 'admin']) {
+    await assertSucceeds(getDoc(doc(db(uid), 'missions/mission-a')));
+    await assertSucceeds(getDoc(doc(db(uid), 'locations/site-a')));
+  }
 });
 
 test('JOB-0066: ended need stays readable without a client update path', async () => {
@@ -844,7 +903,7 @@ test('JOB-0066: ended need stays readable without a client update path', async (
     }));
   });
 
-  await assertSucceeds(getDoc(doc(db(), 'missions/mission-ended')));
+  await assertFails(getDoc(doc(db(), 'missions/mission-ended')));
   await assertSucceeds(getDoc(doc(db('manager'), 'missions/mission-ended')));
   await assertFails(updateDoc(doc(db('coord'), 'missions/mission-ended'), {
     details: 'Altération historique',
@@ -1196,7 +1255,7 @@ test('missions: priority is closed and legacy documents stay readable', async ()
       missingPriority,
     );
   });
-  await assertSucceeds(getDoc(doc(db(), 'missions/priority-legacy')));
+  await assertSucceeds(getDoc(doc(db('coord'), 'missions/priority-legacy')));
 });
 
 test('missions: active mobilization is mandatory for create and list', async () => {
@@ -1215,7 +1274,7 @@ test('missions: active mobilization is mandatory for create and list', async () 
     }),
   ));
   const snapshot = await assertSucceeds(getDocs(query(
-    collection(db(), 'missions'),
+    collection(db('coord'), 'missions'),
     where('mobilizationId', '==', activeMobilizationId),
     where('isActive', '==', true),
   )));
@@ -1460,6 +1519,7 @@ test('RC3.8F.3: professional owner writes remain allowed', async () => {
     phone: '0611111111',
     updatedAt: serverTimestamp(),
   }));
+  await seedVerifiedProfessional('alice');
   await assertSucceeds(engage('alice', 'mk', {}, false));
   await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled', {
     registeredMk: 0,
@@ -1903,8 +1963,8 @@ test('volunteers: all profile professions allowed and unknown/extra denied', asy
 
 test('engagements: owner creation confirms and increments MK and PP', async () => {
   await seed();
-  await assertSucceeds(engage('alice'));
-  await assertSucceeds(engage('bob', 'pp'));
+  await assertSucceeds(engageVerified('alice'));
+  await assertSucceeds(engageVerified('bob', 'pp'));
   const adminDb = db('coord');
   assert.equal(
     (await getDoc(doc(adminDb, 'engagements/mission-a_alice'))).data().status,
@@ -1922,12 +1982,10 @@ test('engagements: owner creation confirms and increments MK and PP', async () =
   assert.equal(storedMission.status, 'toComplete');
 });
 
-test('engagements: canonical non-legacy professions are allowed', async () => {
+test('engagements: verified supported canonical professions are allowed', async () => {
   for (const profession of [
     'physician',
     'nurse',
-    'veterinarian',
-    'other_health_professional',
   ]) {
     await seed({mission: false});
     await env.withSecurityRulesDisabled(async (context) => {
@@ -1945,11 +2003,19 @@ test('engagements: canonical non-legacy professions are allowed', async () => {
       doc(db(`user-${profession}`), `volunteers/user-${profession}`),
       volunteer(`user-${profession}`, {profession}),
     ));
+    await seedVerifiedProfessional(`user-${profession}`, profession);
     await assertSucceeds(engage(`user-${profession}`, profession, {}, false));
   }
+  await seed({mission: false});
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'missions/mission-a'),
+      genericMission({requiredByProfession: {...emptyQuotas(), nurse: 1}}));
+  });
+  await seedVerifiedProfessional('verified-mk', 'mk');
+  await assertFails(engage('verified-mk', 'nurse', {}, false));
 });
 
-test('engagements: otherHealthProfessional may engage with no identifier', async () => {
+test('engagements: otherHealthProfessional without verification cannot engage', async () => {
   await seed({mission: false});
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(
@@ -1972,7 +2038,7 @@ test('engagements: otherHealthProfessional may engage with no identifier', async
     doc(db('none-user'), 'volunteers/none-user'),
     noIdProfile,
   ));
-  await assertSucceeds(
+  await assertFails(
     engage('none-user', 'other_health_professional', {}, false),
   );
 });
@@ -2006,9 +2072,14 @@ test(
   },
 );
 
-test('engagements: a valid RPPS still succeeds (unchanged behavior)', async () => {
+test('engagements: a verified RPPS succeeds', async () => {
   await seed();
-  await assertSucceeds(engage('alice-rpps'));
+  await assertSucceeds(setDoc(
+    doc(db('alice-rpps'), 'volunteers/alice-rpps'),
+    volunteer('alice-rpps'),
+  ));
+  await assertFails(engage('alice-rpps', 'mk', {}, false));
+  await assertSucceeds(engageVerified('alice-rpps'));
   const adminDb = db('coord');
   const stored = (await getDoc(
     doc(adminDb, 'engagements/mission-a_alice-rpps'),
@@ -2081,7 +2152,7 @@ test('engagements: a profile without email is denied (matches client readiness)'
   await assertFails(batch.commit());
 });
 
-test('engagements: a valid ordinal still succeeds (unchanged behavior)', async () => {
+test('engagements: a valid ordinal without verification cannot engage', async () => {
   await seed({mission: false});
   await env.withSecurityRulesDisabled(async (context) => {
     await setDoc(
@@ -2101,7 +2172,7 @@ test('engagements: a valid ordinal still succeeds (unchanged behavior)', async (
     doc(db('vet-ordinal-user'), 'volunteers/vet-ordinal-user'),
     ordinalProfile,
   ));
-  await assertSucceeds(
+  await assertFails(
     engage('vet-ordinal-user', 'veterinarian', {}, false),
   );
 });
@@ -2176,7 +2247,7 @@ test('engagements: owner can get its missing deterministic document', async () =
 
 test('engagements: owner can get its existing deterministic document', async () => {
   await seed();
-  await assertSucceeds(engage('alice'));
+  await assertSucceeds(engageVerified('alice'));
   const snapshot = await assertSucceeds(
     getDoc(doc(db('alice'), 'engagements/mission-a_alice')),
   );
@@ -2185,7 +2256,7 @@ test('engagements: owner can get its existing deterministic document', async () 
 
 test('engagements: other users cannot get existing or missing documents', async () => {
   await seed();
-  await assertSucceeds(engage('bob'));
+  await assertSucceeds(engageVerified('bob'));
   await assertFails(
     getDoc(doc(db('alice'), 'engagements/mission-a_bob')),
   );
@@ -2233,7 +2304,7 @@ test('engagements: deterministic id cannot bypass an inconsistent owner field', 
 
 test('engagements: volunteers cannot list engagements', async () => {
   await seed();
-  await assertSucceeds(engage('alice'));
+  await assertSucceeds(engageVerified('alice'));
   await assertFails(getDocs(collection(db('alice'), 'engagements')));
 });
 
@@ -2246,7 +2317,7 @@ test('engagements: unauthenticated users cannot get missing documents', async ()
 
 test('engagements: coordinator keeps get and list access', async () => {
   await seed();
-  await assertSucceeds(engage('alice'));
+  await assertSucceeds(engageVerified('alice'));
   const snapshot = await assertSucceeds(
     getDoc(doc(db('coord'), 'engagements/mission-a_alice')),
   );
@@ -2262,6 +2333,7 @@ test('engagements: coordinator keeps get and list access', async () => {
 
 test('engagements: confirmed creation succeeds after an allowed missing get', async () => {
   await seed();
+  await seedVerifiedProfessional('alice');
   const userDb = db('alice');
   const missionBefore = (await assertSucceeds(
     getDoc(doc(userDb, 'missions/mission-a')),
@@ -2271,7 +2343,7 @@ test('engagements: confirmed creation succeeds after an allowed missing get', as
   );
   assert.equal(missing.exists(), false);
 
-  await assertSucceeds(engage('alice'));
+  await assertSucceeds(engage('alice', 'mk', {}, false));
 
   const engagement = (await assertSucceeds(
     getDoc(doc(userDb, 'engagements/mission-a_alice')),
@@ -2385,7 +2457,7 @@ test('engagements: old status-less document remains readable by owner', async ()
 
 test('engagements: owner cannot confirm or move itself to standby', async () => {
   await seed();
-  await engage('alice');
+  await engageVerified('alice');
   await assertFails(updateEngagement('alice', 'alice', 'confirmed', {
     registeredMk: 1, status: 'critical',
   }));
@@ -2394,7 +2466,7 @@ test('engagements: owner cannot confirm or move itself to standby', async () => 
 
 test('engagements: owner cancellation is allowed and immutable fields stay protected', async () => {
   await seed();
-  await engage('alice');
+  await engageVerified('alice');
   await assertSucceeds(updateEngagement('alice', 'alice', 'cancelled', {
     registeredMk: 0,
     status: 'critical',
@@ -2412,7 +2484,8 @@ test('engagements: cancelled owner reengages confirmed with exact counter', asyn
   let missionBefore;
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
-    await setDoc(doc(admin, 'volunteers/alice'), volunteer('alice'));
+    await setDoc(doc(admin, 'volunteers/alice'),
+      verifiedVolunteer('alice', {profession: 'pp'}));
     createdAt = (await getDoc(
       doc(admin, 'engagements/mission-a_alice'),
     )).data().createdAt;
@@ -2441,7 +2514,8 @@ test('engagements: historical pending can be confirmed by its owner', async () =
   await seed();
   await seedEngagement('alice', 'pending');
   await env.withSecurityRulesDisabled(async (context) => {
-    await setDoc(doc(context.firestore(), 'volunteers/alice'), volunteer('alice'));
+    await setDoc(doc(context.firestore(), 'volunteers/alice'),
+      verifiedVolunteer('alice'));
   });
 
   await assertSucceeds(reengage('alice'));
@@ -2549,8 +2623,8 @@ test('engagements: wrong owner/profession/id denied', async () => {
 
 test('engagements: duplicate and delete denied', async () => {
   await seed();
-  await assertSucceeds(engage('alice'));
-  await assertFails(engage('alice'));
+  await assertSucceeds(engageVerified('alice'));
+  await assertFails(engage('alice', 'mk', {}, false));
   await assertFails(deleteDoc(doc(db('alice'), 'engagements/mission-a_alice')));
 });
 
@@ -2791,9 +2865,10 @@ test('JOB-0048: explicit mobilization cancellation stays organization-scoped', a
 
 test('engagement on a cancelled mission is denied and existing engagement stays', async () => {
   await seed();
-  await engage('alice');
+  await engageVerified('alice');
   await cancelMission('coord');
-  await assertFails(engage('bob'));
+  await seedVerifiedProfessional('bob');
+  await assertFails(engage('bob', 'mk', {}, false));
   await env.withSecurityRulesDisabled(async (context) => {
     assert.equal(
       (await getDoc(doc(context.firestore(), 'engagements/mission-a_alice'))).exists(),
@@ -2854,12 +2929,23 @@ test('admin invitations: coordinator creates, reads and cancels', async () => {
   await assertSucceeds(
     updateDoc(doc(db('coord'), reference), {status: 'cancelled'}),
   );
-  await assertSucceeds(
+  await assertFails(
     setDoc(
       doc(db('coord'), 'adminInvitations/coordinator-invitation'),
       adminInvitation({role: 'coordinator', locationIds: []}),
     ),
   );
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+  });
+  await assertSucceeds(setDoc(
+    doc(db('platform-admin'), 'adminInvitations/admin-coordinator-invitation'),
+    adminInvitation({
+      role: 'coordinator', locationIds: [], createdBy: 'platform-admin',
+    }),
+  ));
 });
 
 test('admin invitations: manager, volunteer and anonymous have no access', async () => {
@@ -2896,7 +2982,7 @@ test('admin invitations: protected creation fields are enforced', async () => {
       adminInvitation({createdBy: 'other'}),
     ),
   );
-  await assertSucceeds(
+  await assertFails(
     setDoc(
       doc(db('coord'), `${collectionName}/coordinator-role`),
       adminInvitation({role: 'coordinator', locationIds: []}),
@@ -3708,7 +3794,7 @@ test('roles dual-read: inactive cumulative role is denied everywhere', async () 
 
 test('roles dual-read: anonymous professional rights do not open admin data', async () => {
   await seed();
-  await assertSucceeds(engage('anonymous-professional'));
+  await assertSucceeds(engageVerified('anonymous-professional'));
   await assertFails(
     getDocs(collection(db('anonymous-professional'), 'adminInvitations')),
   );
@@ -3843,8 +3929,8 @@ test('platform V6: platform administrator reads its dashboard without client wri
 test('platform V6: existing V5 permissions remain unchanged', async () => {
   await seed();
 
-  await assertSucceeds(getDoc(doc(db(), 'locations/site-a')));
-  await assertSucceeds(getDoc(doc(db(), 'missions/mission-a')));
+  await assertFails(getDoc(doc(db(), 'locations/site-a')));
+  await assertFails(getDoc(doc(db(), 'missions/mission-a')));
   await assertSucceeds(createMissionFor('coord', 'v5-compatible'));
   await assertFails(createMissionFor('manager', 'v5-outside', 'site-b'));
   await assertSucceeds(getDoc(doc(db('manager'), 'roles/manager')));
@@ -4137,9 +4223,8 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
     await setDoc(doc(admin, 'platformAdministrators/platform-admin'), {
       active: true,
     });
-    await setDoc(doc(admin, 'volunteers/professional'), {
-      uid: 'professional',
-    });
+    await setDoc(doc(admin, 'volunteers/professional'),
+      verifiedVolunteer('professional'));
   });
 
   const coordA1 = await assertSucceeds(getDocs(query(
@@ -4251,6 +4336,8 @@ test('RC3.5: one professional engages in two mobilizations without mixing quotas
       mobilizationId: 'mobilization-b1',
     }));
   });
+
+  await seedVerifiedProfessional('professional');
 
   await assertSucceeds(engageMission(
     'professional',
@@ -4923,7 +5010,7 @@ test('RC4.2G: public professional reads and owner engagement rights stay unchang
     )));
   }
   for (const missionId of ['mission-org-a', 'mission-org-b']) {
-    await assertSucceeds(getDoc(doc(db(), `missions/${missionId}`)));
+    await assertFails(getDoc(doc(db(), `missions/${missionId}`)));
     await assertSucceeds(getDoc(doc(
       professionalDb,
       `engagements/${missionId}_professional`,
@@ -4968,7 +5055,7 @@ test('RC4.3E: platform visibility is inherited by mobilizations and missions', a
     professionalDb,
     'mobilizations/mobilization-a',
   )));
-  await assertSucceeds(getDoc(doc(db(), 'missions/mission-org-a')));
+  await assertFails(getDoc(doc(db(), 'missions/mission-org-a')));
   await assertFails(getDoc(doc(
     professionalDb,
     'operations/operation-b',
@@ -5036,7 +5123,7 @@ test('RC4.3E: legacy Gironde keeps its RC3 platform behavior', async () => {
     db('professional'),
     `mobilizations/${activeMobilizationId}`,
   )));
-  await assertSucceeds(getDoc(doc(db(), 'missions/mission-legacy')));
+  await assertFails(getDoc(doc(db(), 'missions/mission-legacy')));
   await assertSucceeds(getDoc(doc(
     db('legacy-coord'),
     'missions/mission-legacy',
@@ -5072,6 +5159,8 @@ test('RC4.3E: platform mission uses its embedded site projection only', async ()
   await seedMultiOrganizationCore();
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
+    await setDoc(doc(admin, 'volunteers/verified-discovery'),
+      verifiedVolunteer('verified-discovery'));
     await updateDoc(doc(admin, 'operations/operation-a'), {
       visibility: 'platform',
     });
@@ -5081,18 +5170,20 @@ test('RC4.3E: platform mission uses its embedded site projection only', async ()
   });
 
   const missionSnapshot = await assertSucceeds(getDoc(doc(
-    db(),
+    db('verified-discovery'),
     'missions/mission-org-a',
   )));
   assert.equal(missionSnapshot.data().locationId, 'site-a');
   assert.equal(missionSnapshot.data().locationName, 'Site A');
-  await assertFails(getDoc(doc(db(), 'locations/site-a')));
+  await assertFails(getDoc(doc(db('verified-discovery'), 'locations/site-a')));
 });
 
 test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', async () => {
   await seedMultiOrganizationCore();
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
+    await setDoc(doc(admin, 'volunteers/verified-discovery'),
+      verifiedVolunteer('verified-discovery'));
     await updateDoc(doc(admin, 'operations/operation-a'), {
       visibility: 'platform',
     });
@@ -5185,8 +5276,17 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
     publicDb,
     `mobilizations/${activeMobilizationId}`,
   )));
-  await assertSucceeds(getDocs(query(
+  await assertFails(getDocs(query(
     collection(publicDb, 'missions'),
+    where('mobilizationId', 'in', [
+      'mobilization-a',
+      'mobilization-platform-2',
+      activeMobilizationId,
+    ]),
+    where('isActive', '==', true),
+  )));
+  await assertSucceeds(getDocs(query(
+    collection(db('verified-discovery'), 'missions'),
     where('mobilizationId', 'in', [
       'mobilization-a',
       'mobilization-platform-2',
@@ -5196,7 +5296,7 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
   )));
 
   await assertFails(getDocs(collection(publicDb, 'engagements')));
-  await assertSucceeds(getDoc(doc(publicDb, 'locations/site-a')));
+  await assertFails(getDoc(doc(publicDb, 'locations/site-a')));
   await assertFails(getDoc(doc(
     publicDb,
     'locations/site-platform-private',
