@@ -129,6 +129,37 @@ void main() {
     },
   );
 
+  test('role lookup error never redirects site reads to anonymous', () async {
+    final repository = _FailingAccessRepository();
+    final administrativeRepository = _AdministrativeLocationRepository();
+    final data = LiveCoordinationData(
+      repository,
+      administrativeLocationRepository: administrativeRepository,
+    );
+    final errors = <Object>[];
+    final subscription = data.watchLocations().listen(
+      (_) {},
+      onError: errors.add,
+    );
+    const access = ResponsibleAccess(
+      uid: 'responsible',
+      role: ResponsibleRole.siteManager,
+      locationIds: {'site-a'},
+      active: true,
+    );
+    repository.emit(access);
+    await Future<void>.delayed(Duration.zero);
+    final error = StateError('role lookup denied');
+    repository.emitError(error);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(errors, [error]);
+    expect(repository.anonymousLocationReads, 0);
+    await subscription.cancel();
+    await data.dispose();
+    await repository.disposeController();
+  });
+
   test('mission errors are replayed and cleared after recovery', () async {
     final repository = _ControlledDataRepository();
     final data = LiveCoordinationData(repository);
@@ -263,6 +294,37 @@ void main() {
     },
   );
 
+  test(
+    'coordinator missions use authenticated accessible mobilizations',
+    () async {
+      const access = ResponsibleAccess(
+        uid: 'coordinator',
+        role: ResponsibleRole.coordinator,
+        locationIds: {'*'},
+        active: true,
+      );
+      final repository = _RoleAwareMultiRepository(access: access);
+      final administrativeRepository = _AdministrativeMissionRepository();
+      final data = LiveCoordinationData(
+        repository,
+        administrativeMissionRepository: administrativeRepository,
+        coordinatorMobilizationIds: () => Stream.multi(
+          (controller) => controller.add({'assigned-mobilization'}),
+        ),
+      );
+
+      final missions = await data.watchMissions().first;
+
+      expect(missions.map((mission) => mission.id), ['administrative-mission']);
+      expect(administrativeRepository.requestedMobilizationIds, {
+        'assigned-mobilization',
+      });
+      expect(repository.legacyMissionReads, 0);
+      expect(repository.allMissionReads, 0);
+      await data.dispose();
+    },
+  );
+
   test('professional location flow keeps the public RC3 repository', () async {
     final repository = _RoleAwareMultiRepository(access: null);
     final administrativeRepository = _AdministrativeLocationRepository();
@@ -310,6 +372,29 @@ void main() {
       }
     },
   );
+
+  test('responsible site IDs bound the authenticated location read', () async {
+    const access = ResponsibleAccess(
+      uid: 'responsible',
+      role: ResponsibleRole.siteManager,
+      locationIds: {'site-a'},
+      active: true,
+    );
+    final repository = _RoleAwareMultiRepository(access: access);
+    final administrativeRepository = _ScopedAdministrativeLocationRepository();
+    final data = LiveCoordinationData(
+      repository,
+      administrativeLocationRepository: administrativeRepository,
+    );
+
+    expect((await data.watchLocations().first).map((location) => location.id), [
+      'site-a',
+    ]);
+    expect(administrativeRepository.requestedIds, {'site-a'});
+    expect(administrativeRepository.unboundedReads, 0);
+    expect(repository.locationReads, 0);
+    await data.dispose();
+  });
 
   test(
     'administrative engagement scope never replaces UID owner reads',
@@ -412,6 +497,16 @@ class _ControlledAccessRepository extends MockCoordinationRepository {
   Future<void> disposeController() => _controller.close();
 }
 
+class _FailingAccessRepository extends _ControlledAccessRepository {
+  int anonymousLocationReads = 0;
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    anonymousLocationReads++;
+    return Stream.error(StateError('Anonymous location fallback'));
+  }
+}
+
 class _ControlledDataRepository extends MockCoordinationRepository {
   final _missions = StreamController<List<CoordinationNeed>>.broadcast(
     sync: true,
@@ -457,7 +552,14 @@ class _RoleAwareMultiRepository extends MockCoordinationRepository
 
   final ResponsibleAccess? access;
   int allMissionReads = 0;
+  int legacyMissionReads = 0;
   int locationReads = 0;
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissions() {
+    legacyMissionReads++;
+    return Stream.error(StateError('Anonymous mission fallback'));
+  }
 
   @override
   Stream<ResponsibleAccess?> watchResponsibleAccess() =>
@@ -499,10 +601,29 @@ class _AdministrativeLocationRepository implements LocationReadRepository {
   }
 }
 
+class _ScopedAdministrativeLocationRepository
+    implements ScopedLocationReadRepository {
+  Set<String>? requestedIds;
+  int unboundedReads = 0;
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    unboundedReads++;
+    return Stream.error(StateError('Unbounded location read'));
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsForIds(Set<String> ids) {
+    requestedIds = Set.unmodifiable(ids);
+    return Stream.value([_location('site-a', 'Site autorisé')]);
+  }
+}
+
 class _AdministrativeMissionRepository
     implements MultiMobilizationCoordinationReadRepository {
   int reads = 0;
   Set<String>? requestedLocationIds;
+  Set<String>? requestedMobilizationIds;
 
   @override
   Stream<List<CoordinationNeed>> watchAllActiveMissions() {
@@ -524,6 +645,7 @@ class _AdministrativeMissionRepository
     Set<String> mobilizationIds,
   ) {
     reads++;
+    requestedMobilizationIds = Set.unmodifiable(mobilizationIds);
     return Stream.value([_mission('administrative-mission', 'Administration')]);
   }
 }

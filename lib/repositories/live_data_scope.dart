@@ -15,6 +15,7 @@ class LiveCoordinationData {
     Stream<List<ResponsePlace>> Function()? locationsOverride,
     MultiMobilizationCoordinationReadRepository?
     administrativeMissionRepository,
+    Stream<Set<String>> Function()? coordinatorMobilizationIds,
     MissionEngagementReadRepository? administrativeEngagementRepository,
     LocationReadRepository? administrativeLocationRepository,
   }) : _repository = repository,
@@ -41,10 +42,13 @@ class LiveCoordinationData {
             access.locationIds,
           );
         }
-        // Le Coordinateur sélectionne sa mobilisation dans le Cockpit.
-        // Les autres écrans conservent leur flux historique tant qu'ils ne
-        // portent pas encore de sélecteur explicite.
-        return repository.watchMissions();
+        if (access.isCoordinator && coordinatorMobilizationIds != null) {
+          return switchLatest(
+            coordinatorMobilizationIds(),
+            administrativeRepository.watchMissionsForMobilizations,
+          );
+        }
+        return administrativeRepository.watchAllActiveMissions();
       });
     }, onValue: _pruneMissionStreams);
     _locations = _SharedLatestStream(() {
@@ -55,18 +59,21 @@ class LiveCoordinationData {
       return switchLatest(
         _retainLastResponsibleAccess(_responsibleAccess.watch()),
         (access) {
-          // Le parcours Professionnel conserve exactement sa projection publique
-          // RC3. Les identités privilégiées passent par le repository borné.
+          // Le Professionnel vérifié lit avec sa session volontaire RC3.
+          // Les rôles privilégiés passent par le dépôt administratif borné.
           if (access == null) return repository.watchLocations();
-          final locations = administrativeLocationRepository.watchLocations();
           if (access.isSiteManager && !access.isCoordinator) {
+            final scopedRepository = administrativeLocationRepository;
+            final locations = scopedRepository is ScopedLocationReadRepository
+                ? scopedRepository.watchLocationsForIds(access.locationIds)
+                : scopedRepository.watchLocations();
             return locations.map(
               (items) => List<ResponsePlace>.unmodifiable(
                 items.where((item) => access.locationIds.contains(item.id)),
               ),
             );
           }
-          return locations;
+          return administrativeLocationRepository.watchLocations();
         },
       );
     });
@@ -148,10 +155,9 @@ Stream<ResponsibleAccess?> _retainLastResponsibleAccess(
 ) => Stream<ResponsibleAccess?>.multi((controller) {
   final subscription = source.listen(
     controller.add,
-    // L'état de routage principal traite l'erreur et ferme les actions
-    // privilégiées. La projection des sites bascule alors sur le chemin
-    // public legacy, sans conserver un ancien périmètre administratif.
-    onError: (_, _) => controller.add(null),
+    // Un échec de lecture du rôle ne doit jamais réorienter un utilisateur
+    // privilégié vers le dépôt anonyme des sites.
+    onError: controller.addError,
     // La fermeture est volontairement absorbée : l'annulation du
     // consommateur libère toujours la souscription et le flux enfant.
     onDone: () {},

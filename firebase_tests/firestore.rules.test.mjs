@@ -766,14 +766,41 @@ test('locations: visitor reads and all client writes denied', async () => {
 
 test('legacy locations require verified professional or administrative access', async () => {
   await seedOrganizationLocations();
+  await seedVerifiedProfessional('verified-professional');
 
   await assertFails(getDoc(doc(db(), 'locations/legacy-implicit')));
   await assertFails(getDoc(doc(db(), 'locations/legacy-explicit')));
+  await assertSucceeds(getDoc(doc(
+    db('verified-professional'), 'locations/legacy-implicit',
+  )));
+  const professionalLegacy = await assertSucceeds(getDocs(query(
+    collection(db('verified-professional'), 'locations'),
+    where('managingOrganizationId', '==', 'legacy-gironde'),
+  )));
+  assert.deepEqual(professionalLegacy.docs.map((item) => item.id), [
+    'legacy-explicit',
+  ]);
+  await assertFails(getDoc(doc(
+    db('verified-professional'), 'locations/site-organization-a',
+  )));
   await assertSucceeds(getDoc(
     doc(db('legacy-coordinator'), 'locations/legacy-implicit'),
   ));
   await assertSucceeds(getDoc(
     doc(db('legacy-manager'), 'locations/legacy-implicit'),
+  ));
+  await assertFails(getDoc(
+    doc(db('legacy-manager'), 'locations/legacy-explicit'),
+  ));
+  const legacyExplicit = await assertSucceeds(getDocs(query(
+    collection(db('legacy-coordinator'), 'locations'),
+    where('managingOrganizationId', '==', 'legacy-gironde'),
+  )));
+  assert.deepEqual(legacyExplicit.docs.map((item) => item.id), [
+    'legacy-explicit',
+  ]);
+  await assertFails(getDoc(
+    doc(db('legacy-coordinator'), 'locations/site-organization-a'),
   ));
   await assertFails(getDoc(doc(
     db(),
@@ -4730,6 +4757,24 @@ test('RC4.3D: site manager membership is limited to declared organization sites'
   });
 
   const managerDb = db('organization-manager-a');
+  await assertSucceeds(getDocs(query(
+    collection(managerDb, 'operations'),
+    where('ownerOrganizationId', '==', 'organization-a'),
+  )));
+  await assertFails(getDocs(query(
+    collection(managerDb, 'operations'),
+    where('ownerOrganizationId', '==', 'organization-b'),
+  )));
+  await assertSucceeds(getDocs(query(
+    collection(managerDb, 'mobilizations'),
+    where('operationId', '==', 'operation-a'),
+    where('status', '==', 'active'),
+  )));
+  await assertFails(getDocs(query(
+    collection(managerDb, 'mobilizations'),
+    where('operationId', '==', 'operation-b'),
+    where('status', '==', 'active'),
+  )));
   await assertSucceeds(getDoc(doc(managerDb, 'locations/site-rc43d-a')));
   await assertFails(getDoc(doc(managerDb, 'locations/site-rc43d-a-other')));
   await assertFails(getDoc(doc(managerDb, 'locations/site-rc43d-b')));

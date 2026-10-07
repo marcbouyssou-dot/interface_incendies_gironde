@@ -31,6 +31,11 @@ void main() {
         'mission-legacy',
       ]);
       expect(fixture.missionDataSource.reads, 1);
+      expect(fixture.missionDataSource.globalReads, 0);
+      expect(fixture.missionDataSource.requestedMobilizationIds.single, {
+        'mobilization-gironde',
+        'mobilization-legacy',
+      });
     });
 
     test('test organization exposes only its linked mission', () async {
@@ -57,6 +62,37 @@ void main() {
         });
       },
     );
+
+    test('mission and site query remains bounded before Firestore', () async {
+      final fixture = _Fixture()..selectLegacy();
+      addTearDown(fixture.dispose);
+
+      final missions = await fixture.repository
+          .watchMissionsForMobilizationsAndLocations(
+            mobilizationIds: {'mobilization-gironde', 'mobilization-test'},
+            locationIds: {'location-gironde'},
+          )
+          .first;
+
+      expect(missions.map((mission) => mission.id), ['mission-gironde']);
+      expect(fixture.missionDataSource.globalReads, 0);
+      expect(
+        fixture
+            .missionDataSource
+            .requestedMobilizationLocationScopes
+            .single
+            .mobilizationIds,
+        {'mobilization-gironde'},
+      );
+      expect(
+        fixture
+            .missionDataSource
+            .requestedMobilizationLocationScopes
+            .single
+            .locationIds,
+        {'location-gironde'},
+      );
+    });
 
     test('global platform admin keeps all missions', () async {
       final fixture = _Fixture()..selectGlobalPlatformAdmin();

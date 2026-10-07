@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/mobilization.dart';
 import '../models/operation.dart';
 import '../models/organization_context.dart';
+import '../models/organization_role.dart';
 import '../models/territory.dart';
 import '../services/legacy_organization_resolver.dart';
 import '../services/organization_context_read_policy.dart';
@@ -58,6 +59,13 @@ class OrganizationScopedPlatformReadRepository
             organizationId: organizationId,
           );
         }
+        if (_delegate is MobilizationLookupRepository) {
+          return watchActiveMobilization().map(
+            (mobilization) => mobilization == null
+                ? const <Mobilization>[]
+                : List<Mobilization>.unmodifiable([mobilization]),
+          );
+        }
         return _delegate.watchActiveMobilization().map((mobilization) {
           if (mobilization == null ||
               !_resolver.isMobilizationAccessible(
@@ -81,6 +89,22 @@ class OrganizationScopedPlatformReadRepository
         final organizationId =
             OrganizationContextReadPolicy.readableOrganizationId(context);
         if (organizationId == null) return Stream<Mobilization?>.value(null);
+        if (organizationId == LegacyOrganizationResolver.legacyOrganizationId &&
+            context?.isPlatformAdministrator != true &&
+            _delegate is MobilizationLookupRepository) {
+          return switchLatest(_retainLastMobilization(source), (mobilization) {
+            if (mobilization == null) {
+              return Stream<Mobilization?>.value(null);
+            }
+            final operationId = mobilization.operationId;
+            if (operationId == null) {
+              return Stream<Mobilization?>.value(mobilization);
+            }
+            return _operationRepository
+                .watchOperation(operationId)
+                .map((operation) => operation == null ? null : mobilization);
+          });
+        }
         return _combineLatestOperationsAndMobilizations<Mobilization?>(
           _operationRepository.watchOperations(),
           source,
@@ -151,6 +175,83 @@ class OrganizationScopedPlatformReadRepository
         includeInactive: includeInactive,
       );
     }
+    final delegate = _delegate;
+    final isManager =
+        context?.hasRole(OrganizationRole.coordinator) == true ||
+        context?.hasRole(OrganizationRole.siteManager) == true ||
+        context?.hasRole(OrganizationRole.organizationAdmin) == true;
+    if (context?.isPlatformAdministrator != true &&
+        isManager &&
+        delegate is OperationMobilizationReadRepository) {
+      if (includeInactive) {
+        return Stream<List<Mobilization>>.error(
+          StateError('Liste des mobilisations inactives non autorisée.'),
+        );
+      }
+      final scopedDelegate = delegate as OperationMobilizationReadRepository;
+      return switchLatest(_operationRepository.watchOperations(), (operations) {
+        // Les rôles RC3 legacy sans membership n'ont accès qu'à leur
+        // mobilisation configurée en lecture documentaire ciblée.
+        final source =
+            organizationId == LegacyOrganizationResolver.legacyOrganizationId &&
+                context?.hasActiveMembership != true
+            ? Stream<List<Mobilization>>.value(const [])
+            : scopedDelegate.watchActiveMobilizationsForOperations(
+                operations.map((operation) => operation.id).toSet(),
+                territoryId: territoryId,
+              );
+        if (organizationId != LegacyOrganizationResolver.legacyOrganizationId) {
+          return source.map(
+            (mobilizations) => _filterMobilizations(
+              organizationId: organizationId,
+              operations: operations,
+              mobilizations: mobilizations,
+            ),
+          );
+        }
+        final scopedSource = source.map(
+          (mobilizations) => _filterMobilizations(
+            organizationId: organizationId,
+            operations: operations,
+            mobilizations: mobilizations,
+          ),
+        );
+        final legacy = switchLatest(_delegate.watchPlatformConfig(), (id) {
+          if (id == null) return Stream<List<Mobilization>>.value(const []);
+          return switchLatest(
+            _retainLastMobilization(_lookupMobilization(id)),
+            (mobilization) {
+              if (mobilization == null) {
+                return Stream<List<Mobilization>>.value(const []);
+              }
+              final operationId = mobilization.operationId;
+              if (operationId == null) {
+                return Stream<List<Mobilization>>.value([mobilization]);
+              }
+              // Une opération historique sans ownerOrganizationId n'est pas
+              // listable par requête bornée, mais reste vérifiable par ID.
+              return _operationRepository
+                  .watchOperation(operationId)
+                  .map(
+                    (operation) => operation == null
+                        ? const <Mobilization>[]
+                        : [mobilization],
+                  );
+            },
+          );
+        });
+        return _combineLatestMobilizationLists(scopedSource, legacy).map(
+          (mobilizations) => mobilizations
+              .where(
+                (mobilization) =>
+                    mobilization.status == MobilizationStatus.active &&
+                    (territoryId == null ||
+                        mobilization.territoryId == territoryId),
+              )
+              .toList(growable: false),
+        );
+      });
+    }
     return _combineLatestOperationsAndMobilizations(
       _operationRepository.watchOperations(),
       _delegate.watchMobilizations(
@@ -176,9 +277,33 @@ class OrganizationScopedPlatformReadRepository
         if (organizationId == null) {
           return Stream<Mobilization?>.value(null);
         }
+        if (context?.isPlatformAdministrator != true &&
+            _delegate is MobilizationLookupRepository) {
+          return switchLatest(
+            _delegate.watchPlatformConfig(),
+            (id) => id == null
+                ? Stream<Mobilization?>.value(null)
+                : watchMobilization(id).map(
+                    (mobilization) =>
+                        mobilization?.status == MobilizationStatus.active
+                        ? mobilization
+                        : null,
+                  ),
+          );
+        }
+        final source =
+            context?.isPlatformAdministrator == true ||
+                _delegate is! MobilizationLookupRepository
+            ? _delegate.watchActiveMobilization()
+            : switchLatest(
+                _delegate.watchPlatformConfig(),
+                (id) => id == null
+                    ? Stream<Mobilization?>.value(null)
+                    : _lookupMobilization(id),
+              );
         return _combineLatestOperationsAndMobilizations<Mobilization?>(
           _operationRepository.watchOperations(),
-          _delegate.watchActiveMobilization(),
+          source,
           (operations, mobilization) {
             if (mobilization == null) return null;
             final accessibleOperationIds = operations
@@ -261,3 +386,50 @@ Stream<R> _combineLatestOperationsAndMobilizations<R>(
     }
   };
 });
+
+Stream<List<Mobilization>> _combineLatestMobilizationLists(
+  Stream<List<Mobilization>> first,
+  Stream<List<Mobilization>> second,
+) => Stream<List<Mobilization>>.multi((controller) {
+  List<Mobilization>? firstValue;
+  List<Mobilization>? secondValue;
+  void emit() {
+    if (firstValue == null || secondValue == null) return;
+    final byId = <String, Mobilization>{};
+    for (final item in firstValue!) {
+      byId[item.id] = item;
+    }
+    for (final item in secondValue!) {
+      byId[item.id] = item;
+    }
+    controller.add(List<Mobilization>.unmodifiable(byId.values));
+  }
+
+  final subscriptions = <StreamSubscription<List<Mobilization>>>[
+    first.listen((value) {
+      firstValue = value;
+      emit();
+    }, onError: controller.addError),
+    second.listen((value) {
+      secondValue = value;
+      emit();
+    }, onError: controller.addError),
+  ];
+  controller.onCancel = () async {
+    for (final subscription in subscriptions) {
+      await subscription.cancel();
+    }
+  };
+});
+
+/// Les refus documentaires sont projetés en `null` par la source, puis son
+/// flux se ferme. Conserver cet état laisse le filtre enfant émettre `null`.
+Stream<Mobilization?> _retainLastMobilization(Stream<Mobilization?> source) =>
+    Stream<Mobilization?>.multi((controller) {
+      final subscription = source.listen(
+        controller.add,
+        onError: controller.addError,
+        onDone: () {},
+      );
+      controller.onCancel = subscription.cancel;
+    });

@@ -45,19 +45,32 @@ class OrganizationScopedOperationReadRepository
         if (organizationId == null) {
           return Stream<List<Operation>>.value(const []);
         }
-        return _delegate
-            .watchOperations(statuses: statuses)
-            .map(
-              (operations) => List<Operation>.unmodifiable(
-                operations.where(
-                  (operation) => _canReadOperation(
-                    operation: operation,
-                    context: context!,
-                    organizationId: organizationId,
-                  ),
-                ),
+        final delegate = _delegate;
+        final isManager =
+            context?.hasRole(OrganizationRole.coordinator) == true ||
+            context?.hasRole(OrganizationRole.siteManager) == true ||
+            context?.hasRole(OrganizationRole.organizationAdmin) == true;
+        final source =
+            context?.isPlatformAdministrator != true &&
+                isManager &&
+                delegate is OrganizationOperationReadRepository
+            ? (delegate as OrganizationOperationReadRepository)
+                  .watchOperationsForOrganization(
+                    organizationId,
+                    statuses: statuses,
+                  )
+            : delegate.watchOperations(statuses: statuses);
+        return source.map(
+          (operations) => List<Operation>.unmodifiable(
+            operations.where(
+              (operation) => _canReadOperation(
+                operation: operation,
+                context: context!,
+                organizationId: organizationId,
               ),
-            );
+            ),
+          ),
+        );
       });
 
   @override

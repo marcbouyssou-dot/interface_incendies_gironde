@@ -32,3 +32,11 @@ abstract interface class MobilizationLookupRepository {
 abstract interface class ResponsibleMobilizationReadRepository {
   Stream<List<Mobilization>> watchResponsibleActiveMobilizations();
 }
+
+/// Liste active bornée côté serveur aux opérations déjà autorisées.
+abstract interface class OperationMobilizationReadRepository {
+  Stream<List<Mobilization>> watchActiveMobilizationsForOperations(
+    Set<String> operationIds, {
+    String? territoryId,
+  });
+}

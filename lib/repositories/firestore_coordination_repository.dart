@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../data/mock_data.dart' show places;
 import '../models/health_profession.dart';
 import '../models/app_notification.dart';
 import '../models/mobilization_context.dart';
@@ -25,6 +26,7 @@ import '../services/operational_context_provider.dart';
 import '../services/platform_administration_service.dart';
 import '../services/push_token_chain_diagnostic.dart';
 import '../utils/switch_latest.dart';
+import '../utils/legacy_location_document_id.dart';
 import 'admin_invitation_repository.dart';
 import 'coordination_repository.dart';
 import 'firestore_admin_invitation_repository.dart';
@@ -771,12 +773,70 @@ class FirestoreCoordinationRepository
 
   @override
   Stream<List<ResponsePlace>> watchLocations() {
-    return _watchLocationsQuery(_firestore.collection('locations'));
+    return _watchLegacyLocations(_firestore);
   }
 
   @override
   Stream<List<ResponsePlace>> watchAllAdministrativeLocations() {
     return _watchLocationsQuery(_responsibleFirestore.collection('locations'));
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsForIds(Set<String> locationIds) =>
+      _watchLocationsForIds(_responsibleFirestore, locationIds);
+
+  Stream<List<ResponsePlace>> _watchLocationsForIds(
+    FirebaseFirestore firestore,
+    Set<String> locationIds,
+  ) {
+    if (locationIds.length > 65 ||
+        locationIds.any(
+          (id) => id.isEmpty || id.trim() != id || id.contains('/'),
+        )) {
+      return Stream.error(
+        const RepositoryException('Périmètre de sites invalide.'),
+      );
+    }
+    if (locationIds.isEmpty) return Stream.value(const []);
+    final ids = locationIds.toList()..sort();
+    return _combineLocationStreams([
+      for (final id in ids)
+        firestore.collection('locations').doc(id).snapshots().map((snapshot) {
+          final data = snapshot.data();
+          return data == null
+              ? const <ResponsePlace>[]
+              : [FirestoreLocationMapper.fromFirestore(id: id, data: data)];
+        }),
+    ]);
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLegacyAdministrativeLocations() =>
+      _watchLegacyLocations(_responsibleFirestore);
+
+  Stream<List<ResponsePlace>> _watchLegacyLocations(
+    FirebaseFirestore firestore,
+  ) {
+    // Les 65 sites initiaux n'ont pas de champ managingOrganizationId.
+    // Leurs identifiants de seed permettent des lectures unitaires autorisées
+    // sans requête globale qui pourrait inclure une autre organisation.
+    final seedIds = places.map(legacyLocationDocumentId).toSet();
+    return _combineLocationStreams([
+      _watchLocationsForIds(firestore, seedIds),
+      _watchLocationsQuery(
+        firestore
+            .collection('locations')
+            .where('managingOrganizationId', isEqualTo: 'legacy-gironde'),
+      ),
+    ]).map(
+      (locations) => List<ResponsePlace>.unmodifiable(
+        locations.where(
+          (location) =>
+              location.managingOrganizationId == null ||
+              location.managingOrganizationId == 'legacy-gironde',
+        ),
+      ),
+    );
   }
 
   @override
@@ -809,6 +869,46 @@ class FirestoreCoordinationRepository
         ),
       ),
     );
+  }
+
+  Stream<List<ResponsePlace>> _combineLocationStreams(
+    List<Stream<List<ResponsePlace>>> streams,
+  ) {
+    if (streams.isEmpty) return Stream.value(const []);
+    late final StreamController<List<ResponsePlace>> controller;
+    final subscriptions = <StreamSubscription<List<ResponsePlace>>>[];
+    final values = <int, List<ResponsePlace>>{};
+
+    void emit() {
+      if (values.length != streams.length || controller.isClosed) return;
+      final byId = <String, ResponsePlace>{
+        for (final locations in values.values)
+          for (final location in locations) location.id: location,
+      };
+      final result = byId.values.toList()
+        ..sort((left, right) => left.id.compareTo(right.id));
+      controller.add(List.unmodifiable(result));
+    }
+
+    controller = StreamController<List<ResponsePlace>>(
+      onListen: () {
+        for (var index = 0; index < streams.length; index++) {
+          final sourceIndex = index;
+          subscriptions.add(
+            streams[index].listen((locations) {
+              values[sourceIndex] = locations;
+              emit();
+            }, onError: controller.addError),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      },
+    );
+    return controller.stream;
   }
 
   @override

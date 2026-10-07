@@ -369,13 +369,16 @@ class _AppShellState extends State<AppShell> {
       responsibleAccessOverride: () =>
           _previewContextStream<ResponsibleAccess?>(null),
       missionsOverride: platformRepository == null || repository == null
-          ? null
+          ? _repository is VisitorOperationalReadGate
+                ? () => Stream<List<CoordinationNeed>>.error(
+                    StateError('Lecture Administrateur indisponible.'),
+                  )
+                : null
           : () => _watchAdministrativeMissions(platformRepository, repository),
       administrativeEngagementRepository:
           _contextualizedEngagementReadRepository(repository),
-      locationsOverride: operationContext == null
-          ? null
-          : () => _watchPreviewLocations(operationContext.locationIds),
+      locationsOverride: () =>
+          _watchPreviewLocations(operationContext?.locationIds),
     );
   }
 
@@ -407,9 +410,9 @@ class _AppShellState extends State<AppShell> {
           : () => repository.watchMissionsForLocations({locationId}),
       administrativeEngagementRepository:
           _contextualizedEngagementReadRepository(repository),
-      locationsOverride: operationContext == null || locationId == null
-          ? null
-          : () => _watchPreviewLocations({locationId}),
+      locationsOverride: () => locationId == null
+          ? Stream<List<ResponsePlace>>.value(const [])
+          : _watchPreviewLocations({locationId}),
     );
   }
 
@@ -435,22 +438,33 @@ class _AppShellState extends State<AppShell> {
         ),
       ),
       missionsOverride: platformRepository == null || repository == null
-          ? null
+          ? _repository is VisitorOperationalReadGate
+                ? () => Stream<List<CoordinationNeed>>.error(
+                    StateError('Lecture Administrateur indisponible.'),
+                  )
+                : null
           : () => _watchAdministrativeMissions(platformRepository, repository),
       administrativeEngagementRepository:
           _contextualizedEngagementReadRepository(repository),
-      locationsOverride: operationContext == null
-          ? null
-          : () => _watchPreviewLocations(operationContext.locationIds),
+      locationsOverride: () =>
+          _watchPreviewLocations(operationContext?.locationIds),
     );
   }
 
-  Stream<List<ResponsePlace>> _watchPreviewLocations(Set<String> ids) {
-    if (ids.isEmpty) return Stream.value(const []);
-    return _repository!.watchLocations().map(
-      (locations) => locations
-          .where((location) => ids.contains(location.id))
-          .toList(growable: false),
+  Stream<List<ResponsePlace>> _watchPreviewLocations(Set<String>? ids) {
+    if (ids?.isEmpty == true) return Stream.value(const []);
+    final repository = _repository!;
+    final source =
+        ids != null && repository is OrganizationLocationReadDataSource
+        ? (repository as OrganizationLocationReadDataSource)
+              .watchAllAdministrativeLocations()
+        : _contextualizedLocationReadRepository(repository).watchLocations();
+    return source.map(
+      (locations) => ids == null
+          ? locations
+          : locations
+                .where((location) => ids.contains(location.id))
+                .toList(growable: false),
     );
   }
 
@@ -734,6 +748,10 @@ class _AppShellState extends State<AppShell> {
     final missionRepository = _contextualizedMissionReadRepository(
       platformRepository,
     );
+    final coordinatorMobilizations = _contextualizedAccessibleMobilizations(
+      multiRuntime,
+      platformRepository,
+    );
     final locationRepository = _contextualizedLocationReadRepository(
       repository,
     );
@@ -749,6 +767,14 @@ class _AppShellState extends State<AppShell> {
               closeWhenLegacyAccessCloses: false,
             ),
       administrativeMissionRepository: missionRepository,
+      coordinatorMobilizationIds: coordinatorMobilizations == null
+          ? null
+          : () => coordinatorMobilizations.watchAccessibleMobilizations().map(
+              (mobilizations) => mobilizations
+                  .where((item) => item.status == MobilizationStatus.active)
+                  .map((item) => item.id)
+                  .toSet(),
+            ),
       administrativeEngagementRepository:
           _contextualizedEngagementReadRepository(missionRepository),
       administrativeLocationRepository:
@@ -877,6 +903,7 @@ class _AppShellState extends State<AppShell> {
         crossRolePreview && multiReadRepository != null
         ? _PlatformAdminPreviewMissionRepository(
             multiReadRepository,
+            platformRepository: platformRepository!,
             allowedMobilizationIds: operationPreviewContext?.mobilizationIds,
           )
         : multiReadRepository;
@@ -1179,25 +1206,34 @@ class _PlatformAdminAccessibleMobilizationsProvider
       );
 }
 
-/// Les Rules évaluent l'identité Firebase réelle, qui reste Administrateur,
-/// et non la perspective affichée. Les missions actives sont déjà lisibles par
-/// la session professionnelle anonyme ; la prévisualisation part donc de ce
-/// flux autorisé puis applique localement le périmètre demandé.
+/// La perspective affichée conserve l'identité Firebase Administrateur.
+/// Les missions sont lues par le dépôt administratif avant le filtre local.
 class _PlatformAdminPreviewMissionRepository
     implements
         MultiMobilizationCoordinationReadRepository,
         MissionAccessReadRepository {
   const _PlatformAdminPreviewMissionRepository(
     this.source, {
+    required this.platformRepository,
     this.allowedMobilizationIds,
   });
 
   final MultiMobilizationCoordinationReadRepository source;
+  final PlatformReadRepository platformRepository;
   final Set<String>? allowedMobilizationIds;
 
   @override
   Stream<List<CoordinationNeed>> watchAllActiveMissions() =>
-      source.watchAllActiveMissions().map(_withinOperation);
+      switchLatest(platformRepository.watchMobilizations(), (mobilizations) {
+        final ids = mobilizations
+            .where((item) => item.status == MobilizationStatus.active)
+            .map((item) => item.id)
+            .where(_mobilizationWithinOperation)
+            .toSet();
+        return ids.isEmpty
+            ? Stream<List<CoordinationNeed>>.value(const [])
+            : source.watchMissionsForMobilizations(ids).map(_withinOperation);
+      });
 
   @override
   Stream<CoordinationNeed?> watchAccessibleMission(String missionId) {
@@ -1217,41 +1253,68 @@ class _PlatformAdminPreviewMissionRepository
   @override
   Stream<List<CoordinationNeed>> watchMissionsForLocations(
     Set<String> locationIds,
-  ) => _filter(
-    locationIds,
-    (mission, ids) =>
-        mission.locationId != null && ids.contains(mission.locationId),
-  );
+  ) {
+    if (locationIds.isEmpty) return Stream.value(const []);
+    return switchLatest(platformRepository.watchMobilizations(), (
+      mobilizations,
+    ) {
+      final ids = mobilizations
+          .where((item) => item.status == MobilizationStatus.active)
+          .map((item) => item.id)
+          .where(_mobilizationWithinOperation)
+          .toSet();
+      if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
+      final repository = source;
+      final missions = repository is MobilizationLocationMissionReadRepository
+          ? (repository as MobilizationLocationMissionReadRepository)
+                .watchMissionsForMobilizationsAndLocations(
+                  mobilizationIds: ids,
+                  locationIds: locationIds,
+                )
+          : repository.watchMissionsForMobilizations(ids);
+      return missions.map(
+        (items) => items
+            .where(
+              (mission) =>
+                  _missionWithinOperation(mission) &&
+                  mission.locationId != null &&
+                  locationIds.contains(mission.locationId),
+            )
+            .toList(growable: false),
+      );
+    });
+  }
 
   @override
   Stream<List<CoordinationNeed>> watchMissionsForMobilizations(
     Set<String> mobilizationIds,
-  ) => _filter(
-    mobilizationIds,
-    (mission, ids) => ids.contains(mission.mobilizationId),
-  );
-
-  Stream<List<CoordinationNeed>> _filter(
-    Set<String> ids,
-    bool Function(CoordinationNeed mission, Set<String> ids) includes,
   ) {
+    final ids = mobilizationIds.where(_mobilizationWithinOperation).toSet();
     if (ids.isEmpty) return Stream.value(const []);
-    return source.watchAllActiveMissions().map(
-      (missions) => missions
-          .where(
-            (mission) =>
-                _missionWithinOperation(mission) && includes(mission, ids),
-          )
-          .toList(growable: false),
-    );
+    return source
+        .watchMissionsForMobilizations(ids)
+        .map(
+          (missions) => missions
+              .where(
+                (mission) =>
+                    _missionWithinOperation(mission) &&
+                    ids.contains(mission.mobilizationId),
+              )
+              .toList(growable: false),
+        );
   }
 
   List<CoordinationNeed> _withinOperation(List<CoordinationNeed> missions) =>
       missions.where(_missionWithinOperation).toList(growable: false);
 
-  bool _missionWithinOperation(CoordinationNeed mission) =>
-      allowedMobilizationIds == null ||
-      allowedMobilizationIds!.contains(mission.mobilizationId);
+  bool _mobilizationWithinOperation(String id) =>
+      allowedMobilizationIds == null || allowedMobilizationIds!.contains(id);
+
+  bool _missionWithinOperation(CoordinationNeed mission) {
+    final mobilizationId = mission.mobilizationId;
+    return mobilizationId != null &&
+        _mobilizationWithinOperation(mobilizationId);
+  }
 }
 
 class _UnavailableMissionEngagementReadRepository

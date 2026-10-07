@@ -17,6 +17,7 @@ import 'package:interface_incendies_gironde/models/user_display_identity.dart';
 import 'package:interface_incendies_gironde/perspective/cross_role_perspective.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/location_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
@@ -570,7 +571,7 @@ void main() {
         missions: [mission],
         location: location,
         accountsRepository: accountsRepository,
-        denyAdministrativeScopedReads: true,
+        failProfessionalMissionRead: true,
       );
       await tester.pumpWidget(
         FireCoordinationApp(
@@ -579,6 +580,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      final anonymousReadsBeforePreview = repository.allActiveRequests;
+      final anonymousLocationsBeforePreview = repository.anonymousLocationReads;
 
       Future<void> openAdminPerspective(Key key) async {
         await tester.tap(find.text('Plus').last);
@@ -599,8 +602,13 @@ void main() {
         find.text("Prévisualisation Coordinateur d'action"),
         findsOneWidget,
       );
-      expect(repository.allActiveRequests, greaterThan(0));
-      expect(repository.mobilizationRequests, isEmpty);
+      expect(repository.allActiveRequests, anonymousReadsBeforePreview);
+      expect(repository.mobilizationRequests, isNotEmpty);
+      expect(repository.administrativeLocationReads, greaterThan(0));
+      expect(
+        repository.anonymousLocationReads,
+        anonymousLocationsBeforePreview,
+      );
       expect(
         find.text('Le cockpit opérationnel est temporairement indisponible.'),
         findsNothing,
@@ -697,8 +705,12 @@ void main() {
         find.byKey(const PageStorageKey('coordinator-cockpit')),
         findsOneWidget,
       );
-      expect(repository.allActiveRequests, greaterThan(1));
-      expect(repository.mobilizationRequests, isEmpty);
+      expect(repository.allActiveRequests, anonymousReadsBeforePreview);
+      expect(repository.mobilizationRequests, isNotEmpty);
+      expect(
+        repository.anonymousLocationReads,
+        anonymousLocationsBeforePreview,
+      );
       expect(find.text('Tous les centres — accès Coordinateur'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -850,7 +862,7 @@ void main() {
             repository: _MultiPreviewRepository(
               missions: [_previewMission(location)],
               location: location,
-              failProfessionalMissionRead: true,
+              denyAdministrativeScopedReads: true,
             ),
             platformRuntime: _MultiPreviewRuntime(),
           ),
@@ -1219,7 +1231,9 @@ class _RecordingCoordinationRepository extends MockCoordinationRepository {
 }
 
 class _MultiPreviewRepository extends MockCoordinationRepository
-    implements MultiMobilizationCoordinationReadRepository {
+    implements
+        MultiMobilizationCoordinationReadRepository,
+        OrganizationLocationReadDataSource {
   _MultiPreviewRepository({
     required List<CoordinationNeed> missions,
     required ResponsePlace location,
@@ -1239,6 +1253,8 @@ class _MultiPreviewRepository extends MockCoordinationRepository
   final bool denyAdministrativeScopedReads;
   final bool failProfessionalMissionRead;
   int allActiveRequests = 0;
+  int anonymousLocationReads = 0;
+  int administrativeLocationReads = 0;
   final List<Set<String>> mobilizationRequests = [];
   final List<Set<String>> locationRequests = [];
   ResponsibleAccess? lastObservedAccess;
@@ -1272,6 +1288,38 @@ class _MultiPreviewRepository extends MockCoordinationRepository
     if (failProfessionalMissionRead) return _permissionDenied();
     return Stream.value(_missions);
   }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    anonymousLocationReads++;
+    return super.watchLocations();
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchAllAdministrativeLocations() {
+    administrativeLocationReads++;
+    return super.watchLocations();
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLegacyAdministrativeLocations() =>
+      watchAllAdministrativeLocations();
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsForIds(Set<String> ids) =>
+      super.watchLocations().map(
+        (locations) => locations
+            .where((location) => ids.contains(location.id))
+            .toList(growable: false),
+      );
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsManagedByOrganization(String id) =>
+      super.watchLocations().map(
+        (locations) => locations
+            .where((location) => location.managingOrganizationId == id)
+            .toList(growable: false),
+      );
 
   @override
   Stream<List<CoordinationNeed>> watchMissionsForLocations(Set<String> ids) {

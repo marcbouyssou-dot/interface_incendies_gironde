@@ -26,7 +26,8 @@ void main() {
         'legacy-explicit',
       ]);
       expect(() => locations.clear(), throwsUnsupportedError);
-      expect(fixture.delegate.reads, 1);
+      expect(fixture.delegate.legacyReads, 1);
+      expect(fixture.delegate.reads, 0);
       expect(fixture.delegate.organizationReads, isEmpty);
     });
 
@@ -36,7 +37,10 @@ void main() {
         final fixture = _Fixture()..selectLegacy(OrganizationRole.siteManager);
         addTearDown(fixture.dispose);
 
-        final locations = await fixture.repository.watchLocations().first;
+        final locations = await fixture.repository.watchLocationsForIds({
+          'legacy-implicit',
+          'test',
+        }).first;
 
         expect(
           locations.map((location) => location.id),
@@ -131,10 +135,14 @@ void main() {
         OrganizationRole.siteManager,
       ]) {
         final fixture = _Fixture()..selectLegacy(role);
-        expect(await fixture.visibleIds(), [
-          'legacy-implicit',
-          'legacy-explicit',
-        ]);
+        final ids = role == OrganizationRole.siteManager
+            ? await fixture.visibleIdsForIds({
+                'legacy-implicit',
+                'legacy-explicit',
+              })
+            : await fixture.visibleIds();
+        expect(ids, ['legacy-implicit', 'legacy-explicit']);
+        expect(fixture.delegate.reads, 0);
         fixture.dispose();
       }
     });
@@ -229,6 +237,14 @@ class _Fixture {
         locations.map((location) => location.id).toList(growable: false),
   );
 
+  Future<List<String>> visibleIdsForIds(Set<String> ids) => repository
+      .watchLocationsForIds(ids)
+      .first
+      .then(
+        (locations) =>
+            locations.map((location) => location.id).toList(growable: false),
+      );
+
   void dispose() => context.dispose();
 }
 
@@ -238,6 +254,8 @@ class _LocationRepository implements OrganizationLocationReadDataSource {
   final List<ResponsePlace> locations;
   int reads = 0;
   int administrativeReads = 0;
+  int legacyReads = 0;
+  final List<Set<String>> scopedReads = [];
   final List<String> organizationReads = [];
 
   @override
@@ -250,6 +268,30 @@ class _LocationRepository implements OrganizationLocationReadDataSource {
   Stream<List<ResponsePlace>> watchAllAdministrativeLocations() {
     administrativeReads++;
     return Stream.value(locations);
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLegacyAdministrativeLocations() {
+    legacyReads++;
+    return Stream.value(
+      locations
+          .where(
+            (location) =>
+                location.managingOrganizationId == null ||
+                location.managingOrganizationId == 'legacy-gironde',
+          )
+          .toList(growable: false),
+    );
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsForIds(Set<String> locationIds) {
+    scopedReads.add(Set.unmodifiable(locationIds));
+    return Stream.value(
+      locations
+          .where((location) => locationIds.contains(location.id))
+          .toList(growable: false),
+    );
   }
 
   @override

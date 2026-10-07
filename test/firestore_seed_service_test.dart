@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/services/firestore_seed_service.dart';
+import 'package:interface_incendies_gironde/utils/legacy_location_document_id.dart';
 
 void main() {
   test(
@@ -46,6 +47,13 @@ void main() {
       places.map(service.stableLocationId).toList(growable: false),
       firstIds,
     );
+  });
+
+  test('legacy read IDs match every historical seed document', () {
+    final ids = places.map(legacyLocationDocumentId).toList(growable: false);
+    expect(ids.toSet(), hasLength(65));
+    expect(ids, contains('partnersites-croix-rouge-bordeaux'));
+    expect(ids, contains('partnersites-parc-des-expositions-de-bordeaux'));
   });
 
   test('partners and unique Pauillac keep their validated metadata', () async {

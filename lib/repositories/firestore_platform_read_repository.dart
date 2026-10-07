@@ -20,6 +20,11 @@ abstract interface class PlatformReadDataSource {
   Stream<PlatformReadDocument?> watchMobilizationDocument(String id);
 }
 
+abstract interface class OperationMobilizationReadDataSource {
+  Stream<List<PlatformReadDocument>>
+  watchActiveMobilizationDocumentsForOperation(String operationId);
+}
+
 class PlatformReadDocument {
   const PlatformReadDocument({required this.id, required this.data});
 
@@ -27,10 +32,27 @@ class PlatformReadDocument {
   final Map<String, Object?> data;
 }
 
-class FirestorePlatformReadDataSource implements PlatformReadDataSource {
+class FirestorePlatformReadDataSource
+    implements PlatformReadDataSource, OperationMobilizationReadDataSource {
   const FirestorePlatformReadDataSource(this.firestore);
 
   final FirebaseFirestore firestore;
+
+  @override
+  Stream<List<PlatformReadDocument>>
+  watchActiveMobilizationDocumentsForOperation(String operationId) => firestore
+      .collection('mobilizations')
+      .where('operationId', isEqualTo: operationId)
+      .where('status', isEqualTo: MobilizationStatus.active.serializedValue)
+      .snapshots()
+      .map(
+        (snapshot) => snapshot.docs
+            .map(
+              (document) =>
+                  PlatformReadDocument(id: document.id, data: document.data()),
+            )
+            .toList(growable: false),
+      );
 
   @override
   Stream<Map<String, Object?>?> watchPlatformConfigDocument() {
@@ -97,7 +119,10 @@ class FirestorePlatformReadDataSource implements PlatformReadDataSource {
 }
 
 class FirestorePlatformReadRepository
-    implements PlatformReadRepository, MobilizationLookupRepository {
+    implements
+        PlatformReadRepository,
+        MobilizationLookupRepository,
+        OperationMobilizationReadRepository {
   const FirestorePlatformReadRepository({
     required PlatformReadDataSource dataSource,
   }) : _dataSource = dataSource;
@@ -111,6 +136,80 @@ class FirestorePlatformReadRepository
   }
 
   final PlatformReadDataSource _dataSource;
+
+  @override
+  Stream<List<Mobilization>> watchActiveMobilizationsForOperations(
+    Set<String> operationIds, {
+    String? territoryId,
+  }) {
+    if (operationIds.any(
+      (id) => id.isEmpty || id.trim() != id || id.contains('/'),
+    )) {
+      return Stream<List<Mobilization>>.error(
+        const FormatException('Identifiant d’opération invalide.'),
+      );
+    }
+    if (operationIds.isEmpty) {
+      return Stream<List<Mobilization>>.value(const []);
+    }
+    final source = _dataSource;
+    if (source is! OperationMobilizationReadDataSource) {
+      return Stream<List<Mobilization>>.error(
+        StateError('Lecture de mobilisation bornée indisponible.'),
+      );
+    }
+    final scopedSource = source as OperationMobilizationReadDataSource;
+    final streams = operationIds
+        .map(
+          (id) => scopedSource
+              .watchActiveMobilizationDocumentsForOperation(id)
+              .map(
+                (documents) => documents
+                    .map(_mobilizationFromDocument)
+                    .where(
+                      (item) =>
+                          territoryId == null ||
+                          item.territoryId == territoryId,
+                    )
+                    .toList(growable: false),
+              ),
+        )
+        .toList(growable: false);
+    late final StreamController<List<Mobilization>> controller;
+    final subscriptions = <StreamSubscription<List<Mobilization>>>[];
+    final values = <int, List<Mobilization>>{};
+    void emit() {
+      if (values.length != streams.length || controller.isClosed) return;
+      final byId = <String, Mobilization>{};
+      for (final list in values.values) {
+        for (final item in list) {
+          byId[item.id] = item;
+        }
+      }
+      final result = byId.values.toList(growable: false)
+        ..sort((left, right) => left.name.compareTo(right.name));
+      controller.add(List<Mobilization>.unmodifiable(result));
+    }
+
+    controller = StreamController<List<Mobilization>>(
+      onListen: () {
+        for (var index = 0; index < streams.length; index++) {
+          subscriptions.add(
+            streams[index].listen((items) {
+              values[index] = items;
+              emit();
+            }, onError: controller.addError),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      },
+    );
+    return controller.stream;
+  }
 
   @override
   Stream<String?> watchPlatformConfig() {

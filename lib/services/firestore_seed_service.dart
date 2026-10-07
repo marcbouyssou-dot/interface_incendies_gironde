@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../data/mock_data.dart';
 import '../models/need.dart';
-import '../utils/location_slug.dart';
+import '../utils/legacy_location_document_id.dart';
 
 enum SeedResult { imported, skipped }
 
@@ -98,10 +98,6 @@ class FirestoreSeedService {
     );
   }
 
-  String stableLocationId(ResponsePlace location) {
-    if (location.type == ResponsePlaceType.redCross) {
-      return 'partnersites-croix-rouge-bordeaux';
-    }
-    return locationSlug('${location.group.name}-${location.name}');
-  }
+  String stableLocationId(ResponsePlace location) =>
+      legacyLocationDocumentId(location);
 }

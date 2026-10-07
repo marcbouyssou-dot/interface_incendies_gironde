@@ -20,6 +20,104 @@ import 'package:interface_incendies_gironde/services/legacy_organization_resolve
 void main() {
   group('OrganizationScopedPlatformReadRepository', () {
     test(
+      'real coordinator lists mobilizations by authorized operation',
+      () async {
+        final fixture = _Fixture()..selectTestOrganization();
+        addTearDown(fixture.dispose);
+        final delegate = _BoundedPlatformRepository(
+          fixture.platformDataSource.mobilizations,
+        );
+        final repository = OrganizationScopedPlatformReadRepository(
+          delegate: delegate,
+          operationRepository: fixture.operationRepository,
+          context: fixture.context,
+        );
+
+        expect(
+          (await repository.watchMobilizations().first).map((item) => item.id),
+          ['mobilization-test'],
+        );
+        expect(delegate.scopedOperationIds, {'operation-test'});
+        expect(delegate.listReads, 0);
+      },
+    );
+    test('legacy linked operation without owner is checked by ID', () async {
+      final fixture = _Fixture()..selectLegacy();
+      addTearDown(fixture.dispose);
+      fixture.operationDataSource.operations.add(
+        _operation(id: 'implicit-legacy-operation'),
+      );
+      fixture.platformDataSource.mobilizations.add(
+        _mobilization(
+          id: 'implicit-legacy-mobilization',
+          operationId: 'implicit-legacy-operation',
+        ),
+      );
+      final operationDelegate = _BoundedOperationRepository(
+        fixture.operationDataSource.operations,
+      );
+      final operationRepository = OrganizationScopedOperationReadRepository(
+        delegate: operationDelegate,
+        context: fixture.context,
+      );
+      final platformDelegate = _BoundedPlatformRepository(
+        fixture.platformDataSource.mobilizations,
+      )..activeMobilizationId = 'implicit-legacy-mobilization';
+      final repository = OrganizationScopedPlatformReadRepository(
+        delegate: platformDelegate,
+        operationRepository: operationRepository,
+        context: fixture.context,
+      );
+
+      expect(
+        (await repository.watchMobilizations().first).map((item) => item.id),
+        ['implicit-legacy-mobilization'],
+      );
+      expect(operationDelegate.scopedReads, 1);
+      expect(operationDelegate.documentReads, 1);
+      expect(platformDelegate.scopedOperationIds, isNull);
+      expect(
+        (await repository
+                .watchMobilization('implicit-legacy-mobilization')
+                .first)
+            ?.id,
+        'implicit-legacy-mobilization',
+      );
+      expect(
+        (await repository.watchActiveMobilization().first)?.id,
+        'implicit-legacy-mobilization',
+      );
+      fixture.selectLegacySiteManager(withMembership: false);
+      expect(
+        (await repository.watchResponsibleActiveMobilizations().first).map(
+          (item) => item.id,
+        ),
+        ['implicit-legacy-mobilization'],
+      );
+    });
+    test(
+      'legacy coordinator without membership uses targeted lookup',
+      () async {
+        final fixture = _Fixture()..selectLegacy();
+        addTearDown(fixture.dispose);
+        final delegate = _BoundedPlatformRepository(
+          fixture.platformDataSource.mobilizations,
+        )..activeMobilizationId = 'mobilization-legacy';
+        final repository = OrganizationScopedPlatformReadRepository(
+          delegate: delegate,
+          operationRepository: fixture.operationRepository,
+          context: fixture.context,
+        );
+
+        expect(
+          (await repository.watchMobilizations().first).map((item) => item.id),
+          ['mobilization-legacy'],
+        );
+        expect(delegate.scopedOperationIds, isNull);
+        expect(delegate.listReads, 0);
+      },
+    );
+    test(
       'legacy sees Gironde-linked and unlinked legacy mobilizations',
       () async {
         final fixture = _Fixture()..selectLegacy();
@@ -307,6 +405,33 @@ class _OperationRepository implements OperationReadRepository {
   }
 }
 
+class _BoundedOperationRepository extends _OperationRepository
+    implements OrganizationOperationReadRepository {
+  _BoundedOperationRepository(super.operations);
+
+  int scopedReads = 0;
+  int documentReads = 0;
+
+  @override
+  Stream<List<Operation>> watchOperationsForOrganization(
+    String organizationId, {
+    Set<OperationStatus>? statuses,
+  }) {
+    scopedReads++;
+    return Stream.value(
+      operations
+          .where((item) => item.ownerOrganizationId == organizationId)
+          .toList(growable: false),
+    );
+  }
+
+  @override
+  Stream<Operation?> watchOperation(String operationId) {
+    documentReads++;
+    return super.watchOperation(operationId);
+  }
+}
+
 class _PlatformRepository implements PlatformReadRepository {
   _PlatformRepository(this.mobilizations);
 
@@ -355,6 +480,46 @@ class _PlatformRepository implements PlatformReadRepository {
   Stream<List<Territory>> watchTerritories() => Stream.value(const []);
 }
 
+class _BoundedPlatformRepository extends _PlatformRepository
+    implements
+        OperationMobilizationReadRepository,
+        MobilizationLookupRepository {
+  _BoundedPlatformRepository(super.mobilizations);
+
+  Set<String>? scopedOperationIds;
+
+  @override
+  Stream<String?> watchPlatformConfig() => Stream<String?>.multi(
+    (controller) => controller.add(activeMobilizationId),
+  );
+
+  @override
+  Stream<Mobilization?> watchMobilization(String mobilizationId) =>
+      Stream<Mobilization?>.multi(
+        (controller) => controller.add(
+          mobilizations.where((item) => item.id == mobilizationId).firstOrNull,
+        ),
+      );
+
+  @override
+  Stream<List<Mobilization>> watchActiveMobilizationsForOperations(
+    Set<String> operationIds, {
+    String? territoryId,
+  }) {
+    scopedOperationIds = operationIds;
+    return Stream.value(
+      mobilizations
+          .where(
+            (item) =>
+                operationIds.contains(item.operationId) &&
+                item.status == MobilizationStatus.active &&
+                (territoryId == null || item.territoryId == territoryId),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
 List<Operation> _operations() => [
   _operation(id: 'operation-gironde', ownerOrganizationId: 'legacy-gironde'),
   _operation(id: 'operation-test', ownerOrganizationId: 'test-organization'),
@@ -366,25 +531,23 @@ List<Mobilization> _mobilizations() => [
   _mobilization(id: 'mobilization-legacy'),
 ];
 
-Operation _operation({
-  required String id,
-  required String ownerOrganizationId,
-}) => Operation.fromMap({
-  'id': id,
-  'name': 'Opération $id',
-  'type': 'exercise',
-  'status': 'active',
-  'context': null,
-  'startAt': DateTime.utc(2026, 8, 21),
-  'endAt': null,
-  'ownerOrganizationId': ownerOrganizationId,
-  'scopeRefs': <Object?>['territories/gironde'],
-  'createdBy': 'test',
-  'createdAt': DateTime.utc(2026, 8, 21),
-  'updatedBy': 'test',
-  'updatedAt': DateTime.utc(2026, 8, 21),
-  'schemaVersion': 3,
-});
+Operation _operation({required String id, String? ownerOrganizationId}) =>
+    Operation.fromMap({
+      'id': id,
+      'name': 'Opération $id',
+      'type': 'exercise',
+      'status': 'active',
+      'context': null,
+      'startAt': DateTime.utc(2026, 8, 21),
+      'endAt': null,
+      'ownerOrganizationId': ?ownerOrganizationId,
+      'scopeRefs': <Object?>['territories/gironde'],
+      'createdBy': 'test',
+      'createdAt': DateTime.utc(2026, 8, 21),
+      'updatedBy': 'test',
+      'updatedAt': DateTime.utc(2026, 8, 21),
+      'schemaVersion': 3,
+    });
 
 Mobilization _mobilization({required String id, String? operationId}) =>
     Mobilization.fromMap({

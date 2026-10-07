@@ -14,6 +14,7 @@ import 'platform_read_repository.dart';
 class OrganizationScopedMissionReadRepository
     implements
         MultiMobilizationCoordinationReadRepository,
+        MobilizationLocationMissionReadRepository,
         MissionAccessReadRepository {
   const OrganizationScopedMissionReadRepository({
     required MultiMobilizationCoordinationReadRepository delegate,
@@ -43,6 +44,13 @@ class OrganizationScopedMissionReadRepository
       yield null;
       return;
     }
+    final platformRepository = _platformRepository;
+    if (platformRepository is MobilizationLookupRepository) {
+      yield* (platformRepository as MobilizationLookupRepository)
+          .watchMobilization(mobilizationId)
+          .map((mobilization) => mobilization == null ? null : mission);
+      return;
+    }
     yield* _platformRepository
         .watchMobilizations(includeInactive: true)
         .map(
@@ -64,11 +72,9 @@ class OrganizationScopedMissionReadRepository
         if (accessibleIds.isEmpty) {
           return Stream<List<CoordinationNeed>>.value(const []);
         }
-        // Le flux public actif reste requis par les previews Administrateur :
-        // leur identité réelle ne peut pas emprunter les lectures Responsable.
-        return _delegate.watchAllActiveMissions().map(
-          (missions) => _filterMissions(missions, accessibleIds),
-        );
+        return _delegate
+            .watchMissionsForMobilizations(accessibleIds)
+            .map((missions) => _filterMissions(missions, accessibleIds));
       });
 
   @override
@@ -131,6 +137,43 @@ class OrganizationScopedMissionReadRepository
                 .toSet(),
             locationIds: locationIds,
           ),
+    );
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissionsForMobilizationsAndLocations({
+    required Set<String> mobilizationIds,
+    required Set<String> locationIds,
+  }) {
+    if (mobilizationIds.isEmpty || locationIds.isEmpty) {
+      return Stream<List<CoordinationNeed>>.value(const []);
+    }
+    final platformRepository = _platformRepository;
+    final delegate = _delegate;
+    if (platformRepository is! MobilizationLookupRepository) {
+      return Stream<List<CoordinationNeed>>.error(
+        StateError('Lecture missions et sites bornée indisponible.'),
+      );
+    }
+    if (delegate is! MobilizationLocationMissionReadRepository) {
+      return watchMissionsForMobilizations(mobilizationIds).map(
+        (missions) => missions
+            .where((mission) => locationIds.contains(mission.locationId))
+            .toList(growable: false),
+      );
+    }
+    return switchLatest(
+      _watchReadableMobilizationIds(
+        platformRepository as MobilizationLookupRepository,
+        mobilizationIds,
+      ),
+      (readableIds) => readableIds.isEmpty
+          ? Stream<List<CoordinationNeed>>.value(const [])
+          : (delegate as MobilizationLocationMissionReadRepository)
+                .watchMissionsForMobilizationsAndLocations(
+                  mobilizationIds: readableIds,
+                  locationIds: locationIds,
+                ),
     );
   }
 

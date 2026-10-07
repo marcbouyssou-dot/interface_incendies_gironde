@@ -3,10 +3,43 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/operation.dart';
 import 'operation_read_repository.dart';
 
-class FirestoreOperationReadRepository implements OperationReadRepository {
+class FirestoreOperationReadRepository
+    implements OperationReadRepository, OrganizationOperationReadRepository {
   const FirestoreOperationReadRepository(this._firestore);
 
   final FirebaseFirestore _firestore;
+
+  @override
+  Stream<List<Operation>> watchOperationsForOrganization(
+    String organizationId, {
+    Set<OperationStatus>? statuses,
+  }) {
+    if (organizationId.trim().isEmpty || organizationId.contains('/')) {
+      return Stream<List<Operation>>.error(
+        const FormatException('Identifiant d’organisation invalide.'),
+      );
+    }
+    // Le filtre d'organisation fait partie de la requête : les règles
+    // Firestore ne filtrent pas une collection lue globalement.
+    return _firestore
+        .collection('operations')
+        .where('ownerOrganizationId', isEqualTo: organizationId)
+        .snapshots()
+        .map((snapshot) {
+          final operations = snapshot.docs
+              .map((document) => _fromDocument(document.id, document.data()))
+              .where(
+                (operation) =>
+                    statuses == null || statuses.contains(operation.status),
+              )
+              .toList(growable: false);
+          operations.sort((left, right) {
+            final byDate = left.startAt.compareTo(right.startAt);
+            return byDate != 0 ? byDate : left.name.compareTo(right.name);
+          });
+          return operations;
+        });
+  }
 
   @override
   Stream<List<Operation>> watchOperations({Set<OperationStatus>? statuses}) {

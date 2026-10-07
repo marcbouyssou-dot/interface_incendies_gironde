@@ -14,6 +14,27 @@ import 'package:interface_incendies_gironde/services/legacy_organization_resolve
 void main() {
   group('OrganizationScopedOperationReadRepository', () {
     test(
+      'real coordinator uses an organization-bounded server query',
+      () async {
+        final delegate = _BoundedOperationRepository(_operations());
+        final context = ValueNotifier<OrganizationContext?>(
+          _legacyContext(OrganizationRole.coordinator),
+        );
+        addTearDown(context.dispose);
+        final repository = OrganizationScopedOperationReadRepository(
+          delegate: delegate,
+          context: context,
+        );
+
+        expect(
+          (await repository.watchOperations().first).map((item) => item.id),
+          ['legacy-explicit'],
+        );
+        expect(delegate.scopedOrganizationId, 'legacy-gironde');
+        expect(delegate.listReads, 0);
+      },
+    );
+    test(
       'legacy context includes implicit and explicit legacy operations',
       () async {
         final delegate = _OperationRepository(_operations());
@@ -307,6 +328,26 @@ class _OperationRepository implements OperationReadRepository {
             (operation) =>
                 statuses == null || statuses.contains(operation.status),
           )
+          .toList(growable: false),
+    );
+  }
+}
+
+class _BoundedOperationRepository extends _OperationRepository
+    implements OrganizationOperationReadRepository {
+  _BoundedOperationRepository(super.operations);
+
+  String? scopedOrganizationId;
+
+  @override
+  Stream<List<Operation>> watchOperationsForOrganization(
+    String organizationId, {
+    Set<OperationStatus>? statuses,
+  }) {
+    scopedOrganizationId = organizationId;
+    return Stream.value(
+      operations
+          .where((item) => item.ownerOrganizationId == organizationId)
           .toList(growable: false),
     );
   }
