@@ -593,6 +593,35 @@ void main() {
         await tester.pumpAndSettle();
       }
 
+      void expectResponsiblePreviewHeader(String title) {
+        expect(
+          find.text('Prévisualisation Responsable de site'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('brand-logo-slot')), findsOneWidget);
+        expect(find.text('MobSanté'), findsOneWidget);
+        expect(
+          find.text('Le bon professionnel, au bon endroit, au bon moment.'),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('mobsante-journey-title-responsible')),
+          findsOneWidget,
+        );
+        expect(find.text(title), findsOneWidget);
+        expect(
+          tester
+              .getTopLeft(find.text('Prévisualisation Responsable de site'))
+              .dy,
+          lessThan(
+            tester
+                .getTopLeft(find.byKey(const Key('mobsante-journey-header')))
+                .dy,
+          ),
+        );
+        expect(tester.takeException(), isNull);
+      }
+
       await openAdminPerspective(const Key('perspective-coordinator'));
       expect(
         find.byKey(const PageStorageKey('coordinator-cockpit')),
@@ -657,9 +686,10 @@ void main() {
 
       await openAdminPerspective(const Key('perspective-responsible'));
       expect(find.byKey(const Key('responsible-home')), findsOneWidget);
-      expect(find.text('Prévisualisation Responsable de site'), findsOneWidget);
+      expectResponsiblePreviewHeader('Demain dans mon établissement');
       await tester.tap(find.text('Besoins').last);
       await tester.pumpAndSettle();
+      expectResponsiblePreviewHeader('Mes besoins');
       expect(
         find.byKey(const PageStorageKey('responsible-needs')),
         findsOneWidget,
@@ -670,12 +700,14 @@ void main() {
       );
       await tester.tap(find.text('Équipe').last);
       await tester.pumpAndSettle();
+      expectResponsiblePreviewHeader('Mon équipe');
       expect(
         find.byKey(const PageStorageKey('responsible-team')),
         findsOneWidget,
       );
       await tester.tap(find.text('Profil').last);
       await tester.pumpAndSettle();
+      expectResponsiblePreviewHeader('Mon profil responsable');
       expect(
         find.byKey(const PageStorageKey('responsible-profile')),
         findsOneWidget,

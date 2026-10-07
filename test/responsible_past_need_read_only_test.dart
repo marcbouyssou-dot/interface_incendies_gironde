@@ -119,6 +119,11 @@ void main() {
       find.byKey(const Key('responsible-edit-need-today')),
       findsOneWidget,
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('responsible-edit-need-future')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(
       find.byKey(const Key('responsible-edit-need-future')),
       findsOneWidget,
@@ -155,6 +160,8 @@ void main() {
       );
       final teamAction = find.byKey(const Key('responsible-view-team-past'));
       expect(teamAction, findsOneWidget);
+      await tester.ensureVisible(teamAction);
+      await tester.pumpAndSettle();
       await tester.tap(teamAction);
       expect(teamOpenCount, 1);
     },

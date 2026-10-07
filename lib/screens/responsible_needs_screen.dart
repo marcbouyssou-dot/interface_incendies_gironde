@@ -195,7 +195,11 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const MobSantePageHeader(title: 'Mes besoins'),
+                      const MobSanteJourneyHeader(
+                        journey: MobSanteJourney.responsible,
+                        pageTitle: 'Mes besoins',
+                        showSubtitle: false,
+                      ),
                       const SizedBox(height: V5Spacing.md),
                       Align(
                         alignment: Alignment.centerRight,

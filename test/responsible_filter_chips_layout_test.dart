@@ -62,7 +62,12 @@ void main() {
         }
         expect(tester.takeException(), isNull);
 
-        await tester.tap(find.byKey(const Key('responsible-needs-filter-past')));
+        final pastFilter = find.byKey(
+          const Key('responsible-needs-filter-past'),
+        );
+        await tester.ensureVisible(pastFilter);
+        await tester.pumpAndSettle();
+        await tester.tap(pastFilter);
         await tester.pumpAndSettle();
         expect(find.text('Passés'), findsWidgets);
         expect(tester.takeException(), isNull);
@@ -83,9 +88,12 @@ void main() {
         }
         expect(tester.takeException(), isNull);
 
-        await tester.tap(
-          find.byKey(const Key('responsible-team-filter-pending')),
+        final pendingFilter = find.byKey(
+          const Key('responsible-team-filter-pending'),
         );
+        await tester.ensureVisible(pendingFilter);
+        await tester.pumpAndSettle();
+        await tester.tap(pendingFilter);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       },
