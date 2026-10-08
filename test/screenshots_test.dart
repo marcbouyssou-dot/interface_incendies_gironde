@@ -12,10 +12,7 @@ void main() {
     await tester.pumpWidget(const FireCoordinationApp());
     final context = tester.element(find.byType(MaterialApp));
     await tester.runAsync(() async {
-      await Future.wait([
-        precacheImage(AssetImage(AppIdentity.pictogramAsset), context),
-        precacheImage(AssetImage(AppIdentity.mobilizationSymbolAsset), context),
-      ]);
+      await precacheImage(AssetImage(AppIdentity.pictogramAsset), context);
     });
     await tester.pumpAndSettle();
     if (tab != null) {

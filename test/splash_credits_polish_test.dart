@@ -50,7 +50,7 @@ void main() {
       final pictogram = find.byKey(const Key('splash-pictogram'));
       expect(pictogram, findsOneWidget);
       expect(find.text(AppIdentity.productSubtitle), findsOneWidget);
-      expect(find.text(AppIdentity.mobilizationSubtitle), findsNothing);
+      expect(find.text('Incendies Gironde'), findsNothing);
       expect(
         find.byKey(const Key('splash-institutional-signature')),
         findsNothing,

@@ -25,7 +25,9 @@ void main() {
       contains('name="apple-mobile-web-app-title" content="MobSanté"'),
     );
     expect(index, isNot(contains('content="Recup33"')));
-    expect(index, contains('<title>MobSanté — Incendies Gironde</title>'));
+    expect(index, contains('<title>MobSanté</title>'));
+    expect(index, isNot(contains('Incendies Gironde')));
+    expect(index, isNot(contains('URPS MK NA')));
     expect(pubspec, contains('version: ${AppIdentity.version}'));
   });
 

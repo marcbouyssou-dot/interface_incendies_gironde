@@ -64,12 +64,7 @@ void main() {
     expect(provider.assetName, isNot(contains('logo_hd.png')));
     expect(find.byType(Image), findsOneWidget);
 
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: BrandMark(showMobilizationSymbol: true)),
-      ),
-    );
-    expect(find.byType(Image), findsNWidgets(2));
+    expect(find.byType(Image), findsOneWidget);
   });
 
   testWidgets('missions render immediately without overflow at iPhone width', (

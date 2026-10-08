@@ -22,6 +22,7 @@ import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/operation_presentation.dart';
 import '../widgets/native_interactions.dart';
+import '../widgets/action_theme_mark.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/v5_secondary_navigation.dart';
 import '../widgets/perspective_switcher.dart';
@@ -1259,21 +1260,7 @@ class _OperationCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: context.v5Colors.surfaceMuted,
-                        borderRadius: BorderRadius.circular(V5Radius.control),
-                      ),
-                      child: Icon(
-                        operation.themeKey == 'fire'
-                            ? Icons.local_fire_department_outlined
-                            : Icons.domain_rounded,
-                        size: 21,
-                        color: context.v5Colors.textSecondary,
-                      ),
-                    ),
+                    ActionThemeMark(themeKey: operation.themeKey, size: 40),
                     const SizedBox(width: V5Spacing.sm),
                     Expanded(
                       child: Column(
@@ -1438,6 +1425,22 @@ class _OperationDetailHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              ActionThemeMark(themeKey: operation.themeKey, size: 44),
+              const SizedBox(width: V5Spacing.sm),
+              Expanded(
+                child: Text(
+                  operation.purpose == OperationPurpose.demonstration
+                      ? 'MobSanté · Action de démonstration'
+                      : 'MobSanté · Action',
+                  key: const Key('operation-detail-action-context'),
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: V5Spacing.sm),
           Semantics(
             header: true,
             child: Text(
@@ -1448,6 +1451,10 @@ class _OperationDetailHeader extends StatelessWidget {
           if (operation.demoSafetyLabel case final label?) ...[
             const SizedBox(height: V5Spacing.xs),
             Text(label, key: const Key('operation-demo-safety-label')),
+          ],
+          if (actionThemeLabel(operation.themeKey) case final theme?) ...[
+            const SizedBox(height: V5Spacing.xs),
+            Text(theme, key: const Key('operation-detail-action-theme')),
           ],
           const SizedBox(height: V5Spacing.sm),
           Wrap(

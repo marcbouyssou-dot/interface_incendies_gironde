@@ -30,12 +30,11 @@
   <meta name="apple-mobile-web-app-title" content="MobSanté">
   <link rel="apple-touch-icon" sizes="192x192" href="icons/Icon-192.png">
   <link rel="preload" href="assets/assets/branding/mobsante_pictogram_transparent.png" as="image" fetchpriority="high">
-  <link rel="preload" href="assets/assets/branding/mobilization_flame.png" as="image" fetchpriority="high">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
 
-  <title>MobSanté — Incendies Gironde</title>
+  <title>MobSanté</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js" defer></script>
@@ -77,8 +76,7 @@
       text-align: center;
     }
 
-    .startup-splash__pictogram,
-    .startup-splash__mobilization-symbol {
+    .startup-splash__pictogram {
       visibility: hidden;
     }
 
@@ -100,16 +98,6 @@
       object-fit: contain;
     }
 
-    .startup-splash__mobilization-symbol {
-      position: absolute;
-      top: -8%;
-      right: -6%;
-      width: 48%;
-      height: 54%;
-      object-fit: contain;
-      transform: scale(1.72);
-    }
-
     .startup-splash__title {
       margin: 0;
       font-size: clamp(36px, 10vw, 42px);
@@ -127,26 +115,6 @@
       letter-spacing: .2px;
     }
 
-    .startup-splash__signature {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-top: 58px;
-      color: #3567A6;
-      font-size: 14px;
-      font-weight: 800;
-      letter-spacing: 3.2px;
-      white-space: nowrap;
-    }
-
-    .startup-splash__signature::before,
-    .startup-splash__signature::after {
-      content: "";
-      flex: 1;
-      height: 1px;
-      background: rgba(16, 35, 62, .24);
-    }
-
   </style>
 </head>
 <body style="background-color: #F6F7F8;">
@@ -160,17 +128,9 @@
           width="1254"
           height="1254"
         >
-        <img
-          class="startup-splash__mobilization-symbol"
-          src="assets/assets/branding/mobilization_flame.png"
-          alt=""
-          width="1254"
-          height="1254"
-        >
       </div>
       <h1 class="startup-splash__title">MobSanté</h1>
-      <p class="startup-splash__subtitle">Incendies Gironde</p>
-      <div class="startup-splash__signature">URPS MK NA</div>
+      <p class="startup-splash__subtitle">Le bon professionnel, au bon endroit, au bon moment.</p>
     </div>
   </div>
   <script>

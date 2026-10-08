@@ -9,7 +9,7 @@ Les PNG officiels utilisent les noms suivants :
 - `Icon-maskable-512.png` : icône maskable 512 × 512.
 
 Toutes les tailles sont dérivées de
-`assets/branding/mobsante_app_icon_master.png`. Les fichiers maskable
-conservent une zone de sécurité suffisante autour du pictogramme et de la
-flamme. Le nom de l’application n’est pas intégré à l’icône. Le manifeste et
+`assets/branding/mobsante_pictogram_master.png`. Les fichiers maskable
+conservent une zone de sécurité suffisante autour du pictogramme neutre.
+Le nom de l’application n’est pas intégré à l’icône. Le manifeste et
 `index.html` référencent ces chemins.

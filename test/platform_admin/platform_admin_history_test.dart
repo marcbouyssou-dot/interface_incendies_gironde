@@ -226,6 +226,7 @@ void main() {
       expect(find.byType(PlatformAdminHistoryDetailScreen), findsOneWidget);
       expect(find.text('Bilan d’opération'), findsOneWidget);
       expect(find.text('Tempête Gironde'), findsOneWidget);
+      expect(find.byKey(const Key('action-theme-neutral')), findsOneWidget);
       await _scrollTo(
         tester,
         find.byKey(const Key('platform-history-detail-coordinator')),
@@ -309,10 +310,15 @@ void main() {
   testWidgets('la démonstration distingue acteurs et engagements fictifs', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final source = _history().operations.first.statistics;
     final operation = Operation.fromMap({
       ...source.operation.toMap(),
       'purpose': 'demonstration',
+      'themeKey': 'fire',
+      'organizerDisplayName': 'URPS MK Nouvelle-Aquitaine',
       'demoSafetyLabel': 'Action de démonstration — données fictives',
     });
     final entry = PlatformHistoryOperation(
@@ -333,6 +339,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Administrateur MobSanté'), findsOneWidget);
+    expect(find.text('Action de démonstration'), findsOneWidget);
+    expect(find.byKey(const Key('action-theme-fire')), findsOneWidget);
+    expect(
+      find.text('Organisateur de l’Action : URPS MK Nouvelle-Aquitaine'),
+      findsOneWidget,
+    );
+    expect(find.text('Thème feu'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     final section = find.byKey(const Key('platform-history-synthetic-actors'));
     await _scrollTo(tester, section);
     expect(

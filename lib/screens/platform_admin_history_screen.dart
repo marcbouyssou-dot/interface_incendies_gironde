@@ -8,6 +8,7 @@ import '../repositories/demo_history_read_repository.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/operation_presentation.dart';
+import '../widgets/action_theme_mark.dart';
 import '../widgets/professional_page_header.dart';
 
 class PlatformAdminHistoryScreen extends StatefulWidget {
@@ -640,11 +641,47 @@ class PlatformAdminHistoryDetailScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.labelMedium,
             ),
             const SizedBox(height: V5Spacing.sm),
+            Row(
+              children: [
+                ActionThemeMark(themeKey: operation.themeKey, size: 48),
+                const SizedBox(width: V5Spacing.sm),
+                Expanded(
+                  child: Text(
+                    operation.purpose == OperationPurpose.demonstration
+                        ? 'Action de démonstration'
+                        : 'Action MobSanté',
+                    key: const Key('platform-history-action-context'),
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: V5Spacing.sm),
             Text(
               operation.name,
               key: const Key('platform-history-detail-title'),
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            if (operation.demoSafetyLabel case final label?) ...[
+              const SizedBox(height: V5Spacing.xs),
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+            ],
+            if (operation.organizerDisplayName case final organizer?) ...[
+              const SizedBox(height: V5Spacing.xs),
+              Text(
+                'Organisateur de l’Action : $organizer',
+                key: const Key('platform-history-action-organizer'),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+            if (actionThemeLabel(operation.themeKey) case final theme?) ...[
+              const SizedBox(height: V5Spacing.xs),
+              Text(
+                theme,
+                key: const Key('platform-history-action-theme'),
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ],
             const SizedBox(height: V5Spacing.sm),
             Wrap(
               spacing: V5Spacing.xs,

@@ -641,6 +641,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('la fiche de démonstration situe le feu dans l’Action', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final scenario = _Scenario.one();
+    final operation = Operation.fromMap({
+      ...scenario.operations.single.toMap(),
+      'status': 'completed',
+      'purpose': 'demonstration',
+      'themeKey': 'fire',
+      'organizerDisplayName': 'URPS MK Nouvelle-Aquitaine',
+      'demoSafetyLabel': 'Action de démonstration — données fictives',
+    });
+    final platform = _PlatformRepository(scenario.mobilizations);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: PlatformOperationDetailScreen(
+          operationId: operation.id,
+          operationRepository: _OperationRepository([operation]),
+          platformRepository: platform,
+          mobilizationProvider: CurrentMobilizationProvider(
+            repository: platform,
+          ),
+          administrationRepository:
+              const NoPlatformAdministrationReadRepository(),
+          administrationService: _AdministrationService(),
+          missionRepository: _MissionRepository(scenario.missions),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('MobSanté · Action de démonstration'), findsOneWidget);
+    expect(find.byKey(const Key('action-theme-fire')), findsOneWidget);
+    expect(find.text('Thème feu'), findsOneWidget);
+    expect(find.text('URPS MK Nouvelle-Aquitaine'), findsOneWidget);
+    expect(find.text('Incendies Gironde'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   final goldenScenarios = <String, _Scenario>{
     'executive_dashboard_zero': const _Scenario.empty(),
     'executive_dashboard_one': _Scenario.one(),
@@ -663,13 +706,10 @@ void main() {
         find.byKey(const Key('executive-dashboard-golden-root')),
       );
       await tester.runAsync(() async {
-        await Future.wait([
-          precacheImage(const AssetImage(AppIdentity.pictogramAsset), context),
-          precacheImage(
-            const AssetImage(AppIdentity.mobilizationSymbolAsset),
-            context,
-          ),
-        ]);
+        await precacheImage(
+          const AssetImage(AppIdentity.pictogramAsset),
+          context,
+        );
       });
       await tester.pumpAndSettle();
       await expectLater(

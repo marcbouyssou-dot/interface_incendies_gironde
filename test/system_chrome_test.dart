@@ -171,12 +171,16 @@ void main() {
     expect(index, contains('<h1 class="startup-splash__title">MobSanté</h1>'));
     expect(
       index,
-      contains('<p class="startup-splash__subtitle">Incendies Gironde</p>'),
+      contains(
+        '<p class="startup-splash__subtitle">'
+        '${AppIdentity.productSubtitle}</p>',
+      ),
     );
-    expect(index, contains('class="startup-splash__signature">URPS MK NA'));
+    expect(index, isNot(contains('Incendies Gironde')));
+    expect(index, isNot(contains('URPS MK NA')));
+    expect(index, isNot(contains('mobilization_flame.png')));
     final imagesRule = RegExp(
-      r'\.startup-splash__pictogram,\s*'
-      r'\.startup-splash__mobilization-symbol\s*\{([^}]*)\}',
+      r'\.startup-splash__pictogram\s*\{([^}]*)\}',
       dotAll: true,
     ).firstMatch(index);
     expect(imagesRule, isNotNull);

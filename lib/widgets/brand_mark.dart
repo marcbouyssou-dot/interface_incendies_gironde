@@ -9,7 +9,6 @@ class BrandMark extends StatelessWidget {
     this.size = 50,
     this.assetPath = officialAssetPath,
     this.onDarkBackground = false,
-    this.showMobilizationSymbol = false,
   });
 
   static const officialAssetPath = AppIdentity.pictogramAsset;
@@ -17,7 +16,6 @@ class BrandMark extends StatelessWidget {
   final double size;
   final String? assetPath;
   final bool onDarkBackground;
-  final bool showMobilizationSymbol;
 
   @override
   Widget build(BuildContext context) {
@@ -40,40 +38,20 @@ class BrandMark extends StatelessWidget {
         child: SizedBox.square(
           key: const Key('brand-logo-slot'),
           dimension: size,
-          child: Stack(
-            clipBehavior: Clip.hardEdge,
-            children: [
-              Positioned.fill(
-                child: assetPath == null
-                    ? DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: onDarkBackground
-                              ? Colors.white.withValues(alpha: .12)
-                              : V5Colors.light.warningContainer,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(size * .12),
-                          child: mark,
-                        ),
-                      )
-                    : mark,
-              ),
-              if (assetPath != null && showMobilizationSymbol)
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  width: size * .5,
-                  height: size * .5,
-                  child: Image.asset(
-                    AppIdentity.mobilizationSymbolAsset,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                    excludeFromSemantics: true,
+          child: assetPath == null
+              ? DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: onDarkBackground
+                        ? Colors.white.withValues(alpha: .12)
+                        : V5Colors.light.warningContainer,
+                    shape: BoxShape.circle,
                   ),
-                ),
-            ],
-          ),
+                  child: Padding(
+                    padding: EdgeInsets.all(size * .12),
+                    child: mark,
+                  ),
+                )
+              : mark,
         ),
       ),
     );
