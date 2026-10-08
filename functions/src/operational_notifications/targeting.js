@@ -6,7 +6,7 @@ const DEFAULT_PREFERENCES = Object.freeze({
   quietHoursEnd: 7,
 });
 
-export function recipientsForEvent({event, mission, roles, assignments = [], volunteers, engagements, preferences, recentNotifications, now}) {
+export function recipientsForEvent({event, mission, roles, assignments = [], volunteers, engagements, preferences, recentNotifications, now, eligibleProfessionalIds = new Set()}) {
   const recipients = new Map();
   const add = (uid, role, category) => {
     if (!uid || uid === event.actorUid) return;
@@ -25,6 +25,7 @@ export function recipientsForEvent({event, mission, roles, assignments = [], vol
     }
     const needed = neededProfessions(event.payload);
     for (const volunteer of volunteers) {
+      if (!eligibleProfessionalIds.has(volunteer.uid)) continue;
       if (!needed.has(canonicalProfession(volunteer.profession))) continue;
       if (activeEngagements.some((item) => item.volunteerId === volunteer.uid)) continue;
       const solicitations = (recentNotifications.get(volunteer.uid) ?? [])

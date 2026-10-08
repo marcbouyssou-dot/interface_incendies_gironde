@@ -116,6 +116,15 @@ class _ResponsibleDiffusionSummaryState
         ),
         const SizedBox(height: V5Spacing.sm),
         _DiffusionLine(label: 'Population ciblée', value: population),
+        if (diffusion.targetingStatus ==
+            'TARGETING_UNAVAILABLE_SITE_LOCATION') ...[
+          const SizedBox(height: V5Spacing.sm),
+          const Text(
+            'Ciblage géographique indisponible : les coordonnées du site '
+            'doivent être vérifiées.',
+            key: Key('responsible-targeting-site-location-unavailable'),
+          ),
+        ],
         const SizedBox(height: V5Spacing.sm),
         _DiffusionLine(
           label: 'Snapshot',

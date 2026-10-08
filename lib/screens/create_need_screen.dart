@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import '../config/patient_data_guidance.dart';
 import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/mission_equipment.dart';
@@ -722,6 +723,7 @@ class _CreateNeedScreenState extends State<CreateNeedScreen> {
                     V5TextField(
                       label: 'Commentaire facultatif',
                       controller: _detailsController,
+                      supportingText: PatientDataGuidance.warning,
                       enabled: !_publishing,
                       maxLines: 4,
                       minLines: 3,

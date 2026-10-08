@@ -129,6 +129,7 @@ test('compatible targeting is opt-in, profession matched, capped and excludes en
     event, mission: baseMission, roles: [], volunteers,
     engagements: [{missionId: 'mission-a', volunteerId: 'engaged', status: 'confirmed'}],
     preferences, recentNotifications, now,
+    eligibleProfessionalIds: new Set(['eligible', 'engaged', 'capped']),
   });
   assert.deepEqual(recipients.map((item) => item.uid), ['eligible']);
 });
@@ -188,6 +189,7 @@ test('multi-mobilization targeting keeps events, engagements and coordinators is
     ]),
     recentNotifications: new Map(),
     now,
+    eligibleProfessionalIds: new Set(['professional']),
   };
   assert.deepEqual(recipientsForEvent({
     ...common,

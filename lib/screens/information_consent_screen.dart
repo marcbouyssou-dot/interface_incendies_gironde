@@ -54,9 +54,9 @@ class InformationConsentScreen extends StatelessWidget {
                       icon: Icons.rule_outlined,
                       title: 'Conditions d’utilisation',
                       items: [
-                        'MobSanté est un outil de coordination des professionnels '
-                            'mobilisés dans le cadre du dispositif Incendies '
-                            'Gironde.',
+                        'MobSanté est un outil de coordination de professionnels '
+                            'mobilisés dans le cadre d’Actions organisées par '
+                            'différentes organisations.',
                         'L’application ne remplace ni les services d’urgence ni les '
                             'consignes données par les autorités et responsables '
                             'opérationnels.',

@@ -7,6 +7,7 @@ import 'package:interface_incendies_gironde/models/public_mission_discovery.dart
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/public_mission_discovery_repository.dart';
+import 'package:interface_incendies_gironde/repositories/professional_admission_repository.dart';
 import 'package:interface_incendies_gironde/screens/professional_engagements_screen.dart';
 import 'package:interface_incendies_gironde/screens/slots_screen.dart';
 import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
@@ -30,6 +31,76 @@ class _UnavailableMissionsRepository extends MockCoordinationRepository
   Stream<List<ResponsePlace>> watchLocations() {
     locationReads++;
     return Stream.error(StateError('Location data unavailable'));
+  }
+}
+
+class _InvitationOnlyRepository extends MockCoordinationRepository
+    implements ProfessionalAdmissionRepository, VisitorOperationalReadGate {
+  _InvitationOnlyRepository({required bool verified})
+    : super(
+        responsibleAccess: null,
+        initialProfiles: verified
+            ? {'mock-volunteer': verifiedMkProfile()}
+            : const {},
+      );
+
+  String? redeemedCode;
+  int operationalReads = 0;
+  bool anonymous = false;
+  bool emailVerified = true;
+  String? linkedEmail;
+  int verificationEmails = 0;
+
+  @override
+  Stream<ProfessionalAdmissionState> watchProfessionalAdmission() =>
+      Stream.value(
+        const ProfessionalAdmissionState(
+          mode: ProfessionalAdmissionMode.invitationOnly,
+        ),
+      );
+
+  @override
+  Future<void> redeemProfessionalInvitation(String code) async {
+    redeemedCode = code;
+  }
+
+  @override
+  Future<ProfessionalEmailIdentity> professionalEmailIdentity() async =>
+      ProfessionalEmailIdentity(
+        isAnonymous: anonymous,
+        emailVerified: emailVerified,
+        email: linkedEmail,
+      );
+
+  @override
+  Future<void> linkProfessionalEmail(String email, String password) async {
+    linkedEmail = email;
+    anonymous = false;
+    emailVerified = false;
+    verificationEmails++;
+  }
+
+  @override
+  Future<void> signInProfessionalEmail(String email, String password) async {
+    linkedEmail = email;
+    anonymous = false;
+  }
+
+  @override
+  Future<void> sendProfessionalEmailVerification() async {
+    verificationEmails++;
+  }
+
+  @override
+  Future<void> signOutProfessionalEmail() async {
+    anonymous = true;
+    emailVerified = false;
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchMissions() {
+    operationalReads++;
+    return super.watchMissions();
   }
 }
 
@@ -85,6 +156,84 @@ void _expectIdentity(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('invitation waits for verified email on compact iPhone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _InvitationOnlyRepository(verified: true)
+      ..anonymous = true
+      ..emailVerified = false;
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('professional-use-invitation')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('professional-invitation-code')),
+      'opaque-test-code',
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Valider'))
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.byKey(const Key('professional-invitation-email')),
+      'a@example.test',
+    );
+    await tester.enterText(
+      find.byKey(const Key('professional-invitation-password')),
+      'test-password-42',
+    );
+    await tester.ensureVisible(find.text('Associer mon compte'));
+    await tester.tap(find.text('Associer mon compte'));
+    await tester.pumpAndSettle();
+    expect(repository.redeemedCode, isNull);
+    expect(repository.verificationEmails, 1);
+    repository.emailVerified = true;
+    await tester.tap(find.text('J’ai vérifié mon e-mail'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Valider'));
+    await tester.pumpAndSettle();
+    expect(repository.redeemedCode, 'opaque-test-code');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'invitation-only visitor can enter code without operational reads',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repository = _InvitationOnlyRepository(verified: true);
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('MobSanté est actuellement accessible sur invitation.'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('professional-use-invitation')),
+        findsOneWidget,
+      );
+      expect(find.byType(SlotsScreen), findsNothing);
+      expect(repository.operationalReads, 0);
+      await tester.tap(find.byKey(const Key('professional-use-invitation')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('professional-invitation-code')),
+        'local-test-code',
+      );
+      await tester.tap(find.text('Valider'));
+      await tester.pumpAndSettle();
+      expect(repository.redeemedCode, 'local-test-code');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'unverified Missions and Engagements explain value without data',
     (tester) async {

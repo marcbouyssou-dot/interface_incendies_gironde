@@ -120,6 +120,24 @@ void main() {
     expect(find.text('Population non encore disponible'), findsNothing);
   });
 
+  testWidgets('signale un site sans coordonnées vérifiées', (tester) async {
+    await pumpSummary(
+      tester,
+      _DiffusionRepository(
+        result: _model(
+          populationCount: 0,
+          snapshotAvailable: true,
+          targetingStatus: 'TARGETING_UNAVAILABLE_SITE_LOCATION',
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('responsible-targeting-site-location-unavailable')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('affiche exactement une population réelle positive', (
     tester,
   ) async {
@@ -144,6 +162,7 @@ void main() {
 DiffusionReadModel _model({
   required int? populationCount,
   required bool snapshotAvailable,
+  String? targetingStatus,
 }) => DiffusionReadModel(
   diffusionId: 'diffusion-a',
   needId: 'need-bassens',
@@ -151,6 +170,7 @@ DiffusionReadModel _model({
   createdAt: DateTime(2026, 8, 24, 10, 30),
   populationCount: populationCount,
   snapshotAvailable: snapshotAvailable,
+  targetingStatus: targetingStatus,
 );
 
 class _DiffusionRepository implements DiffusionReadRepository {

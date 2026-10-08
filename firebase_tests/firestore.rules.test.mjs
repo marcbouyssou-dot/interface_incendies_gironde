@@ -5003,6 +5003,19 @@ test('RC4.2G: organization member is isolated across the complete parent chain',
   ));
 });
 
+test('004U1: organization admin read stays scoped without a coordinator Action grant', async () => {
+  await seedMultiOrganizationCore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await deleteDoc(doc(context.firestore(),
+      'operationAccess/operation-a_member-a'));
+  });
+  const member = db('member-a');
+  await assertSucceeds(getDoc(doc(member, 'operations/operation-a')));
+  await assertSucceeds(getDoc(doc(member, 'mobilizations/mobilization-a')));
+  await assertFails(getDoc(doc(member, 'operations/operation-b')));
+  await assertFails(getDoc(doc(member, 'mobilizations/mobilization-b')));
+});
+
 test('RC4.2G: inactive membership is denied and platform admin stays global', async () => {
   await seedMultiOrganizationCore();
   const inactiveDb = db('inactive-member');

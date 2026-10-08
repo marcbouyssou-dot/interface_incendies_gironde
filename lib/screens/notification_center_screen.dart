@@ -230,12 +230,14 @@ class NotificationCenterScreen extends StatefulWidget {
     this.targetedPushTestService,
     this.initialNotificationId,
     this.contextLabel,
+    this.showProfessionalTargetingGuidance = false,
   });
 
   final PushNotificationGateway? pushGateway;
   final TargetedPushTestService? targetedPushTestService;
   final String? initialNotificationId;
   final String? contextLabel;
+  final bool showProfessionalTargetingGuidance;
 
   @override
   State<NotificationCenterScreen> createState() =>
@@ -870,6 +872,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                       preferenceSnapshot.data ??
                       const NotificationPreferences(),
                   onChanged: _repository!.saveNotificationPreferences,
+                  showProfessionalTargetingGuidance:
+                      widget.showProfessionalTargetingGuidance,
                 ),
               ),
               if (widget.targetedPushTestService != null) ...[
@@ -1098,21 +1102,30 @@ class _ConsentCard extends StatelessWidget {
 }
 
 class _PreferencesCard extends StatelessWidget {
-  const _PreferencesCard({required this.preferences, required this.onChanged});
+  const _PreferencesCard({
+    required this.preferences,
+    required this.onChanged,
+    required this.showProfessionalTargetingGuidance,
+  });
   final NotificationPreferences preferences;
   final ValueChanged<NotificationPreferences> onChanged;
+  final bool showProfessionalTargetingGuidance;
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const SectionTitle(title: 'Préférences'),
-      V5SwitchTile(
-        title: 'Missions compatibles',
-        value: preferences.compatibleMissions,
-        onChanged: (value) =>
-            onChanged(preferences.copyWith(compatibleMissions: value)),
-      ),
+      if (showProfessionalTargetingGuidance)
+        Padding(
+          padding: const EdgeInsets.only(bottom: V5Spacing.sm),
+          child: Text(
+            'Missions compatibles : configurez votre zone d’intervention '
+            'dans Mon profil.',
+            key: const Key('compatible-missions-profile-guidance'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
       V5SwitchTile(
         title: 'Modifications de mes engagements',
         value: preferences.engagementUpdates,

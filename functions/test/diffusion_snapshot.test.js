@@ -42,7 +42,7 @@ test('creates the minimal Diffusion Snapshot', () => {
   assert.equal(Object.isFrozen(value), true);
 });
 
-test('criteriaSnapshot contains only the four criteria currently applied', () => {
+test('criteriaSnapshot records Action, identity, admission and geography', () => {
   const criteria = currentCriteriaSnapshot();
 
   assert.deepEqual(criteria, {
@@ -54,10 +54,50 @@ test('criteriaSnapshot contains only the four criteria currently applied', () =>
       maximum: 3,
       windowHours: 24,
     },
+    action: 'active_operational',
+    identity: 'verified_rpps',
+    admission: 'operation_scoped_when_invitation_only',
+    geography: 'verified_site_within_selected_radius',
   });
   assert.equal('territory' in criteria, false);
   assert.equal('organization' in criteria, false);
   assert.equal('interests' in criteria, false);
+});
+
+test('legacy snapshots without targeting status or new criteria remain readable', () => {
+  const serialized = serializeDiffusionSnapshot(snapshot());
+  delete serialized.criteriaSnapshot.action;
+  delete serialized.criteriaSnapshot.identity;
+  delete serialized.criteriaSnapshot.admission;
+  delete serialized.criteriaSnapshot.geography;
+  const restored = deserializeDiffusionSnapshot({id: diffusionId, data: serialized});
+  assert.equal(restored.targetingStatus, undefined);
+  assert.equal(restored.criteriaSnapshot.action, undefined);
+});
+
+test('site location status is retained without individual coordinates', () => {
+  const value = diffusionSnapshot({
+    diffusionId, needId, createdAt, populationCount: 0,
+    targetingStatus: 'TARGETING_UNAVAILABLE_SITE_LOCATION',
+  });
+  const serialized = serializeDiffusionSnapshot(value);
+  assert.equal(serialized.targetingStatus,
+    'TARGETING_UNAVAILABLE_SITE_LOCATION');
+  assert.equal(JSON.stringify(serialized).includes('latitude'), false);
+});
+
+test('transition Snapshot states its actual geography rule', () => {
+  const value = diffusionSnapshot({
+    diffusionId, needId, createdAt, populationCount: 1,
+    targetingStatus: 'TARGETING_TRANSITION_LEGACY',
+  });
+  assert.equal(value.criteriaSnapshot.geography,
+    'verified_site_legacy_opt_in_or_selected_radius');
+  const restored = deserializeDiffusionSnapshot({
+    id: diffusionId, data: serializeDiffusionSnapshot(value),
+  });
+  assert.equal(restored.criteriaSnapshot.geography,
+    'verified_site_legacy_opt_in_or_selected_radius');
 });
 
 test('serialization and deserialization preserve the exact Snapshot', () => {

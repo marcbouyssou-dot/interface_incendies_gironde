@@ -26,6 +26,7 @@ import '../repositories/operation_access_read_repository.dart';
 import '../repositories/recipe_admin_runtime.dart';
 import '../repositories/platform_read_repository.dart';
 import '../repositories/public_mission_discovery_repository.dart';
+import '../repositories/professional_admission_repository.dart';
 import '../repositories/read_only_preview_coordination_repository.dart';
 import '../repositories/responsible_access_administration_repository_scope.dart';
 import '../services/professional_verification_service.dart';
@@ -488,10 +489,15 @@ class _AppShellState extends State<AppShell> {
       unawaited(
         repository
             .getVolunteerProfile()
-            .then((profile) {
-              if (mounted &&
-                  identical(_repository, repository) &&
-                  profile?.hasVerifiedProfessionalIdentity == true) {
+            .then((profile) async {
+              if (profile?.hasVerifiedProfessionalIdentity != true) return;
+              final admitted = repository is ProfessionalAdmissionRepository
+                  ? (await (repository as ProfessionalAdmissionRepository)
+                            .watchProfessionalAdmission()
+                            .first)
+                        .canReadOperationalData
+                  : true;
+              if (mounted && identical(_repository, repository) && admitted) {
                 _prewarmMissionData();
               }
             })

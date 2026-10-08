@@ -341,6 +341,21 @@ void main() {
     await data.dispose();
   });
 
+  test('invited professional locations follow only visible missions', () async {
+    final repository = _MissionScopedLocationRepository();
+    final data = LiveCoordinationData(
+      repository,
+      administrativeLocationRepository: _AdministrativeLocationRepository(),
+    );
+
+    final locations = await data.watchLocations().first;
+
+    expect(repository.requestedMissionIds, ['professional-mission']);
+    expect(locations.map((location) => location.id), ['site-a']);
+    expect(repository.unboundedReads, 0);
+    await data.dispose();
+  });
+
   test(
     'responsible and coordinator locations use the scoped repository',
     () async {
@@ -586,6 +601,28 @@ class _RoleAwareMultiRepository extends MockCoordinationRepository
     locationReads++;
     return Stream.value([_location('public-location', 'Site public')]);
   }
+}
+
+class _MissionScopedLocationRepository extends _RoleAwareMultiRepository
+    implements ProfessionalMissionLocationReadRepository {
+  _MissionScopedLocationRepository() : super(access: null);
+
+  List<String>? requestedMissionIds;
+  int unboundedReads = 0;
+
+  @override
+  Stream<List<ResponsePlace>> watchLocations() {
+    unboundedReads++;
+    return Stream.error(StateError('Unbounded professional location read'));
+  }
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsForMissions(
+    Stream<List<CoordinationNeed>> missions,
+  ) => missions.map((items) {
+    requestedMissionIds = items.map((mission) => mission.id).toList();
+    return [_location('site-a', 'Site de mission')];
+  });
 }
 
 class _AdministrativeLocationRepository implements LocationReadRepository {

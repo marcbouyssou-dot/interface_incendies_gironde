@@ -8,9 +8,7 @@ void main() {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      const MaterialApp(home: PrivacyPolicyScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: PrivacyPolicyScreen()));
     await tester.pumpAndSettle();
   }
 
@@ -18,20 +16,17 @@ void main() {
     Size(320, 568), // narrow mobile
     Size(390, 844), // standard mobile
   ]) {
-    testWidgets(
-      'privacy policy renders without overflow at '
-      '${size.width.toInt()}x${size.height.toInt()}',
-      (tester) async {
-        await pumpPrivacyPolicy(tester, size);
+    testWidgets('privacy policy renders without overflow at '
+        '${size.width.toInt()}x${size.height.toInt()}', (tester) async {
+      await pumpPrivacyPolicy(tester, size);
 
-        expect(find.byKey(const Key('privacy-policy-screen')), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expect(find.byKey(const Key('privacy-policy-screen')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets(
-    'does not claim responsables can contact participants directly',
+    'describes a multi-Action platform without a global Gironde organizer',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -41,16 +36,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('permettre aux responsables autorisés de'),
-        findsNothing,
+      await tester.scrollUntilVisible(
+        find.textContaining('MobSanté peut accueillir plusieurs'),
+        300,
+        scrollable: find.byType(Scrollable),
       );
       expect(
-        find.textContaining(
-          'leur téléphone, leur email, leur identifiant RPPS ou',
-        ),
+        find.textContaining('MobSanté peut accueillir plusieurs'),
         findsOneWidget,
       );
+      expect(find.textContaining('Incendies Gironde'), findsNothing);
+      expect(find.textContaining('URPS MK'), findsNothing);
     },
   );
 
@@ -68,7 +64,7 @@ void main() {
       // viewport height; scroll it into the built tree before asserting on
       // its content.
       await tester.scrollUntilVisible(
-        find.textContaining('ne constituent pas, à ce jour, une fonctionnalité'),
+        find.textContaining('ne sont pas un export individuel'),
         300,
         scrollable: find.byType(Scrollable),
       );
@@ -78,9 +74,7 @@ void main() {
         findsNothing,
       );
       expect(
-        find.textContaining(
-          'ne constituent pas, à ce jour, une fonctionnalité',
-        ),
+        find.textContaining('ne sont pas un export individuel'),
         findsOneWidget,
       );
     },

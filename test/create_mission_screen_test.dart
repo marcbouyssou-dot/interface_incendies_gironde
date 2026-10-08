@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:interface_incendies_gironde/config/patient_data_guidance.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/app_notification.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
@@ -212,6 +213,16 @@ void main() {
     await tester.tap(find.text(priority.label).last);
     await tester.pumpAndSettle();
   }
+
+  testWidgets('mission free text warns against patient data', (tester) async {
+    await pumpForm(tester, _MissionRepository());
+    await tester.scrollUntilVisible(
+      find.text('Commentaire facultatif'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text(PatientDataGuidance.warning), findsOneWidget);
+  });
 
   testWidgets('date and both time pickers open and retain their choices', (
     tester,

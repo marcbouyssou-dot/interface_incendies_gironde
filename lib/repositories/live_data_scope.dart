@@ -54,6 +54,10 @@ class LiveCoordinationData {
     _locations = _SharedLatestStream(() {
       if (locationsOverride != null) return locationsOverride();
       if (administrativeLocationRepository == null) {
+        if (repository is ProfessionalMissionLocationReadRepository) {
+          return (repository as ProfessionalMissionLocationReadRepository)
+              .watchLocationsForMissions(_missions.watch());
+        }
         return repository.watchLocations();
       }
       return switchLatest(
@@ -61,7 +65,12 @@ class LiveCoordinationData {
         (access) {
           // Le Professionnel vérifié lit avec sa session volontaire RC3.
           // Les rôles privilégiés passent par le dépôt administratif borné.
-          if (access == null) return repository.watchLocations();
+          if (access == null) {
+            return repository is ProfessionalMissionLocationReadRepository
+                ? (repository as ProfessionalMissionLocationReadRepository)
+                      .watchLocationsForMissions(_missions.watch())
+                : repository.watchLocations();
+          }
           if (access.isSiteManager && !access.isCoordinator) {
             final scopedRepository = administrativeLocationRepository;
             final locations = scopedRepository is ScopedLocationReadRepository

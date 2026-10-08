@@ -183,6 +183,16 @@ test('dispatch creates one canonical created fact per real recipient', async () 
   assert.equal(entries[0].factType, 'created');
   assert.equal(entries[0].recipientUid, recipientUid);
   assert.equal(entries[0].organizationId, 'organization-a');
+  for (const record of [
+    ...entries,
+    ...firestore.collectionValues('notifications'),
+  ]) {
+    for (const privateField of [
+      'latitude', 'longitude', 'radiusKm', 'phone', 'email', 'rpps',
+    ]) {
+      assert.equal(Object.hasOwn(record, privateField), false);
+    }
+  }
 });
 
 test('an event without an effectively targeted recipient creates no entry', async () => {
@@ -198,6 +208,96 @@ test('an event without an effectively targeted recipient creates no entry', asyn
   assert.deepEqual(firestore.collectionValues(
     PROFESSIONAL_SOLICITATION_JOURNAL_COLLECTION,
   ), []);
+});
+
+test('unverified site location records unavailable targeting without notifying', async () => {
+  const firestore = operationalFirestore({compatibleMissions: true});
+  firestore.seed('locations/location-a', {
+    id: 'location-a', latitude: 44.84, longitude: -0.58,
+    addressStatus: 'unverified',
+  });
+  const result = await dispatchOperationalEvent({
+    firestore,
+    messaging: {send: async () => 'unused'},
+    event: event(),
+    now: occurredAt,
+  });
+
+  assert.deepEqual(result, {notifications: 0, pushes: 0});
+  assert.deepEqual(firestore.collectionValues('notifications'), []);
+  const [snapshot] = firestore.collectionValues('diffusionSnapshots');
+  assert.equal(snapshot.populationCount, 0);
+  assert.equal(snapshot.targetingStatus, 'TARGETING_UNAVAILABLE_SITE_LOCATION');
+});
+
+test('temporary legacy opt-in serves existing users until explicit strict cutover', async () => {
+  const legacy = operationalFirestore({compatibleMissions: true});
+  legacy.values.delete(`professionalTargeting/${recipientUid}`);
+  assert.deepEqual(await dispatchOperationalEvent({
+    firestore: legacy, messaging: {send: async () => 'unused'},
+    event: event(), now: occurredAt,
+  }), {notifications: 1, pushes: 0});
+  assert.equal(legacy.collectionValues('diffusionSnapshots')[0].targetingStatus,
+    'TARGETING_TRANSITION_LEGACY');
+
+  const strict = operationalFirestore({compatibleMissions: true});
+  strict.values.delete(`professionalTargeting/${recipientUid}`);
+  strict.seed('platform/config', {
+    admissionMode: 'open', notificationTargetingMode: 'geographic_strict',
+  });
+  assert.deepEqual(await dispatchOperationalEvent({
+    firestore: strict, messaging: {send: async () => 'unused'},
+    event: event(), now: occurredAt,
+  }), {notifications: 0, pushes: 0});
+
+  const radiusOnly = operationalFirestore({compatibleMissions: true});
+  radiusOnly.seed(`professionalTargeting/${recipientUid}`, {
+    uid: recipientUid, enabled: false, radiusKm: 20,
+  });
+  assert.deepEqual(await dispatchOperationalEvent({
+    firestore: radiusOnly, messaging: {send: async () => 'unused'},
+    event: event(), now: occurredAt,
+  }), {notifications: 1, pushes: 0});
+
+  const optedOut = operationalFirestore({compatibleMissions: false});
+  optedOut.seed(`professionalTargeting/${recipientUid}`, {
+    uid: recipientUid, enabled: false, radiusKm: 20,
+  });
+  assert.deepEqual(await dispatchOperationalEvent({
+    firestore: optedOut, messaging: {send: async () => 'unused'},
+    event: event(), now: occurredAt,
+  }), {notifications: 0, pushes: 0});
+});
+
+test('invitation mode dispatch requires an Action grant and chosen radius', async () => {
+  const withoutGrant = operationalFirestore({compatibleMissions: true});
+  withoutGrant.seed('platform/config', {admissionMode: 'invitation_only'});
+  assert.deepEqual(await dispatchOperationalEvent({
+    firestore: withoutGrant, messaging: {send: async () => 'unused'},
+    event: event(), now: occurredAt,
+  }), {notifications: 0, pushes: 0});
+
+  const withGrant = operationalFirestore({compatibleMissions: true});
+  withGrant.seed('platform/config', {admissionMode: 'invitation_only'});
+  withGrant.seed(`professionalAdmissions/operation-a_${recipientUid}`, {
+    uid: recipientUid, operationId: 'operation-a',
+    organizationId: 'organization-a', profession: 'nurse',
+    status: 'active', expiresAt: timestamp(occurredAt.getTime() + 86400000),
+  });
+  assert.deepEqual(await dispatchOperationalEvent({
+    firestore: withGrant, messaging: {send: async () => 'unused'},
+    event: event(), now: occurredAt,
+  }), {notifications: 1, pushes: 0});
+
+  const outOfRadius = operationalFirestore({compatibleMissions: true});
+  outOfRadius.seed('professionalTargeting/professional-a', {
+    uid: recipientUid, enabled: true, latitude: 45.84, longitude: -0.58,
+    radiusKm: 20, source: 'selected_point',
+  });
+  assert.deepEqual(await dispatchOperationalEvent({
+    firestore: outOfRadius, messaging: {send: async () => 'unused'},
+    event: event(), now: occurredAt,
+  }), {notifications: 0, pushes: 0});
 });
 
 test('provider acceptance writes provider_accepted only after FCM success', async () => {
@@ -403,18 +503,35 @@ function operationalFirestore({compatibleMissions}) {
     createdBy: 'manager-a',
     isActive: true,
     status: 'toComplete',
+    requiredByProfession: {nurse: 1},
+    registeredByProfession: {nurse: 0},
   });
   firestore.seed('mobilizations/mobilization-a', {
     id: 'mobilization-a',
     operationId: 'operation-a',
+    status: 'active',
   });
   firestore.seed('operations/operation-a', {
     id: 'operation-a',
     ownerOrganizationId: 'organization-a',
+    status: 'active', purpose: 'operational',
+  });
+  firestore.seed('locations/location-a', {
+    id: 'location-a', latitude: 44.84, longitude: -0.58,
+    addressStatus: 'verified_official',
   });
   firestore.seed(`volunteers/${recipientUid}`, {
     uid: recipientUid,
     profession: 'nurse',
+    verificationStatus: 'verified', verificationSource: 'ans_rpps',
+    professionalIdType: 'rpps', professionalIdValue: '10123456789',
+    rpps: '10123456789', verifiedFirstName: 'Alice',
+    verifiedLastName: 'Exemple', verifiedProfessionCode: '60',
+    verifiedProfessionLabel: 'Infirmière', verifiedAt: timestamp(occurredAt.getTime()),
+  });
+  firestore.seed(`professionalTargeting/${recipientUid}`, {
+    uid: recipientUid, enabled: true, latitude: 44.84, longitude: -0.58,
+    radiusKm: 20, source: 'selected_point',
   });
   firestore.seed(`notificationPreferences/${recipientUid}`, {
     compatibleMissions,

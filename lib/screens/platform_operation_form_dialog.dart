@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/patient_data_guidance.dart';
 import '../models/operation.dart';
 import '../models/operational_scope.dart';
 import '../models/territory.dart';
@@ -153,6 +154,7 @@ class _PlatformOperationFormDialogState
               key: const Key('platform-operation-context'),
               label: 'Contexte (facultatif)',
               controller: _context,
+              supportingText: PatientDataGuidance.warning,
               maxLength: 500,
               maxLines: 3,
               textCapitalization: TextCapitalization.sentences,

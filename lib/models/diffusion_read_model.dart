@@ -7,6 +7,7 @@ class DiffusionReadModel {
     required this.createdAt,
     required this.populationCount,
     required this.snapshotAvailable,
+    this.targetingStatus,
   });
 
   final String diffusionId;
@@ -15,4 +16,5 @@ class DiffusionReadModel {
   final DateTime createdAt;
   final int? populationCount;
   final bool snapshotAvailable;
+  final String? targetingStatus;
 }

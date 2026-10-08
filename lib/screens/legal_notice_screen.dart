@@ -80,7 +80,7 @@ class LegalNoticeScreen extends StatelessWidget {
                     const SizedBox(height: 22),
                     const _LegalSectionHeader(
                       eyebrow: 'IDENTITÉ DU SERVICE',
-                      title: 'Édition et hébergement',
+                      title: 'Plateforme et hébergement',
                     ),
                     const SizedBox(height: 10),
                     const _LegalInformationPanel(),
@@ -163,23 +163,21 @@ class _LegalInformationPanel extends StatelessWidget {
       child: Column(
         children: [
           _LegalInformationRow(
-            icon: Icons.business_outlined,
-            title: 'Éditeur de l’application',
-            content:
-                'Marc Bouyssou, vice-président de l’URPS MK '
-                'Nouvelle-Aquitaine',
-          ),
-          _LegalDivider(),
-          _LegalInformationRow(
-            icon: Icons.alternate_email_rounded,
-            title: 'Contact',
-            content: 'URPS MK Nouvelle-Aquitaine',
-          ),
-          _LegalDivider(),
-          _LegalInformationRow(
             icon: Icons.cloud_outlined,
-            title: 'Hébergeur',
+            title: 'Hébergement du client Web',
             content: 'Netlify, Inc. — mobsante.netlify.app',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.storage_outlined,
+            title: 'Comptes et données',
+            content: 'Firebase / Google Cloud',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.business_outlined,
+            title: 'Organisateur d’une Action',
+            content: 'Indiqué dans le contexte de chaque Action.',
           ),
           _LegalDivider(),
           _LegalInformationRow(

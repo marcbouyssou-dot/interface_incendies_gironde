@@ -20,12 +20,20 @@ void main() {
       canStartVolunteerEngagement(hasUser: false, isAnonymous: false),
       isTrue,
     );
+    expect(
+      canStartVolunteerEngagement(
+        hasUser: true,
+        isAnonymous: false,
+        hasVerifiedEmail: true,
+      ),
+      isTrue,
+    );
   });
 
-  test('a historical responsible primary session is replaced', () {
+  test('a linked professional primary session is preserved', () {
     expect(
       mustCreateAnonymousVolunteerSession(hasUser: true, isAnonymous: false),
-      isTrue,
+      isFalse,
     );
     expect(
       mustCreateAnonymousVolunteerSession(hasUser: true, isAnonymous: true),

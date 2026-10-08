@@ -77,6 +77,18 @@ import {
   confirmProfessionalRpps as confirmProfessionalRppsRequest,
 } from './confirm_professional_rpps.js';
 import {
+  ProfessionalAdmissionError,
+  createProfessionalInvitation as createProfessionalInvitationRequest,
+  getProfessionalInvitationStatus as getProfessionalInvitationStatusRequest,
+  redeemProfessionalInvitation as redeemProfessionalInvitationRequest,
+  revokeProfessionalInvitation as revokeProfessionalInvitationRequest,
+  listProfessionalMissionLocations as listProfessionalMissionLocationsRequest,
+} from './professional_admission.js';
+import {
+  ReferenceGeocodingError,
+  searchProfessionalReferenceAddresses as searchReferenceAddressesRequest,
+} from './reference_geocoding.js';
+import {
   activateMobilization as activateMobilizationRequest,
   archiveMobilization as archiveMobilizationRequest,
   assignMobilizationCoordinator as assignMobilizationCoordinatorRequest,
@@ -666,6 +678,83 @@ export const confirmProfessionalRpps = onCall(
       },
     });
   }),
+);
+
+async function professionalAdmissionCallable(action) {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof ProfessionalAdmissionError) {
+      throw new HttpsError(error.code, error.message);
+    }
+    console.error('PROFESSIONAL_ADMISSION_FAILED', {
+      type: error?.constructor?.name ?? 'Unknown',
+    });
+    throw new HttpsError('internal', 'Admission professionnelle indisponible.');
+  }
+}
+
+export const createProfessionalInvitation = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    createProfessionalInvitationRequest({
+      db: getFirestore(), callerUid: request.auth?.uid, data: request.data,
+    })),
+);
+
+export const redeemProfessionalInvitation = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    redeemProfessionalInvitationRequest({
+      db: getFirestore(), auth: getAuth(), callerUid: request.auth?.uid,
+      data: request.data,
+    })),
+);
+
+export const getProfessionalInvitationStatus = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    getProfessionalInvitationStatusRequest({
+      db: getFirestore(), callerUid: request.auth?.uid, data: request.data,
+    })),
+);
+
+export const revokeProfessionalInvitation = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    revokeProfessionalInvitationRequest({
+      db: getFirestore(), callerUid: request.auth?.uid, data: request.data,
+    })),
+);
+
+export const listProfessionalMissionLocations = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    listProfessionalMissionLocationsRequest({
+      db: getFirestore(), callerUid: request.auth?.uid, data: request.data,
+    })),
+);
+
+export const searchProfessionalReferenceAddresses = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  async (request) => {
+    try {
+      return await searchReferenceAddressesRequest({
+        db: getFirestore(),
+        callerUid: request.auth?.uid,
+        isAnonymous: request.auth?.token?.firebase?.sign_in_provider === 'anonymous',
+        data: request.data,
+      });
+    } catch (error) {
+      if (error instanceof ReferenceGeocodingError) {
+        throw new HttpsError(error.code, error.message);
+      }
+      console.error('REFERENCE_GEOCODING_FAILED', {
+        type: error?.constructor?.name ?? 'Unknown',
+      });
+      throw new HttpsError('internal', 'Géocodage indisponible.');
+    }
+  },
 );
 
 export const provisionAdminInvitation = onCall(

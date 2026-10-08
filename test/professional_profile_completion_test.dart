@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
+import 'package:interface_incendies_gironde/config/patient_data_guidance.dart';
 import 'package:interface_incendies_gironde/data/mock_data.dart';
 import 'package:interface_incendies_gironde/models/need.dart';
 import 'package:interface_incendies_gironde/models/professional_equipment.dart';
@@ -11,6 +12,27 @@ import 'package:interface_incendies_gironde/screens/professional_shell.dart';
 import 'package:interface_incendies_gironde/widgets/v5_form_system.dart';
 
 void main() {
+  testWidgets('free equipment details warn against patient data', (
+    tester,
+  ) async {
+    final repository = MockCoordinationRepository(responsibleAccess: null);
+    await _pumpApp(tester, repository);
+    await _openProfessionalProfile(tester);
+    await tester.tap(find.byKey(const Key('edit-professional-profile')));
+    await tester.pumpAndSettle();
+    final other = find.byKey(
+      const Key('professional-profile-equipment-other_equipment'),
+    );
+    await _scrollTo(tester, other);
+    await tester.tap(other);
+    await tester.pumpAndSettle();
+    await _scrollTo(
+      tester,
+      find.byKey(const Key('professional-profile-equipment-details')),
+    );
+    expect(find.text(PatientDataGuidance.warning), findsOneWidget);
+  });
+
   testWidgets(
     'an incomplete professional profile can be completed and survives reload',
     (tester) async {
@@ -36,7 +58,7 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('save-professional-profile')));
       await tester.pumpAndSettle();
-      expect(find.text('Champ requis'), findsNWidgets(3));
+      expect(find.text('Champ requis'), findsNWidgets(2));
       expect(find.text('Email invalide'), findsOneWidget);
       expect(
         find.text('Le numéro RPPS doit contenir exactement 11 chiffres.'),
@@ -141,14 +163,20 @@ void main() {
         const Offset(0, -550),
       );
       await tester.pumpAndSettle();
-      expect(find.text('CPTS Médoc'), findsWidgets);
       expect(find.text('10 rue de la Santé, Cabinet 2'), findsOneWidget);
       expect(find.text('33000 · Bordeaux'), findsOneWidget);
-      await tester.drag(
-        find.byKey(const PageStorageKey('professional-profile')),
-        const Offset(0, -350),
+      await tester.scrollUntilVisible(
+        find.text('CPTS Médoc'),
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const PageStorageKey('professional-profile')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.pumpAndSettle();
+      expect(find.text('CPTS Médoc'), findsWidgets);
       expect(find.text('Table de massage'), findsOneWidget);
 
       final saved = await repository.getVolunteerProfile();
@@ -170,13 +198,30 @@ void main() {
 
       expect(find.text('Profil complet'), findsOneWidget);
       expect(find.text('alice@example.fr'), findsOneWidget);
-      await tester.drag(
-        find.byKey(const PageStorageKey('professional-profile')),
-        const Offset(0, -550),
+      await tester.scrollUntilVisible(
+        find.text('33000 · Bordeaux'),
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const PageStorageKey('professional-profile')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('33000 · Bordeaux'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('CPTS Médoc'),
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const PageStorageKey('professional-profile')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.pumpAndSettle();
       expect(find.text('CPTS Médoc'), findsWidgets);
-      expect(find.text('33000 · Bordeaux'), findsOneWidget);
       semantics.dispose();
     },
   );

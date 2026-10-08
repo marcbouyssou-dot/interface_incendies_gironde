@@ -184,7 +184,7 @@ void main() {
     test('each missing piece is reported on its own', () {
       expect(gaps(first: ' '), [EngagementProfileGap.firstName]);
       expect(gaps(last: ''), [EngagementProfileGap.lastName]);
-      expect(gaps(phone: ''), [EngagementProfileGap.phone]);
+      expect(gaps(phone: ''), isEmpty);
       expect(gaps(email: null), [EngagementProfileGap.email]);
       expect(gaps(email: 'pas-un-email'), [EngagementProfileGap.email]);
       expect(gaps(profession: VolunteerProfession.mk), [
@@ -383,7 +383,7 @@ void main() {
     );
 
     testWidgets(
-      'summary without phone and email shows both as to be filled in',
+      'summary treats phone as optional while email remains required',
       (tester) async {
         final repository = MockCoordinationRepository(
           responsibleAccess: null,
@@ -403,9 +403,10 @@ void main() {
         );
         await _openSheet(tester, repository);
 
-        expect(find.byKey(const Key('engagement-gap-phone')), findsOneWidget);
+        expect(find.byKey(const Key('engagement-gap-phone')), findsNothing);
         expect(find.byKey(const Key('engagement-gap-email')), findsOneWidget);
-        expect(find.text('À renseigner'), findsNWidgets(2));
+        expect(find.text('Non renseigné'), findsOneWidget);
+        expect(find.text('À renseigner'), findsOneWidget);
         expect(find.text('Compléter mon profil'), findsOneWidget);
       },
     );

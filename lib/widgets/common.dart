@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../config/patient_data_guidance.dart';
 import '../models/health_profession.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
@@ -1839,6 +1840,7 @@ class _CancelMissionDialogState extends State<_CancelMissionDialog> {
               key: const Key('cancellation-reason'),
               label: 'Motif de l’annulation',
               controller: _reason,
+              supportingText: PatientDataGuidance.warning,
               maxLength: 300,
               maxLines: 3,
             ),
@@ -2668,7 +2670,7 @@ class _RegistrationSheetState extends State<_RegistrationSheet> {
 
   static String? _phone(String? value) {
     final normalized = value?.trim() ?? '';
-    if (normalized.isEmpty) return 'Champ requis';
+    if (normalized.isEmpty) return null;
     if (normalized.replaceAll(RegExp(r'\D'), '').length < 6) {
       return 'Téléphone trop court';
     }
@@ -3060,7 +3062,6 @@ class _ProfileSummary extends StatelessWidget {
     final gaps = ProfessionalProfileValidation.engagementGapsForProfile(
       profile,
     );
-    final phoneMissing = gaps.contains(EngagementProfileGap.phone);
     final emailMissing = gaps.contains(EngagementProfileGap.email);
     final identifierMissing = gaps.contains(
       EngagementProfileGap.professionalIdentifier,
@@ -3136,8 +3137,9 @@ class _ProfileSummary extends StatelessWidget {
             key: const Key('profile-summary-phone'),
             icon: Icons.phone_outlined,
             label: 'Téléphone',
-            value: phoneMissing ? 'À renseigner' : profile.phone.trim(),
-            missing: phoneMissing,
+            value: profile.phone.trim().isEmpty
+                ? 'Non renseigné'
+                : profile.phone.trim(),
           ),
           const SizedBox(height: 10),
           _ProfileSummaryItem(

@@ -9,12 +9,12 @@ class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
   static const provisionalLegalNotice =
-      'Les informations détaillées relatives au traitement des données '
-      'personnelles seront précisées avant l’ouverture générale du service.';
+      'Les catégories de données, leurs usages et les prestataires techniques '
+      'sont décrits dans la politique de confidentialité.';
   static const dataUseNotice =
-      'Les coordonnées renseignées sont utilisées pour organiser les missions '
-      'et permettre aux responsables autorisés de contacter les participants '
-      'concernés.';
+      'Les coordonnées renseignées servent à gérer le compte et la '
+      'mobilisation. Les accès aux informations de mission dépendent du rôle '
+      'et de l’Action concernée.';
 
   @override
   Widget build(BuildContext context) {

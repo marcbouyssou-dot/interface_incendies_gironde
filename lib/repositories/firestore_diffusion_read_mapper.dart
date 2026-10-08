@@ -72,6 +72,9 @@ abstract final class FirestoreDiffusionReadMapper {
       createdAt: createdAt,
       populationCount: populationCount,
       snapshotAvailable: true,
+      targetingStatus: snapshot.data['targetingStatus'] is String
+          ? snapshot.data['targetingStatus'] as String
+          : null,
     );
   }
 

@@ -9,6 +9,10 @@ import {
   recipientsForEvent,
 } from './targeting.js';
 import {
+  eligibleProfessionalUids,
+  targetingSiteStatus,
+} from './professional_targeting.js';
+import {
   canonicalSolicitationEntry,
   deriveSolicitationOrganizationContext,
   ensureCanonicalSolicitationEntry,
@@ -63,15 +67,22 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
     });
     recentNotifications.set(value.recipientUid, list);
   }
+  const targeting = event.eventType === 'mission.published'
+    ? await loadEligibleProfessionalIds({
+      firestore, mission, volunteers, preferences, roles, now: now.getTime(),
+    })
+    : {uids: new Set(), status: null};
   const recipients = recipientsForEvent({
     event, mission, roles, assignments, volunteers, engagements, preferences,
     recentNotifications, now: now.getTime(),
+    eligibleProfessionalIds: targeting.uids,
   });
   await captureDiffusionSnapshot({
     firestore,
     event,
     recipients,
     createdAt: Timestamp.fromDate(now),
+    targetingStatus: targeting.status,
   });
   if (recipients.length === 0) return {notifications: 0, pushes: 0};
   const solicitationContext = await deriveSolicitationOrganizationContext({
@@ -140,6 +151,57 @@ export async function dispatchOperationalEvent({firestore, messaging, event, now
     }
   }
   return {notifications: recipients.length, pushes};
+}
+
+async function loadEligibleProfessionalIds({
+  firestore, mission, volunteers, preferences, roles, now,
+}) {
+  if (typeof mission.mobilizationId !== 'string'
+    || typeof mission.locationId !== 'string') {
+    return {uids: new Set(), status: 'TARGETING_UNAVAILABLE_CONTEXT'};
+  }
+  const [configSnapshot, mobilizationSnapshot, locationSnapshot,
+    targetingSnapshot] = await Promise.all([
+    firestore.collection('platform').doc('config').get(),
+    firestore.collection('mobilizations').doc(mission.mobilizationId).get(),
+    firestore.collection('locations').doc(mission.locationId).get(),
+    firestore.collection('professionalTargeting').get(),
+  ]);
+  const mobilization = mobilizationSnapshot.data();
+  if (typeof mobilization?.operationId !== 'string') {
+    return {uids: new Set(), status: 'TARGETING_UNAVAILABLE_CONTEXT'};
+  }
+  const operationSnapshot = await firestore.collection('operations')
+    .doc(mobilization.operationId).get();
+  const admissionMode = configSnapshot.data()?.admissionMode ?? 'open';
+  const targetingMode =
+    configSnapshot.data()?.notificationTargetingMode ?? 'legacy_opt_in';
+  if (!['legacy_opt_in', 'geographic_strict'].includes(targetingMode)) {
+    return {uids: new Set(), status: 'TARGETING_UNAVAILABLE_CONTEXT'};
+  }
+  const admissionSnapshot = admissionMode === 'invitation_only'
+    ? await firestore.collection('professionalAdmissions')
+      .where('operationId', '==', operationSnapshot.id).get()
+    : null;
+  const location = {id: locationSnapshot.id, ...locationSnapshot.data()};
+  const status = targetingSiteStatus(location);
+  return {uids: eligibleProfessionalUids({
+    mission,
+    mobilization: {id: mobilizationSnapshot.id, ...mobilization},
+    operation: {id: operationSnapshot.id, ...operationSnapshot.data()},
+    location,
+    admissionMode,
+    volunteers,
+    targetings: new Map(targetingSnapshot.docs.map((document) =>
+      [document.id, document.data()])),
+    admissions: new Map((admissionSnapshot?.docs ?? []).map((document) =>
+      [document.data().uid, document.data()])),
+    preferences,
+    roleUids: new Set(roles.map((role) => role.uid)),
+    allowLegacyWithoutPoint: targetingMode === 'legacy_opt_in',
+    now,
+  }), status: status === 'TARGETING_READY' && targetingMode === 'legacy_opt_in'
+    ? 'TARGETING_TRANSITION_LEGACY' : status};
 }
 
 export async function deliverPush({firestore, messaging, event, content, recipientUid, subscription, notificationId, deferred = false, preferences, now = new Date(), context = null}) {

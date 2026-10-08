@@ -21,6 +21,22 @@ void main() {
       expect(model.snapshotAvailable, isTrue);
     });
 
+    test('projects an unavailable site location from the Snapshot', () {
+      final snapshot = _snapshotDocument(populationCount: 0);
+      final model = FirestoreDiffusionReadMapper.fromFirestore(
+        diffusion: _diffusionDocument(),
+        snapshot: DiffusionReadDocument(
+          id: snapshot.id,
+          data: {
+            ...snapshot.data,
+            'targetingStatus': 'TARGETING_UNAVAILABLE_SITE_LOCATION',
+          },
+        ),
+      );
+
+      expect(model.targetingStatus, 'TARGETING_UNAVAILABLE_SITE_LOCATION');
+    });
+
     test('maps legacy DateTime and reports an absent Snapshot explicitly', () {
       final createdAt = DateTime.utc(2026, 8, 23, 9);
       final document = _diffusionDocument(createdAt: createdAt);

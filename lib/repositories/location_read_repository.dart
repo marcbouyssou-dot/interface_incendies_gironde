@@ -8,6 +8,13 @@ abstract interface class LocationReadRepository {
   Stream<List<ResponsePlace>> watchLocations();
 }
 
+/// Projection des seuls sites rattachés aux missions du Professionnel admis.
+abstract interface class ProfessionalMissionLocationReadRepository {
+  Stream<List<ResponsePlace>> watchLocationsForMissions(
+    Stream<List<CoordinationNeed>> missions,
+  );
+}
+
 /// Lecture de sites déjà bornée par les identifiants du rôle Responsable.
 abstract interface class ScopedLocationReadRepository
     implements LocationReadRepository {

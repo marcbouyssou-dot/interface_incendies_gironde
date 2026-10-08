@@ -5,6 +5,7 @@ import '../models/volunteer_profile.dart';
 import '../models/public_mission_discovery.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/public_mission_discovery_repository.dart';
+import '../repositories/professional_admission_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
@@ -43,6 +44,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   final List<Widget?> _screens = List<Widget?>.filled(3, null);
   Object? _repositoryIdentity;
   Future<VolunteerProfile?>? _profile;
+  Stream<ProfessionalAdmissionState>? _admission;
   late Stream<List<PublicMissionDiscovery>> _publicMissions;
 
   @override
@@ -50,7 +52,9 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     super.initState();
     _currentIndex = widget.initialIndex;
     _screens[_currentIndex] = _createScreen(_currentIndex);
-    _publicMissions = widget.publicMissionDiscoveryRepository.watchMissions();
+    _publicMissions = widget.publicMissionDiscoveryRepository
+        .watchMissions()
+        .asBroadcastStream();
   }
 
   @override
@@ -60,7 +64,9 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
       oldWidget.publicMissionDiscoveryRepository,
       widget.publicMissionDiscoveryRepository,
     )) {
-      _publicMissions = widget.publicMissionDiscoveryRepository.watchMissions();
+      _publicMissions = widget.publicMissionDiscoveryRepository
+          .watchMissions()
+          .asBroadcastStream();
     }
   }
 
@@ -71,6 +77,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     if (!identical(repository, _repositoryIdentity)) {
       _repositoryIdentity = repository;
       _profile = repository.getVolunteerProfile();
+      _admission = _admissionStream(repository);
     }
   }
 
@@ -87,38 +94,101 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     _ => throw RangeError.index(index, _screens),
   };
 
+  Stream<ProfessionalAdmissionState> _admissionStream(Object repository) =>
+      repository is ProfessionalAdmissionRepository
+      ? repository.watchProfessionalAdmission()
+      : Stream<ProfessionalAdmissionState>.multi(
+          (controller) => controller.add(
+            const ProfessionalAdmissionState(
+              mode: ProfessionalAdmissionMode.open,
+            ),
+          ),
+        );
+
   void _selectTab(int index) {
     setState(() {
       if (index != 2) {
-        _profile = RepositoryScope.of(context).getVolunteerProfile();
+        final repository = RepositoryScope.of(context);
+        _profile = repository.getVolunteerProfile();
+        _admission = _admissionStream(repository);
       }
       _screens[index] ??= _createScreen(index);
       _currentIndex = index;
     });
   }
 
-  Widget _operationalTabs() => FutureBuilder<VolunteerProfile?>(
-    future: _profile,
-    builder: (context, snapshot) {
-      if (snapshot.connectionState != ConnectionState.done) {
-        return const V5LoadingState(label: 'Chargement du profil…');
-      }
-      if (snapshot.data?.hasVerifiedProfessionalIdentity != true) {
-        return _ProfessionalDiscoveryState(
-          missions: _currentIndex == 0,
-          onCompleteProfile: () => _selectTab(2),
-          publicMissions: _publicMissions,
+  Widget _operationalTabs() => StreamBuilder<ProfessionalAdmissionState>(
+    stream: _admission,
+    builder: (context, admissionSnapshot) {
+      if (admissionSnapshot.hasError) {
+        return const V5LoadingState(
+          label: 'Admission temporairement indisponible',
         );
       }
-      return NativeTabView(
-        index: _currentIndex,
-        children: List.generate(
-          _screens.length,
-          (index) => _screens[index] ?? const SizedBox.shrink(),
-        ),
-      );
+      final admission = admissionSnapshot.data;
+      if (admission == null) {
+        return const V5LoadingState(label: 'Vérification de l’accès…');
+      }
+      return _operationalTabsForAdmission(admission);
     },
   );
+
+  Widget _operationalTabsForAdmission(ProfessionalAdmissionState admission) =>
+      FutureBuilder<VolunteerProfile?>(
+        future: _profile,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const V5LoadingState(label: 'Chargement du profil…');
+          }
+          final verified =
+              snapshot.data?.hasVerifiedProfessionalIdentity == true;
+          if (!verified || !admission.canReadOperationalData) {
+            return _ProfessionalDiscoveryState(
+              missions: _currentIndex == 0,
+              invitationOnly:
+                  admission.mode == ProfessionalAdmissionMode.invitationOnly,
+              verified: verified,
+              hasProfile: snapshot.data != null,
+              onUseInvitation: snapshot.data == null
+                  ? () => _selectTab(2)
+                  : _useInvitation,
+              onCompleteProfile: () => _selectTab(2),
+              publicMissions: _publicMissions,
+            );
+          }
+          return NativeTabView(
+            index: _currentIndex,
+            children: List.generate(
+              _screens.length,
+              (index) => _screens[index] ?? const SizedBox.shrink(),
+            ),
+          );
+        },
+      );
+
+  Future<void> _useInvitation() async {
+    final repository = RepositoryScope.of(context);
+    if (repository is! ProfessionalAdmissionRepository) return;
+    final redeemed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _ProfessionalInvitationDialog(
+        repository: repository as ProfessionalAdmissionRepository,
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _profile = RepositoryScope.of(context).getVolunteerProfile();
+      _admission = _admissionStream(repository);
+      _screens[2] = _createScreen(2);
+    });
+    if (redeemed == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invitation enregistrée pour cette Action.'),
+        ),
+      );
+    }
+  }
 
   void _openResponsibleAccess() {
     final repository = RepositoryScope.of(context);
@@ -152,11 +222,30 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
 
   void _openNotifications() {
     Navigator.of(context).push(
-      AppPageRoute<void>(builder: (_) => const NotificationCenterScreen()),
+      AppPageRoute<void>(
+        builder: (_) => const NotificationCenterScreen(
+          showProfessionalTargetingGuidance: true,
+        ),
+      ),
     );
   }
 
-  Future<void> _signOut() => RepositoryScope.of(context).signOutResponsible();
+  Future<void> _signOut() async {
+    final repository = RepositoryScope.of(context);
+    if (repository is ProfessionalAdmissionRepository) {
+      await (repository as ProfessionalAdmissionRepository)
+          .signOutProfessionalEmail();
+      if (mounted) {
+        setState(() {
+          _profile = repository.getVolunteerProfile();
+          _admission = _admissionStream(repository);
+          _screens[2] = _createScreen(2);
+        });
+      }
+    } else {
+      await repository.signOutResponsible();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -177,14 +266,215 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   }
 }
 
+class _ProfessionalInvitationDialog extends StatefulWidget {
+  const _ProfessionalInvitationDialog({required this.repository});
+
+  final ProfessionalAdmissionRepository repository;
+
+  @override
+  State<_ProfessionalInvitationDialog> createState() =>
+      _ProfessionalInvitationDialogState();
+}
+
+class _ProfessionalInvitationDialogState
+    extends State<_ProfessionalInvitationDialog> {
+  final _code = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  ProfessionalEmailIdentity? _identity;
+  String? _message;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshIdentity();
+  }
+
+  @override
+  void dispose() {
+    _code.dispose();
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshIdentity() async {
+    try {
+      final identity = await widget.repository.professionalEmailIdentity();
+      if (mounted) setState(() => _identity = identity);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message = 'Session indisponible. Réessayez.');
+      }
+    }
+  }
+
+  Future<void> _perform(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await action();
+    } catch (error) {
+      if (mounted) setState(() => _message = '$error');
+    } finally {
+      if (mounted) await _refreshIdentity();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _redeem() async {
+    if (_code.text.trim().isEmpty) {
+      setState(() => _message = 'Saisissez le code de votre invitation.');
+      return;
+    }
+    await _perform(() async {
+      await widget.repository.redeemProfessionalInvitation(_code.text.trim());
+      if (mounted) Navigator.pop(context, true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final identity = _identity;
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Utiliser une invitation'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Cette invitation est personnelle. Connectez-vous avec '
+            'l’adresse vérifiée du destinataire, puis complétez votre profil professionnel.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('professional-invitation-code'),
+            controller: _code,
+            autocorrect: false,
+            decoration: const InputDecoration(labelText: 'Code d’invitation'),
+          ),
+          if (identity == null) const LinearProgressIndicator(),
+          if (identity?.isAnonymous == true) ...[
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('professional-invitation-email'),
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Adresse e-mail'),
+            ),
+            TextField(
+              key: const Key('professional-invitation-password'),
+              controller: _password,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Mot de passe'),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Associer conserve votre profil actuel. Se connecter '
+              'ouvre un compte déjà existant.',
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => _perform(
+                          () => widget.repository.linkProfessionalEmail(
+                            _email.text,
+                            _password.text,
+                          ),
+                        ),
+                  child: const Text('Associer mon compte'),
+                ),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => _perform(
+                          () => widget.repository.signInProfessionalEmail(
+                            _email.text,
+                            _password.text,
+                          ),
+                        ),
+                  child: const Text('Se connecter'),
+                ),
+              ],
+            ),
+          ],
+          if (identity != null && !identity.isAnonymous) ...[
+            const SizedBox(height: 12),
+            Text(
+              identity.emailVerified
+                  ? 'Adresse e-mail vérifiée.'
+                  : 'Vérifiez votre adresse e-mail avant de valider.',
+            ),
+            if (!identity.emailVerified)
+              Wrap(
+                spacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _perform(
+                            widget.repository.sendProfessionalEmailVerification,
+                          ),
+                    child: const Text('Renvoyer l’e-mail'),
+                  ),
+                  TextButton(
+                    onPressed: _busy ? null : () => _perform(_refreshIdentity),
+                    child: const Text('J’ai vérifié mon e-mail'),
+                  ),
+                ],
+              ),
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => _perform(widget.repository.signOutProfessionalEmail),
+              child: const Text('Changer de compte'),
+            ),
+          ],
+          if (_message != null) ...[
+            const SizedBox(height: 8),
+            Text(_message!, key: const Key('professional-invitation-message')),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Fermer'),
+        ),
+        FilledButton(
+          onPressed: _busy || identity?.emailVerified != true ? null : _redeem,
+          child: const Text('Valider'),
+        ),
+      ],
+    );
+  }
+}
+
 class _ProfessionalDiscoveryState extends StatelessWidget {
   const _ProfessionalDiscoveryState({
     required this.missions,
+    required this.invitationOnly,
+    required this.verified,
+    required this.hasProfile,
+    required this.onUseInvitation,
     required this.onCompleteProfile,
     required this.publicMissions,
   });
 
   final bool missions;
+  final bool invitationOnly;
+  final bool verified;
+  final bool hasProfile;
+  final VoidCallback onUseInvitation;
   final VoidCallback onCompleteProfile;
   final Stream<List<PublicMissionDiscovery>> publicMissions;
 
@@ -215,6 +505,25 @@ class _ProfessionalDiscoveryState extends StatelessWidget {
                     pageTitleKey: const Key('professional-page-title'),
                   ),
                   const SizedBox(height: V5Spacing.md),
+                  if (invitationOnly) ...[
+                    const Text(
+                      'MobSanté est actuellement accessible sur invitation.',
+                      key: Key('professional-invitation-only-message'),
+                    ),
+                    if (!hasProfile) ...[
+                      const SizedBox(height: V5Spacing.xs),
+                      const Text(
+                        'Enregistrez votre profil professionnel avant d’utiliser votre code d’invitation.',
+                      ),
+                    ],
+                    const SizedBox(height: V5Spacing.sm),
+                    OutlinedButton(
+                      key: const Key('professional-use-invitation'),
+                      onPressed: onUseInvitation,
+                      child: const Text('Utiliser mon invitation'),
+                    ),
+                    const SizedBox(height: V5Spacing.md),
+                  ],
                   if (missions) ...[
                     Text(
                       'MobSanté met en relation les professionnels de santé '
@@ -266,7 +575,9 @@ class _ProfessionalDiscoveryState extends StatelessWidget {
                     const SizedBox(height: V5Spacing.md),
                   ],
                   Text(
-                    missions
+                    verified && invitationOnly
+                        ? 'Votre identité professionnelle est vérifiée. Utilisez votre invitation pour accéder aux missions de votre Action.'
+                        : missions
                         ? 'Finalisez votre profil professionnel pour découvrir '
                               'les missions correspondant à votre profession, '
                               'consulter leurs informations pratiques et vous engager.'

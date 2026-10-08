@@ -26,7 +26,7 @@ import 'widgets/v5_controls.dart';
 bool mustCreateAnonymousVolunteerSession({
   required bool hasUser,
   required bool isAnonymous,
-}) => !hasUser || !isAnonymous;
+}) => !hasUser;
 
 @visibleForTesting
 Future<T> initializeFirebaseAppWithAppCheck<T extends Object>({
@@ -104,9 +104,6 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     final responsibleAppFuture = _initializeResponsibleApp();
     markStartupEvent('mobsante-auth-start');
     final restoredUser = volunteerAuth.currentUser;
-    if (restoredUser != null && !restoredUser.isAnonymous) {
-      await volunteerAuth.signOut();
-    }
     if (mustCreateAnonymousVolunteerSession(
       hasUser: restoredUser != null,
       isAnonymous: restoredUser?.isAnonymous ?? false,

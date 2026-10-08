@@ -713,6 +713,13 @@ service cloud.firestore {
           && !professionalIdentityChanged);
     }
 
+    function clientAdmissionProjectionIsSafe() {
+      return (!('admissionScopes' in request.resource.data)
+          && !('admissionScopes' in resource.data))
+        || (request.resource.data.get('admissionScopes', {})
+          == resource.data.get('admissionScopes', {}));
+    }
+
     function validVolunteerData(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
@@ -727,6 +734,7 @@ service cloud.firestore {
           'profileSchemaVersion', 'competencies',
           'mobilizationPreferences', 'communicationPreferences',
           'consentRecords',
+          'admissionScopes',
           'createdAt', 'updatedAt'
         ])
         && request.resource.data.keys().hasAll([
@@ -1014,12 +1022,14 @@ service cloud.firestore {
     }
 
     function canReadOperationScope(operationId, organizationId) {
-      let grantValid = validCurrentOperationAccess(
-        operationId, organizationId
+      let organizationAdmin = hasCompactMembershipRole(
+        organizationId, 'organization_admin'
       );
+      let grantValid = !organizationAdmin
+        && validCurrentOperationAccess(operationId, organizationId);
       let access = grantValid
         ? get(operationAccessPath(operationId)).data : {};
-      return hasCompactMembershipRole(organizationId, 'organization_admin')
+      return organizationAdmin
         || (grantValid
           && (('coordinator' in access.roles
               && hasCompactMembershipRole(organizationId, 'coordinator'))
@@ -1078,10 +1088,10 @@ service cloud.firestore {
     }
 
     function isPlatformDiscoverableOperation(operation) {
-      return hasValidOperationOrganization(operation)
+      return isPublishedOperation(operation)
+        && hasValidOperationOrganization(operation)
         && hasValidEffectiveOperationVisibility(operation)
-        && effectiveOperationVisibility(operation) == 'platform'
-        && isPublishedOperation(operation);
+        && effectiveOperationVisibility(operation) == 'platform';
     }
 
     // Les requêtes publiques de collection doivent porter explicitement la
@@ -1386,6 +1396,59 @@ service cloud.firestore {
       return /databases/$(database)/documents/platform/config;
     }
 
+    // Missing configuration preserves the currently published open onboarding.
+    // Unknown values fail closed; only the backend may change this document.
+    function professionalAdmissionMode() {
+      return exists(platformConfigPath())
+        ? get(platformConfigPath()).data.get('admissionMode', 'open')
+        : 'open';
+    }
+
+    function professionalAdmissionPath(operationId) {
+      return /databases/$(database)/documents/professionalAdmissions/$(operationId + '_' + request.auth.uid);
+    }
+
+    function hasProfessionalAdmission(operationId, profession) {
+      let path = professionalAdmissionPath(operationId);
+      let admission = get(path).data;
+      return isSignedIn()
+        && operationId is string
+        && operationId.size() > 0
+        && admission.get('uid', '') == request.auth.uid
+        && admission.get('operationId', '') == operationId
+        && admission.get('profession', '') == profession
+        && admission.get('status', '') == 'active'
+        && admission.get('expiresAt', request.time) > request.time;
+    }
+
+    function professionalMayAccessMobilization(mobilizationId, profession) {
+      let mode = professionalAdmissionMode();
+      let mobilization = mode == 'invitation_only'
+        ? get(mobilizationPath(mobilizationId)).data : {};
+      return mode == 'open'
+        || (mode == 'invitation_only'
+          && mobilization.get('operationId', '') is string
+          && hasProfessionalAdmission(mobilization.operationId, profession));
+    }
+
+    // Engagements already read the profile in the same atomic batch. The
+    // backend-maintained projection avoids another rules document access.
+    function profileMayEngageMobilization(mobilizationId, profile) {
+      let mode = professionalAdmissionMode();
+      let mobilization = mode == 'invitation_only'
+        ? get(mobilizationPath(mobilizationId)).data : {};
+      let operationId = mobilization.get('operationId', '');
+      let scope = profile.get('admissionScopes', {}).get(operationId, {});
+      return mode == 'open'
+        || (mode == 'invitation_only'
+          && scope.get('status', '') == 'active'
+          && scope.get('profession', '') == profile.profession
+          && scope.get('organizationId', '') == operationOwnerOrganizationId(
+            get(operationPath(operationId)).data
+          )
+          && scope.get('expiresAt', request.time) > request.time);
+    }
+
     function isActiveMobilization(mobilizationId) {
       return mobilizationId is string
         && exists(mobilizationPath(mobilizationId))
@@ -1509,6 +1572,27 @@ service cloud.firestore {
             && hasHistoricalActionAccess(
               mobilization.operationId, mission.get('locationId', '')
             )));
+    }
+
+    // Only reached when the general active discovery path did not grant the
+    // read. Resolve the existing engagement and mobilization once.
+    function canProfessionalReadOwnCurrentMission(missionId, mission, profile) {
+      let ownPath = engagementPath(missionId, request.auth.uid);
+      let ownsPath = isSignedIn() && exists(ownPath);
+      let engagement = ownsPath ? get(ownPath).data : {};
+      let mobilizationId = mission.get('mobilizationId', '');
+      let safeMobilizationId = mobilizationId is string
+        ? mobilizationId : '__invalid__';
+      let currentMobilizationPath = mobilizationPath(safeMobilizationId);
+      let mobilization = ownsPath && mobilizationId is string
+          && exists(currentMobilizationPath)
+        ? get(currentMobilizationPath).data : {};
+      return ownsPath
+        && engagement.get('volunteerId', '') == request.auth.uid
+        && engagement.get('mobilizationId', '') == mobilizationId
+        && profile.get('verificationStatus', '') == 'verified'
+        && mobilization.get('status', '') == 'active'
+        && !isHistoricalMobilizationData(mobilization);
     }
 
     function canHistoricallyReadEngagement(engagement) {
@@ -1659,13 +1743,75 @@ service cloud.firestore {
         : {};
       return isPlatformAdministrator()
         || (isVerifiedProfessional()
-          && isPlatformDiscoverableMobilizationById(mobilizationId))
+          && professionalMayAccessMobilization(
+            mobilizationId,
+            get(volunteerPath(request.auth.uid)).data.profession
+          )
+          && (professionalAdmissionMode() == 'invitation_only'
+            || isPlatformDiscoverableMobilizationById(mobilizationId)))
         || canReadOrganizationMissionScope(mobilizationId, locationId)
         || (isLegacyMobilization(mobilization)
           && (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
             || (isActiveSiteManager()
               && locationId in currentRole().locationIds))
           && canUseMobilizationOrganizationAsRole(mobilizationId));
+    }
+
+    function canProfessionalReadActiveMission(mission, profile) {
+      let mobilizationId = mission.get('mobilizationId', '');
+      let mode = professionalAdmissionMode();
+      return mission.get('isActive', false) == true
+        && mobilizationId is string
+        && isNonBlankCanonicalText(mobilizationId)
+        && (mode == 'invitation_only'
+          ? canInvitedProfessionalReadMobilization(mobilizationId, profile)
+          : (mode == 'open'
+            && canProfessionalReadOpenMobilization(
+              mobilizationId, profile
+            )));
+    }
+
+    function canProfessionalReadOpenMobilization(mobilizationId, profile) {
+      let mobilization = get(mobilizationPath(mobilizationId)).data;
+      let operationId = mobilization.get('operationId', '__missing__');
+      let operation = hasValidMobilizationOperation(mobilization)
+        ? get(operationPath(operationId)).data : {};
+      return mobilization.get('status', '') == 'active'
+        && operation.get('status', '') != 'suspended'
+        && (isLegacyMobilization(mobilization)
+          ? isConfiguredLegacyMobilization(mobilizationId, mobilization)
+          : isPlatformDiscoverableOperation(operation))
+        && isCompleteVerifiedProfile(profile);
+    }
+
+    function canProfessionalGetMission(missionId, mission) {
+      let profile = get(volunteerPath(request.auth.uid)).data;
+      return canProfessionalReadActiveMission(mission, profile)
+        || canProfessionalReadOwnCurrentMission(missionId, mission, profile)
+        || canHistoricallyReadMission(missionId, mission);
+    }
+
+    // Keep the invited read path compact: the general role resolver is close
+    // to Firestore's expression limit and is irrelevant to a volunteer UID.
+    function canInvitedProfessionalReadMobilization(mobilizationId, profile) {
+      let mobilization = get(mobilizationPath(mobilizationId)).data;
+      let operationId = mobilization.get('operationId', '');
+      let operation = get(operationPath(operationId)).data;
+      let admissionPath = professionalAdmissionPath(operationId);
+      let admission = get(admissionPath).data;
+      return isSignedIn()
+        && !exists(rolePath())
+        && isCompleteVerifiedProfile(profile)
+        && mobilization.get('status', '') == 'active'
+        && operation.get('status', '') == 'active'
+        && operation.get('purpose', 'operational') == 'operational'
+        && admission.get('uid', '') == request.auth.uid
+        && admission.get('operationId', '') == operationId
+        && admission.get('organizationId', '')
+          == operationOwnerOrganizationId(operation)
+        && admission.get('profession', '') == profile.profession
+        && admission.get('status', '') == 'active'
+        && admission.get('expiresAt', request.time) > request.time;
     }
 
     // Targeted Action-linked mission reads avoid the legacy role/engagement
@@ -1750,8 +1896,8 @@ service cloud.firestore {
 
     function hasProfessionalProfile() {
       return isSignedIn()
-        && !exists(rolePath())
-        && exists(volunteerPath(request.auth.uid));
+        && exists(volunteerPath(request.auth.uid))
+        && !exists(rolePath());
     }
 
     function isVerifiedProfessional() {
@@ -1921,6 +2067,10 @@ service cloud.firestore {
         && isCompleteVerifiedProfile(
           getAfter(volunteerPath(request.auth.uid)).data
         )
+        && profileMayEngageMobilization(
+          request.resource.data.mobilizationId,
+          getAfter(volunteerPath(request.auth.uid)).data
+        )
         && hasParticipationProfessionalIdentifier(
           getAfter(volunteerPath(request.auth.uid)).data
         )
@@ -2041,6 +2191,10 @@ service cloud.firestore {
         && isCompleteVerifiedProfile(
           getAfter(volunteerPath(request.auth.uid)).data
         )
+        && profileMayEngageMobilization(
+          resource.data.mobilizationId,
+          getAfter(volunteerPath(request.auth.uid)).data
+        )
         && mission.isActive == true
         && mission.status != 'cancelled'
         && request.time < mission.endAt
@@ -2057,49 +2211,43 @@ service cloud.firestore {
     match /locations/{locationId} {
       // Les sites historiques restent lisibles par les professionnels vérifiés.
       allow get, list: if (isVerifiedProfessional()
+          && professionalAdmissionMode() == 'open'
           && isLegacyPublicLocation(resource.data))
         || canReadPrivilegedLocation(locationId, resource.data);
       allow create, update, delete: if false;
     }
 
     match /missions/{missionId} {
-      allow get: if canReadScopedActiveMission(resource.data)
-        || (isSignedIn()
-          && exists(engagementPath(missionId, request.auth.uid))
-          && isHistoricallyVerifiedProfessional()
-          && isActiveMobilization(resource.data.mobilizationId)
-          && !isHistoricalMobilization(resource.data.mobilizationId)
-          && get(engagementPath(missionId, request.auth.uid)).data
-            .volunteerId == request.auth.uid
-          && get(engagementPath(missionId, request.auth.uid)).data
-            .mobilizationId == resource.data.mobilizationId)
-        || (isActiveMobilization(resource.data.mobilizationId)
-          && !isHistoricalMobilization(resource.data.mobilizationId)
-          && canReadMissionScope(
-            resource.data.mobilizationId,
-            resource.data.locationId
-          )
-          && (resource.data.isActive == true
-            || (isSignedIn()
-              && exists(engagementPath(missionId, request.auth.uid)))
-            || canManageLocation(resource.data.locationId)
-            || canReadOrganizationMissionScope(
-              resource.data.mobilizationId,
-              resource.data.locationId
-            )))
-        || canHistoricallyReadMission(missionId, resource.data);
-      allow list: if (resource.data.isActive == true
-          && isActiveMobilization(resource.data.mobilizationId)
-          && !isHistoricalMobilization(resource.data.mobilizationId)
-          && canReadMissionScope(
-            resource.data.mobilizationId,
-            resource.data.locationId
-          ))
-        || (isPlatformAdministrator()
-          && isHistoricalMobilization(resource.data.mobilizationId))
-        || (isHistoricalMobilization(resource.data.mobilizationId)
-          && canHistoricallyReadMission(missionId, resource.data)
-          && !isHistoricallyVerifiedProfessional());
+      allow get: if isPlatformAdministrator()
+        || (hasProfessionalProfile()
+          ? canProfessionalGetMission(missionId, resource.data)
+          : (canReadScopedActiveMission(resource.data)
+            || (isActiveMobilization(resource.data.mobilizationId)
+              && !isHistoricalMobilization(resource.data.mobilizationId)
+              && canReadMissionScope(
+                resource.data.mobilizationId, resource.data.locationId
+              )
+              && (resource.data.isActive == true
+                || (isSignedIn()
+                  && exists(engagementPath(missionId, request.auth.uid)))
+                || canManageLocation(resource.data.locationId)
+                || canReadOrganizationMissionScope(
+                  resource.data.mobilizationId, resource.data.locationId
+                )))
+            || canHistoricallyReadMission(missionId, resource.data)));
+      allow list: if isPlatformAdministrator()
+        || (hasProfessionalProfile()
+          ? canProfessionalReadActiveMission(resource.data,
+              get(volunteerPath(request.auth.uid)).data)
+          : ((resource.data.isActive == true
+              && isActiveMobilization(resource.data.mobilizationId)
+              && !isHistoricalMobilization(resource.data.mobilizationId)
+              && canReadMissionScope(
+                resource.data.mobilizationId, resource.data.locationId
+              ))
+            || (isHistoricalMobilization(resource.data.mobilizationId)
+              && canHistoricallyReadMission(missionId, resource.data)
+              && !isHistoricallyVerifiedProfessional())));
       allow create: if isSignedIn() && validMissionCreate(missionId);
       allow update: if request.resource.data.status == 'cancelled'
         ? (!existsAfter(engagementPath(missionId, request.auth.uid))
@@ -2126,6 +2274,7 @@ service cloud.firestore {
       allow create: if isVolunteerOwner(uid)
         && canUseProfessionalOwnerWritePath()
         && validVolunteerData(uid)
+        && !('admissionScopes' in request.resource.data)
         && isUnverifiedProfile(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
@@ -2133,10 +2282,79 @@ service cloud.firestore {
         && canUseProfessionalOwnerWritePath()
         && validVolunteerData(uid)
         && clientVerificationUpdateIsSafe()
+        && clientAdmissionProjectionIsSafe()
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time;
       allow read: if isVolunteerOwner(uid);
       allow delete: if false;
+    }
+
+    match /professionalTargeting/{uid} {
+      function validTargeting() {
+        let data = request.resource.data;
+        let hasPoint = data.keys().hasAny([
+          'latitude', 'longitude', 'source'
+        ]);
+        let hasGeocoding = data.keys().hasAny([
+          'geocodingProvider', 'geocodingPrecision', 'confirmedAt'
+        ]);
+        return data.keys().hasOnly([
+            'uid', 'enabled', 'latitude', 'longitude', 'radiusKm',
+            'source', 'geocodingProvider', 'geocodingPrecision',
+            'confirmedAt', 'createdAt', 'updatedAt'
+          ])
+          && data.keys().hasAll(['uid', 'enabled', 'createdAt', 'updatedAt'])
+          && data.uid == uid
+          && data.enabled is bool
+          && (!('radiusKm' in data)
+            || data.radiusKm in [10, 20, 30, 50])
+          && (!data.enabled || (hasPoint && 'radiusKm' in data))
+          && (!hasPoint || (data.keys().hasAll([
+              'latitude', 'longitude', 'source'
+            ])
+            && data.latitude is number
+            && data.latitude >= -90 && data.latitude <= 90
+            && data.longitude is number
+            && data.longitude >= -180 && data.longitude <= 180
+            && data.source in [
+              'selected_point', 'commune_centroid', 'device_location'
+            ]))
+          && (!hasGeocoding || (hasPoint && data.keys().hasAll([
+              'geocodingProvider', 'geocodingPrecision', 'confirmedAt'
+            ])
+            && data.geocodingProvider == 'ign_geoplateforme'
+            && data.geocodingPrecision is string
+            && data.geocodingPrecision.size() > 0
+            && data.geocodingPrecision.size() <= 40
+            && data.confirmedAt is timestamp
+            && data.confirmedAt <= request.time));
+      }
+      allow get: if isVolunteerOwner(uid)
+        && exists(volunteerPath(uid)) && !exists(rolePath())
+        && !exists(platformAdministratorPath(uid));
+      allow list: if false;
+      allow create: if isVolunteerOwner(uid)
+        && exists(volunteerPath(uid)) && !exists(rolePath())
+        && !exists(platformAdministratorPath(uid))
+        && validTargeting()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isVolunteerOwner(uid)
+        && exists(volunteerPath(uid)) && !exists(rolePath())
+        && !exists(platformAdministratorPath(uid))
+        && validTargeting()
+        && (!request.resource.data.keys().hasAll([
+            'latitude', 'longitude', 'source'
+          ]) || !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['latitude', 'longitude', 'source'])
+          || (request.resource.data.keys().hasAll([
+              'geocodingProvider', 'geocodingPrecision', 'confirmedAt'
+            ]) && request.resource.data.confirmedAt == request.time))
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isVolunteerOwner(uid)
+        && exists(volunteerPath(uid)) && !exists(rolePath())
+        && !exists(platformAdministratorPath(uid));
     }
 
     match /engagements/{engagementId} {
@@ -2316,6 +2534,23 @@ service cloud.firestore {
 
     match /mobilizations/{mobilizationId} {
       allow get: if isPlatformAdministrator()
+        || (professionalAdmissionMode() == 'invitation_only'
+          && resource.data.get('status', '') == 'active'
+          && hasValidMobilizationOperation(resource.data)
+          && get(operationPath(resource.data.get('operationId', ''))).data
+            .get('status', '') == 'active'
+          && get(operationPath(resource.data.get('operationId', ''))).data
+            .get('purpose', 'operational') == 'operational'
+          && isVerifiedProfessional()
+          && hasProfessionalAdmission(
+            resource.data.get('operationId', ''),
+            get(volunteerPath(request.auth.uid)).data.profession
+          )
+          && get(professionalAdmissionPath(
+            resource.data.get('operationId', '')
+          )).data.get('organizationId', '') == operationOwnerOrganizationId(
+            get(operationPath(resource.data.get('operationId', ''))).data
+          ))
         || (hasValidMobilizationOperation(resource.data)
           && isHistoricalMobilizationData(resource.data)
           && hasHistoricalActionGrant(resource.data.operationId))
@@ -2330,6 +2565,23 @@ service cloud.firestore {
               && (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
                 || isActiveSiteManager()))));
       allow list: if isPlatformAdministrator()
+        || (professionalAdmissionMode() == 'invitation_only'
+          && resource.data.get('status', '') == 'active'
+          && hasValidMobilizationOperation(resource.data)
+          && get(operationPath(resource.data.get('operationId', ''))).data
+            .get('status', '') == 'active'
+          && get(operationPath(resource.data.get('operationId', ''))).data
+            .get('purpose', 'operational') == 'operational'
+          && isVerifiedProfessional()
+          && hasProfessionalAdmission(
+            resource.data.get('operationId', ''),
+            get(volunteerPath(request.auth.uid)).data.profession
+          )
+          && get(professionalAdmissionPath(
+            resource.data.get('operationId', '')
+          )).data.get('organizationId', '') == operationOwnerOrganizationId(
+            get(operationPath(resource.data.get('operationId', ''))).data
+          ))
         || (hasValidMobilizationOperation(resource.data)
           && isHistoricalMobilizationData(resource.data)
           && hasHistoricalActionGrant(resource.data.operationId))
@@ -2353,6 +2605,18 @@ service cloud.firestore {
 
     match /operations/{operationId} {
       allow get: if isPlatformAdministrator()
+        || (professionalAdmissionMode() == 'invitation_only'
+          && resource.data.get('status', '') == 'active'
+          && resource.data.get('purpose', 'operational') == 'operational'
+          && isVerifiedProfessional()
+          && hasProfessionalAdmission(
+            operationId,
+            get(volunteerPath(request.auth.uid)).data.profession
+          )
+          && get(professionalAdmissionPath(operationId)).data
+            .get('organizationId', '') == operationOwnerOrganizationId(
+              resource.data
+            ))
         || (!(resource.data.get('status', '') in ['completed', 'archived'])
           && (canReadOperationOrganization(resource.data)
             || (isSignedIn()
@@ -2360,6 +2624,18 @@ service cloud.firestore {
         || (resource.data.get('status', '') in ['completed', 'archived']
           && hasHistoricalActionGrant(operationId));
       allow list: if isPlatformAdministrator()
+        || (professionalAdmissionMode() == 'invitation_only'
+          && resource.data.get('status', '') == 'active'
+          && resource.data.get('purpose', 'operational') == 'operational'
+          && isVerifiedProfessional()
+          && hasProfessionalAdmission(
+            operationId,
+            get(volunteerPath(request.auth.uid)).data.profession
+          )
+          && get(professionalAdmissionPath(operationId)).data
+            .get('organizationId', '') == operationOwnerOrganizationId(
+              resource.data
+            ))
         || (!(resource.data.get('status', '') in ['completed', 'archived'])
           && (canReadOperationOrganization(resource.data)
             || (isSignedIn()
@@ -2379,6 +2655,16 @@ service cloud.firestore {
         || (isSignedIn()
           && resource.data.get('uid', '') == request.auth.uid
           && resource.data.get('active', false) == true);
+      allow create, update, delete: if false;
+    }
+
+    match /professionalInvitations/{invitationId} {
+      allow read, write: if false;
+    }
+
+    match /professionalAdmissions/{admissionId} {
+      allow get, list: if isSignedIn()
+        && resource.data.get('uid', '') == request.auth.uid;
       allow create, update, delete: if false;
     }
 

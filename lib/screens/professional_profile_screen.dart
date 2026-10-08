@@ -3,15 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import '../config/patient_data_guidance.dart';
 import '../models/need.dart';
 import '../models/professional_equipment.dart';
 import '../models/professional_profile_validation.dart';
 import '../models/volunteer_profile.dart';
 import '../repositories/repository_scope.dart';
+import '../repositories/professional_targeting_repository.dart';
 import '../services/professional_verification_service.dart';
+import '../services/reference_geocoding_service.dart';
 import '../theme/v5_foundation.dart';
 import '../widgets/professional_page_header.dart';
 import '../widgets/professional_rpps_verification.dart';
+import '../widgets/professional_targeting_section.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/v5_controls.dart';
 import '../widgets/v5_form_system.dart';
@@ -292,6 +296,33 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                   ),
                   const SizedBox(height: V5Spacing.sm),
                   _ProfileSection(
+                    title: 'Zone d’intervention',
+                    icon: Icons.radar_outlined,
+                    children: [
+                      ProfessionalTargetingSection(
+                        repository:
+                            RepositoryScope.of(context)
+                                is ProfessionalTargetingRepository
+                            ? RepositoryScope.of(context)
+                                  as ProfessionalTargetingRepository
+                            : null,
+                        hasProfile: profile != null,
+                        geocodingService:
+                            RepositoryScope.of(context)
+                                is ReferenceGeocodingService
+                            ? RepositoryScope.of(context)
+                                  as ReferenceGeocodingService
+                            : null,
+                        professionalAddress: profile == null
+                            ? null
+                            : ('${profile.professionalAddress.addressLineLabel} '
+                                      '${profile.professionalAddress.localityLabel}')
+                                  .trim(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: V5Spacing.sm),
+                  _ProfileSection(
                     title: 'CPTS',
                     icon: Icons.hub_outlined,
                     children: [
@@ -334,12 +365,6 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                     title: 'Préférences',
                     icon: Icons.tune_rounded,
                     children: [
-                      _ProfileValue(
-                        label: 'Critères géographiques',
-                        value: profile?.cptsLabel?.trim().isNotEmpty == true
-                            ? 'Autour de ${profile!.cptsLabel!.trim()}'
-                            : 'À choisir dans l’onglet Missions',
-                      ),
                       const _ProfileValue(
                         label: 'Critères temporels',
                         value: 'À choisir dans l’onglet Missions',
@@ -710,8 +735,6 @@ class _ProfessionalProfileEditorState
                       controller: _phone,
                       focusNode: _phoneFocus,
                       keyboardType: TextInputType.phone,
-                      isRequired: true,
-                      validator: _required,
                     ),
                     const SizedBox(height: V5Spacing.sm),
                     V5TextField(
@@ -937,6 +960,7 @@ class _ProfessionalProfileEditorState
                         ),
                         label: 'Précisez le matériel',
                         controller: _equipmentDetails,
+                        supportingText: PatientDataGuidance.warning,
                         focusNode: _equipmentDetailsFocus,
                         isRequired: true,
                         validator: _required,
@@ -1088,11 +1112,6 @@ class _ProfessionalProfileEditorState
         focusNode: _lastNameFocus,
         label: 'Nom',
         error: _required(_lastName.text),
-      ),
-      (
-        focusNode: _phoneFocus,
-        label: 'Téléphone',
-        error: _required(_phone.text),
       ),
       (
         focusNode: _emailFocus,

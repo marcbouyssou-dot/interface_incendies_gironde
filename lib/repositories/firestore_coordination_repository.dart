@@ -20,6 +20,7 @@ import '../models/profession_quotas.dart';
 import '../models/volunteer_profile.dart';
 import '../models/user_display_identity.dart';
 import '../services/professional_verification_service.dart';
+import '../services/reference_geocoding_service.dart';
 import '../services/accessible_mobilizations_provider.dart';
 import '../services/current_mobilization_provider.dart';
 import '../services/firebase_platform_administration_service.dart';
@@ -42,6 +43,8 @@ import 'firestore_platform_administration_read_repository.dart';
 import 'firebase_platform_actor_read_repository.dart';
 import 'firestore_platform_read_repository.dart';
 import 'professional_profile_v2_firestore_mapper.dart';
+import 'professional_admission_repository.dart';
+import 'professional_targeting_repository.dart';
 import 'firestore_responsible_access_administration_repository.dart';
 import 'responsible_access_administration_repository.dart';
 import 'location_administration_repository.dart';
@@ -60,7 +63,8 @@ import 'user_display_identity_resolver.dart';
 bool canStartVolunteerEngagement({
   required bool hasUser,
   required bool isAnonymous,
-}) => !hasUser || isAnonymous;
+  bool hasVerifiedEmail = false,
+}) => !hasUser || isAnonymous || hasVerifiedEmail;
 
 @visibleForTesting
 ResponsibleAccess parseResponsibleAccessDocument({
@@ -248,6 +252,7 @@ class FirestoreCoordinationRepository
         AdministrativeIdentityReadRepository,
         OrganizationEngagementReadDataSource,
         OrganizationLocationReadDataSource,
+        ProfessionalMissionLocationReadRepository,
         ProfessionalEngagementHistoryReadRepository,
         HistoricalActionMissionReadRepository,
         HistoricalMobilizationMissionReadRepository,
@@ -261,7 +266,10 @@ class FirestoreCoordinationRepository
         DemoHistoryRuntime,
         OperationAccessRuntime,
         PlatformAccountAuthenticator,
-        VisitorOperationalReadGate {
+        VisitorOperationalReadGate,
+        ProfessionalAdmissionRepository,
+        ProfessionalTargetingRepository,
+        ReferenceGeocodingService {
   FirestoreCoordinationRepository(
     this._firestore,
     this._auth, {
@@ -305,6 +313,365 @@ class FirestoreCoordinationRepository
   final FirebaseAuth _responsibleAuth;
   final FirebaseFunctions _responsibleFunctions;
   final FirebaseFunctions _volunteerFunctions;
+  List<ReferenceAddressCandidate> _lastReferenceAddressResults = const [];
+
+  @override
+  Future<List<ReferenceAddressCandidate>> searchAddress(String query) async {
+    _lastReferenceAddressResults = const [];
+    try {
+      final response = await _volunteerFunctions
+          .httpsCallable('searchProfessionalReferenceAddresses')
+          .call<Object?>({'query': query.trim()})
+          .timeout(const Duration(seconds: 9));
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final rawResults = data['results'] as List? ?? const [];
+      final results = rawResults
+          .map((item) {
+            final value = Map<String, dynamic>.from(item as Map);
+            return ReferenceAddressCandidate(
+              displayLabel: value['displayLabel'] as String,
+              latitude: (value['latitude'] as num).toDouble(),
+              longitude: (value['longitude'] as num).toDouble(),
+              provider: value['provider'] as String,
+              providerReference: value['providerReference'] as String?,
+              precision: value['precision'] as String,
+              confidence: (value['confidence'] as num?)?.toDouble(),
+            );
+          })
+          .toList(growable: false);
+      _lastReferenceAddressResults = results;
+      return results;
+    } on FirebaseFunctionsException catch (error) {
+      throw ReferenceGeocodingException(switch (error.code) {
+        'invalid-argument' => ReferenceGeocodingFailure.invalidQuery,
+        'deadline-exceeded' => ReferenceGeocodingFailure.timeout,
+        _ => ReferenceGeocodingFailure.unavailable,
+      });
+    } catch (_) {
+      throw const ReferenceGeocodingException(
+        ReferenceGeocodingFailure.unavailable,
+      );
+    }
+  }
+
+  @override
+  Future<ReferenceAddressCandidate> resolveAddress(
+    ReferenceAddressCandidate selection,
+  ) async {
+    if (!_lastReferenceAddressResults.any(
+      (item) => identical(item, selection),
+    )) {
+      throw const ReferenceGeocodingException(
+        ReferenceGeocodingFailure.invalidSelection,
+      );
+    }
+    return selection;
+  }
+
+  @override
+  Stream<ProfessionalAdmissionState> watchProfessionalAdmission() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      return Stream.value(
+        const ProfessionalAdmissionState(
+          mode: ProfessionalAdmissionMode.unavailable,
+        ),
+      );
+    }
+    return switchLatest(
+      _firestore.collection('platform').doc('config').snapshots(),
+      (config) {
+        final mode = config.data()?['admissionMode'] ?? 'open';
+        if (mode == 'open') {
+          return Stream.value(
+            const ProfessionalAdmissionState(
+              mode: ProfessionalAdmissionMode.open,
+            ),
+          );
+        }
+        if (mode != 'invitation_only') {
+          return Stream.value(
+            const ProfessionalAdmissionState(
+              mode: ProfessionalAdmissionMode.unavailable,
+            ),
+          );
+        }
+        return _firestore
+            .collection('professionalAdmissions')
+            .where('uid', isEqualTo: uid)
+            .snapshots()
+            .map((snapshot) {
+              final now = DateTime.now();
+              final operationIds = snapshot.docs
+                  .where((document) {
+                    final data = document.data();
+                    final expiry = data['expiresAt'];
+                    return data['status'] == 'active' &&
+                        expiry is Timestamp &&
+                        expiry.toDate().isAfter(now);
+                  })
+                  .map((document) => document.data()['operationId'])
+                  .whereType<String>()
+                  .toSet();
+              return ProfessionalAdmissionState(
+                mode: ProfessionalAdmissionMode.invitationOnly,
+                operationIds: operationIds,
+              );
+            });
+      },
+    );
+  }
+
+  @override
+  Stream<ProfessionalTargetingPreference> watchProfessionalTargeting() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      return Stream.value(const ProfessionalTargetingPreference());
+    }
+    return _firestore
+        .collection('professionalTargeting')
+        .doc(uid)
+        .snapshots()
+        .asyncMap((snapshot) async {
+          final reads = await Future.wait([
+            _firestore.collection('notificationPreferences').doc(uid).get(),
+            _firestore.collection('platform').doc('config').get(),
+          ]);
+          final notificationPreferences = reads[0];
+          final platformConfig = reads[1];
+          final targetingMode = platformConfig
+              .data()?['notificationTargetingMode'];
+          final legacyOptIn =
+              (targetingMode == null || targetingMode == 'legacy_opt_in') &&
+              notificationPreferences.data()?['compatibleMissions'] == true;
+          final data = snapshot.data();
+          if (data == null) {
+            return ProfessionalTargetingPreference(legacyOptIn: legacyOptIn);
+          }
+          final preference = ProfessionalTargetingPreference(
+            enabled: data['enabled'] == true,
+            radiusKm: data['radiusKm'] is int ? data['radiusKm'] as int : 20,
+            latitude: (data['latitude'] as num?)?.toDouble(),
+            longitude: (data['longitude'] as num?)?.toDouble(),
+            source: data['source'] as String?,
+            geocodingProvider: data['geocodingProvider'] as String?,
+            geocodingPrecision: data['geocodingPrecision'] as String?,
+            legacyOptIn: legacyOptIn,
+          );
+          return preference.enabled && !preference.hasReferencePoint
+              ? preference.withEnabled(false)
+              : preference;
+        });
+  }
+
+  @override
+  Future<void> disableLegacyProfessionalSolicitations() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      throw const RepositoryException('Session professionnelle requise.');
+    }
+    final reference = _firestore.collection('notificationPreferences').doc(uid);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      final current = snapshot.data() ?? const <String, dynamic>{};
+      transaction.set(reference, {
+        'uid': uid,
+        'compatibleMissions': false,
+        'engagementUpdates': current['engagementUpdates'] is bool
+            ? current['engagementUpdates']
+            : true,
+        'operationalAlerts': current['operationalAlerts'] is bool
+            ? current['operationalAlerts']
+            : true,
+        'quietHoursStart': current['quietHoursStart'] is int
+            ? current['quietHoursStart']
+            : 22,
+        'quietHoursEnd': current['quietHoursEnd'] is int
+            ? current['quietHoursEnd']
+            : 7,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  @override
+  Future<void> saveProfessionalTargeting(
+    ProfessionalTargetingPreference preference,
+  ) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      throw const RepositoryException('Session professionnelle requise.');
+    }
+    if (!ProfessionalTargetingPreference.radiusChoices.contains(
+          preference.radiusKm,
+        ) ||
+        (preference.enabled && !preference.hasReferencePoint)) {
+      throw const RepositoryException(
+        'Point ou rayon d’intervention invalide.',
+      );
+    }
+    final targetingRef = _firestore
+        .collection('professionalTargeting')
+        .doc(uid);
+    final notificationsRef = _firestore
+        .collection('notificationPreferences')
+        .doc(uid);
+    await _firestore.runTransaction((transaction) async {
+      final targeting = await transaction.get(targetingRef);
+      final notifications = await transaction.get(notificationsRef);
+      final current = notifications.data() ?? const <String, dynamic>{};
+      final hasPoint = preference.hasReferencePoint;
+      final oldPoint = targeting.data();
+      final pointChanged =
+          hasPoint &&
+          (oldPoint?['latitude'] != preference.latitude ||
+              oldPoint?['longitude'] != preference.longitude ||
+              oldPoint?['source'] != preference.source);
+      if (pointChanged &&
+          (preference.geocodingProvider != 'ign_geoplateforme' ||
+              preference.geocodingPrecision == null)) {
+        throw const RepositoryException('Point de référence non confirmé.');
+      }
+      transaction.set(targetingRef, {
+        'uid': uid,
+        'enabled': preference.enabled,
+        'radiusKm': preference.radiusKm,
+        if (hasPoint) 'latitude': preference.latitude,
+        if (hasPoint) 'longitude': preference.longitude,
+        if (hasPoint) 'source': preference.source,
+        if (hasPoint && preference.geocodingProvider != null)
+          'geocodingProvider': preference.geocodingProvider,
+        if (hasPoint && preference.geocodingPrecision != null)
+          'geocodingPrecision': preference.geocodingPrecision,
+        if (hasPoint && pointChanged)
+          'confirmedAt': FieldValue.serverTimestamp(),
+        if (hasPoint && !pointChanged && oldPoint?['confirmedAt'] != null)
+          'confirmedAt': oldPoint!['confirmedAt'],
+        'createdAt':
+            targeting.data()?['createdAt'] ?? FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      transaction.set(notificationsRef, {
+        'uid': uid,
+        'compatibleMissions': preference.enabled,
+        'engagementUpdates': current['engagementUpdates'] is bool
+            ? current['engagementUpdates']
+            : true,
+        'operationalAlerts': current['operationalAlerts'] is bool
+            ? current['operationalAlerts']
+            : true,
+        'quietHoursStart': current['quietHoursStart'] is int
+            ? current['quietHoursStart']
+            : 22,
+        'quietHoursEnd': current['quietHoursEnd'] is int
+            ? current['quietHoursEnd']
+            : 7,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  @override
+  Future<void> redeemProfessionalInvitation(String code) async {
+    final identity = await professionalEmailIdentity();
+    if (identity.isAnonymous || !identity.emailVerified) {
+      throw const RepositoryException(
+        'Connectez-vous avec une adresse e-mail vérifiée avant de valider l’invitation.',
+      );
+    }
+    try {
+      await _volunteerFunctions
+          .httpsCallable('redeemProfessionalInvitation')
+          .call<Object?>({'code': code.trim()})
+          .timeout(const Duration(seconds: 15));
+    } on FirebaseFunctionsException catch (error) {
+      throw RepositoryException(switch (error.code) {
+        'failed-precondition' => 'Invitation indisponible ou expirée.',
+        'permission-denied' =>
+          'Invitation indisponible pour ce compte ou profil professionnel non vérifié.',
+        'invalid-argument' => 'Invitation indisponible.',
+        _ => 'Impossible d’utiliser cette invitation pour le moment.',
+      });
+    }
+  }
+
+  @override
+  Future<ProfessionalEmailIdentity> professionalEmailIdentity() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const ProfessionalEmailIdentity(
+        isAnonymous: true,
+        emailVerified: false,
+      );
+    }
+    if (!user.isAnonymous) await user.reload();
+    final current = _auth.currentUser ?? user;
+    return ProfessionalEmailIdentity(
+      isAnonymous: current.isAnonymous,
+      emailVerified: current.emailVerified,
+      email: current.email,
+    );
+  }
+
+  @override
+  Future<void> linkProfessionalEmail(String email, String password) async {
+    final current = _auth.currentUser;
+    if (current == null || !current.isAnonymous) {
+      throw const RepositoryException('Session anonyme à associer requise.');
+    }
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
+      await current.linkWithCredential(credential);
+    } on FirebaseAuthException catch (error) {
+      throw RepositoryException(
+        error.code == 'email-already-in-use'
+            ? 'Cette adresse possède déjà un compte. Utilisez « Se connecter ».'
+            : 'Association du compte impossible. Vérifiez l’adresse et le mot de passe.',
+      );
+    }
+    await sendProfessionalEmailVerification();
+  }
+
+  @override
+  Future<void> signInProfessionalEmail(String email, String password) async {
+    try {
+      await _auth.signInWithEmailAndPassword(
+        email: email.trim().toLowerCase(),
+        password: password,
+      );
+    } on FirebaseAuthException {
+      throw const RepositoryException(
+        'Connexion impossible. Vérifiez vos identifiants.',
+      );
+    }
+  }
+
+  @override
+  Future<void> sendProfessionalEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw const RepositoryException(
+        'Connectez-vous pour vérifier votre adresse.',
+      );
+    }
+    try {
+      await user.sendEmailVerification();
+    } on FirebaseAuthException {
+      throw const RepositoryException(
+        'Envoi impossible. Réessayez depuis « Renvoyer l’e-mail ».',
+      );
+    }
+  }
+
+  @override
+  Future<void> signOutProfessionalEmail() async {
+    await _auth.signOut();
+    await _auth.signInAnonymously();
+  }
+
   late final UserDisplayIdentityResolver _identityResolver;
   late final PublicMobilizationReadRepository _publicMobilizationRepository =
       PublicMobilizationReadRepository(
@@ -565,23 +932,28 @@ class FirestoreCoordinationRepository
 
   @override
   Stream<List<CoordinationNeed>> watchMissions() {
-    return switchLatest(_mobilizationProvider.watchContext(), (context) {
-      if (context == null || !context.isActive) {
-        return Stream<List<CoordinationNeed>>.value(const []);
+    return switchLatest(watchProfessionalAdmission(), (admission) {
+      if (admission.mode != ProfessionalAdmissionMode.open) {
+        return watchAllActiveMissions();
       }
-      return _firestore
-          .collection('missions')
-          .where('mobilizationId', isEqualTo: context.mobilizationId)
-          .where('isActive', isEqualTo: true)
-          .snapshots()
-          .map(
-            (snapshot) => scopedMissionsFromDocuments(
-              documents: snapshot.docs.map(
-                (document) => (id: document.id, data: document.data()),
+      return switchLatest(_mobilizationProvider.watchContext(), (context) {
+        if (context == null || !context.isActive) {
+          return Stream<List<CoordinationNeed>>.value(const []);
+        }
+        return _firestore
+            .collection('missions')
+            .where('mobilizationId', isEqualTo: context.mobilizationId)
+            .where('isActive', isEqualTo: true)
+            .snapshots()
+            .map(
+              (snapshot) => scopedMissionsFromDocuments(
+                documents: snapshot.docs.map(
+                  (document) => (id: document.id, data: document.data()),
+                ),
+                context: context,
               ),
-              context: context,
-            ),
-          );
+            );
+      });
     });
   }
 
@@ -669,11 +1041,29 @@ class FirestoreCoordinationRepository
 
   @override
   Stream<List<CoordinationNeed>> watchAllActiveMissions() {
-    return switchLatest(
-      _publicMobilizationRepository.watchActiveMobilizationIds(),
-      (mobilizationIds) =>
-          _watchMissionsInMobilizationBatches(_firestore, mobilizationIds),
-    );
+    return switchLatest(watchProfessionalAdmission(), (admission) {
+      if (admission.mode == ProfessionalAdmissionMode.unavailable) {
+        return Stream.value(const <CoordinationNeed>[]);
+      }
+      if (admission.mode == ProfessionalAdmissionMode.open) {
+        return switchLatest(
+          _publicMobilizationRepository.watchActiveMobilizationIds(),
+          (mobilizationIds) =>
+              _watchMissionsInMobilizationBatches(_firestore, mobilizationIds),
+        );
+      }
+      if (admission.operationIds.isEmpty) {
+        return Stream.value(const <CoordinationNeed>[]);
+      }
+      final source = FirestorePublicMobilizationReadDataSource(_firestore);
+      return _combineMissionStreams([
+        for (final operationId in admission.operationIds)
+          switchLatest(
+            source.watchActiveMobilizationIdsForOperations([operationId]),
+            (ids) => _watchMissionsInMobilizationBatches(_firestore, ids),
+          ),
+      ]);
+    });
   }
 
   Stream<List<String>> _watchAdministrativeActiveMobilizationIds(
@@ -820,8 +1210,51 @@ class FirestoreCoordinationRepository
   }
 
   @override
-  Stream<List<ResponsePlace>> watchLocations() {
-    return _watchLegacyLocations(_firestore);
+  Stream<List<ResponsePlace>> watchLocations() =>
+      watchLocationsForMissions(watchAllActiveMissions());
+
+  @override
+  Stream<List<ResponsePlace>> watchLocationsForMissions(
+    Stream<List<CoordinationNeed>> missions,
+  ) {
+    return switchLatest(watchProfessionalAdmission(), (admission) {
+      if (admission.mode == ProfessionalAdmissionMode.open) {
+        return _watchLegacyLocations(_firestore);
+      }
+      if (admission.mode != ProfessionalAdmissionMode.invitationOnly ||
+          admission.operationIds.isEmpty) {
+        return Stream.value(const <ResponsePlace>[]);
+      }
+      return switchLatest(missions, (items) {
+        final ids = items.map((mission) => mission.id).toSet().toList()..sort();
+        if (ids.isEmpty) return Stream.value(const <ResponsePlace>[]);
+        return Stream.fromFuture(_readInvitedMissionLocations(ids));
+      });
+    });
+  }
+
+  Future<List<ResponsePlace>> _readInvitedMissionLocations(
+    List<String> missionIds,
+  ) async {
+    final byId = <String, ResponsePlace>{};
+    for (final batch in _batchesOf(missionIds, 30)) {
+      final result = await _volunteerFunctions
+          .httpsCallable('listProfessionalMissionLocations')
+          .call<Map<String, dynamic>>({'missionIds': batch});
+      final locations = result.data['locations'];
+      if (locations is! List) {
+        throw const RepositoryException('Sites des missions indisponibles.');
+      }
+      for (final raw in locations) {
+        if (raw is! Map) continue;
+        final data = Map<String, dynamic>.from(raw);
+        final id = data.remove('id');
+        if (id is String) {
+          byId[id] = FirestoreLocationMapper.fromFirestore(id: id, data: data);
+        }
+      }
+    }
+    return byId.values.toList(growable: false);
   }
 
   @override
@@ -962,7 +1395,7 @@ class FirestoreCoordinationRepository
   @override
   Future<VolunteerProfile?> getVolunteerProfile() async {
     final user = _auth.currentUser;
-    if (user == null || !user.isAnonymous) {
+    if (user == null) {
       throw const RepositoryException(
         'Une session volontaire est nécessaire pour accéder au profil.',
       );
@@ -994,9 +1427,7 @@ class FirestoreCoordinationRepository
       otherEquipmentDetails: profile.otherEquipmentDetails,
     );
     final user = _auth.currentUser;
-    if (user == null ||
-        !user.isAnonymous ||
-        (profile.uid.isNotEmpty && user.uid != profile.uid)) {
+    if (user == null || (profile.uid.isNotEmpty && user.uid != profile.uid)) {
       throw const RepositoryException(
         'Ce profil n’appartient pas à la session volontaire active.',
       );
@@ -1014,6 +1445,8 @@ class FirestoreCoordinationRepository
               existingData: existingData,
             ),
             ..._verificationDataForClientSave(existingData, profile),
+            if (existingData?['admissionScopes'] != null)
+              'admissionScopes': existingData!['admissionScopes'],
             'createdAt': existingData?['createdAt'] ?? now,
           });
         })
@@ -1025,7 +1458,7 @@ class FirestoreCoordinationRepository
     ProfessionalVerificationResult verification,
   ) async {
     final user = _auth.currentUser;
-    if (user == null || !user.isAnonymous) {
+    if (user == null) {
       throw const RepositoryException(
         'Une session volontaire est nécessaire pour confirmer le RPPS.',
       );
@@ -1062,7 +1495,7 @@ class FirestoreCoordinationRepository
   @override
   Stream<EngagementInfo?> watchMyEngagement(String missionId) {
     return switchLatest(_auth.authStateChanges(), (user) {
-      if (user == null || !user.isAnonymous) {
+      if (user == null) {
         return Stream<EngagementInfo?>.value(null);
       }
       return _firestore
@@ -1105,7 +1538,7 @@ class FirestoreCoordinationRepository
   @override
   Stream<List<ProfessionalEngagementRecord>> watchOwnEngagementRecords() {
     return switchLatest(_auth.authStateChanges(), (user) {
-      if (user == null || !user.isAnonymous) {
+      if (user == null) {
         return Stream<List<ProfessionalEngagementRecord>>.value(const []);
       }
       return _firestore
@@ -1780,6 +2213,7 @@ class FirestoreCoordinationRepository
     if (!canStartVolunteerEngagement(
       hasUser: user != null,
       isAnonymous: user?.isAnonymous ?? false,
+      hasVerifiedEmail: user?.emailVerified ?? false,
     )) {
       throw const RepositoryException(
         'Une session volontaire est nécessaire pour s’engager.',
@@ -1967,7 +2401,7 @@ class FirestoreCoordinationRepository
   @override
   Future<void> cancelEngagement(String missionId) async {
     final user = _auth.currentUser;
-    if (user == null || !user.isAnonymous) {
+    if (user == null) {
       throw const RepositoryException(
         'Vous n’êtes plus engagé sur cette mission.',
       );

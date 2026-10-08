@@ -6,7 +6,6 @@ import 'volunteer_profile.dart';
 enum EngagementProfileGap {
   firstName,
   lastName,
-  phone,
   email,
   professionalIdentifier,
   cptsLabel,
@@ -17,7 +16,6 @@ extension EngagementProfileGapLabel on EngagementProfileGap {
   String label(VolunteerProfession profession) => switch (this) {
     EngagementProfileGap.firstName => 'Prénom',
     EngagementProfileGap.lastName => 'Nom',
-    EngagementProfileGap.phone => 'Téléphone',
     EngagementProfileGap.email => 'Email valide',
     EngagementProfileGap.professionalIdentifier =>
       profession == VolunteerProfession.veterinarian
@@ -80,7 +78,7 @@ abstract final class ProfessionalProfileValidation {
   /// It is a superset of what `createEngagement()` and the Firestore rules
   /// refuse (valid email, complete identifier, CPTS length, equipment
   /// details), plus the identity fields every profile form already requires
-  /// (first name, last name, phone). An empty result therefore guarantees the
+  /// (first name and last name). Phone is optional. An empty result therefore guarantees the
   /// engagement is not refused for a missing profile field. Verified identity
   /// is a separate prerequisite checked by [VolunteerProfile.hasVerifiedProfessionalIdentity]
   /// and by Firestore rules.
@@ -101,7 +99,6 @@ abstract final class ProfessionalProfileValidation {
     return [
       if (blank(firstName)) EngagementProfileGap.firstName,
       if (blank(lastName)) EngagementProfileGap.lastName,
-      if (blank(phone)) EngagementProfileGap.phone,
       if (!isValidEmail(email)) EngagementProfileGap.email,
       if (!hasCompleteProfessionalIdentifier(
         profession,

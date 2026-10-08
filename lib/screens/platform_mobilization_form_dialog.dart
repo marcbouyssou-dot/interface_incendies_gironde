@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/patient_data_guidance.dart';
 import '../models/mobilization.dart';
 import '../models/territory.dart';
 import '../services/platform_administration_service.dart';
@@ -101,6 +102,7 @@ class _PlatformMobilizationFormDialogState
               key: const Key('platform-mobilization-subtitle'),
               label: 'Sous-titre',
               controller: _subtitle,
+              supportingText: PatientDataGuidance.warning,
               maxLength: 240,
               textCapitalization: TextCapitalization.sentences,
               isRequired: true,

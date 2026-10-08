@@ -50,15 +50,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.inventory_2_outlined,
                       title: 'Données collectées',
                       paragraphs: [
-                        'MobSanté collecte les informations de profil nécessaires '
-                            'à la mobilisation : prénom, nom, téléphone, adresse '
-                            'email, profession, identifiant RPPS ou ordinal, CPTS '
-                            'éventuelle et matériel pouvant être apporté.',
-                        'Les participations enregistrent également la mission, le '
-                            'lieu, la profession mobilisée, le statut de la '
-                            'participation et les dates techniques associées. Un '
-                            'identifiant technique de session est utilisé pour '
-                            'sécuriser les opérations.',
+                        'Selon votre rôle, MobSanté traite les informations de '
+                            'compte et de profil : identité, coordonnées, '
+                            'profession, identifiant professionnel, statut de '
+                            'vérification, CPTS et matériel déclaré lorsque ces '
+                            'champs sont renseignés.',
+                        'Le service enregistre aussi les rôles, invitations, '
+                            'Actions, missions, engagements et statuts associés. '
+                            'Les notifications, abonnements push et journaux '
+                            'techniques utilisent des identifiants et des dates.',
                       ],
                     ),
                     SizedBox(height: 13),
@@ -66,20 +66,17 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.flag_outlined,
                       title: 'Finalités du traitement',
                       paragraphs: [
-                        'Ces données servent à organiser les missions, vérifier les '
-                            'informations professionnelles requises et suivre les '
-                            'quotas de participation.',
-                        'Les responsables et coordinateurs autorisés voient '
-                            'uniquement le nom, la profession et le statut '
-                            'd’engagement des professionnels mobilisés sur leurs '
-                            'missions ; ils n’ont pas accès dans l’application à '
-                            'leur téléphone, leur email, leur identifiant RPPS ou '
-                            'leur adresse. Toute prise de contact directe avec un '
-                            'professionnel se fait aujourd’hui en dehors de '
-                            'l’application.',
-                        'Les statistiques du tableau de bord sont calculées sous '
-                            'forme agrégée et ne présentent aucune donnée '
-                            'nominative.',
+                        'Ces données permettent de gérer les comptes, vérifier '
+                            'les professionnels, organiser les Actions et missions, '
+                            'suivre les engagements et sécuriser le service.',
+                        'Les professionnels consultent leurs données. Les '
+                            'responsables et coordinateurs accèdent aux données '
+                            'nécessaires dans le périmètre de leurs Actions et '
+                            'sites. L’administration MobSanté gère la plateforme '
+                            'et ses Actions selon ses habilitations.',
+                        'Chaque Action est présentée dans le contexte de son '
+                            'organisation. MobSanté peut accueillir plusieurs '
+                            'organisations et Actions.',
                       ],
                     ),
                     SizedBox(height: 13),
@@ -87,19 +84,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.schedule_outlined,
                       title: 'Durées de conservation',
                       paragraphs: [
-                        'Les profils et participations sont conservés pendant la '
-                            'durée nécessaire à l’organisation et au suivi du '
-                            'dispositif Incendies Gironde.',
-                        'Cette version ne comporte pas de suppression automatique : '
-                            'les données restent conservées jusqu’à une demande '
-                            'd’effacement ou jusqu’à la clôture et l’archivage du '
-                            'dispositif par l’éditeur.',
-                        'L’administration de la plateforme peut ponctuellement '
-                            'générer des exports au format CSV à des fins de '
-                            'gestion opérationnelle ; ces exports ne sont pas '
-                            'stockés par l’application et ne constituent pas, à ce '
-                            'jour, une fonctionnalité d’export personnel '
-                            'déclenchable directement par les professionnels.',
+                        'Aucune purge automatique par catégorie n’est actuellement '
+                            'configurée. Les durées et critères de conservation '
+                            'doivent être validés avant l’ouverture de la bêta.',
+                        'Les exports CSV de gestion produits par l’administration '
+                            'ne sont pas un export individuel déclenchable par les '
+                            'professionnels dans l’application.',
                       ],
                     ),
                     SizedBox(height: 13),
@@ -107,7 +97,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.verified_user_outlined,
                       title: 'Vos droits RGPD',
                       paragraphs: [
-                        'Les professionnels peuvent demander l’accès à leurs '
+                        'Les utilisateurs peuvent demander l’accès à leurs '
                             'données, leur rectification, leur effacement, la '
                             'limitation du traitement, s’opposer au traitement ou '
                             'demander la portabilité lorsque ce droit s’applique.',
@@ -121,11 +111,23 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.contact_mail_outlined,
                       title: 'Exercer vos droits',
                       paragraphs: [
-                        'Toute demande peut être adressée à l’éditeur de MobSanté '
-                            'via l’URPS MK Nouvelle-Aquitaine, avec la mention '
-                            '« Exercice des droits RGPD — MobSanté ». Une preuve '
-                            'd’identité pourra être demandée uniquement si elle est '
-                            'nécessaire pour sécuriser la demande.',
+                        'Une demande peut être signalée à l’administration '
+                            'MobSanté ou à l’organisation qui vous a invité. '
+                            'Un canal de contact dédié doit être confirmé avant '
+                            'l’ouverture de la bêta. Une preuve d’identité ne sera '
+                            'demandée que si elle est nécessaire pour sécuriser '
+                            'la demande.',
+                      ],
+                    ),
+                    SizedBox(height: 13),
+                    _PrivacySection(
+                      icon: Icons.cloud_outlined,
+                      title: 'Prestataires techniques',
+                      paragraphs: [
+                        'Le client Web est servi par Netlify. Les comptes, données '
+                            'et notifications utilisent Firebase / Google Cloud. '
+                            'Des courriels d’invitation peuvent être envoyés '
+                            'par Resend.',
                       ],
                     ),
                   ],
@@ -252,7 +254,8 @@ class _PrivacySection extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
-            if (index < paragraphs.length - 1) const SizedBox(height: V5Spacing.sm),
+            if (index < paragraphs.length - 1)
+              const SizedBox(height: V5Spacing.sm),
           ],
         ],
       ),

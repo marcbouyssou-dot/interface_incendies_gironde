@@ -14,7 +14,8 @@ import 'package:interface_incendies_gironde/services/push_notification_gateway.d
 import 'package:interface_incendies_gironde/services/platform_administration_service.dart';
 import 'package:interface_incendies_gironde/services/push_token_chain_diagnostic.dart';
 import 'package:interface_incendies_gironde/theme/app_theme.dart';
-import 'package:interface_incendies_gironde/widgets/common.dart' show SectionTitle;
+import 'package:interface_incendies_gironde/widgets/common.dart'
+    show SectionTitle;
 
 void main() {
   final now = DateTime(2026, 8, 15, 12);
@@ -1939,6 +1940,7 @@ void main() {
     double textScale = 1,
     bool reduceMotion = false,
     bool settle = true,
+    bool showProfessionalTargetingGuidance = false,
   }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -1961,6 +1963,8 @@ void main() {
             pushGateway: gateway,
             targetedPushTestService: targetedPushTestService,
             initialNotificationId: initialNotificationId,
+            showProfessionalTargetingGuidance:
+                showProfessionalTargetingGuidance,
           ),
         ),
       ),
@@ -3342,7 +3346,7 @@ void main() {
     expect(find.text('Mission inaccessible'), findsOneWidget);
   });
 
-  testWidgets('preferences keep prudent defaults and persist opt-in', (
+  testWidgets('compatible missions points to the single profile opt-in', (
     tester,
   ) async {
     final repository = MockCoordinationRepository();
@@ -3350,12 +3354,14 @@ void main() {
       tester,
       repository: repository,
       gateway: _FakePushGateway(),
+      showProfessionalTargetingGuidance: true,
     );
-    final compatiblePreference = find.text('Missions compatibles');
-    expect(compatiblePreference, findsOneWidget);
-    await tester.tap(compatiblePreference);
-    await tester.pump();
-    expect(repository.notificationPreferences.compatibleMissions, true);
+    expect(
+      find.byKey(const Key('compatible-missions-profile-guidance')),
+      findsOneWidget,
+    );
+    expect(find.text('Missions compatibles'), findsNothing);
+    expect(repository.notificationPreferences.compatibleMissions, false);
   });
 
   testWidgets('center supports Dynamic Type, dark mode and Reduce Motion', (
