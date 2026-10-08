@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -101,7 +100,6 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
   Future<CoordinationRepository> _initializeFirebaseWork() async {
     await FirebaseBootstrap.initialize();
     final volunteerAuth = FirebaseAuth.instance;
-    final responsibleAppFuture = _initializeResponsibleApp();
     markStartupEvent('mobsante-auth-start');
     final restoredUser = volunteerAuth.currentUser;
     if (mustCreateAnonymousVolunteerSession(
@@ -112,11 +110,10 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
     }
     markStartupEvent('mobsante-auth-ready');
     final firestore = FirebaseFirestore.instance;
-    final managerApp = await responsibleAppFuture;
-    final responsibleAuth = FirebaseAuth.instanceFor(app: managerApp);
-    final responsibleFirestore = FirebaseFirestore.instanceFor(app: managerApp);
+    // Identity is shared across Professional and management capabilities.
+    // Keeping two Firebase Auth apps would create two independent sessions.
     _diffusionReadRepository = FirestoreDiffusionReadRepository.withFirestore(
-      responsibleFirestore,
+      firestore,
     );
     const enableLocationSeed = bool.fromEnvironment(
       'ENABLE_LOCATION_SEED',
@@ -136,25 +133,11 @@ class _FirebaseStartupGateState extends State<FirebaseStartupGate> {
       firestore,
       volunteerAuth,
       mobilizationProvider: mobilizationProvider,
-      responsibleFirestore: responsibleFirestore,
-      responsibleAuth: responsibleAuth,
+      responsibleFirestore: firestore,
+      responsibleAuth: volunteerAuth,
     );
     markStartupEvent('mobsante-firestore-session-ready');
     return repository;
-  }
-
-  Future<FirebaseApp> _initializeResponsibleApp() async {
-    final existing = Firebase.apps
-        .where((app) => app.name == 'responsible')
-        .firstOrNull;
-    return initializeFirebaseAppWithAppCheck(
-      existingApp: existing,
-      initializeApp: () => Firebase.initializeApp(
-        name: 'responsible',
-        options: Firebase.app().options,
-      ),
-      activateAppCheck: FirebaseBootstrap.activateAppCheck,
-    );
   }
 
   void _scheduleErrorReveal() {

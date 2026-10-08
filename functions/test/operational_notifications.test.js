@@ -109,7 +109,7 @@ test('inactive or already cancelled documents do not emit publication events', (
   }), []);
 });
 
-test('compatible targeting is opt-in, profession matched, capped and excludes engaged/self', () => {
+test('compatible targeting keeps eligible multi-role Professional and excludes engaged/self', () => {
   const event = missionCreatedEvents({mission: baseMission, sourceEventId: 'create', occurredAt: timestamp(now)})[0];
   const volunteers = [
     {uid: 'eligible', profession: 'nurse'},
@@ -126,7 +126,9 @@ test('compatible targeting is opt-in, profession matched, capped and excludes en
   ]);
   const recentNotifications = new Map([['capped', [0, 1, 2].map(() => ({category: 'compatible', occurredAt: now - 1000}))]]);
   const recipients = recipientsForEvent({
-    event, mission: baseMission, roles: [], volunteers,
+    event, mission: baseMission,
+    roles: [{uid: 'eligible', role: 'coordinator', active: true,
+      locationIds: ['*']}], volunteers,
     engagements: [{missionId: 'mission-a', volunteerId: 'engaged', status: 'confirmed'}],
     preferences, recentNotifications, now,
     eligibleProfessionalIds: new Set(['eligible', 'engaged', 'capped']),

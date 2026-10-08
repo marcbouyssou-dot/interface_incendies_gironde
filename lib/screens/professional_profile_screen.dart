@@ -24,6 +24,7 @@ class ProfessionalProfileScreen extends StatefulWidget {
   const ProfessionalProfileScreen({
     super.key,
     required this.onOpenResponsibleAccess,
+    this.showResponsibleLogin = true,
     required this.onOpenSettings,
     required this.onOpenNotifications,
     required this.onSignOut,
@@ -31,6 +32,7 @@ class ProfessionalProfileScreen extends StatefulWidget {
   });
 
   final VoidCallback onOpenResponsibleAccess;
+  final bool showResponsibleLogin;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenNotifications;
   final Future<void> Function() onSignOut;
@@ -388,12 +390,13 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                     ),
                     const SizedBox(height: V5Spacing.xs),
                   ],
-                  TextButton.icon(
-                    key: const Key('open-responsible-access'),
-                    onPressed: widget.onOpenResponsibleAccess,
-                    icon: const Icon(Icons.shield_outlined),
-                    label: const Text('Connexion responsable'),
-                  ),
+                  if (widget.showResponsibleLogin)
+                    TextButton.icon(
+                      key: const Key('open-responsible-access'),
+                      onPressed: widget.onOpenResponsibleAccess,
+                      icon: const Icon(Icons.shield_outlined),
+                      label: const Text('Connexion responsable'),
+                    ),
                   TextButton.icon(
                     key: const Key('professional-sign-out'),
                     onPressed: _signingOut ? null : _signOut,

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../dev/role_preview.dart';
 import '../models/mobilization.dart';
 import '../models/need.dart';
+import '../models/organization_role.dart';
 import '../perspective/cross_role_perspective.dart';
 import '../models/platform_administrator_access.dart';
 import '../repositories/coordination_repository.dart';
@@ -88,6 +89,7 @@ class _AppShellState extends State<AppShell> {
   final List<Widget?> _legacyScreens = List<Widget?>.filled(4, null);
   CoordinationRepository? _repository;
   LiveCoordinationData? _liveData;
+  LiveCoordinationData? _actualProfessionalData;
   LiveCoordinationData? _platformAdminProfessionalPreviewData;
   LiveCoordinationData? _platformAdminResponsiblePreviewData;
   LiveCoordinationData? _platformAdminCoordinatorPreviewData;
@@ -99,6 +101,7 @@ class _AppShellState extends State<AppShell> {
   String? _platformAdminCoordinatorOperationId;
   StreamSubscription<ResponsibleAccess?>? _accessSubscription;
   StreamSubscription<String?>? _administrativeIdentitySubscription;
+  StreamSubscription<List<OperationAccess>>? _operationAccessSubscription;
   StreamSubscription<List<CoordinationNeed>>? _missionsWarmupSubscription;
   StreamSubscription<List<ResponsePlace>>? _locationsWarmupSubscription;
   bool _warmupStarted = false;
@@ -134,6 +137,10 @@ class _AppShellState extends State<AppShell> {
   Stream<List<ResponsePlace>>? _platformLocationStream;
   ResponsibleAccess? _access;
   String? _administrativeUid;
+  Set<String> _operationRoleNames = const {};
+  bool _hasProfessionalProfile = false;
+  int _capabilityGeneration = 0;
+  _AppJourney? _selectedActualJourney;
   PlatformAdministratorAccess? _platformAdministrator;
   bool _accessResolved = false;
   bool _accessResolutionFailed = false;
@@ -285,9 +292,17 @@ class _AppShellState extends State<AppShell> {
       unawaited(_locationsWarmupSubscription?.cancel());
       _warmupStarted = false;
       _liveData?.dispose();
+      _actualProfessionalData?.dispose();
+      _actualProfessionalData = null;
       _disposePlatformAdminPreviewData();
       _repository = repository;
       _administrativeUid = null;
+      _capabilityGeneration++;
+      _hasProfessionalProfile = false;
+      _operationRoleNames = const {};
+      _selectedActualJourney = null;
+      unawaited(_operationAccessSubscription?.cancel());
+      _operationAccessSubscription = null;
       _readOnlyPreviewRepository = null;
       _readOnlyPreviewOperationId = null;
       _liveData = _createLiveData(repository);
@@ -317,6 +332,7 @@ class _AppShellState extends State<AppShell> {
   void dispose() {
     unawaited(_accessSubscription?.cancel());
     unawaited(_administrativeIdentitySubscription?.cancel());
+    unawaited(_operationAccessSubscription?.cancel());
     unawaited(_missionsWarmupSubscription?.cancel());
     unawaited(_locationsWarmupSubscription?.cancel());
     unawaited(_platformAdministratorSubscription?.cancel());
@@ -324,6 +340,7 @@ class _AppShellState extends State<AppShell> {
       _handlePlatformAdministrationSessionChanged,
     );
     _liveData?.dispose();
+    unawaited(_actualProfessionalData?.dispose());
     unawaited(_platformAdminProfessionalPreviewData?.dispose());
     unawaited(_platformAdminResponsiblePreviewData?.dispose());
     unawaited(_platformAdminCoordinatorPreviewData?.dispose());
@@ -509,6 +526,48 @@ class _AppShellState extends State<AppShell> {
   void _handleAdministrativeUid(String? uid) {
     if (!mounted || uid == _administrativeUid) return;
     _administrativeUid = uid;
+    final generation = ++_capabilityGeneration;
+    unawaited(_operationAccessSubscription?.cancel());
+    _operationAccessSubscription = null;
+    setState(() {
+      _hasProfessionalProfile = false;
+      _operationRoleNames = const {};
+      _selectedActualJourney = null;
+    });
+    if (uid != null) {
+      final repository = _repository!;
+      unawaited(
+        repository
+            .getVolunteerProfile()
+            .then((profile) {
+              if (!mounted || generation != _capabilityGeneration) return;
+              setState(() => _hasProfessionalProfile = profile != null);
+            })
+            .catchError((Object _) {}),
+      );
+      final runtime = widget.platformRuntime;
+      if (runtime is OperationAccessRuntime) {
+        _operationAccessSubscription = (runtime as OperationAccessRuntime)
+            .operationAccessReadRepository
+            .watchForUser(uid)
+            .listen(
+              (grants) {
+                if (!mounted || generation != _capabilityGeneration) return;
+                setState(
+                  () => _operationRoleNames = grants
+                      .expand((grant) => grant.roles)
+                      .map((role) => role.serializedValue)
+                      .toSet(),
+                );
+              },
+              onError: (Object _) {
+                if (mounted && generation == _capabilityGeneration) {
+                  setState(() => _operationRoleNames = const {});
+                }
+              },
+            );
+      }
+    }
     _syncOrganizationContext();
   }
 
@@ -519,6 +578,7 @@ class _AppShellState extends State<AppShell> {
       _access = null;
       _accessResolved = true;
       _accessResolutionFailed = true;
+      _selectedActualJourney = null;
     });
     _syncOrganizationContext();
   }
@@ -804,6 +864,13 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  LiveCoordinationData _professionalData() =>
+      _actualProfessionalData ??= LiveCoordinationData(
+        _repository!,
+        responsibleAccessOverride: () => Stream.value(null),
+        missionsOverride: _repository!.watchMissions,
+      );
+
   void _scheduleApplicationReveal() {
     if (_applicationRevealScheduled) return;
     _applicationRevealScheduled = true;
@@ -835,6 +902,8 @@ class _AppShellState extends State<AppShell> {
 
   void _refreshLiveData() {
     final previous = _liveData;
+    final previousProfessional = _actualProfessionalData;
+    _actualProfessionalData = null;
     unawaited(_accessSubscription?.cancel());
     final next = _createLiveData(_repository!);
     setState(() {
@@ -848,6 +917,7 @@ class _AppShellState extends State<AppShell> {
       onError: (_, _) => _handleAccessError(),
     );
     if (previous != null) unawaited(previous.dispose());
+    if (previousProfessional != null) unawaited(previousProfessional.dispose());
   }
 
   @override
@@ -859,15 +929,42 @@ class _AppShellState extends State<AppShell> {
         previewMode == RolePreviewMode.administrator &&
         widget.platformRuntime is RecipeAdminRuntime;
     final perspectiveController = CrossRolePerspectiveScope.of(context);
-    final automaticJourney = !_accessResolved || _accessResolutionFailed
+    final isPlatformAdministrator =
+        (_platformAdministratorResolved &&
+            (_platformAdministrator?.active ?? false)) ||
+        _platformAdministrationSessionExpired;
+    final canCoordinate =
+        _access?.isCoordinator == true ||
+        _operationRoleNames.contains(
+          OrganizationRole.coordinator.serializedValue,
+        );
+    final canManageSite =
+        _access?.isSiteManager == true ||
+        _operationRoleNames.contains(
+          OrganizationRole.siteManager.serializedValue,
+        );
+    final actualJourneys = <_AppJourney>{
+      if (_hasProfessionalProfile ||
+          (!canCoordinate && !canManageSite && !isPlatformAdministrator))
+        _AppJourney.professional,
+      if (canManageSite) _AppJourney.responsible,
+      if (canCoordinate) _AppJourney.coordinator,
+      if (isPlatformAdministrator) _AppJourney.platformAdmin,
+    };
+    final automaticJourney = isPlatformAdministrator
+        ? _AppJourney.platformAdmin
+        : !_accessResolved ||
+              _accessResolutionFailed ||
+              (_access != null &&
+                  !_access!.hasPrivilegedAccess &&
+                  !canCoordinate &&
+                  !canManageSite)
         ? _AppJourney.coordinator
-        : _access == null
-        ? _AppJourney.professional
-        : _access!.roles.contains(ResponsibleRole.coordinator)
+        : canCoordinate
         ? _AppJourney.coordinator
-        : _access!.roles.contains(ResponsibleRole.siteManager)
+        : canManageSite
         ? _AppJourney.responsible
-        : _AppJourney.coordinator;
+        : _AppJourney.professional;
     final journey = switch (previewMode) {
       RolePreviewMode.professional => _AppJourney.professional,
       RolePreviewMode.responsible => _AppJourney.responsible,
@@ -876,23 +973,24 @@ class _AppShellState extends State<AppShell> {
         recipeAdminPreview ? _AppJourney.platformAdmin : automaticJourney,
       RolePreviewMode.automatic => automaticJourney,
     };
-    final isPlatformAdministrator =
-        (_platformAdministratorResolved &&
-            (_platformAdministrator?.active ?? false)) ||
-        _platformAdministrationSessionExpired;
     final adminPerspectiveHost = isPlatformAdministrator || recipeAdminPreview;
-    var displayedJourney = adminPerspectiveHost
+    final crossRolePreview =
+        adminPerspectiveHost &&
+        perspectiveController.perspective != CrossRolePerspective.actual;
+    final actualJourney =
+        !_accessResolutionFailed &&
+            _selectedActualJourney != null &&
+            actualJourneys.contains(_selectedActualJourney)
+        ? _selectedActualJourney!
+        : journey;
+    final displayedJourney = crossRolePreview
         ? switch (perspectiveController.perspective) {
             CrossRolePerspective.actual => _AppJourney.platformAdmin,
             CrossRolePerspective.professional => _AppJourney.professional,
             CrossRolePerspective.responsible => _AppJourney.responsible,
             CrossRolePerspective.coordinator => _AppJourney.coordinator,
           }
-        : journey;
-    var crossRolePreview = false;
-    crossRolePreview =
-        adminPerspectiveHost &&
-        perspectiveController.perspective != CrossRolePerspective.actual;
+        : actualJourney;
     final operationPreviewContext = crossRolePreview
         ? perspectiveController.operationContext
         : null;
@@ -963,6 +1061,11 @@ class _AppShellState extends State<AppShell> {
         verificationService: widget.professionalVerificationService,
         publicMissionDiscoveryRepository:
             widget.publicMissionDiscoveryRepository,
+        showResponsibleLogin:
+            !crossRolePreview &&
+            !canCoordinate &&
+            !canManageSite &&
+            !isPlatformAdministrator,
       ),
       _AppJourney.responsible => ResponsibleShell(
         key: ValueKey(crossRolePreview ? 'admin-responsible' : 'responsible'),
@@ -1035,8 +1138,27 @@ class _AppShellState extends State<AppShell> {
             child: displayedShell,
           )
         : displayedShell;
+    final selectedShell =
+        !crossRolePreview &&
+            !_accessResolutionFailed &&
+            actualJourneys.length > 1
+        ? SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _ActualPerspectivePicker(
+                  journeys: actualJourneys,
+                  selected: displayedJourney,
+                  onSelected: (selection) =>
+                      setState(() => _selectedActualJourney = selection),
+                ),
+                Expanded(child: framedShell),
+              ],
+            ),
+          )
+        : framedShell;
     final contextAwareShell = multiRuntime == null
-        ? framedShell
+        ? selectedShell
         : OperationalContextScope(
             provider: crossRolePreview
                 ? _PlatformAdminOperationalContextProvider(
@@ -1047,11 +1169,14 @@ class _AppShellState extends State<AppShell> {
                         operationPreviewContext?.mobilizationIds,
                   )
                 : multiRuntime.operationalContextProvider,
-            child: framedShell,
+            child: selectedShell,
           );
     return LiveCoordinationDataScope(
       data: !crossRolePreview
-          ? _liveData!
+          ? displayedJourney == _AppJourney.professional &&
+                    (canCoordinate || canManageSite || isPlatformAdministrator)
+                ? _professionalData()
+                : _liveData!
           : switch (displayedJourney) {
               _AppJourney.professional => _adminProfessionalPreviewData(
                 platformRepository: platformRepository,
@@ -1424,6 +1549,67 @@ class _PlatformRouteLoading extends StatelessWidget {
     backgroundColor: context.v5Colors.canvas,
     body: const SafeArea(
       child: Center(child: CircularProgressIndicator.adaptive()),
+    ),
+  );
+}
+
+class _ActualPerspectivePicker extends StatelessWidget {
+  const _ActualPerspectivePicker({
+    required this.journeys,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final Set<_AppJourney> journeys;
+  final _AppJourney selected;
+  final ValueChanged<_AppJourney> onSelected;
+
+  static String label(_AppJourney journey) => switch (journey) {
+    _AppJourney.professional => 'Professionnel de santé',
+    _AppJourney.responsible => 'Responsable de site',
+    _AppJourney.coordinator => "Coordinateur d'action",
+    _AppJourney.platformAdmin => 'Administrateur MobSanté',
+  };
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: context.v5Colors.canvas,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          const Text('Perspective : '),
+          Flexible(
+            child: PopupMenuButton<_AppJourney>(
+              key: const Key('actual-perspective-picker'),
+              tooltip: 'Changer de perspective',
+              onSelected: onSelected,
+              itemBuilder: (_) => [
+                for (final journey in _AppJourney.values)
+                  if (journeys.contains(journey))
+                    PopupMenuItem<_AppJourney>(
+                      key: Key('actual-perspective-${journey.name}'),
+                      value: journey,
+                      child: Text(label(journey)),
+                    ),
+              ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label(selected),
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ),
+                  const Icon(Icons.expand_more),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }

@@ -98,7 +98,8 @@ test('Action, identity, profession, opt-in and site gates fail closed', () => {
   assert.deepEqual(candidateSet({operation: {...operation, id: 'operation-b'}}), new Set());
   assert.deepEqual(candidateSet({location: {...site, addressStatus: 'needs_confirmation'}}), new Set());
   assert.deepEqual(candidateSet({admissionMode: 'unknown'}), new Set());
-  assert.deepEqual(candidateSet({roleUids: new Set(['within'])}), new Set());
+  assert.deepEqual(candidateSet({roleUids: new Set(['within'])}),
+    new Set(['within']));
   assert.deepEqual(candidateSet({preferences: new Map()}), new Set());
   assert.deepEqual(candidateSet({now: now + 86400001}), new Set());
 });

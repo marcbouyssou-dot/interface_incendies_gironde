@@ -197,7 +197,6 @@ async function loadEligibleProfessionalIds({
     admissions: new Map((admissionSnapshot?.docs ?? []).map((document) =>
       [document.data().uid, document.data()])),
     preferences,
-    roleUids: new Set(roles.map((role) => role.uid)),
     allowLegacyWithoutPoint: targetingMode === 'legacy_opt_in',
     now,
   }), status: status === 'TARGETING_READY' && targetingMode === 'legacy_opt_in'

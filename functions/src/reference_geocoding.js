@@ -94,12 +94,8 @@ export async function searchProfessionalReferenceAddresses({
     throw new ReferenceGeocodingError('unauthenticated', 'Session professionnelle requise.');
   }
   const query = validQuery(data);
-  const [volunteer, role, administrator] = await Promise.all([
-    db.collection('volunteers').doc(callerUid).get(),
-    db.collection('roles').doc(callerUid).get(),
-    db.collection('platformAdministrators').doc(callerUid).get(),
-  ]);
-  if (!volunteer.exists || role.exists || administrator.exists) {
+  const volunteer = await db.collection('volunteers').doc(callerUid).get();
+  if (!volunteer.exists || volunteer.data()?.uid !== callerUid) {
     throw new ReferenceGeocodingError('permission-denied', 'Accès réservé au professionnel.');
   }
   return {results: await searchProvider(query)};

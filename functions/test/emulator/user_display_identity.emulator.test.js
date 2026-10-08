@@ -85,7 +85,12 @@ before(async () => {
     phone: '0600000000',
     email: 'secret@example.test',
     rpps: '12345678901',
+    targetingLocation: 'private-test-point',
   });
+  await db.collection('roles').doc('volunteer-identity-test').set(
+    managerRole('merignac'));
+  await db.collection('platformAdministrators')
+    .doc('volunteer-identity-test').set({active: true});
   await db.collection('engagements').doc(
     'mission-identity-test_volunteer-identity-test',
   ).set({
@@ -153,6 +158,9 @@ test('only the responsible perimeter receives the minimal team identity', async 
   assert.equal(Object.hasOwn(member, 'phone'), false);
   assert.equal(Object.hasOwn(member, 'email'), false);
   assert.equal(Object.hasOwn(member, 'rpps'), false);
+  assert.equal(Object.hasOwn(member, 'targetingLocation'), false);
+  assert.equal(Object.hasOwn(member, 'roles'), false);
+  assert.equal(Object.hasOwn(member, 'platformAdministrator'), false);
 
   await assertCode(
     () => services.listMissionTeam({

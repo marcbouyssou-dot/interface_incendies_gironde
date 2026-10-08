@@ -141,7 +141,7 @@ test('transferred link cannot be consumed and target can use it for one Action',
   assert.equal((await getDoc(doc(targetUser.firestore, 'missions', targetB.missionId))).exists(), true);
 });
 
-test('unverified email, anonymous, missing identity and other roles cannot redeem', async () => {
+test('unverified email and anonymous identity cannot redeem', async () => {
   const admin = await actor({administrator: true});
   const targetUser = await actor({verified: true, emailVerified: false});
   const target = await action();
@@ -159,15 +159,102 @@ test('unverified email, anonymous, missing identity and other roles cannot redee
   await denied(() => anonymousRedeem({code: issued.code}));
   await signInAnonymously(anonymousAuth);
   await denied(() => anonymousRedeem({code: issued.code}));
-  await adminDb.collection('roles').doc(targetUser.uid).set({role: 'site_manager', active: true});
-  await denied(() => targetUser.redeem({code: issued.code}));
-  await adminDb.collection('roles').doc(targetUser.uid).set({role: 'coordinator', active: true});
-  await denied(() => targetUser.redeem({code: issued.code}));
-  await adminDb.collection('roles').doc(targetUser.uid).delete();
-  await adminDb.collection('platformAdministrators').doc(targetUser.uid).set({active: true});
-  await denied(() => targetUser.redeem({code: issued.code}));
-  await adminDb.collection('platformAdministrators').doc(targetUser.uid).delete();
   await targetUser.redeem({code: issued.code});
+});
+
+test('verified Professional may redeem alongside management capabilities', async () => {
+  const admin = await actor({administrator: true});
+  for (const capability of ['site_manager', 'coordinator', 'platform_admin']) {
+    const professional = await actor({verified: true});
+    if (capability === 'platform_admin') {
+      await adminDb.collection('platformAdministrators').doc(professional.uid)
+        .set({active: true});
+    } else {
+      await adminDb.collection('roles').doc(professional.uid)
+        .set({role: capability, active: true,
+          locationIds: capability === 'site_manager' ? ['site-x'] : []});
+    }
+    const target = await action();
+    const issued = await invitation(admin, target, professional);
+    await professional.redeem({code: issued.code});
+    const admission = (await adminDb.collection('professionalAdmissions')
+      .doc(`${target.operationId}_${professional.uid}`).get()).data();
+    assert.equal(admission.uid, professional.uid);
+    assert.equal(admission.operationId, target.operationId);
+  }
+});
+
+test('management capabilities neither admit nor bypass Professional engagement', async () => {
+  const admin = await actor({administrator: true});
+  for (const capability of ['site_manager', 'coordinator', 'platform_admin', 'all']) {
+    const professional = await actor({verified: true});
+    const allowed = await action();
+    const other = await action();
+    if (capability === 'site_manager' || capability === 'all') {
+      await adminDb.collection('roles').doc(professional.uid).set({
+        role: capability === 'all' ? 'coordinator' : 'site_manager',
+        roles: capability === 'all'
+          ? ['coordinator', 'site_manager'] : ['site_manager'],
+        schemaVersion: 2, active: true,
+        locationIds: [(await adminDb.collection('missions')
+          .doc(allowed.missionId).get()).data().locationId],
+      });
+    } else if (capability === 'coordinator') {
+      await adminDb.collection('roles').doc(professional.uid).set({
+        role: 'coordinator', active: true, locationIds: [],
+      });
+    }
+    if (capability === 'platform_admin' || capability === 'all') {
+      await adminDb.collection('platformAdministrators')
+        .doc(professional.uid).set({active: true});
+    }
+    if (capability === 'site_manager' || capability === 'all') {
+      // Creating a mission as a manager does not grant Professional admission.
+      await adminDb.collection('missions').doc(allowed.missionId)
+        .update({createdBy: professional.uid});
+    }
+    await denied(() => engage(professional, allowed));
+    const issued = await invitation(admin, allowed, professional);
+    await professional.redeem({code: issued.code});
+    await denied(() => engage(professional, other));
+    await engage(professional, allowed);
+    assert.equal((await getDoc(doc(professional.firestore, 'engagements',
+      `${allowed.missionId}_${professional.uid}`))).exists(), true);
+    const batch = writeBatch(professional.firestore);
+    batch.update(doc(professional.firestore, 'engagements',
+      `${allowed.missionId}_${professional.uid}`), {
+      status: 'cancelled', updatedAt: serverTimestamp(),
+    });
+    batch.update(doc(professional.firestore, 'missions', allowed.missionId), {
+      registeredMk: 0,
+      registeredByProfession: {physiotherapist: 0, nurse: 0},
+      status: 'critical', updatedAt: serverTimestamp(),
+    });
+    await batch.commit();
+    assert.equal((await adminDb.collection('engagements')
+      .doc(`${allowed.missionId}_${professional.uid}`).get()).data().status,
+    'cancelled');
+  }
+});
+
+test('Admin capability cannot replace Professional verification, profession or active Action', async () => {
+  const admin = await actor({administrator: true});
+  const professional = await actor({verified: true});
+  await adminDb.collection('platformAdministrators')
+    .doc(professional.uid).set({active: true});
+  const target = await action();
+  const issued = await invitation(admin, target, professional);
+  await professional.redeem({code: issued.code});
+  const profile = adminDb.collection('volunteers').doc(professional.uid);
+  await profile.update({verificationStatus: 'unverified'});
+  await denied(() => engage(professional, target));
+  await profile.update({verificationStatus: 'verified', profession: 'nurse'});
+  await denied(() => engage(professional, target));
+  await profile.update({profession: 'physiotherapist'});
+  await adminDb.collection('operations').doc(target.operationId).update({
+    status: 'completed', purpose: 'demonstration',
+  });
+  await denied(() => engage(professional, target));
 });
 
 test('linking an anonymous professional keeps the UID and needs email verification', async () => {
@@ -275,7 +362,10 @@ test('invitation-only requires a scoped grant and verified matching identity', a
     .doc(`${targetA.missionId}_${verified.uid}`).get()).exists, true);
   assert.equal((await verified.redeem({code: second.code})).data.alreadyRedeemed, true);
   await admin.revoke({invitationId: second.invitationId});
-  await denied(() => getDoc(doc(verified.firestore, 'missions', targetA.missionId)));
+  // Revocation ends discovery, while the existing participant retains the
+  // current mission context needed to review their own engagement.
+  assert.equal((await getDoc(doc(verified.firestore, 'missions',
+    targetA.missionId))).exists(), true);
 });
 
 test('expired, revoked and wrong-profession invitations cannot admit', async () => {

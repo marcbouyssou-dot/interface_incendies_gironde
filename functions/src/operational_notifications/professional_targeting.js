@@ -60,7 +60,7 @@ function neededProfessions(mission) {
 // radius or computed distance in notification, diffusion or role read models.
 export function eligibleProfessionalUids({
   mission, mobilization, operation, location, admissionMode,
-  volunteers, targetings, admissions, preferences, roleUids = new Set(), now,
+  volunteers, targetings, admissions, preferences, now,
   allowLegacyWithoutPoint = false,
 }) {
   if (!mission || mission.isActive !== true || mission.status === 'cancelled'
@@ -80,7 +80,7 @@ export function eligibleProfessionalUids({
   if (needed.size === 0) return new Set();
   const result = new Set();
   for (const volunteer of volunteers) {
-    if (!volunteer?.uid || roleUids.has(volunteer.uid)
+    if (!volunteer?.uid
       || !isVerifiedRppsProfile(volunteer)
       || !needed.has(canonicalProfession(volunteer.profession))
       || preferences.get(volunteer.uid)?.compatibleMissions !== true) continue;

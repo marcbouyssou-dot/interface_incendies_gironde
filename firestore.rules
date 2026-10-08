@@ -1178,7 +1178,9 @@ service cloud.firestore {
     }
 
     function canUseProfessionalOwnerWritePath() {
-      return isSignedIn() && !isPlatformAdministrator();
+      // Professional writes are authorized by their own profile, admission,
+      // profession and mission checks, regardless of management capabilities.
+      return isSignedIn();
     }
 
     function mobilizationPath(mobilizationId) {
@@ -1800,7 +1802,6 @@ service cloud.firestore {
       let admissionPath = professionalAdmissionPath(operationId);
       let admission = get(admissionPath).data;
       return isSignedIn()
-        && !exists(rolePath())
         && isCompleteVerifiedProfile(profile)
         && mobilization.get('status', '') == 'active'
         && operation.get('status', '') == 'active'
@@ -1896,8 +1897,7 @@ service cloud.firestore {
 
     function hasProfessionalProfile() {
       return isSignedIn()
-        && exists(volunteerPath(request.auth.uid))
-        && !exists(rolePath());
+        && exists(volunteerPath(request.auth.uid));
     }
 
     function isVerifiedProfessional() {
@@ -2220,8 +2220,8 @@ service cloud.firestore {
     match /missions/{missionId} {
       allow get: if isPlatformAdministrator()
         || (hasProfessionalProfile()
-          ? canProfessionalGetMission(missionId, resource.data)
-          : (canReadScopedActiveMission(resource.data)
+          && canProfessionalGetMission(missionId, resource.data))
+        || (canReadScopedActiveMission(resource.data)
             || (isActiveMobilization(resource.data.mobilizationId)
               && !isHistoricalMobilization(resource.data.mobilizationId)
               && canReadMissionScope(
@@ -2234,20 +2234,19 @@ service cloud.firestore {
                 || canReadOrganizationMissionScope(
                   resource.data.mobilizationId, resource.data.locationId
                 )))
-            || canHistoricallyReadMission(missionId, resource.data)));
+            || canHistoricallyReadMission(missionId, resource.data));
       allow list: if isPlatformAdministrator()
         || (hasProfessionalProfile()
-          ? canProfessionalReadActiveMission(resource.data,
-              get(volunteerPath(request.auth.uid)).data)
-          : ((resource.data.isActive == true
+          && canProfessionalReadActiveMission(resource.data,
+              get(volunteerPath(request.auth.uid)).data))
+        || ((resource.data.isActive == true
               && isActiveMobilization(resource.data.mobilizationId)
               && !isHistoricalMobilization(resource.data.mobilizationId)
               && canReadMissionScope(
                 resource.data.mobilizationId, resource.data.locationId
               ))
             || (isHistoricalMobilization(resource.data.mobilizationId)
-              && canHistoricallyReadMission(missionId, resource.data)
-              && !isHistoricallyVerifiedProfessional())));
+              && canHistoricallyReadMission(missionId, resource.data)));
       allow create: if isSignedIn() && validMissionCreate(missionId);
       allow update: if request.resource.data.status == 'cancelled'
         ? (!existsAfter(engagementPath(missionId, request.auth.uid))
@@ -2330,18 +2329,15 @@ service cloud.firestore {
             && data.confirmedAt <= request.time));
       }
       allow get: if isVolunteerOwner(uid)
-        && exists(volunteerPath(uid)) && !exists(rolePath())
-        && !exists(platformAdministratorPath(uid));
+        && exists(volunteerPath(uid));
       allow list: if false;
       allow create: if isVolunteerOwner(uid)
-        && exists(volunteerPath(uid)) && !exists(rolePath())
-        && !exists(platformAdministratorPath(uid))
+        && exists(volunteerPath(uid))
         && validTargeting()
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isVolunteerOwner(uid)
-        && exists(volunteerPath(uid)) && !exists(rolePath())
-        && !exists(platformAdministratorPath(uid))
+        && exists(volunteerPath(uid))
         && validTargeting()
         && (!request.resource.data.keys().hasAll([
             'latitude', 'longitude', 'source'
@@ -2353,8 +2349,7 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time;
       allow delete: if isVolunteerOwner(uid)
-        && exists(volunteerPath(uid)) && !exists(rolePath())
-        && !exists(platformAdministratorPath(uid));
+        && exists(volunteerPath(uid));
     }
 
     match /engagements/{engagementId} {

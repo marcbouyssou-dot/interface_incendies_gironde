@@ -125,19 +125,15 @@ export async function redeemProfessionalInvitation({db, auth, callerUid, data}) 
   const invitationId = invitationIdFor(code);
   const invitationRef = db.collection('professionalInvitations').doc(invitationId);
   const profileRef = db.collection('volunteers').doc(callerUid);
-  const roleRef = db.collection('roles').doc(callerUid);
-  const administratorRef = db.collection('platformAdministrators').doc(callerUid);
   return db.runTransaction(async (transaction) => {
-    const [invitationSnapshot, profileSnapshot, roleSnapshot, administratorSnapshot] = await Promise.all([
+    const [invitationSnapshot, profileSnapshot] = await Promise.all([
       transaction.get(invitationRef), transaction.get(profileRef),
-      transaction.get(roleRef), transaction.get(administratorRef),
     ]);
     const invitation = invitationSnapshot.data();
     const profile = profileSnapshot.data();
     if (!invitation || !invitation.targetEmailNormalized
       || invitation.targetEmailNormalized !== verifiedEmail
-      || !profile || profile.uid !== callerUid
-      || roleSnapshot.exists || administratorSnapshot.exists) {
+      || !profile || profile.uid !== callerUid) {
       throw new ProfessionalAdmissionError('permission-denied', 'Invitation indisponible.');
     }
     if (canonicalAdmissionProfession(profile.profession) !== invitation.expectedProfession
@@ -305,12 +301,9 @@ export async function listProfessionalMissionLocations({db, callerUid, data}) {
     throw new ProfessionalAdmissionError('invalid-argument', 'Missions invalides.');
   }
   if (missionIds.length === 0) return {locations: []};
-  const [profileSnapshot, roleSnapshot] = await Promise.all([
-    db.collection('volunteers').doc(callerUid).get(),
-    db.collection('roles').doc(callerUid).get(),
-  ]);
+  const profileSnapshot = await db.collection('volunteers').doc(callerUid).get();
   const profile = profileSnapshot.data();
-  if (roleSnapshot.exists || !profile || profile.uid !== callerUid
+  if (!profile || profile.uid !== callerUid
     || !isVerifiedRppsProfile(profile)) {
     throw new ProfessionalAdmissionError('permission-denied', 'Profil professionnel non vérifié.');
   }

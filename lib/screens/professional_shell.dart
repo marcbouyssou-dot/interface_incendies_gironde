@@ -27,12 +27,14 @@ class ProfessionalShell extends StatefulWidget {
     super.key,
     this.initialIndex = 0,
     this.verificationService = const FakeProfessionalVerificationService(),
+    this.showResponsibleLogin = true,
     this.publicMissionDiscoveryRepository =
         const EmptyPublicMissionDiscoveryRepository(),
   }) : assert(initialIndex >= 0 && initialIndex < 3);
 
   final int initialIndex;
   final ProfessionalVerificationService verificationService;
+  final bool showResponsibleLogin;
   final PublicMissionDiscoveryRepository publicMissionDiscoveryRepository;
 
   @override
@@ -60,6 +62,9 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   @override
   void didUpdateWidget(covariant ProfessionalShell oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.showResponsibleLogin != widget.showResponsibleLogin) {
+      _screens[2] = _createScreen(2);
+    }
     if (!identical(
       oldWidget.publicMissionDiscoveryRepository,
       widget.publicMissionDiscoveryRepository,
@@ -86,6 +91,7 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     1 => const ProfessionalEngagementsScreen(),
     2 => ProfessionalProfileScreen(
       onOpenResponsibleAccess: _openResponsibleAccess,
+      showResponsibleLogin: widget.showResponsibleLogin,
       onOpenSettings: _openSettings,
       onOpenNotifications: _openNotifications,
       onSignOut: _signOut,

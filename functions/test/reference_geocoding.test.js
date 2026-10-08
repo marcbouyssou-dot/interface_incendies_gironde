@@ -7,11 +7,14 @@ import {
   searchProfessionalReferenceAddresses,
 } from '../src/reference_geocoding.js';
 
-function db({volunteer = true, role = false, administrator = false} = {}) {
-  return {collection: (name) => ({doc: () => ({get: async () => ({
-    exists: {volunteers: volunteer, roles: role,
-      platformAdministrators: administrator}[name],
-  })})})};
+function db({volunteer = true} = {}) {
+  return {collection: (name) => {
+    assert.equal(name, 'volunteers');
+    return {doc: () => ({get: async () => ({
+    exists: volunteer,
+    data: () => ({uid: 'private-uid'}),
+  })})};
+  }};
 }
 
 const feature = {
@@ -90,8 +93,6 @@ test('only an authenticated professional can search without passing identity to 
   }), {results: []});
   for (const rejected of [
     {...input, db: db({volunteer: false})},
-    {...input, db: db({role: true})},
-    {...input, db: db({administrator: true})},
     {...input, db: db(), isAnonymous: true},
     {...input, db: db(), data: {query: 'alice@example.fr'}},
     {...input, db: db(), data: {query: '10123456789'}},

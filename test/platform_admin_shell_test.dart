@@ -14,10 +14,12 @@ import 'package:interface_incendies_gironde/models/platform_administrator_access
 import 'package:interface_incendies_gironde/models/responsible_account.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/models/user_display_identity.dart';
+import 'package:interface_incendies_gironde/models/volunteer_profile.dart';
 import 'package:interface_incendies_gironde/perspective/cross_role_perspective.dart';
 import 'package:interface_incendies_gironde/repositories/mock_coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
 import 'package:interface_incendies_gironde/repositories/location_read_repository.dart';
+import 'package:interface_incendies_gironde/repositories/live_data_scope.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_administration_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
@@ -271,6 +273,79 @@ void main() {
     expect(find.byType(ProfessionalShell), findsNothing);
     expect(find.text('Administrateur MobSanté'), findsOneWidget);
     expect(find.text('Préparez et pilotez les mobilisations.'), findsOneWidget);
+  });
+
+  testWidgets('Admin remains available when the management role read fails', (
+    tester,
+  ) async {
+    await _pumpPlatformAdmin(tester, repository: _AccessErrorRepository());
+    expect(find.byType(PlatformAdminShell), findsOneWidget);
+    expect(find.byType(ProfessionalShell), findsNothing);
+  });
+
+  testWidgets('one multi-role identity switches real perspectives on iPhone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _MultiRoleIdentityRepository();
+    await tester.pumpWidget(
+      FireCoordinationApp(
+        repository: repository,
+        platformRuntime: _runtime(
+          administrator: const PlatformAdministratorAccess(
+            uid: 'multi-role-user',
+            active: true,
+          ),
+          contextStream: Stream<MobilizationContext?>.value(
+            const MobilizationContext(
+              mobilizationId: 'incendies-gironde-2026',
+              territoryId: 'gironde',
+              status: MobilizationStatus.active,
+            ),
+          ).asBroadcastStream(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(PlatformAdminShell), findsOneWidget);
+    expect(find.byKey(const Key('actual-perspective-picker')), findsOneWidget);
+
+    Future<void> choose(String perspective) async {
+      await tester.tap(find.byKey(const Key('actual-perspective-picker')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(Key('actual-perspective-$perspective')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    await choose('professional');
+    expect(find.byType(ProfessionalShell), findsOneWidget);
+    expect(find.byKey(const Key('cross-role-preview-banner')), findsNothing);
+    final professionalData = LiveCoordinationDataScope.of(
+      tester.element(find.byType(ProfessionalShell)),
+    );
+    expect(
+      await tester.runAsync(
+        () => professionalData.watchResponsibleAccess().first,
+      ),
+      isNull,
+    );
+    tester
+        .widget<V5BottomNavigation>(find.byType(V5BottomNavigation))
+        .onDestinationSelected(2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('open-responsible-access')), findsNothing);
+    await choose('coordinator');
+    expect(find.byType(CoordinatorShell), findsOneWidget);
+    await choose('responsible');
+    expect(find.byType(ResponsibleShell), findsOneWidget);
+    await choose('platformAdmin');
+    expect(find.byType(PlatformAdminShell), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -1241,6 +1316,41 @@ Future<void> _pumpPlatformAdmin(
     ),
   );
   if (settle) await tester.pumpAndSettle();
+}
+
+class _AccessErrorRepository extends MockCoordinationRepository {
+  @override
+  Stream<ResponsibleAccess?> watchResponsibleAccess() =>
+      Stream.error(StateError('management role unavailable'));
+}
+
+class _MultiRoleIdentityRepository extends MockCoordinationRepository
+    implements AdministrativeIdentityReadRepository {
+  _MultiRoleIdentityRepository()
+    : super(
+        volunteerUid: 'multi-role-user',
+        responsibleAccess: ResponsibleAccess.v2(
+          uid: 'multi-role-user',
+          roles: const [
+            ResponsibleRole.coordinator,
+            ResponsibleRole.siteManager,
+          ],
+          locationIds: {places.first.id},
+          active: true,
+        ),
+        initialProfiles: const {
+          'multi-role-user': VolunteerProfile(
+            uid: 'multi-role-user',
+            firstName: 'Test',
+            lastName: 'Multi',
+            phone: '',
+            profession: VolunteerProfession.mk,
+          ),
+        },
+      );
+
+  @override
+  Stream<String?> watchAdministrativeUid() => Stream.value('multi-role-user');
 }
 
 class _RecordingCoordinationRepository extends MockCoordinationRepository {
