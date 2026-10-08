@@ -18,6 +18,7 @@ class CoordinatorMoreScreen extends StatefulWidget {
     required this.onOpenSettings,
     required this.onOpenProfile,
     required this.onOpenNotifications,
+    this.onOpenHistory,
     required this.onSignOut,
   });
 
@@ -25,6 +26,7 @@ class CoordinatorMoreScreen extends StatefulWidget {
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenNotifications;
+  final VoidCallback? onOpenHistory;
   final Future<void> Function() onSignOut;
 
   @override
@@ -76,6 +78,7 @@ class _CoordinatorMoreScreenState extends State<CoordinatorMoreScreen> {
           onOpenSettings: widget.onOpenSettings,
           onOpenProfile: widget.onOpenProfile,
           onOpenNotifications: widget.onOpenNotifications,
+          onOpenHistory: widget.onOpenHistory,
           onSignOut: _signOut,
         );
       },
@@ -91,6 +94,7 @@ class _CoordinatorMoreContent extends StatelessWidget {
     required this.onOpenSettings,
     required this.onOpenProfile,
     required this.onOpenNotifications,
+    required this.onOpenHistory,
     required this.onSignOut,
   });
 
@@ -100,6 +104,7 @@ class _CoordinatorMoreContent extends StatelessWidget {
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenNotifications;
+  final VoidCallback? onOpenHistory;
   final VoidCallback onSignOut;
 
   @override
@@ -144,6 +149,13 @@ class _CoordinatorMoreContent extends StatelessWidget {
                         label: 'Notifications',
                         onTap: onOpenNotifications,
                       ),
+                      if (onOpenHistory != null)
+                        _MoreRow(
+                          key: const Key('coordinator-action-history'),
+                          icon: Icons.history_rounded,
+                          label: 'Historique des Actions',
+                          onTap: onOpenHistory!,
+                        ),
                       _MoreRow(
                         key: const Key('coordinator-profile'),
                         icon: Icons.person_outline_rounded,

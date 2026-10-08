@@ -57,9 +57,26 @@ class OrganizationScopedOperationReadRepository
             ? (delegate as OrganizationOperationReadRepository)
                   .watchOperationsForOrganization(
                     organizationId,
-                    statuses: statuses,
+                    statuses:
+                        statuses ??
+                        const {
+                          OperationStatus.draft,
+                          OperationStatus.planned,
+                          OperationStatus.active,
+                          OperationStatus.suspended,
+                        },
                   )
-            : delegate.watchOperations(statuses: statuses);
+            : delegate.watchOperations(
+                statuses:
+                    statuses ??
+                    (context?.isPlatformAdministrator == true ||
+                            delegate is! OrganizationOperationReadRepository
+                        ? null
+                        : const {
+                            OperationStatus.planned,
+                            OperationStatus.active,
+                          }),
+              );
         return source.map(
           (operations) => List<Operation>.unmodifiable(
             operations.where(

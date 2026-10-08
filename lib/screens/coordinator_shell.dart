@@ -16,6 +16,7 @@ import 'admin_invitations_screen.dart';
 import 'coordinator_actors_screen.dart';
 import 'coordinator_cockpit_screen.dart';
 import 'coordinator_more_screen.dart';
+import 'historical_action_missions_screen.dart';
 import 'coordinator_published_needs.dart';
 import 'coordinator_territory_screen.dart';
 import 'coordination_screen.dart';
@@ -83,6 +84,7 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
       onOpenSettings: _openSettings,
       onOpenProfile: _openProfile,
       onOpenNotifications: _openNotifications,
+      onOpenHistory: _openHistory,
       onSignOut: _signOut,
     ),
     _ => throw RangeError.index(index, _screens),
@@ -169,6 +171,21 @@ class _CoordinatorShellState extends State<CoordinatorShell> {
   void _openLocations() {
     Navigator.of(context).push(
       AppPageRoute<void>(builder: (_) => const LocationAdministrationScreen()),
+    );
+  }
+
+  void _openHistory() {
+    final liveData = LiveCoordinationDataScope.of(context);
+    Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) => LiveCoordinationDataScope(
+          data: liveData,
+          child: Scaffold(
+            appBar: AppBar(title: const Text('Historique')),
+            body: const SafeArea(child: HistoricalActionMissionsScreen()),
+          ),
+        ),
+      ),
     );
   }
 

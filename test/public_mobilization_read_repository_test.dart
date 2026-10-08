@@ -4,6 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/repositories/public_mobilization_read_repository.dart';
 
 void main() {
+  test('la requête publique demande seulement planned et active', () {
+    expect(
+      FirestorePublicMobilizationReadDataSource.publishedOperationStatuses,
+      const ['planned', 'active'],
+    );
+  });
+
   group('PublicMobilizationReadRepository', () {
     test(
       'agrège uniquement les mobilisations des opérations platform',

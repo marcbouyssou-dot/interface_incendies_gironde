@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../models/need.dart';
+import '../models/operation.dart';
 import '../models/mission_equipment.dart';
 import '../models/profession_quotas.dart';
 import '../models/responsible_access.dart';
@@ -48,6 +49,51 @@ abstract interface class OrganizationEngagementReadDataSource {
 /// périmètre. Le flux doit réévaluer cet accès quand le contexte change.
 abstract interface class MissionAccessReadRepository {
   Stream<CoordinationNeed?> watchAccessibleMission(String missionId);
+}
+
+/// A professional's own engagement records, resolved to individual missions.
+/// Implementations must query by the authenticated UID before fetching each
+/// mission; this is never an Action-wide mission list.
+abstract interface class ProfessionalEngagementHistoryReadRepository {
+  Stream<List<ProfessionalEngagementRecord>> watchOwnEngagementRecords();
+}
+
+class ProfessionalEngagementRecord {
+  const ProfessionalEngagementRecord({
+    required this.mission,
+    required this.engagement,
+  });
+
+  final CoordinationNeed mission;
+  final EngagementInfo engagement;
+}
+
+/// Historical R/C reads are backed by explicit Action grants, independent of
+/// the current global role and the active mobilization selector.
+abstract interface class HistoricalActionMissionReadRepository {
+  Stream<List<HistoricalActionMission>> watchHistoricalActionMissions();
+}
+
+/// Administrative history includes inactive and cancelled missions. Its
+/// caller must still constrain the requested mobilizations by authorization.
+abstract interface class HistoricalMobilizationMissionReadRepository {
+  Stream<List<CoordinationNeed>> watchHistoricalMissionsForMobilizations(
+    Set<String> mobilizationIds,
+  );
+}
+
+class HistoricalActionMission {
+  const HistoricalActionMission({
+    required this.operationId,
+    required this.operationName,
+    required this.operationStatus,
+    required this.mission,
+  });
+
+  final String operationId;
+  final String operationName;
+  final OperationStatus operationStatus;
+  final CoordinationNeed mission;
 }
 
 /// Lecture ciblée de l'abonnement Push de l'installation courante.

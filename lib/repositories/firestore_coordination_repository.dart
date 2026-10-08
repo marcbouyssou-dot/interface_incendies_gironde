@@ -10,6 +10,7 @@ import '../models/health_profession.dart';
 import '../models/app_notification.dart';
 import '../models/mobilization_context.dart';
 import '../models/mobilization.dart';
+import '../models/operation.dart';
 import '../models/need.dart';
 import '../models/site_equipment.dart';
 import '../models/platform_administrator_access.dart';
@@ -245,6 +246,9 @@ class FirestoreCoordinationRepository
         AdministrativeIdentityReadRepository,
         OrganizationEngagementReadDataSource,
         OrganizationLocationReadDataSource,
+        ProfessionalEngagementHistoryReadRepository,
+        HistoricalActionMissionReadRepository,
+        HistoricalMobilizationMissionReadRepository,
         MultiMobilizationCoordinationReadRepository,
         MobilizationLocationMissionReadRepository,
         MultiMobilizationCoordinationMutationRepository,
@@ -576,6 +580,38 @@ class FirestoreCoordinationRepository
     final ids = _validatedQueryIds(mobilizationIds, 'mobilisation');
     if (ids.isEmpty) return Stream<List<CoordinationNeed>>.value(const []);
     return _watchMissionsInMobilizationBatches(_responsibleFirestore, ids);
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchHistoricalMissionsForMobilizations(
+    Set<String> mobilizationIds,
+  ) {
+    final ids = _validatedQueryIds(mobilizationIds, 'mobilisation');
+    if (ids.isEmpty) return Stream.value(const []);
+    return _combineMissionStreams(
+      _batchesOf(ids, 30).map((batch) {
+        final allowedIds = batch.toSet();
+        return _responsibleFirestore
+            .collection('missions')
+            .where('mobilizationId', whereIn: batch)
+            .snapshots()
+            .map((snapshot) {
+              final missions = snapshot.docs
+                  .where(
+                    (document) =>
+                        allowedIds.contains(document.data()['mobilizationId']),
+                  )
+                  .map(
+                    (document) => FirestoreMissionMapper.fromFirestore(
+                      id: document.id,
+                      data: document.data(),
+                    ),
+                  )
+                  .toList(growable: false);
+              return missions;
+            });
+      }),
+    );
   }
 
   @override
@@ -1050,6 +1086,185 @@ class FirestoreCoordinationRepository
               createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
               updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
             );
+          });
+    });
+  }
+
+  @override
+  Stream<List<ProfessionalEngagementRecord>> watchOwnEngagementRecords() {
+    return switchLatest(_auth.authStateChanges(), (user) {
+      if (user == null || !user.isAnonymous) {
+        return Stream<List<ProfessionalEngagementRecord>>.value(const []);
+      }
+      return _firestore
+          .collection('engagements')
+          .where('volunteerId', isEqualTo: user.uid)
+          .snapshots()
+          .asyncMap((snapshot) async {
+            final records = await Future.wait(
+              snapshot.docs.map((document) async {
+                final data = document.data();
+                final missionId = data['missionId'];
+                if (missionId is! String ||
+                    missionId.isEmpty ||
+                    missionId.contains('/') ||
+                    document.id != '${missionId}_${user.uid}' ||
+                    data['volunteerId'] != user.uid) {
+                  throw const RepositoryException('Engagement invalide.');
+                }
+                final missionSnapshot = await _firestore
+                    .collection('missions')
+                    .doc(missionId)
+                    .get();
+                final missionData = missionSnapshot.data();
+                if (missionData == null ||
+                    missionData['mobilizationId'] != data['mobilizationId']) {
+                  throw const RepositoryException('Historique incohérent.');
+                }
+                final profession = data['profession'];
+                if (profession is! String) {
+                  throw const RepositoryException('Engagement invalide.');
+                }
+                return ProfessionalEngagementRecord(
+                  mission: FirestoreMissionMapper.fromFirestore(
+                    id: missionId,
+                    data: missionData,
+                  ),
+                  engagement: EngagementInfo(
+                    missionId: missionId,
+                    volunteerId: user.uid,
+                    profession: volunteerProfessionFromId(profession),
+                    status: _engagementStatus(data['status']),
+                    createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+                    updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+                  ),
+                );
+              }),
+            );
+            records.sort((a, b) {
+              final left = a.mission.startAt ?? DateTime(9999);
+              final right = b.mission.startAt ?? DateTime(9999);
+              return left.compareTo(right);
+            });
+            return List<ProfessionalEngagementRecord>.unmodifiable(records);
+          });
+    });
+  }
+
+  @override
+  Stream<List<HistoricalActionMission>> watchHistoricalActionMissions() {
+    return switchLatest(_responsibleAuth.authStateChanges(), (user) {
+      if (user == null || user.isAnonymous) {
+        return Stream<List<HistoricalActionMission>>.value(const []);
+      }
+      return _responsibleFirestore
+          .collection('historicalActionAccess')
+          .where('uid', isEqualTo: user.uid)
+          .where('active', isEqualTo: true)
+          .snapshots()
+          .asyncMap((snapshot) async {
+            final records = <HistoricalActionMission>[];
+            for (final grantSnapshot in snapshot.docs) {
+              final grant = grantSnapshot.data();
+              final operationId = grant['operationId'];
+              final roles = grant['roles'];
+              final locations = grant['locationIds'];
+              if (operationId is! String ||
+                  operationId.isEmpty ||
+                  operationId.contains('/') ||
+                  grantSnapshot.id != '${operationId}_${user.uid}' ||
+                  roles is! List ||
+                  locations is! List ||
+                  grant['uid'] != user.uid) {
+                throw const RepositoryException('Accès historique invalide.');
+              }
+              final coordinator = roles.contains('coordinator');
+              final siteManager = roles.contains('site_manager');
+              final locationIds = locations.whereType<String>().toSet();
+              if (!coordinator && (!siteManager || locationIds.isEmpty)) {
+                continue;
+              }
+              final operationSnapshot = await _responsibleFirestore
+                  .collection('operations')
+                  .doc(operationId)
+                  .get();
+              final operation = operationSnapshot.data();
+              if (operation == null) continue;
+              final status = operationStatusFromValue(operation['status']);
+              if (status != OperationStatus.completed &&
+                  status != OperationStatus.archived) {
+                continue;
+              }
+              final name = operation['name'];
+              if (name is! String || name.isEmpty) {
+                throw const RepositoryException('Action historique invalide.');
+              }
+              final mobilizations = await _responsibleFirestore
+                  .collection('mobilizations')
+                  .where('operationId', isEqualTo: operationId)
+                  .get();
+              for (final mobilization in mobilizations.docs) {
+                final queries = coordinator
+                    ? [
+                        _responsibleFirestore
+                            .collection('missions')
+                            .where(
+                              'mobilizationId',
+                              isEqualTo: mobilization.id,
+                            ),
+                      ]
+                    : [
+                        for (
+                          var offset = 0;
+                          offset < locationIds.length;
+                          offset += 30
+                        )
+                          _responsibleFirestore
+                              .collection('missions')
+                              .where(
+                                'mobilizationId',
+                                isEqualTo: mobilization.id,
+                              )
+                              .where(
+                                'locationId',
+                                whereIn: locationIds
+                                    .skip(offset)
+                                    .take(30)
+                                    .toList(),
+                              ),
+                      ];
+                for (final query in queries) {
+                  final missions = await query.get();
+                  for (final document in missions.docs) {
+                    final data = document.data();
+                    if (data['mobilizationId'] != mobilization.id ||
+                        (!coordinator &&
+                            !locationIds.contains(data['locationId']))) {
+                      throw const RepositoryException(
+                        'Mission historique hors périmètre.',
+                      );
+                    }
+                    records.add(
+                      HistoricalActionMission(
+                        operationId: operationId,
+                        operationName: name,
+                        operationStatus: status,
+                        mission: FirestoreMissionMapper.fromFirestore(
+                          id: document.id,
+                          data: data,
+                        ),
+                      ),
+                    );
+                  }
+                }
+              }
+            }
+            records.sort((a, b) {
+              final left = a.mission.startAt ?? DateTime(9999);
+              final right = b.mission.startAt ?? DateTime(9999);
+              return right.compareTo(left);
+            });
+            return List<HistoricalActionMission>.unmodifiable(records);
           });
     });
   }

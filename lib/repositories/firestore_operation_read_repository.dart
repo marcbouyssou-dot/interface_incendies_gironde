@@ -21,24 +21,31 @@ class FirestoreOperationReadRepository
     }
     // Le filtre d'organisation fait partie de la requête : les règles
     // Firestore ne filtrent pas une collection lue globalement.
-    return _firestore
+    Query<Map<String, dynamic>> query = _firestore
         .collection('operations')
-        .where('ownerOrganizationId', isEqualTo: organizationId)
-        .snapshots()
-        .map((snapshot) {
-          final operations = snapshot.docs
-              .map((document) => _fromDocument(document.id, document.data()))
-              .where(
-                (operation) =>
-                    statuses == null || statuses.contains(operation.status),
-              )
-              .toList(growable: false);
-          operations.sort((left, right) {
-            final byDate = left.startAt.compareTo(right.startAt);
-            return byDate != 0 ? byDate : left.name.compareTo(right.name);
-          });
-          return operations;
-        });
+        .where('ownerOrganizationId', isEqualTo: organizationId);
+    final serializedStatuses = statuses
+        ?.map((status) => status.serializedValue)
+        .toList(growable: false);
+    if (serializedStatuses != null && serializedStatuses.isNotEmpty) {
+      query = serializedStatuses.length == 1
+          ? query.where('status', isEqualTo: serializedStatuses.single)
+          : query.where('status', whereIn: serializedStatuses);
+    }
+    return query.snapshots().map((snapshot) {
+      final operations = snapshot.docs
+          .map((document) => _fromDocument(document.id, document.data()))
+          .where(
+            (operation) =>
+                statuses == null || statuses.contains(operation.status),
+          )
+          .toList(growable: false);
+      operations.sort((left, right) {
+        final byDate = left.startAt.compareTo(right.startAt);
+        return byDate != 0 ? byDate : left.name.compareTo(right.name);
+      });
+      return operations;
+    });
   }
 
   @override

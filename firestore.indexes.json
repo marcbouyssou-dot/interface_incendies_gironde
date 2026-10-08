@@ -27,6 +27,30 @@
       ]
     },
     {
+      "collectionGroup": "missions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "mobilizationId", "order": "ASCENDING"},
+        {"fieldPath": "locationId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "historicalActionAccess",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "uid", "order": "ASCENDING"},
+        {"fieldPath": "active", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "organizationMemberships",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "organizationId", "order": "ASCENDING"},
+        {"fieldPath": "roles", "arrayConfig": "CONTAINS"}
+      ]
+    },
+    {
       "collectionGroup": "operations",
       "queryScope": "COLLECTION",
       "fields": [
@@ -39,6 +63,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         {"fieldPath": "visibility", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "operations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "ownerOrganizationId", "order": "ASCENDING"},
         {"fieldPath": "status", "order": "ASCENDING"}
       ]
     },

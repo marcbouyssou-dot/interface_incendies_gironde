@@ -177,3 +177,17 @@ test('publication captures site inventory and preserves absent versus empty', ()
   site.availableEquipment = ['stethoscope'];
   assert.deepEqual(published.availableEquipmentOnSite, ['massage_table']);
 });
+
+test('closed or missing parent Action blocks mission creation', () => {
+  const mobilization = {
+    id: 'incendies-gironde-2026', status: 'active', operationId: 'action-a',
+  };
+  for (const status of ['completed', 'archived', 'suspended', 'planned']) {
+    assertCode(() => mutation({
+      mobilization, operation: {id: 'action-a', status},
+    }), 'failed-precondition');
+  }
+  assertCode(() => mutation({mobilization}), 'failed-precondition');
+  assert.equal(mutation({mobilization,
+    operation: {id: 'action-a', status: 'active'}}).fields.id.length > 0, true);
+});

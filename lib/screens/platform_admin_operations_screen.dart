@@ -105,7 +105,16 @@ class _PlatformAdminOperationsScreenState
 
   @override
   Widget build(BuildContext context) => StreamBuilder<List<Operation>>(
-    stream: widget.operationRepository.watchOperations(),
+    stream: widget.operationRepository.watchOperations(
+      statuses: const {
+        OperationStatus.draft,
+        OperationStatus.planned,
+        OperationStatus.active,
+        OperationStatus.suspended,
+        OperationStatus.completed,
+        OperationStatus.archived,
+      },
+    ),
     builder: (context, operationSnapshot) => StreamBuilder<List<Mobilization>>(
       stream: widget.platformRepository.watchMobilizations(
         includeInactive: true,

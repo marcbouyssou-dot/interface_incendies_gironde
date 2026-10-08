@@ -96,6 +96,10 @@ class RepositoryPlatformAdminHistoryDataSource
         unawaited(missionSubscription?.cancel());
         final stream = missionRepository == null || mobilizationIds.isEmpty
             ? Stream<List<CoordinationNeed>>.value(const [])
+            : missionRepository is HistoricalMobilizationMissionReadRepository
+            ? (missionRepository!
+                      as HistoricalMobilizationMissionReadRepository)
+                  .watchHistoricalMissionsForMobilizations(mobilizationIds)
             : missionRepository!.watchMissionsForMobilizations(mobilizationIds);
         missionSubscription = stream.listen((value) {
           if (generation != missionGeneration) return;

@@ -14,6 +14,7 @@ import 'platform_read_repository.dart';
 class OrganizationScopedMissionReadRepository
     implements
         MultiMobilizationCoordinationReadRepository,
+        HistoricalMobilizationMissionReadRepository,
         MobilizationLocationMissionReadRepository,
         MissionAccessReadRepository {
   const OrganizationScopedMissionReadRepository({
@@ -106,6 +107,29 @@ class OrganizationScopedMissionReadRepository
             .toSet();
         return _watchMissionsForAccessibleMobilizations(accessibleIds);
       },
+    );
+  }
+
+  @override
+  Stream<List<CoordinationNeed>> watchHistoricalMissionsForMobilizations(
+    Set<String> mobilizationIds,
+  ) {
+    final delegate = _delegate;
+    final platformRepository = _platformRepository;
+    if (delegate is! HistoricalMobilizationMissionReadRepository ||
+        platformRepository is! MobilizationLookupRepository) {
+      return Stream.error(StateError('Historique des missions indisponible.'));
+    }
+    return switchLatest(
+      _watchReadableMobilizationIds(
+        platformRepository as MobilizationLookupRepository,
+        mobilizationIds,
+      ),
+      (readableIds) => readableIds.isEmpty
+          ? Stream<List<CoordinationNeed>>.value(const [])
+          : (delegate as HistoricalMobilizationMissionReadRepository)
+                .watchHistoricalMissionsForMobilizations(readableIds)
+                .map((missions) => _filterMissions(missions, readableIds)),
     );
   }
 

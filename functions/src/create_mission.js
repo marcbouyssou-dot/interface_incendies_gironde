@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 
 import {parseResponsibleAccess} from './responsible_access.js';
+import {operationAllowsOperationalMutation} from './operation_activity.js';
 import {globalMissionEquipmentLabels, normalizeMissionEquipment} from './mission_equipment.js';
 import {normalizeSiteEquipment, SiteEquipmentError} from './site_equipment.js';
 import {
@@ -88,13 +89,15 @@ export function missionCreateMutation({
   coordinatorAuthorized,
   organizationAuthorized,
   mobilization,
+  operation = null,
   location,
   serverTimestamp,
   timestampFromMillis,
 }) {
   if (!isPlainObject(mobilization)
       || mobilization.id !== request.mobilizationId
-      || mobilization.status !== 'active') {
+      || mobilization.status !== 'active'
+      || !operationAllowsOperationalMutation(mobilization, operation)) {
     throw new MissionWriteError('failed-precondition', 'Mobilisation inactive.');
   }
   let access;

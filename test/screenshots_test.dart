@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interface_incendies_gironde/app.dart';
+import 'package:interface_incendies_gironde/config/app_identity.dart';
 import 'package:interface_incendies_gironde/widgets/v5_bottom_navigation.dart';
 
 void main() {
@@ -9,6 +10,13 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(const FireCoordinationApp());
+    final context = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await Future.wait([
+        precacheImage(AssetImage(AppIdentity.pictogramAsset), context),
+        precacheImage(AssetImage(AppIdentity.mobilizationSymbolAsset), context),
+      ]);
+    });
     await tester.pumpAndSettle();
     if (tab != null) {
       await tester.tap(

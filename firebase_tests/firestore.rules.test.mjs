@@ -4760,10 +4760,12 @@ test('RC4.3D: site manager membership is limited to declared organization sites'
   await assertSucceeds(getDocs(query(
     collection(managerDb, 'operations'),
     where('ownerOrganizationId', '==', 'organization-a'),
+    where('status', 'in', ['draft', 'planned', 'active', 'suspended']),
   )));
   await assertFails(getDocs(query(
     collection(managerDb, 'operations'),
     where('ownerOrganizationId', '==', 'organization-b'),
+    where('status', 'in', ['draft', 'planned', 'active', 'suspended']),
   )));
   await assertSucceeds(getDocs(query(
     collection(managerDb, 'mobilizations'),
@@ -4872,10 +4874,12 @@ test('RC4.2G: organization member is isolated across the complete parent chain',
   await assertSucceeds(getDocs(query(
     collection(memberDb, 'operations'),
     where('ownerOrganizationId', '==', 'organization-a'),
+    where('status', 'in', ['draft', 'planned', 'active', 'suspended']),
   )));
   await assertFails(getDocs(query(
     collection(memberDb, 'operations'),
     where('ownerOrganizationId', '==', 'organization-b'),
+    where('status', 'in', ['draft', 'planned', 'active', 'suspended']),
   )));
 
   await assertSucceeds(getDoc(doc(memberDb, 'mobilizations/mobilization-a')));
@@ -5223,7 +5227,7 @@ test('RC4.3E: platform mission uses its embedded site projection only', async ()
   await assertFails(getDoc(doc(db('verified-discovery'), 'locations/site-a')));
 });
 
-test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', async () => {
+test('004H1: public Action query excludes closed and suspended states', async () => {
   await seedMultiOrganizationCore();
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
@@ -5251,6 +5255,22 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
       ownerOrganizationId: 'organization-b',
       visibility: 'public',
     });
+    for (const status of ['suspended', 'completed', 'archived']) {
+      await setDoc(doc(admin, `operations/operation-${status}`), {
+        id: `operation-${status}`,
+        name: `Opération ${status}`,
+        type: 'emergency',
+        status,
+        ownerOrganizationId: 'organization-b',
+        visibility: 'platform',
+      });
+      await setDoc(doc(admin, `mobilizations/mobilization-${status}`), {
+        id: `mobilization-${status}`,
+        territoryId: 'gironde',
+        status: 'active',
+        operationId: `operation-${status}`,
+      });
+    }
     await setDoc(doc(admin, 'mobilizations/mobilization-platform-2'), {
       id: 'mobilization-platform-2',
       territoryId: 'gironde',
@@ -5283,12 +5303,25 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
   const operationSnapshot = await assertSucceeds(getDocs(query(
     collection(publicDb, 'operations'),
     where('visibility', '==', 'platform'),
-    where('status', 'in', ['planned', 'active', 'suspended', 'completed']),
+    where('status', 'in', ['planned', 'active']),
   )));
   assert.deepEqual(
     operationSnapshot.docs.map((snapshot) => snapshot.id).sort(),
     ['operation-a', 'operation-platform-2'],
   );
+  await assertFails(getDocs(query(
+    collection(publicDb, 'operations'),
+    where('visibility', '==', 'platform'),
+    where('status', 'in', ['planned', 'active', 'suspended', 'completed']),
+  )));
+  for (const status of ['suspended', 'completed', 'archived']) {
+    await assertFails(getDoc(doc(publicDb, `operations/operation-${status}`)));
+    await assertFails(getDocs(query(
+      collection(publicDb, 'operations'),
+      where('visibility', '==', 'platform'),
+      where('status', '==', status),
+    )));
+  }
 
   const mobilizationSnapshot = await assertSucceeds(getDocs(query(
     collection(publicDb, 'mobilizations'),
@@ -5300,7 +5333,10 @@ test('HOTFIX RC4.3: public flow is bounded by explicit platform operations', asy
     ['mobilization-a', 'mobilization-platform-2'],
   );
 
-  for (const operationId of ['operation-b', 'operation-public']) {
+  for (const operationId of [
+    'operation-b', 'operation-public',
+    'operation-suspended', 'operation-completed', 'operation-archived',
+  ]) {
     await assertFails(getDocs(query(
       collection(publicDb, 'mobilizations'),
       where('operationId', '==', operationId),
@@ -5369,3 +5405,290 @@ test('mobilizations: an assigned coordinator can get its mobilization and read i
     where('status', '==', 'active'),
   )));
 });
+
+async function seedHistoricalActions(status) {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'organizations/urps-fixture'),
+      organization('urps-fixture', {name: 'URPS MK Nouvelle-Aquitaine'}));
+    await setDoc(doc(admin, 'platformAdministrators/history-admin'),
+      {active: true});
+    await setDoc(doc(admin, 'volunteers/history-professional'),
+      verifiedVolunteer('history-professional'));
+    await setDoc(doc(admin, 'volunteers/history-unverified'),
+      volunteer('history-unverified'));
+    await setDoc(doc(admin, 'volunteers/history-new'),
+      verifiedVolunteer('history-new'));
+    for (const [action, mobilization, location] of [
+      ['incendies-gironde-fixture', 'fire-fixture', 'fire-site'],
+      ['flood-action-fixture', 'flood-fixture', 'flood-site'],
+    ]) {
+      await setDoc(doc(admin, `operations/${action}`), {
+        id: action, name: action, type: 'natural_disaster', status,
+        ownerOrganizationId: 'urps-fixture', visibility: 'organization_private',
+      });
+      await setDoc(doc(admin, `mobilizations/${mobilization}`), {
+        id: mobilization, operationId: action, territoryId: 'gironde',
+        status: status === 'completed' ? 'inactive' : 'archived',
+      });
+      await setDoc(doc(admin, `locations/${location}`), {
+        id: location, name: location, isActive: true,
+        managingOrganizationId: 'urps-fixture',
+      });
+      await setDoc(doc(admin, `missions/${action}`), mission({
+        id: action, mobilizationId: mobilization, locationId: location,
+        locationName: location, isActive: false,
+      }));
+      await setDoc(doc(admin,
+        `engagements/${action}_${action === 'incendies-gironde-fixture'
+          ? 'history-professional' : 'other-professional'}`), {
+        missionId: action, mobilizationId: mobilization,
+        volunteerId: action === 'incendies-gironde-fixture'
+          ? 'history-professional' : 'other-professional',
+        profession: 'mk', status: 'confirmed',
+      });
+    }
+    await setDoc(doc(admin,
+      'engagements/incendies-gironde-fixture_history-unverified'), {
+      missionId: 'incendies-gironde-fixture', mobilizationId: 'fire-fixture',
+      volunteerId: 'history-unverified', profession: 'mk', status: 'confirmed',
+    });
+    await setDoc(doc(admin, 'locations/fire-other-site'), {
+      id: 'fire-other-site', name: 'fire-other-site', isActive: true,
+      managingOrganizationId: 'urps-fixture',
+    });
+    await setDoc(doc(admin, 'missions/fire-other-need'), mission({
+      id: 'fire-other-need', mobilizationId: 'fire-fixture',
+      locationId: 'fire-other-site', locationName: 'fire-other-site',
+      isActive: false,
+    }));
+    for (const [uid, roles, locationIds] of [
+      ['history-manager', ['site_manager'], ['fire-site']],
+      ['history-coordinator', ['coordinator'], []],
+    ]) {
+      await setDoc(doc(admin, `roles/${uid}`), {
+        role: roles[0], roles, locationIds, active: true, schemaVersion: 2,
+      });
+      await setDoc(doc(admin, `organizationMemberships/urps-fixture_${uid}`),
+        organizationMembership('urps-fixture', uid, {
+          roles, locationIds,
+        }));
+      await setDoc(doc(admin,
+        `historicalActionAccess/incendies-gironde-fixture_${uid}`), {
+        uid, operationId: 'incendies-gironde-fixture', roles,
+        locationIds, active: true, schemaVersion: 1,
+      });
+    }
+  });
+}
+
+for (const status of ['completed', 'archived']) {
+  test(`BETA-READY-004C: ${status} historical Action is read-only and scoped`,
+    async () => {
+      await seedHistoricalActions(status);
+      const actionA = 'incendies-gironde-fixture';
+      const actionB = 'flood-action-fixture';
+      const professional = db('history-professional');
+      const manager = db('history-manager');
+      const coordinator = db('history-coordinator');
+      const admin = db('history-admin');
+      const anonymous = db();
+
+      await assertSucceeds(getDoc(doc(professional,
+        `engagements/${actionA}_history-professional`)));
+      await assertSucceeds(getDoc(doc(professional, `missions/${actionA}`)));
+      await assertFails(getDoc(doc(professional, `missions/${actionB}`)));
+      await assertFails(getDoc(doc(professional,
+        `engagements/${actionB}_other-professional`)));
+      const ownEngagements = await assertSucceeds(getDocs(query(
+        collection(professional, 'engagements'),
+        where('volunteerId', '==', 'history-professional'),
+      )));
+      assert.deepEqual(ownEngagements.docs.map((value) => value.id),
+        [`${actionA}_history-professional`]);
+
+      for (const authorized of [manager, coordinator]) {
+        const uid = authorized === manager
+          ? 'history-manager' : 'history-coordinator';
+        const grants = await assertSucceeds(getDocs(query(
+          collection(authorized, 'historicalActionAccess'),
+          where('uid', '==', uid),
+          where('active', '==', true),
+        )));
+        assert.equal(grants.size, 1);
+        await assertSucceeds(getDoc(doc(authorized,
+          `operations/${actionA}`)));
+        await assertFails(getDoc(doc(authorized,
+          `operations/${actionB}`)));
+        const mobilizations = await assertSucceeds(getDocs(query(
+          collection(authorized, 'mobilizations'),
+          where('operationId', '==', actionA),
+        )));
+        assert.equal(mobilizations.size, 1);
+        const missions = await assertSucceeds(getDocs(query(
+          collection(authorized, 'missions'),
+          where('mobilizationId', '==', 'fire-fixture'),
+          ...(authorized === manager
+            ? [where('locationId', 'in', ['fire-site'])] : []),
+        )));
+        assert.equal(missions.size, authorized === manager ? 1 : 2);
+        await assertSucceeds(getDoc(doc(authorized, `missions/${actionA}`)));
+        if (authorized === manager) {
+          await assertFails(getDoc(doc(authorized, 'missions/fire-other-need')));
+        } else {
+          await assertSucceeds(getDoc(doc(authorized, 'missions/fire-other-need')));
+        }
+        await assertFails(getDoc(doc(authorized, `missions/${actionB}`)));
+        await assertSucceeds(getDoc(doc(authorized,
+          `engagements/${actionA}_history-professional`)));
+        await assertFails(getDoc(doc(authorized,
+          `engagements/${actionB}_other-professional`)));
+      }
+      await assertSucceeds(getDoc(doc(admin, `missions/${actionA}`)));
+      await assertSucceeds(getDoc(doc(admin, `missions/${actionB}`)));
+      await assertFails(getDoc(doc(anonymous, `missions/${actionA}`)));
+      await assertFails(getDoc(doc(anonymous,
+        `engagements/${actionA}_history-professional`)));
+      await assertFails(getDoc(doc(db('history-unverified'),
+        `missions/${actionA}`)));
+      await assertFails(getDoc(doc(db('history-unverified'),
+        `engagements/${actionA}_history-unverified`)));
+
+      await assertFails(setDoc(doc(db('history-new'),
+        `engagements/${actionA}_history-new`), {
+        missionId: actionA, mobilizationId: 'fire-fixture',
+        volunteerId: 'history-new', profession: 'mk',
+        status: 'confirmed',
+      }));
+      await assertFails(updateDoc(doc(manager, `missions/${actionA}`), {
+        status: 'cancelled', isActive: false,
+      }));
+      await assertFails(updateDoc(doc(professional,
+        `engagements/${actionA}_history-professional`), {
+        status: 'cancelled',
+      }));
+      const publicDiscovery = await assertSucceeds(getDocs(
+        collection(anonymous, 'publicMissionDiscovery')));
+      assert.equal(publicDiscovery.empty, true);
+    });
+}
+
+test('BETA-READY-004C: revoking a historical grant closes manager reads',
+  async () => {
+    await seedHistoricalActions('archived');
+    const manager = db('history-manager');
+    await assertSucceeds(getDoc(doc(manager,
+      'missions/incendies-gironde-fixture')));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(),
+        'historicalActionAccess/incendies-gironde-fixture_history-manager'), {
+        active: false,
+      });
+    });
+    await assertFails(getDoc(doc(manager,
+      'missions/incendies-gironde-fixture')));
+    await assertFails(getDoc(doc(manager,
+      'operations/incendies-gironde-fixture')));
+  });
+
+test('BETA-READY-004C: a closed Action blocks writes while its mobilization is active',
+  async () => {
+    await seedHistoricalActions('completed');
+    await env.withSecurityRulesDisabled(async (context) => {
+      const admin = context.firestore();
+      await updateDoc(doc(admin, 'operations/incendies-gironde-fixture'), {
+        status: 'active',
+      });
+      await updateDoc(doc(admin, 'mobilizations/fire-fixture'), {
+        status: 'active',
+      });
+    });
+    const manager = db('history-manager');
+    const need = (id) => mission({
+      id, mobilizationId: 'fire-fixture', locationId: 'fire-site',
+      locationName: 'fire-site', createdBy: 'history-manager',
+    });
+    await assertSucceeds(setDoc(doc(manager, 'missions/fire-open-need'),
+      need('fire-open-need')));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(),
+        'operations/incendies-gironde-fixture'), {status: 'completed'});
+    });
+    await assertFails(setDoc(doc(manager, 'missions/fire-closed-need'),
+      need('fire-closed-need')));
+  });
+
+test('BETA-READY-004D: suspended Action freezes writes and discovery but keeps existing reads',
+  async () => {
+    await seedHistoricalActions('completed');
+    await env.withSecurityRulesDisabled(async (context) => {
+      const admin = context.firestore();
+      await updateDoc(doc(admin, 'operations/incendies-gironde-fixture'), {
+        status: 'active', visibility: 'platform',
+      });
+      await updateDoc(doc(admin, 'mobilizations/fire-fixture'), {
+        status: 'active',
+      });
+      await updateDoc(doc(admin, 'missions/incendies-gironde-fixture'), {
+        isActive: true,
+      });
+      for (const uid of ['history-manager', 'history-coordinator']) {
+        await deleteDoc(doc(admin,
+          `historicalActionAccess/incendies-gironde-fixture_${uid}`));
+      }
+    });
+    const involved = db('history-professional');
+    const uninvolved = db('history-new');
+    const manager = db('history-manager');
+    const coordinator = db('history-coordinator');
+    const missionRef = (client) => doc(client,
+      'missions/incendies-gironde-fixture');
+    await assertSucceeds(getDoc(missionRef(uninvolved)));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(),
+        'operations/incendies-gironde-fixture'), {status: 'suspended'});
+    });
+    await assertFails(getDoc(missionRef(uninvolved)));
+    await assertFails(getDocs(query(collection(uninvolved, 'missions'),
+      where('mobilizationId', '==', 'fire-fixture'),
+      where('isActive', '==', true))));
+    await assertSucceeds(getDoc(missionRef(involved)));
+    await assertSucceeds(getDoc(doc(involved,
+      'engagements/incendies-gironde-fixture_history-professional')));
+    await assertSucceeds(getDoc(missionRef(manager)));
+    await assertSucceeds(getDoc(missionRef(coordinator)));
+    await assertSucceeds(getDoc(missionRef(db('history-admin'))));
+    await assertFails(setDoc(doc(uninvolved,
+      'engagements/incendies-gironde-fixture_history-new'), {
+      missionId: 'incendies-gironde-fixture',
+      mobilizationId: 'fire-fixture', volunteerId: 'history-new',
+      profession: 'mk', status: 'confirmed',
+    }));
+    await assertFails(updateDoc(missionRef(manager), {status: 'cancelled'}));
+    for (const client of [involved, manager, coordinator,
+      db('history-admin')]) {
+      await assertFails(setDoc(doc(client,
+        'historicalActionAccess/incendies-gironde-fixture_forged'), {
+        operationId: 'incendies-gironde-fixture', uid: 'forged',
+        roles: ['coordinator'], locationIds: [], active: true,
+        schemaVersion: 1,
+      }));
+    }
+    const grants = await assertSucceeds(getDocs(query(
+      collection(manager, 'historicalActionAccess'),
+      where('uid', '==', 'history-manager'),
+      where('active', '==', true),
+    )));
+    assert.equal(grants.empty, true);
+    await assertFails(getDoc(missionRef(db())));
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(),
+        'operations/incendies-gironde-fixture'), {status: 'active'});
+    });
+    await assertSucceeds(getDoc(missionRef(uninvolved)));
+    assert.equal((await getDocs(query(
+      collection(manager, 'historicalActionAccess'),
+      where('uid', '==', 'history-manager'),
+      where('active', '==', true),
+    ))).empty, true);
+  });

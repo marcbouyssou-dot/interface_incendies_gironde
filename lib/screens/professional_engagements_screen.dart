@@ -30,6 +30,7 @@ class _ProfessionalEngagementsScreenState
   LiveCoordinationData? _liveData;
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
+  Stream<List<ProfessionalEngagementRecord>>? _history;
 
   @override
   void didChangeDependencies() {
@@ -39,36 +40,42 @@ class _ProfessionalEngagementsScreenState
     _liveData = liveData;
     _missions = liveData.watchMissions();
     _locations = liveData.watchLocations();
+    _history = liveData.watchOwnEngagementRecords();
   }
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
       color: context.v5Colors.canvas,
-      child: StreamBuilder<List<CoordinationNeed>>(
-        stream: _missions,
-        builder: (context, missionSnapshot) {
-          if (missionSnapshot.hasError) {
-            return const _EngagementLoadError();
-          }
-          if (!missionSnapshot.hasData) {
+      child: StreamBuilder<List<ProfessionalEngagementRecord>>(
+        stream: _history,
+        builder: (context, historySnapshot) {
+          if (historySnapshot.hasError) return const _EngagementLoadError();
+          if (!historySnapshot.hasData) {
             return const Center(child: V5ActivityIndicator());
           }
-          return StreamBuilder<List<ResponsePlace>>(
-            stream: _locations,
-            builder: (context, locationSnapshot) {
-              if (locationSnapshot.hasError) {
-                return const _EngagementLoadError();
-              }
-              if (!locationSnapshot.hasData) {
-                return const Center(child: V5ActivityIndicator());
-              }
-              return _ProfessionalEngagementCollection(
-                liveData: _liveData!,
-                missions: missionSnapshot.data!,
-                locations: locationSnapshot.data!,
-              );
-            },
+          return StreamBuilder<List<CoordinationNeed>>(
+            stream: _missions,
+            builder: (context, missionSnapshot) =>
+                StreamBuilder<List<ResponsePlace>>(
+                  stream: _locations,
+                  builder: (context, locationSnapshot) {
+                    final operationalError =
+                        missionSnapshot.hasError || locationSnapshot.hasError;
+                    if (!operationalError &&
+                        (!missionSnapshot.hasData ||
+                            !locationSnapshot.hasData)) {
+                      return const Center(child: V5ActivityIndicator());
+                    }
+                    return _ProfessionalEngagementCollection(
+                      liveData: _liveData!,
+                      missions: missionSnapshot.data ?? const [],
+                      locations: locationSnapshot.data ?? const [],
+                      history: historySnapshot.data!,
+                      operationalError: operationalError,
+                    );
+                  },
+                ),
           );
         },
       ),
@@ -81,11 +88,15 @@ class _ProfessionalEngagementCollection extends StatefulWidget {
     required this.liveData,
     required this.missions,
     required this.locations,
+    required this.history,
+    required this.operationalError,
   });
 
   final LiveCoordinationData liveData;
   final List<CoordinationNeed> missions;
   final List<ResponsePlace> locations;
+  final List<ProfessionalEngagementRecord> history;
+  final bool operationalError;
 
   @override
   State<_ProfessionalEngagementCollection> createState() =>
@@ -160,21 +171,40 @@ class _ProfessionalEngagementCollectionState
 
   @override
   Widget build(BuildContext context) {
+    final currentEngagements = widget.missions
+        .where((mission) => _engagements[mission.id] != null)
+        .map(
+          (mission) => (
+            mission: mission,
+            engagement: _engagements[mission.id]!,
+            historical: false,
+          ),
+        )
+        .toList(growable: false);
+    final currentIds = widget.missions.map((mission) => mission.id).toSet();
     final allEngagements =
-        widget.missions
-            .where((mission) => _engagements[mission.id] != null)
-            .map(
-              (mission) =>
-                  (mission: mission, engagement: _engagements[mission.id]!),
-            )
-            .toList(growable: false)
-          ..sort((a, b) {
-            final aDate = a.mission.startAt ?? DateTime(9999);
-            final bDate = b.mission.startAt ?? DateTime(9999);
-            return aDate.compareTo(bDate);
-          });
+        [
+          ...currentEngagements,
+          for (final record in widget.history)
+            if (!currentIds.contains(record.mission.id))
+              (
+                mission: record.mission,
+                engagement: record.engagement,
+                historical: true,
+              ),
+        ]..sort((a, b) {
+          final aDate = a.mission.startAt ?? DateTime(9999);
+          final bDate = b.mission.startAt ?? DateTime(9999);
+          return aDate.compareTo(bDate);
+        });
     final visible = allEngagements
-        .where((item) => _periodFor(item.mission) == _period)
+        .where(
+          (item) =>
+              (item.historical
+                  ? _EngagementPeriod.past
+                  : _periodFor(item.mission)) ==
+              _period,
+        )
         .toList(growable: false);
 
     return LayoutBuilder(
@@ -237,6 +267,7 @@ class _ProfessionalEngagementCollectionState
                     return _EngagementCard(
                       mission: item.mission,
                       engagement: item.engagement,
+                      readOnly: item.historical,
                       location: responsePlaceForNeed(
                         item.mission,
                         widget.locations,
@@ -246,6 +277,12 @@ class _ProfessionalEngagementCollectionState
                   separatorBuilder: (_, _) =>
                       const SizedBox(height: V5Spacing.sm),
                 ),
+              )
+            else if (_period != _EngagementPeriod.past &&
+                widget.operationalError)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EngagementLoadError(),
               )
             else if (_failed.isNotEmpty)
               const SliverFillRemaining(
@@ -285,11 +322,13 @@ class _EngagementCard extends StatelessWidget {
     required this.mission,
     required this.engagement,
     required this.location,
+    required this.readOnly,
   });
 
   final CoordinationNeed mission;
   final EngagementInfo engagement;
   final ResponsePlace? location;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -321,6 +360,10 @@ class _EngagementCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: V5Spacing.sm),
+          if (readOnly) ...[
+            const V5StatusPill(label: 'Terminée', tone: V5StatusTone.neutral),
+            const SizedBox(height: V5Spacing.sm),
+          ],
           _EngagementLine(
             icon: Icons.calendar_today_outlined,
             value: mission.startAt == null
@@ -352,10 +395,11 @@ class _EngagementCard extends StatelessWidget {
                   mission: mission,
                   profession: engagement.profession,
                 ),
-                EngagementCancellationButton(
-                  need: mission,
-                  engagement: engagement,
-                ),
+                if (!readOnly)
+                  EngagementCancellationButton(
+                    need: mission,
+                    engagement: engagement,
+                  ),
               ],
             ),
           ),

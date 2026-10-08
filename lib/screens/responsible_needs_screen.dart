@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/need.dart';
-import '../models/responsible_access.dart';
+import '../models/operation.dart';
 import '../repositories/live_data_scope.dart';
+import '../repositories/coordination_repository.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/mission_timing.dart';
@@ -48,6 +49,7 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
   Stream<List<CoordinationNeed>>? _missions;
   Stream<List<ResponsePlace>>? _locations;
   Stream<ResponsibleAccess?>? _access;
+  Stream<List<HistoricalActionMission>>? _history;
   String? _editingMissionId;
   _NeedsFilter _filter = _NeedsFilter.attention;
 
@@ -60,62 +62,71 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
     _missions = liveData.watchMissions();
     _locations = liveData.watchLocations();
     _access = liveData.watchResponsibleAccess();
+    _history = liveData.watchHistoricalActionMissions();
   }
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<List<CoordinationNeed>>(
       valueListenable: widget.publishedNeeds,
-      builder: (context, _, _) => StreamBuilder<ResponsibleAccess?>(
-        stream: _access,
-        builder: (context, accessSnapshot) =>
-            StreamBuilder<List<CoordinationNeed>>(
-              stream: _missions,
-              builder: (context, missionsSnapshot) =>
-                  StreamBuilder<List<ResponsePlace>>(
-                    stream: _locations,
-                    builder: (context, locationsSnapshot) {
-                      if (accessSnapshot.hasError ||
-                          missionsSnapshot.hasError ||
-                          locationsSnapshot.hasError) {
-                        return const _NeedsMessage(
-                          message:
-                              'Les besoins sont temporairement indisponibles.',
+      builder: (context, _, _) => StreamBuilder<List<HistoricalActionMission>>(
+        stream: _history,
+        builder: (context, historySnapshot) => StreamBuilder<ResponsibleAccess?>(
+          stream: _access,
+          builder: (context, accessSnapshot) =>
+              StreamBuilder<List<CoordinationNeed>>(
+                stream: _missions,
+                builder: (context, missionsSnapshot) =>
+                    StreamBuilder<List<ResponsePlace>>(
+                      stream: _locations,
+                      builder: (context, locationsSnapshot) {
+                        if (accessSnapshot.hasError ||
+                            missionsSnapshot.hasError ||
+                            locationsSnapshot.hasError ||
+                            (_filter == _NeedsFilter.past &&
+                                historySnapshot.hasError)) {
+                          return const _NeedsMessage(
+                            message:
+                                'Les besoins sont temporairement indisponibles.',
+                          );
+                        }
+                        if (!missionsSnapshot.hasData ||
+                            !locationsSnapshot.hasData ||
+                            (_filter == _NeedsFilter.past &&
+                                !historySnapshot.hasData)) {
+                          return const _NeedsLoading();
+                        }
+                        final locations = locationsSnapshot.data!;
+                        final needs =
+                            missionsVisibleToResponsible(
+                                  missions: widget.publishedNeeds.mergeWith(
+                                    missionsSnapshot.data!,
+                                  ),
+                                  locations: locations,
+                                  access: accessSnapshot.data,
+                                  previewLocationId: widget.previewLocationId,
+                                )
+                                .where(
+                                  (need) => need.isActive && !need.isCancelled,
+                                )
+                                .toList(growable: false);
+                        return _ResponsibleNeedsContent(
+                          needs: needs,
+                          historical: historySnapshot.data ?? const [],
+                          locations: locations,
+                          access: accessSnapshot.data,
+                          selectedFilter: _filter,
+                          editingMissionId: _editingMissionId,
+                          onFilterChanged: (filter) =>
+                              setState(() => _filter = filter),
+                          onCreateNeed: _openCreateNeed,
+                          onEditNeed: _openEditor,
+                          onOpenTeam: widget.onOpenTeam,
                         );
-                      }
-                      if (!missionsSnapshot.hasData ||
-                          !locationsSnapshot.hasData) {
-                        return const _NeedsLoading();
-                      }
-                      final locations = locationsSnapshot.data!;
-                      final needs =
-                          missionsVisibleToResponsible(
-                                missions: widget.publishedNeeds.mergeWith(
-                                  missionsSnapshot.data!,
-                                ),
-                                locations: locations,
-                                access: accessSnapshot.data,
-                                previewLocationId: widget.previewLocationId,
-                              )
-                              .where(
-                                (need) => need.isActive && !need.isCancelled,
-                              )
-                              .toList(growable: false);
-                      return _ResponsibleNeedsContent(
-                        needs: needs,
-                        locations: locations,
-                        access: accessSnapshot.data,
-                        selectedFilter: _filter,
-                        editingMissionId: _editingMissionId,
-                        onFilterChanged: (filter) =>
-                            setState(() => _filter = filter),
-                        onCreateNeed: _openCreateNeed,
-                        onEditNeed: _openEditor,
-                        onOpenTeam: widget.onOpenTeam,
-                      );
-                    },
-                  ),
-            ),
+                      },
+                    ),
+              ),
+        ),
       ),
     );
   }
@@ -154,6 +165,7 @@ class _ResponsibleNeedsScreenState extends State<ResponsibleNeedsScreen> {
 class _ResponsibleNeedsContent extends StatelessWidget {
   const _ResponsibleNeedsContent({
     required this.needs,
+    required this.historical,
     required this.locations,
     required this.access,
     required this.selectedFilter,
@@ -165,6 +177,7 @@ class _ResponsibleNeedsContent extends StatelessWidget {
   });
 
   final List<CoordinationNeed> needs;
+  final List<HistoricalActionMission> historical;
   final List<ResponsePlace> locations;
   final ResponsibleAccess? access;
   final _NeedsFilter selectedFilter;
@@ -178,8 +191,24 @@ class _ResponsibleNeedsContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.v5Colors;
     final now = DateTime.now();
-    final filteredNeeds = needs
-        .where((need) => _matchesFilter(need, selectedFilter, now: now))
+    final historyByMissionId = {
+      for (final record in historical) record.mission.id: record,
+    };
+    final allNeeds = selectedFilter == _NeedsFilter.past
+        ? <CoordinationNeed>[
+            ...needs,
+            for (final record in historical)
+              if (!needs.any((need) => need.id == record.mission.id))
+                record.mission,
+          ]
+        : needs;
+    final filteredNeeds = allNeeds
+        .where(
+          (need) =>
+              (selectedFilter == _NeedsFilter.past &&
+                  historyByMissionId.containsKey(need.id)) ||
+              _matchesFilter(need, selectedFilter, now: now),
+        )
         .toList(growable: false);
     return ColoredBox(
       color: colors.canvas,
@@ -239,7 +268,7 @@ class _ResponsibleNeedsContent extends StatelessWidget {
               ),
             ),
           ),
-          if (needs.isEmpty)
+          if (allNeeds.isEmpty)
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
               sliver: SliverToBoxAdapter(
@@ -278,7 +307,11 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   final location = responsePlaceForNeed(need, locations);
                   final locationId = need.locationId ?? location?.id;
                   final isPast = isMissionPast(need, now: now);
+                  final historicalRecord = selectedFilter == _NeedsFilter.past
+                      ? historyByMissionId[need.id]
+                      : null;
                   final canManage =
+                      historicalRecord == null &&
                       access != null &&
                       locationId != null &&
                       access!.canManage(locationId) &&
@@ -289,43 +322,58 @@ class _ResponsibleNeedsContent extends StatelessWidget {
                   return Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 560),
-                      child: ResponsibleMissionCard(
-                        key: Key('responsible-need-${need.id}'),
-                        need: need,
-                        tone: _toneForNeed(need, now: now),
-                        statusLabel: _statusForNeed(need, now: now),
-                        actions: [
-                          if (canEdit)
-                            TextButton(
-                              key: Key('responsible-edit-need-${need.id}'),
-                              onPressed: editingMissionId == null
-                                  ? () => onEditNeed(need)
-                                  : null,
-                              style: TextButton.styleFrom(
-                                foregroundColor: colors.accent,
-                                minimumSize: const Size(44, 44),
-                              ),
-                              child: Text(
-                                editingMissionId == need.id
-                                    ? 'Ouverture…'
-                                    : 'Modifier',
-                              ),
-                            ),
-                          if (canCancel)
-                            MissionCancellationButton(
-                              need: need,
-                              label: 'Annuler',
-                              showIcon: false,
-                              foregroundColor: colors.textSecondary,
-                            ),
-                          TextButton(
-                            key: Key('responsible-view-team-${need.id}'),
-                            onPressed: onOpenTeam,
-                            style: TextButton.styleFrom(
-                              foregroundColor: colors.accent,
-                              minimumSize: const Size(44, 44),
-                            ),
-                            child: const Text('Voir l’équipe'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (historicalRecord != null) ...[
+                            Text(historicalRecord.operationName),
+                            const SizedBox(height: V5Spacing.xs),
+                          ],
+                          ResponsibleMissionCard(
+                            key: Key('responsible-need-${need.id}'),
+                            need: need,
+                            tone: _toneForNeed(need, now: now),
+                            statusLabel: historicalRecord == null
+                                ? _statusForNeed(need, now: now)
+                                : historicalRecord.operationStatus ==
+                                      OperationStatus.archived
+                                ? 'Archivée'
+                                : 'Terminée',
+                            actions: [
+                              if (canEdit)
+                                TextButton(
+                                  key: Key('responsible-edit-need-${need.id}'),
+                                  onPressed: editingMissionId == null
+                                      ? () => onEditNeed(need)
+                                      : null,
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: colors.accent,
+                                    minimumSize: const Size(44, 44),
+                                  ),
+                                  child: Text(
+                                    editingMissionId == need.id
+                                        ? 'Ouverture…'
+                                        : 'Modifier',
+                                  ),
+                                ),
+                              if (canCancel)
+                                MissionCancellationButton(
+                                  need: need,
+                                  label: 'Annuler',
+                                  showIcon: false,
+                                  foregroundColor: colors.textSecondary,
+                                ),
+                              if (historicalRecord == null)
+                                TextButton(
+                                  key: Key('responsible-view-team-${need.id}'),
+                                  onPressed: onOpenTeam,
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: colors.accent,
+                                    minimumSize: const Size(44, 44),
+                                  ),
+                                  child: const Text('Voir l’équipe'),
+                                ),
+                            ],
                           ),
                         ],
                       ),
@@ -445,11 +493,7 @@ class _NeedsEmptyState extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: Icon(
-                Icons.check_rounded,
-                size: 21,
-                color: colors.success,
-              ),
+              child: Icon(Icons.check_rounded, size: 21, color: colors.success),
             ),
             const SizedBox(height: V5Spacing.md),
             Text(

@@ -3,6 +3,12 @@ import {
   PlatformAdministrationError,
 } from './platform_administration.js';
 import {hasActiveCoordinatorRole} from './responsible_access.js';
+import {
+  isHistoricalAccessId,
+  planHistoricalAccessGrants,
+  sameHistoricalAccessGrant,
+} from './historical_access_lifecycle.js';
+import {publicMissionId} from './public_discovery/projector.js';
 
 const MOBILIZATION_STATUSES = new Set([
   'draft',
@@ -45,6 +51,12 @@ export function platformAdministrationServices({
       serverTimestamp,
       request,
     }),
+    revokeHistoricalActionAccess: (request) =>
+      runRevokeHistoricalActionAccess({
+        firestore,
+        serverTimestamp,
+        request,
+      }),
     setOperationCoordinator: (request) => runSetOperationCoordinator({
       firestore,
       serverTimestamp,
@@ -166,18 +178,234 @@ async function runTransitionOperation({firestore, serverTimestamp, request}) {
     const operationRef = operationReference(firestore, request.operationId);
     const operation = await transaction.get(operationRef);
     const current = requireOperation(operation);
+    if (current.status === request.targetStatus
+      && ['completed', 'archived'].includes(current.status)) {
+      return {operationId: request.operationId, status: current.status};
+    }
     if (!OPERATION_TRANSITIONS.has(`${current.status}:${request.targetStatus}`)) {
       throw new PlatformAdministrationError(
         'failed-precondition',
         'Cette transition d’opération n’est pas autorisée.',
       );
     }
+    const createsHistory = request.targetStatus === 'completed'
+      || (request.targetStatus === 'archived'
+        && current.status !== 'completed');
+    const grants = createsHistory
+      ? await prepareHistoricalActionGrants({
+        firestore,
+        transaction,
+        operationId: request.operationId,
+        operation: current,
+      })
+      : [];
+    const existingGrants = await Promise.all(grants.map((grant) =>
+      transaction.get(firestore.collection('historicalActionAccess')
+        .doc(`${request.operationId}_${grant.uid}`))));
+    const actionGrants = createsHistory
+      ? await transaction.get(firestore.collection('historicalActionAccess')
+        .where('operationId', '==', request.operationId))
+      : {docs: []};
+    const expectedGrantIds = new Set(grants.map((grant) =>
+      `${request.operationId}_${grant.uid}`));
+    if (actionGrants.docs.some((snapshot) => snapshot.data().active === true
+      && !expectedGrantIds.has(snapshot.id))) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Un droit historique actif dépasse le périmètre de cette Action.',
+      );
+    }
+    for (let index = 0; index < grants.length; index += 1) {
+      if (existingGrants[index].exists
+        && !sameHistoricalAccessGrant(existingGrants[index].data(), grants[index])) {
+        throw new PlatformAdministrationError(
+          'failed-precondition',
+          'Un droit historique existant ne correspond pas au périmètre actuel.',
+        );
+      }
+    }
+    const publicMissionIds = ['suspended', 'completed', 'archived']
+      .includes(request.targetStatus)
+      ? await actionPublicMissionIds({
+        firestore, transaction, operationId: request.operationId,
+      })
+      : [];
+    const newGrantCount = existingGrants.filter((snapshot) =>
+      !snapshot.exists).length;
+    // Count serverTimestamp transforms conservatively as additional writes.
+    if (2 + newGrantCount * 4 + publicMissionIds.length > 500) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'Trop de fiches publiques pour une clôture atomique.',
+      );
+    }
+    const timestamp = serverTimestamp();
     transaction.update(operationRef, {
       status: request.targetStatus,
       updatedBy: request.callerUid,
-      updatedAt: serverTimestamp(),
+      updatedAt: timestamp,
     });
+    for (let index = 0; index < grants.length; index += 1) {
+      if (existingGrants[index].exists) continue;
+      const grant = grants[index];
+      const grantId = `${request.operationId}_${grant.uid}`;
+      const sourceTransition = `${current.status}:${request.targetStatus}`;
+      transaction.create(firestore.collection('historicalActionAccess')
+        .doc(grantId), {
+        ...grant,
+        createdAt: timestamp,
+        createdBy: request.callerUid,
+        sourceTransition,
+      });
+      transaction.create(firestore.collection('historicalActionAccessAudit')
+        .doc(`${grantId}_created`), {
+        operationId: request.operationId,
+        uid: grant.uid,
+        event: 'created',
+        roles: grant.roles,
+        locationIds: grant.locationIds,
+        sourceTransition,
+        actorUid: request.callerUid,
+        occurredAt: timestamp,
+      });
+    }
+    for (const publicId of publicMissionIds) {
+      transaction.delete(firestore.collection('publicMissionDiscovery')
+        .doc(publicId));
+    }
     return {operationId: request.operationId, status: request.targetStatus};
+  });
+}
+
+async function actionPublicMissionIds({firestore, transaction, operationId}) {
+  const mobilizations = await transaction.get(firestore
+    .collection('mobilizations').where('operationId', '==', operationId));
+  const missionSnapshots = await Promise.all(mobilizations.docs.map((snapshot) =>
+    transaction.get(firestore.collection('missions')
+      .where('mobilizationId', '==', snapshot.id))));
+  return missionSnapshots.flatMap((snapshot) => snapshot.docs)
+    .map((snapshot) => publicMissionId(snapshot.id));
+}
+
+async function prepareHistoricalActionGrants({
+  firestore, transaction, operationId, operation,
+}) {
+  const mobilizations = await transaction.get(firestore
+    .collection('mobilizations').where('operationId', '==', operationId));
+  const scopedMobilizations = mobilizations.docs.map((snapshot) => ({
+    id: snapshot.id,
+    data: snapshot.data(),
+  }));
+  const coordinatorUid = operationCoordinatorUid(operation);
+  const locationScope = operation.scopeRefs?.some((reference) =>
+    typeof reference === 'string' && reference.startsWith('locations/'));
+  const organizationId = operation.ownerOrganizationId;
+  if (!isHistoricalAccessId(organizationId)) {
+    if (scopedMobilizations.length > 0 || coordinatorUid !== null
+      || locationScope) {
+      throw new PlatformAdministrationError(
+        'failed-precondition',
+        'L’organisation propriétaire doit être définie avant la clôture.',
+      );
+    }
+    return [];
+  }
+  if (scopedMobilizations.length > 100) {
+    throw new PlatformAdministrationError(
+      'failed-precondition',
+      'Trop de mobilisations pour une clôture atomique.',
+    );
+  }
+  const [missionSnapshots, assignmentSnapshots, siteManagerMemberships] =
+    await Promise.all([
+      Promise.all(scopedMobilizations.map(({id}) => transaction.get(
+        firestore.collection('missions').where('mobilizationId', '==', id),
+      ))),
+      Promise.all(scopedMobilizations.map(({id}) => transaction.get(
+        firestore.collection('mobilizationAssignments')
+          .where('mobilizationId', '==', id),
+      ))),
+      transaction.get(firestore.collection('organizationMemberships')
+        .where('organizationId', '==', organizationId)
+        .where('roles', 'array-contains', 'site_manager')),
+    ]);
+  const missions = missionSnapshots.flatMap((snapshot) => snapshot.docs)
+    .map((snapshot) => ({id: snapshot.id, data: snapshot.data()}));
+  const assignments = assignmentSnapshots.flatMap((snapshot) => snapshot.docs)
+    .map((snapshot) => ({id: snapshot.id, data: snapshot.data()}));
+  if (missions.length > 1000 || siteManagerMemberships.docs.length > 200) {
+    throw new PlatformAdministrationError(
+      'failed-precondition',
+      'Périmètre trop vaste pour une clôture atomique.',
+    );
+  }
+  const coordinatorUids = new Set([
+    ...(coordinatorUid === null ? [] : [coordinatorUid]),
+    ...assignments.filter(({data}) => data.role === 'coordinator'
+      && data.active === true).map(({data}) => data.uid),
+  ]);
+  if ([...coordinatorUids].some((uid) => !isHistoricalAccessId(uid))) {
+    throw new PlatformAdministrationError(
+      'failed-precondition',
+      'Affectation Coordinateur historique invalide.',
+    );
+  }
+  const coordinatorMemberships = await Promise.all([...coordinatorUids]
+    .map((uid) => transaction.get(firestore
+      .collection('organizationMemberships')
+      .doc(`${organizationId}_${uid}`))));
+  const membershipMap = new Map(siteManagerMemberships.docs.map((snapshot) => [
+    snapshot.id, {id: snapshot.id, data: snapshot.data()},
+  ]));
+  for (const snapshot of coordinatorMemberships) {
+    if (snapshot.exists) membershipMap.set(snapshot.id, {
+      id: snapshot.id,
+      data: snapshot.data(),
+    });
+  }
+  return planHistoricalAccessGrants({
+    operationId,
+    operation,
+    mobilizations: scopedMobilizations,
+    missions,
+    assignments,
+    memberships: [...membershipMap.values()],
+  });
+}
+
+async function runRevokeHistoricalActionAccess({
+  firestore, serverTimestamp, request,
+}) {
+  return firestore.runTransaction(async (transaction) => {
+    await requirePlatformAdministrator({firestore, transaction, request});
+    const grantId = `${request.operationId}_${request.uid}`;
+    const grantRef = firestore.collection('historicalActionAccess').doc(grantId);
+    const grant = await transaction.get(grantRef);
+    if (!grant.exists
+      || grant.data().operationId !== request.operationId
+      || grant.data().uid !== request.uid) {
+      throw new PlatformAdministrationError('not-found', 'Droit historique introuvable.');
+    }
+    if (grant.data().active === false) {
+      return {operationId: request.operationId, uid: request.uid, active: false};
+    }
+    const timestamp = serverTimestamp();
+    transaction.update(grantRef, {
+      active: false,
+      revokedAt: timestamp,
+      revokedBy: request.callerUid,
+      revocationReason: request.reason,
+    });
+    transaction.create(firestore.collection('historicalActionAccessAudit')
+      .doc(`${grantId}_revoked`), {
+      operationId: request.operationId,
+      uid: request.uid,
+      event: 'revoked',
+      reason: request.reason,
+      actorUid: request.callerUid,
+      occurredAt: timestamp,
+    });
+    return {operationId: request.operationId, uid: request.uid, active: false};
   });
 }
 

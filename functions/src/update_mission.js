@@ -1,5 +1,6 @@
 import {isCanonicalBlankText, parseResponsibleAccess} from './responsible_access.js';
 import {globalMissionEquipmentLabels, normalizeMissionEquipment} from './mission_equipment.js';
+import {operationAllowsOperationalMutation} from './operation_activity.js';
 
 const PROFESSIONS = Object.freeze([
   'physiotherapist',
@@ -104,6 +105,7 @@ export function missionUpdateMutation({
   request,
   mission,
   mobilization,
+  operation = null,
   coordinatorAuthorized,
   destination,
   callerRole,
@@ -120,6 +122,7 @@ export function missionUpdateMutation({
     || !isPlainObject(mobilization)
     || mobilization.id !== mission.mobilizationId
     || mobilization.status !== 'active'
+    || !operationAllowsOperationalMutation(mobilization, operation)
     || engagements.some(
       (engagement) =>
         !isPlainObject(engagement)

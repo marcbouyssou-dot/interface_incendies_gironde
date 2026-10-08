@@ -87,6 +87,9 @@ test('new actions require explicit platform visibility', () => {
   assert.ok(projectPublicMission({...input, operation: {
     visibility: 'platform', status: 'active',
   }}));
+  assert.equal(projectPublicMission({...input, operation: {
+    visibility: 'platform', status: 'suspended',
+  }}), null);
 });
 
 test('rebuild plan is deterministic and idempotent', () => {

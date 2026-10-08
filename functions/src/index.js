@@ -83,6 +83,7 @@ import {
   deactivateMobilization as deactivateMobilizationRequest,
   PlatformAdministrationError,
   removeMobilizationCoordinator as removeMobilizationCoordinatorRequest,
+  revokeHistoricalActionAccess as revokeHistoricalActionAccessRequest,
   setOperationCoordinator as setOperationCoordinatorRequest,
   transitionOperation as transitionOperationRequest,
   updateOperation as updateOperationRequest,
@@ -490,6 +491,16 @@ export const transitionOperation = onCall(
   platformCallableOptions,
   async (request) => platformAdministrationCallable(() =>
     transitionOperationRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const revokeHistoricalActionAccess = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    revokeHistoricalActionAccessRequest({
       callerUid: request.auth?.uid,
       data: request.data,
       services: platformServices(),
@@ -1266,11 +1277,20 @@ export function missionUpdateServices({firestore}) {
         const mobilizationData = mobilization?.exists
           ? mobilization.data()
           : null;
+        const attachedOperationId = mobilizationData?.operationId;
+        const attachedOperation = typeof attachedOperationId === 'string'
+            && attachedOperationId !== ''
+            && !attachedOperationId.includes('/')
+          ? await transaction.get(
+            firestore.collection('operations').doc(attachedOperationId),
+          )
+          : null;
         const callerRole = caller.exists ? caller.data() : null;
         const mutation = missionUpdateMutation({
           request: {missionId, ...request},
           mission: missionData,
           mobilization: mobilizationData,
+          operation: attachedOperation?.exists ? attachedOperation.data() : null,
           coordinatorAuthorized: canCoordinateMobilization({
             uid: callerUid,
             role: callerRole,
@@ -1339,6 +1359,7 @@ export function missionCreateServices({firestore}) {
         const mobilizationData = mobilization.exists ? mobilization.data() : null;
         const roleData = role.exists ? role.data() : null;
         let organizationAuthorized = false;
+        let attachedOperation = null;
         if (mobilizationData?.status === 'active') {
           const operationId = mobilizationData.operationId;
           if (operationId === undefined) {
@@ -1357,6 +1378,7 @@ export function missionCreateServices({firestore}) {
             const operation = await transaction.get(
               firestore.collection('operations').doc(operationId),
             );
+            attachedOperation = operation.exists ? operation.data() : null;
             const ownerId = operation.exists
               ? operation.data().ownerOrganizationId : null;
             if (operation.exists && ownerId === undefined) {
@@ -1389,6 +1411,7 @@ export function missionCreateServices({firestore}) {
           }),
           organizationAuthorized,
           mobilization: mobilizationData,
+          operation: attachedOperation,
           location: location.exists ? location.data() : null,
           serverTimestamp: FieldValue.serverTimestamp(),
           timestampFromMillis: (value) => new Date(value),

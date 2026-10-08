@@ -91,6 +91,7 @@ function mutation(overrides = {}) {
     mobilization: Object.hasOwn(overrides, 'mobilization')
       ? overrides.mobilization
       : {id: 'mobilization-active', status: 'active'},
+    operation: overrides.operation ?? null,
     coordinatorAuthorized: overrides.coordinatorAuthorized ?? true,
     destination: Object.hasOwn(overrides, 'destination')
       ? overrides.destination
@@ -483,4 +484,18 @@ test('public operation validates before delegating and preserves service result'
     () => updateMission({callerUid: null, data: request(), services: {}}),
     (error) => error.code === 'unauthenticated',
   );
+});
+
+test('closed or missing parent Action blocks mission update', () => {
+  const mobilization = {
+    id: 'mobilization-active', status: 'active', operationId: 'action-a',
+  };
+  for (const status of ['completed', 'archived', 'suspended', 'planned']) {
+    assertCode(() => mutation({
+      mobilization, operation: {id: 'action-a', status},
+    }), 'failed-precondition');
+  }
+  assertCode(() => mutation({mobilization}), 'failed-precondition');
+  assert.ok(mutation({mobilization,
+    operation: {id: 'action-a', status: 'active'}}).fields);
 });

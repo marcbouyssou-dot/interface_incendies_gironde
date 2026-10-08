@@ -11,6 +11,7 @@ import {
   isPlatformAdministrator,
   PlatformAdministrationError,
   removeMobilizationCoordinator,
+  revokeHistoricalActionAccess,
   setOperationCoordinator,
   transitionOperation,
   updateOperation,
@@ -19,6 +20,7 @@ import {
 import {
   platformAdministrationServices,
 } from '../src/platform_administration_firestore.js';
+import {publicMissionId} from '../src/public_discovery/projector.js';
 
 const ADMIN_UID = 'platform-admin';
 const COORDINATOR_UID = 'coordinator';
@@ -415,6 +417,219 @@ test('operation lifecycle follows the strict transition graph', async () => {
     'failed-precondition',
   );
 });
+
+function seedHistoricalLifecycle(firestore) {
+  firestore.seed('operations/fire-action', operationDocument(
+    'fire-action', 'active', {
+      ownerOrganizationId: 'urps-na',
+      coordinatorUid: 'fire-coordinator',
+      scopeRefs: ['territories/gironde', 'locations/fire-site'],
+    },
+  ));
+  firestore.seed('mobilizations/fire-mobilization', mobilizationDocument(
+    'fire-mobilization', 'active', {operationId: 'fire-action'},
+  ));
+  firestore.seed('missions/fire-need', {
+    id: 'fire-need', mobilizationId: 'fire-mobilization',
+    locationId: 'fire-site',
+  });
+  firestore.seed('missions/fire-other-need', {
+    id: 'fire-other-need', mobilizationId: 'fire-mobilization',
+    locationId: 'fire-other-site',
+  });
+  firestore.seed('organizationMemberships/urps-na_fire-manager', {
+    uid: 'fire-manager', organizationId: 'urps-na',
+    roles: ['site_manager'], locationIds: ['fire-site', 'unrelated-site'],
+    active: true, schemaVersion: 1,
+  });
+  firestore.seed('organizationMemberships/urps-na_fire-coordinator', {
+    uid: 'fire-coordinator', organizationId: 'urps-na',
+    roles: ['coordinator'], locationIds: [], active: true, schemaVersion: 1,
+  });
+  firestore.seed('operations/flood-action', operationDocument(
+    'flood-action', 'active', {
+      ownerOrganizationId: 'urps-na', coordinatorUid: 'flood-coordinator',
+    },
+  ));
+  firestore.seed('mobilizations/flood-mobilization', mobilizationDocument(
+    'flood-mobilization', 'active', {operationId: 'flood-action'},
+  ));
+  firestore.seed('missions/flood-need', {
+    id: 'flood-need', mobilizationId: 'flood-mobilization',
+    locationId: 'flood-site',
+  });
+  firestore.seed('organizationMemberships/urps-na_flood-manager', {
+    uid: 'flood-manager', organizationId: 'urps-na',
+    roles: ['site_manager'], locationIds: ['flood-site'],
+    active: true, schemaVersion: 1,
+  });
+  firestore.seed('organizationMemberships/urps-na_flood-coordinator', {
+    uid: 'flood-coordinator', organizationId: 'urps-na',
+    roles: ['coordinator'], locationIds: [], active: true, schemaVersion: 1,
+  });
+}
+
+test('historical grants follow the Action lifecycle with exact sites and retry safety',
+  async () => {
+    const {firestore, services} = harness();
+    seedHistoricalLifecycle(firestore);
+    const publicFire = `publicMissionDiscovery/${publicMissionId('fire-need')}`;
+    const publicFlood = `publicMissionDiscovery/${publicMissionId('flood-need')}`;
+    firestore.seed(publicFire, {status: 'open'});
+    firestore.seed(publicFlood, {status: 'open'});
+    const request = {callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'completed',
+    }, services};
+    await transitionOperation(request);
+    const manager = firestore.read(
+      'historicalActionAccess/fire-action_fire-manager',
+    );
+    const coordinator = firestore.read(
+      'historicalActionAccess/fire-action_fire-coordinator',
+    );
+    assert.deepEqual(manager.roles, ['site_manager']);
+    assert.deepEqual(manager.locationIds, ['fire-site']);
+    assert.deepEqual(coordinator.roles, ['coordinator']);
+    assert.deepEqual(coordinator.locationIds, []);
+    assert.equal(manager.createdBy, ADMIN_UID);
+    assert.equal(manager.sourceTransition, 'active:completed');
+    assert.equal(manager.createdAt.toISOString(), NOW.toISOString());
+    assert.equal(firestore.has('historicalActionAccess/fire-action_flood-manager'),
+      false);
+    assert.equal(firestore.has('historicalActionAccess/flood-action_fire-manager'),
+      false);
+    assert.equal(firestore.has(publicFire), false);
+    assert.equal(firestore.has(publicFlood), true);
+    assert.equal(firestore.read(
+      'historicalActionAccessAudit/fire-action_fire-manager_created',
+    ).event, 'created');
+
+    await transitionOperation(request);
+    assert.deepEqual(firestore.read(
+      'historicalActionAccess/fire-action_fire-manager',
+    ), manager);
+    await transitionOperation({callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'archived',
+    }, services});
+    assert.deepEqual(firestore.read(
+      'historicalActionAccess/fire-action_fire-manager',
+    ), manager);
+    assert.deepEqual(firestore.read(
+      'historicalActionAccess/fire-action_fire-coordinator',
+    ), coordinator);
+  });
+
+test('suspension atomically removes public discovery without historical grants',
+  async () => {
+    const {firestore, services} = harness();
+    seedHistoricalLifecycle(firestore);
+    const publicFire = `publicMissionDiscovery/${publicMissionId('fire-need')}`;
+    const publicFlood = `publicMissionDiscovery/${publicMissionId('flood-need')}`;
+    firestore.seed(publicFire, {status: 'open'});
+    firestore.seed(publicFlood, {status: 'open'});
+    await transitionOperation({callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'suspended',
+    }, services});
+    assert.equal(firestore.has(publicFire), false);
+    assert.equal(firestore.has(publicFlood), true);
+    assert.equal(firestore.has(
+      'historicalActionAccess/fire-action_fire-manager'), false);
+    await transitionOperation({callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'active',
+    }, services});
+    assert.equal(firestore.read('operations/fire-action').status, 'active');
+  });
+
+test('historical grant revocation is Admin-only, audited and does not affect another actor',
+  async () => {
+    const {firestore, services} = harness();
+    seedHistoricalLifecycle(firestore);
+    await transitionOperation({callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'completed',
+    }, services});
+    const data = {operationId: 'fire-action', uid: 'fire-manager',
+      reason: 'privacy_request'};
+    await assertCode(() => revokeHistoricalActionAccess({
+      callerUid: 'fire-manager', data, services,
+    }), 'permission-denied');
+    assert.equal(firestore.read(
+      'historicalActionAccess/fire-action_fire-manager',
+    ).active, true);
+    await revokeHistoricalActionAccess({callerUid: ADMIN_UID, data, services});
+    const revoked = firestore.read(
+      'historicalActionAccess/fire-action_fire-manager',
+    );
+    assert.equal(revoked.active, false);
+    assert.equal(revoked.revokedBy, ADMIN_UID);
+    assert.equal(revoked.revocationReason, 'privacy_request');
+    assert.equal(revoked.revokedAt.toISOString(), NOW.toISOString());
+    assert.equal(firestore.read(
+      'historicalActionAccessAudit/fire-action_fire-manager_revoked',
+    ).event, 'revoked');
+    assert.equal(firestore.read(
+      'historicalActionAccess/fire-action_fire-coordinator',
+    ).active, true);
+    await revokeHistoricalActionAccess({callerUid: ADMIN_UID, data, services});
+    assert.deepEqual(firestore.read(
+      'historicalActionAccess/fire-action_fire-manager',
+    ), revoked);
+  });
+
+test('direct archive handles linked draft/planned Actions but active archive remains forbidden',
+  async () => {
+    const {firestore, services} = harness();
+    seedHistoricalLifecycle(firestore);
+    await assertCode(() => transitionOperation({callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'archived',
+    }, services}), 'failed-precondition');
+    firestore.seed('operations/fire-action', operationDocument(
+      'fire-action', 'planned', {
+        ownerOrganizationId: 'urps-na', coordinatorUid: 'fire-coordinator',
+      },
+    ));
+    await transitionOperation({callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'archived',
+    }, services});
+    assert.deepEqual(firestore.read(
+      'historicalActionAccess/fire-action_fire-manager',
+    ).locationIds, ['fire-site']);
+  });
+
+test('a conflicting pre-existing grant blocks completion atomically', async () => {
+  const {firestore, services} = harness();
+  seedHistoricalLifecycle(firestore);
+  firestore.seed('historicalActionAccess/fire-action_fire-manager', {
+    uid: 'fire-manager', operationId: 'fire-action',
+    roles: ['site_manager'], locationIds: ['unrelated-site'],
+    active: true, schemaVersion: 1,
+    createdAt: NOW, createdBy: ADMIN_UID, sourceTransition: 'planned:archived',
+  });
+  await assertCode(() => transitionOperation({callerUid: ADMIN_UID, data: {
+    operationId: 'fire-action', targetStatus: 'completed',
+  }, services}), 'failed-precondition');
+  assert.equal(firestore.read('operations/fire-action').status, 'active');
+  assert.equal(firestore.has(
+    'historicalActionAccess/fire-action_fire-coordinator',
+  ), false);
+});
+
+test('an unrelated active historical grant blocks completion atomically',
+  async () => {
+    const {firestore, services} = harness();
+    seedHistoricalLifecycle(firestore);
+    firestore.seed('historicalActionAccess/fire-action_outsider', {
+      uid: 'outsider', operationId: 'fire-action', roles: ['coordinator'],
+      locationIds: [], active: true, schemaVersion: 1,
+      createdAt: NOW, createdBy: ADMIN_UID,
+      sourceTransition: 'planned:archived',
+    });
+    await assertCode(() => transitionOperation({callerUid: ADMIN_UID, data: {
+      operationId: 'fire-action', targetStatus: 'completed',
+    }, services}), 'failed-precondition');
+    assert.equal(firestore.read('operations/fire-action').status, 'active');
+    assert.equal(firestore.has(
+      'historicalActionAccess/fire-action_fire-manager'), false);
+  });
 
 test('operation update preserves status and accepts no end date', async () => {
   const {firestore, services} = harness();
@@ -956,8 +1171,10 @@ class MemoryFirestore {
     const documents = [...this.#documents.entries()]
       .filter(([path]) => path.startsWith(prefix))
       .filter(([path]) => !path.slice(prefix.length).includes('/'))
-      .filter(([, data]) => query.filters.every(({field, value}) =>
-        data[field] === value))
+      .filter(([, data]) => query.filters.every(({field, operator, value}) =>
+        operator === 'array-contains'
+          ? Array.isArray(data[field]) && data[field].includes(value)
+          : data[field] === value))
       .map(([path, data]) => new MemoryDocumentSnapshot(
         path.slice(prefix.length),
         structuredClone(data),
@@ -974,6 +1191,10 @@ class MemoryFirestore {
     const current = this.#documents.get(path);
     if (current === undefined) throw new Error('missing document');
     this.#documents.set(path, structuredClone({...current, ...fields}));
+  }
+
+  delete(path) {
+    this.#documents.delete(path);
   }
 
   set(path, data, merge) {
@@ -996,8 +1217,10 @@ class MemoryCollectionReference {
   }
 
   where(field, operator, value) {
-    assert.equal(operator, '==');
-    return new MemoryQuery(this.firestore, this.path, [{field, value}]);
+    assert.ok(['==', 'array-contains'].includes(operator));
+    return new MemoryQuery(this.firestore, this.path, [
+      {field, operator, value},
+    ]);
   }
 }
 
@@ -1020,10 +1243,10 @@ class MemoryQuery {
   }
 
   where(field, operator, value) {
-    assert.equal(operator, '==');
+    assert.ok(['==', 'array-contains'].includes(operator));
     return new MemoryQuery(this.firestore, this.collectionPath, [
       ...this.filters,
-      {field, value},
+      {field, operator, value},
     ]);
   }
 }
@@ -1066,6 +1289,10 @@ class MemoryTransaction {
   set(reference, data, options = {}) {
     this.writes.push(() =>
       this.firestore.set(reference.path, data, options.merge === true));
+  }
+
+  delete(reference) {
+    this.writes.push(() => this.firestore.delete(reference.path));
   }
 
   commit() {

@@ -88,8 +88,34 @@ class LiveCoordinationData {
   _volunteerEngagements = {};
   final Map<String, _SharedLatestStream<List<EngagementInfo>>>
   _missionEngagements = {};
+  _SharedLatestStream<List<ProfessionalEngagementRecord>>? _ownHistory;
+  _SharedLatestStream<List<HistoricalActionMission>>? _actionHistory;
 
   Stream<List<CoordinationNeed>> watchMissions() => _missions.watch();
+
+  Stream<List<ProfessionalEngagementRecord>> watchOwnEngagementRecords() {
+    final repository = _repository;
+    if (repository is! ProfessionalEngagementHistoryReadRepository) {
+      return Stream.value(const <ProfessionalEngagementRecord>[]);
+    }
+    final historyRepository =
+        repository as ProfessionalEngagementHistoryReadRepository;
+    return (_ownHistory ??= _SharedLatestStream(
+      historyRepository.watchOwnEngagementRecords,
+    )).watch();
+  }
+
+  Stream<List<HistoricalActionMission>> watchHistoricalActionMissions() {
+    final repository = _repository;
+    if (repository is! HistoricalActionMissionReadRepository) {
+      return Stream.value(const <HistoricalActionMission>[]);
+    }
+    final historyRepository =
+        repository as HistoricalActionMissionReadRepository;
+    return (_actionHistory ??= _SharedLatestStream(
+      historyRepository.watchHistoricalActionMissions,
+    )).watch();
+  }
 
   Stream<List<ResponsePlace>> watchLocations() => _locations.watch();
 
@@ -133,6 +159,8 @@ class LiveCoordinationData {
 
   Future<void> dispose() async {
     await _missions.dispose();
+    await _ownHistory?.dispose();
+    await _actionHistory?.dispose();
     await _locations.dispose();
     await _responsibleAccess.dispose();
     for (final stream in _volunteerEngagements.values) {

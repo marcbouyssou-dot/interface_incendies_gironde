@@ -106,19 +106,16 @@ class FirestorePublicMobilizationReadDataSource
 
   final FirebaseFirestore _firestore;
 
+  static List<String> get publishedOperationStatuses => [
+    OperationStatus.planned.serializedValue,
+    OperationStatus.active.serializedValue,
+  ];
+
   @override
   Stream<List<String>> watchPublishedPlatformOperationIds() => _firestore
       .collection('operations')
       .where('visibility', isEqualTo: 'platform')
-      .where(
-        'status',
-        whereIn: [
-          OperationStatus.planned.serializedValue,
-          OperationStatus.active.serializedValue,
-          OperationStatus.suspended.serializedValue,
-          OperationStatus.completed.serializedValue,
-        ],
-      )
+      .where('status', whereIn: publishedOperationStatuses)
       .snapshots()
       .map((snapshot) {
         final ids = snapshot.docs.map((document) => document.id).toList();
