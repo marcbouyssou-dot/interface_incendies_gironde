@@ -50,6 +50,9 @@ test('legacy fallback accepts only the configured active mobilization', () => {
     mobilization: {id: 'legacy', status: 'inactive'},
   }), false);
   assert.equal(allowed({platformConfig: null}), false);
+  assert.equal(allowed({
+    mobilization: {id: 'legacy', status: 'active', operationId: 'action-a'},
+  }), false);
 });
 
 test('inactive and non-coordinator roles never receive the fallback', () => {

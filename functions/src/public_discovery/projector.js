@@ -79,7 +79,8 @@ export function isPubliclyDiscoverable({
     if (typeof mobilization.operationId !== 'string' ||
         mobilization.operationId.length === 0 ||
         mobilization.operationId.includes('/')) return false;
-    return operation?.visibility === 'platform' &&
+    return operation?.purpose !== 'demonstration' &&
+      operation?.visibility === 'platform' &&
       ['planned', 'active'].includes(operation.status);
   }
   return mobilization.id === activeMobilizationId;

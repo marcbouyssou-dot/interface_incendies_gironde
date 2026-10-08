@@ -12,6 +12,7 @@ import 'package:interface_incendies_gironde/models/organization_role.dart';
 import 'package:interface_incendies_gironde/models/organization_visibility.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
+import 'package:interface_incendies_gironde/repositories/operation_access_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_scoped_operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_scoped_platform_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
@@ -41,60 +42,110 @@ void main() {
         expect(delegate.listReads, 0);
       },
     );
-    test('legacy linked operation without owner is checked by ID', () async {
-      final fixture = _Fixture()..selectLegacy();
-      addTearDown(fixture.dispose);
-      fixture.operationDataSource.operations.add(
-        _operation(id: 'implicit-legacy-operation'),
-      );
-      fixture.platformDataSource.mobilizations.add(
-        _mobilization(
-          id: 'implicit-legacy-mobilization',
-          operationId: 'implicit-legacy-operation',
-        ),
-      );
-      final operationDelegate = _BoundedOperationRepository(
-        fixture.operationDataSource.operations,
-      );
-      final operationRepository = OrganizationScopedOperationReadRepository(
-        delegate: operationDelegate,
-        context: fixture.context,
-      );
-      final platformDelegate = _BoundedPlatformRepository(
-        fixture.platformDataSource.mobilizations,
-      )..activeMobilizationId = 'implicit-legacy-mobilization';
-      final repository = OrganizationScopedPlatformReadRepository(
-        delegate: platformDelegate,
-        operationRepository: operationRepository,
-        context: fixture.context,
-      );
+    test(
+      'responsible resolves two linked Actions without a global pointer',
+      () async {
+        final fixture = _Fixture()
+          ..selectLegacySiteManager(withMembership: true);
+        addTearDown(fixture.dispose);
+        fixture.operationDataSource.operations.add(
+          _operation(
+            id: 'operation-second',
+            ownerOrganizationId: 'legacy-gironde',
+          ),
+        );
+        fixture.platformDataSource.mobilizations.add(
+          _mobilization(
+            id: 'mobilization-second',
+            operationId: 'operation-second',
+          ),
+        );
+        final operationDelegate = _BoundedOperationRepository(
+          fixture.operationDataSource.operations,
+        );
+        final platformDelegate = _BoundedPlatformRepository(
+          fixture.platformDataSource.mobilizations,
+        )..activeMobilizationId = 'mobilization-test';
+        final repository = OrganizationScopedPlatformReadRepository(
+          delegate: platformDelegate,
+          operationRepository: OrganizationScopedOperationReadRepository(
+            delegate: operationDelegate,
+            accessRepository: fixture.accessRepository,
+            context: fixture.context,
+          ),
+          context: fixture.context,
+        );
 
-      expect(
-        (await repository.watchMobilizations().first).map((item) => item.id),
-        ['implicit-legacy-mobilization'],
-      );
-      expect(operationDelegate.scopedReads, 1);
-      expect(operationDelegate.documentReads, 1);
-      expect(platformDelegate.scopedOperationIds, isNull);
-      expect(
-        (await repository
-                .watchMobilization('implicit-legacy-mobilization')
-                .first)
-            ?.id,
-        'implicit-legacy-mobilization',
-      );
-      expect(
-        (await repository.watchActiveMobilization().first)?.id,
-        'implicit-legacy-mobilization',
-      );
-      fixture.selectLegacySiteManager(withMembership: false);
-      expect(
-        (await repository.watchResponsibleActiveMobilizations().first).map(
-          (item) => item.id,
-        ),
-        ['implicit-legacy-mobilization'],
-      );
-    });
+        final ids =
+            (await repository.watchResponsibleActiveMobilizations().first)
+                .map((item) => item.id)
+                .toList();
+        expect(
+          ids,
+          containsAll(['mobilization-gironde', 'mobilization-second']),
+        );
+        expect(ids, isNot(contains('mobilization-test')));
+        expect(
+          platformDelegate.scopedOperationIds,
+          containsAll(['operation-gironde', 'operation-second']),
+        );
+        expect(platformDelegate.activeReads, 0);
+      },
+    );
+    test(
+      'linked action is checked by ID, never selected by legacy pointer',
+      () async {
+        final fixture = _Fixture()..selectLegacy();
+        addTearDown(fixture.dispose);
+        fixture.operationDataSource.operations.add(
+          _operation(id: 'implicit-legacy-operation'),
+        );
+        fixture.platformDataSource.mobilizations.add(
+          _mobilization(
+            id: 'implicit-legacy-mobilization',
+            operationId: 'implicit-legacy-operation',
+          ),
+        );
+        final operationDelegate = _BoundedOperationRepository(
+          fixture.operationDataSource.operations,
+        );
+        final operationRepository = OrganizationScopedOperationReadRepository(
+          delegate: operationDelegate,
+          context: fixture.context,
+        );
+        final platformDelegate = _BoundedPlatformRepository(
+          fixture.platformDataSource.mobilizations,
+        )..activeMobilizationId = 'implicit-legacy-mobilization';
+        final repository = OrganizationScopedPlatformReadRepository(
+          delegate: platformDelegate,
+          operationRepository: operationRepository,
+          context: fixture.context,
+        );
+
+        expect(
+          (await repository.watchMobilizations().first).map((item) => item.id),
+          isEmpty,
+        );
+        expect(operationDelegate.scopedReads, 1);
+        expect(operationDelegate.documentReads, 0);
+        expect(platformDelegate.scopedOperationIds, isNull);
+        expect(
+          (await repository
+                  .watchMobilization('implicit-legacy-mobilization')
+                  .first)
+              ?.id,
+          'implicit-legacy-mobilization',
+        );
+        expect((await repository.watchActiveMobilization().first)?.id, isNull);
+        fixture.selectLegacySiteManager(withMembership: false);
+        expect(
+          (await repository.watchResponsibleActiveMobilizations().first).map(
+            (item) => item.id,
+          ),
+          isEmpty,
+        );
+      },
+    );
     test(
       'legacy coordinator without membership uses targeted lookup',
       () async {
@@ -131,7 +182,7 @@ void main() {
     );
 
     test(
-      'test organization sees only mobilizations linked to its operation',
+      'test organization lists its action without a global active selection',
       () async {
         final fixture = _Fixture()..selectTestOrganization();
         addTearDown(fixture.dispose);
@@ -139,12 +190,9 @@ void main() {
         expect(await fixture.visibleMobilizationIds(), ['mobilization-test']);
         expect(
           await fixture.repository.watchActiveMobilization().first,
-          fixture.testMobilization,
+          isNull,
         );
-        expect(
-          await fixture.repository.watchPlatformConfig().first,
-          'mobilization-test',
-        );
+        expect(await fixture.repository.watchPlatformConfig().first, isNull);
       },
     );
 
@@ -254,7 +302,7 @@ void main() {
     for (final withMembership in [false, true]) {
       test(
         'legacy site manager ${withMembership ? 'with' : 'without'} membership '
-        'uses only the configured mobilization',
+        'resolves authorized actions without selecting a linked one by pointer',
         () async {
           final fixture = _Fixture()
             ..selectLegacySiteManager(withMembership: withMembership);
@@ -264,10 +312,18 @@ void main() {
               .watchResponsibleActiveMobilizations()
               .first;
 
-          expect(mobilizations.map((item) => item.id), ['mobilization-legacy']);
+          expect(
+            mobilizations.map((item) => item.id),
+            withMembership
+                ? ['mobilization-gironde', 'mobilization-legacy']
+                : ['mobilization-legacy'],
+          );
           expect(fixture.operationDataSource.listReads, 0);
-          expect(fixture.platformDataSource.listReads, 0);
-          expect(fixture.platformDataSource.activeReads, 1);
+          expect(fixture.platformDataSource.listReads, withMembership ? 1 : 0);
+          expect(
+            fixture.platformDataSource.activeReads,
+            withMembership ? 0 : 1,
+          );
         },
       );
     }
@@ -281,6 +337,7 @@ class _Fixture {
       platformDataSource = _PlatformRepository(_mobilizations()) {
     operationRepository = OrganizationScopedOperationReadRepository(
       delegate: operationDataSource,
+      accessRepository: accessRepository,
       context: context,
     );
     repository = OrganizationScopedPlatformReadRepository(
@@ -305,6 +362,8 @@ class _Fixture {
   final ValueNotifier<OrganizationContext?> context;
   final _OperationRepository operationDataSource;
   final _PlatformRepository platformDataSource;
+  final OperationAccessReadRepository accessRepository =
+      const _FixtureAccessRepository();
   late final OrganizationScopedOperationReadRepository operationRepository;
   late final OrganizationScopedPlatformReadRepository repository;
 
@@ -378,6 +437,40 @@ class _Fixture {
       );
 
   void dispose() => context.dispose();
+}
+
+class _FixtureAccessRepository implements OperationAccessReadRepository {
+  const _FixtureAccessRepository();
+
+  @override
+  Stream<List<OperationAccess>> watchForUser(String uid) =>
+      Stream.multi((controller) {
+        controller.add(switch (uid) {
+          'test-user' => const [
+            OperationAccess(
+              operationId: 'operation-test',
+              organizationId: 'test-organization',
+              roles: {OrganizationRole.coordinator},
+              locationIds: {},
+            ),
+          ],
+          'legacy-manager' => const [
+            OperationAccess(
+              operationId: 'operation-gironde',
+              organizationId: 'legacy-gironde',
+              roles: {OrganizationRole.siteManager},
+              locationIds: {'location-legacy'},
+            ),
+            OperationAccess(
+              operationId: 'operation-second',
+              organizationId: 'legacy-gironde',
+              roles: {OrganizationRole.siteManager},
+              locationIds: {'location-legacy'},
+            ),
+          ],
+          _ => const [],
+        });
+      });
 }
 
 class _OperationRepository implements OperationReadRepository {

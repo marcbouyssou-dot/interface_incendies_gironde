@@ -4,6 +4,7 @@ import '../models/operation.dart';
 import '../platform_admin/platform_admin_history_view_data.dart';
 import '../platform_admin/platform_admin_statistics_view_data.dart';
 import '../repositories/platform_admin_history_read_repository.dart';
+import '../repositories/demo_history_read_repository.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../utils/operation_presentation.dart';
@@ -14,10 +15,12 @@ class PlatformAdminHistoryScreen extends StatefulWidget {
     super.key,
     required this.dataSource,
     this.referenceTime,
+    this.demoHistoryRepository,
   });
 
   final PlatformAdminHistoryDataSource dataSource;
   final DateTime? referenceTime;
+  final DemoHistoryReadRepository? demoHistoryRepository;
 
   @override
   State<PlatformAdminHistoryScreen> createState() =>
@@ -64,7 +67,10 @@ class _PlatformAdminHistoryScreenState
   void _openOperation(PlatformHistoryOperation operation) {
     Navigator.of(context).push(
       AppPageRoute<void>(
-        builder: (_) => PlatformAdminHistoryDetailScreen(entry: operation),
+        builder: (_) => PlatformAdminHistoryDetailScreen(
+          entry: operation,
+          demoHistoryRepository: widget.demoHistoryRepository,
+        ),
       ),
     );
   }
@@ -195,6 +201,7 @@ class _HistoryOperationCard extends StatelessWidget {
       button: true,
       label:
           '${operation.name}. ${operationStatusLabel(operation.status)}. '
+          '${operation.demoSafetyLabel ?? ''}. '
           '${entry.missionCount} missions. Ouvrir le bilan.',
       child: Material(
         color: colors.surfaceElevated,
@@ -243,6 +250,11 @@ class _HistoryOperationCard extends StatelessWidget {
                       label: operationTypeLabel(operation.type),
                       icon: Icons.category_outlined,
                     ),
+                    if (operation.demoSafetyLabel case final label?)
+                      _HistoryTag(
+                        label: label,
+                        icon: Icons.info_outline_rounded,
+                      ),
                   ],
                 ),
                 const SizedBox(height: V5Spacing.sm),
@@ -598,9 +610,14 @@ class _HistoryChoiceSection<T> extends StatelessWidget {
 }
 
 class PlatformAdminHistoryDetailScreen extends StatelessWidget {
-  const PlatformAdminHistoryDetailScreen({super.key, required this.entry});
+  const PlatformAdminHistoryDetailScreen({
+    super.key,
+    required this.entry,
+    this.demoHistoryRepository,
+  });
 
   final PlatformHistoryOperation entry;
+  final DemoHistoryReadRepository? demoHistoryRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -670,6 +687,13 @@ class PlatformAdminHistoryDetailScreen extends StatelessWidget {
               title: 'Statistiques finales disponibles',
               child: _HistoryMetricWrap(entry: entry),
             ),
+            if (operation.purpose == OperationPurpose.demonstration) ...[
+              const SizedBox(height: V5Spacing.xl),
+              _DemoHistorySection(
+                operationId: operation.id,
+                repository: demoHistoryRepository,
+              ),
+            ],
             const SizedBox(height: V5Spacing.xl),
             _HistoryDetailSection(
               key: const Key('platform-history-mobilizations'),
@@ -767,6 +791,101 @@ class PlatformAdminHistoryDetailScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DemoHistorySection extends StatefulWidget {
+  const _DemoHistorySection({
+    required this.operationId,
+    required this.repository,
+  });
+
+  final String operationId;
+  final DemoHistoryReadRepository? repository;
+
+  @override
+  State<_DemoHistorySection> createState() => _DemoHistorySectionState();
+}
+
+class _DemoHistorySectionState extends State<_DemoHistorySection> {
+  Future<DemoHistory>? _history;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DemoHistorySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.operationId != widget.operationId ||
+        !identical(oldWidget.repository, widget.repository)) {
+      _load();
+    }
+  }
+
+  void _load() {
+    _history = widget.repository?.readHistory(widget.operationId);
+  }
+
+  @override
+  Widget build(BuildContext context) => _HistoryDetailSection(
+    key: const Key('platform-history-synthetic-actors'),
+    title: 'Acteurs et engagements fictifs',
+    child: _history == null
+        ? const Text('Historique fictif indisponible.')
+        : FutureBuilder<DemoHistory>(
+            future: _history,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text('Historique fictif indisponible.');
+              }
+              if (!snapshot.hasData) {
+                return const Center(
+                  child: CircularProgressIndicator.adaptive(),
+                );
+              }
+              final history = snapshot.data!;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${history.actors.length} acteurs fictifs · '
+                    '${history.engagements.length} engagements fictifs',
+                  ),
+                  const SizedBox(height: V5Spacing.sm),
+                  for (final actor in history.actors)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: V5Spacing.xs),
+                      child: Text('${actor.label} · personnage fictif'),
+                    ),
+                  if (history.engagements.isNotEmpty) ...[
+                    const SizedBox(height: V5Spacing.sm),
+                    Text(
+                      'Engagements historiques',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: V5Spacing.xs),
+                    for (final engagement in history.engagements)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: V5Spacing.xs),
+                        child: Text(
+                          '${history.actors.firstWhere((actor) => actor.id == engagement.actorId).label} · '
+                          '${engagement.profession} · '
+                          '${engagement.statusKnown ? engagement.status : 'statut inconnu'}',
+                          key: Key('demo-engagement-${engagement.id}'),
+                        ),
+                      ),
+                  ],
+                  if (history.engagements.any(
+                    (engagement) => !engagement.statusKnown,
+                  ))
+                    const Text('Un statut historique est inconnu.'),
+                ],
+              );
+            },
+          ),
+  );
 }
 
 class _HistoryDetailLine extends StatelessWidget {

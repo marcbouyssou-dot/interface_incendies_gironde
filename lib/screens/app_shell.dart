@@ -22,6 +22,7 @@ import '../repositories/organization_scoped_platform_read_repository.dart';
 import '../repositories/platform_actor_read_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../repositories/platform_runtime.dart';
+import '../repositories/operation_access_read_repository.dart';
 import '../repositories/recipe_admin_runtime.dart';
 import '../repositories/platform_read_repository.dart';
 import '../repositories/public_mission_discovery_repository.dart';
@@ -579,6 +580,10 @@ class _AppShellState extends State<AppShell> {
       _organizationScopedOperationRepository =
           OrganizationScopedOperationReadRepository(
             delegate: rawRepository,
+            accessRepository: runtime is OperationAccessRuntime
+                ? (runtime as OperationAccessRuntime)
+                      .operationAccessReadRepository
+                : const EmptyOperationAccessReadRepository(),
             context: context,
           );
     }
@@ -649,6 +654,10 @@ class _AppShellState extends State<AppShell> {
             legacyDelegate: rawProvider,
             organizationRepository: platformRepository,
             context: context,
+            accessRepository: runtime is OperationAccessRuntime
+                ? (runtime as OperationAccessRuntime)
+                      .operationAccessReadRepository
+                : const EmptyOperationAccessReadRepository(),
           );
     }
     return _organizationScopedAccessibleMobilizationsProvider;
@@ -677,6 +686,11 @@ class _AppShellState extends State<AppShell> {
             delegate: rawRepository,
             platformRepository: platformRepository,
             missionLookup: repository.getMission,
+            context: _organizationContextController,
+            accessRepository: repository is OperationAccessRuntime
+                ? (repository as OperationAccessRuntime)
+                      .operationAccessReadRepository
+                : const EmptyOperationAccessReadRepository(),
           );
     }
     return _organizationScopedMissionReadRepository;
@@ -989,6 +1003,10 @@ class _AppShellState extends State<AppShell> {
               ? (widget.platformRuntime! as PlatformActorRuntime)
                     .platformActorReadRepository
               : const NoPlatformActorReadRepository(),
+          demoHistoryRepository: widget.platformRuntime is DemoHistoryRuntime
+              ? (widget.platformRuntime! as DemoHistoryRuntime)
+                    .demoHistoryReadRepository
+              : null,
           onSignOut: recipeAdminPreview
               ? () async => RolePreviewScope.of(
                   context,

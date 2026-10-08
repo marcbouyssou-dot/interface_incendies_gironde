@@ -7,6 +7,8 @@ import 'organization_read_repository.dart';
 import 'platform_actor_read_repository.dart';
 import 'platform_administration_read_repository.dart';
 import 'platform_read_repository.dart';
+import 'demo_history_read_repository.dart';
+import 'operation_access_read_repository.dart';
 
 abstract interface class PlatformRuntime {
   PlatformReadRepository get platformReadRepository;
@@ -35,6 +37,14 @@ abstract interface class PlatformActorRuntime {
 /// Capacité RC4 additive, séparée de [PlatformRuntime] pour préserver RC3.
 abstract interface class OrganizationRuntime {
   OrganizationReadRepository get organizationReadRepository;
+}
+
+abstract interface class DemoHistoryRuntime {
+  DemoHistoryReadRepository get demoHistoryReadRepository;
+}
+
+abstract interface class OperationAccessRuntime {
+  OperationAccessReadRepository get operationAccessReadRepository;
 }
 
 abstract interface class PlatformAccountAuthenticator {

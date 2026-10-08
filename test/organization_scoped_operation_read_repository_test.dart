@@ -8,11 +8,71 @@ import 'package:interface_incendies_gironde/models/organization_membership.dart'
 import 'package:interface_incendies_gironde/models/organization_role.dart';
 import 'package:interface_incendies_gironde/models/organization_visibility.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
+import 'package:interface_incendies_gironde/repositories/operation_access_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_scoped_operation_read_repository.dart';
 import 'package:interface_incendies_gironde/services/legacy_organization_resolver.dart';
 
 void main() {
   group('OrganizationScopedOperationReadRepository', () {
+    test(
+      'explicit grants isolate simultaneous Actions in one organization',
+      () async {
+        final organization = _organization('organization-a');
+        final membership = OrganizationMembership(
+          organizationId: organization.id,
+          uid: 'coordinator-a',
+          roles: const {OrganizationRole.coordinator},
+          active: true,
+          createdAt: DateTime.utc(2026, 8, 21),
+          updatedAt: DateTime.utc(2026, 8, 21),
+          schemaVersion: 1,
+        );
+        final context = ValueNotifier<OrganizationContext?>(
+          OrganizationContext.selected(
+            uid: membership.uid,
+            organization: organization,
+            membership: membership,
+            effectiveRoles: const {OrganizationRole.coordinator},
+          ),
+        );
+        addTearDown(context.dispose);
+        final delegate = _OperationRepository([
+          _operation(id: 'action-a', ownerOrganizationId: organization.id),
+          _operation(id: 'action-b', ownerOrganizationId: organization.id),
+        ]);
+        final actionA = OperationAccess(
+          operationId: 'action-a',
+          organizationId: organization.id,
+          roles: const {OrganizationRole.coordinator},
+          locationIds: const {},
+        );
+        final actionB = OperationAccess(
+          operationId: 'action-b',
+          organizationId: organization.id,
+          roles: const {OrganizationRole.coordinator},
+          locationIds: const {},
+        );
+        final one = OrganizationScopedOperationReadRepository(
+          delegate: delegate,
+          accessRepository: _AccessRepository([actionA]),
+          context: context,
+        );
+        expect((await one.watchOperations().first).map((item) => item.id), [
+          'action-a',
+        ]);
+        expect(await one.watchOperation('action-b').first, isNull);
+        final both = OrganizationScopedOperationReadRepository(
+          delegate: delegate,
+          accessRepository: _AccessRepository([actionA, actionB]),
+          context: context,
+        );
+        expect((await both.watchOperations().first).map((item) => item.id), [
+          'action-a',
+          'action-b',
+        ]);
+        expect(delegate.listReads, 0);
+      },
+    );
     test(
       'real coordinator uses an organization-bounded server query',
       () async {
@@ -300,6 +360,16 @@ void main() {
       },
     );
   });
+}
+
+class _AccessRepository implements OperationAccessReadRepository {
+  const _AccessRepository(this.grants);
+
+  final List<OperationAccess> grants;
+
+  @override
+  Stream<List<OperationAccess>> watchForUser(String uid) =>
+      Stream.multi((controller) => controller.add(grants));
 }
 
 class _OperationRepository implements OperationReadRepository {

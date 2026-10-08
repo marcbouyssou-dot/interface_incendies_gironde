@@ -81,6 +81,14 @@ test('Gironde-like Action creates exact grants, archives and revokes without cro
       await firestore.doc(
         `organizationMemberships/${organizationId}_${coordinatorUid}`,
       ).set(membership(coordinatorUid, ['coordinator'], []));
+      await firestore.doc(`operationAccess/${operationId}_${managerUid}`)
+        .set({uid: managerUid, organizationId, operationId,
+          roles: ['site_manager'], locationIds: [siteId],
+          active: true, schemaVersion: 1});
+      await firestore.doc(`operationAccess/${operationId}_${coordinatorUid}`)
+        .set({uid: coordinatorUid, organizationId, operationId,
+          roles: ['coordinator'], locationIds: [],
+          active: true, schemaVersion: 1});
     }
     await firestore.doc(`engagements/${id('need-fire')}_${id('professional')}`)
       .set({missionId: id('need-fire'), mobilizationId: mobilizationA,
@@ -127,6 +135,12 @@ test('Gironde-like Action creates exact grants, archives and revokes without cro
     assert.deepEqual(coordinatorGrant.locationIds, []);
     assert.equal(managerGrant.sourceTransition, 'active:completed');
     assert.equal(managerGrant.createdBy, administrator);
+    assert.equal((await firestore.doc(
+      `operationAccess/${operationA}_${managerA}`).get()).data().active,
+    false);
+    assert.equal((await firestore.doc(
+      `operationAccess/${operationB}_${managerB}`).get()).data().active,
+    true);
     assert.ok(managerGrant.createdAt.toDate() instanceof Date);
     assert.equal((await firestore.doc(
       `historicalActionAccess/${operationA}_${managerB}`,

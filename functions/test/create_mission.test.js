@@ -188,6 +188,10 @@ test('closed or missing parent Action blocks mission creation', () => {
     }), 'failed-precondition');
   }
   assertCode(() => mutation({mobilization}), 'failed-precondition');
+  assertCode(() => mutation({mobilization,
+    operation: {id: 'action-a', status: 'active'}}), 'permission-denied');
   assert.equal(mutation({mobilization,
-    operation: {id: 'action-a', status: 'active'}}).fields.id.length > 0, true);
+    operation: {id: 'action-a', status: 'active'},
+    operationAccess: {coordinator: false,
+      locationIds: ['bordeauxmetropole-bassens']}}).fields.id.length > 0, true);
 });

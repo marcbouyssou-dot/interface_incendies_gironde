@@ -134,7 +134,11 @@ class DefaultAccessibleMobilizationsProvider
           dataSource.watchLegacyActiveMobilizationId(uid),
           (legacyId) => legacyId == null
               ? Stream<List<Mobilization>>.value(const [])
-              : _watchMobilizations([legacyId]),
+              : _watchMobilizations([legacyId]).map(
+                  (items) => items
+                      .where((mobilization) => mobilization.operationId == null)
+                      .toList(growable: false),
+                ),
         );
       });
     });

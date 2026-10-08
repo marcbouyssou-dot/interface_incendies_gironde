@@ -9,6 +9,7 @@ import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/platform_admin/platform_admin_history_view_data.dart';
 import 'package:interface_incendies_gironde/platform_admin/platform_admin_statistics_view_data.dart';
 import 'package:interface_incendies_gironde/repositories/coordination_repository.dart';
+import 'package:interface_incendies_gironde/repositories/demo_history_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_admin_history_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
@@ -305,6 +306,47 @@ void main() {
     },
   );
 
+  testWidgets('la démonstration distingue acteurs et engagements fictifs', (
+    tester,
+  ) async {
+    final source = _history().operations.first.statistics;
+    final operation = Operation.fromMap({
+      ...source.operation.toMap(),
+      'purpose': 'demonstration',
+      'demoSafetyLabel': 'Action de démonstration — données fictives',
+    });
+    final entry = PlatformHistoryOperation(
+      OperationAdminStatistics(
+        operation: operation,
+        snapshot: source.snapshot,
+        territories: source.territories,
+        breakdown: source.breakdown,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: PlatformAdminHistoryDetailScreen(
+          entry: entry,
+          demoHistoryRepository: const _DemoHistorySource(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final section = find.byKey(const Key('platform-history-synthetic-actors'));
+    await _scrollTo(tester, section);
+    expect(
+      find.text('1 acteurs fictifs · 1 engagements fictifs'),
+      findsOneWidget,
+    );
+    final engagement = find.byKey(
+      const Key('demo-engagement-demo-engagement-09'),
+    );
+    await _scrollTo(tester, engagement);
+    expect(find.textContaining('statut inconnu'), findsWidgets);
+    expect(find.textContaining('personnage fictif'), findsOneWidget);
+  });
+
   testWidgets('la navigation compacte conserve un accès direct Historique', (
     tester,
   ) async {
@@ -565,6 +607,37 @@ class _HistorySource implements PlatformAdminHistoryDataSource {
 
   @override
   Stream<PlatformAdminHistoryViewData> watchHistory() => Stream.value(data);
+}
+
+class _DemoHistorySource implements DemoHistoryReadRepository {
+  const _DemoHistorySource();
+
+  @override
+  Future<DemoHistory> readHistory(String operationId) async =>
+      const DemoHistory(
+        actors: [
+          DemoActor(
+            id: 'demo-actor-01',
+            operationId: 'operation-archived',
+            label: 'Acteur fictif 01',
+            roles: ['responsable'],
+            professions: [],
+            historicalSiteIds: ['site-x'],
+          ),
+        ],
+        engagements: [
+          DemoEngagement(
+            id: 'demo-engagement-09',
+            operationId: 'operation-archived',
+            actorId: 'demo-actor-01',
+            missionId: 'mission-09',
+            locationId: 'site-x',
+            profession: 'physiotherapist',
+            status: 'unknown',
+            statusKnown: false,
+          ),
+        ],
+      );
 }
 
 class _OperationRepository implements OperationReadRepository {

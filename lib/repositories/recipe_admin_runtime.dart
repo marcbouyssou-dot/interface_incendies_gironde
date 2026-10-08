@@ -267,6 +267,10 @@ class _RecipeAdministrationService implements PlatformAdministrationService {
         name: draft.name,
         type: draft.type,
         context: draft.context,
+        purpose: draft.purpose,
+        themeKey: draft.themeKey,
+        organizerDisplayName: draft.organizerDisplayName,
+        demoSafetyLabel: draft.demoSafetyLabel,
         status: OperationStatus.draft,
         startAt: draft.startAt,
         endAt: draft.endAt,
@@ -289,6 +293,12 @@ class _RecipeAdministrationService implements PlatformAdministrationService {
         'name': draft.name,
         'type': draft.type.serializedValue,
         'context': draft.context,
+        'purpose': draft.purpose.name,
+        if (draft.themeKey != null) 'themeKey': draft.themeKey,
+        if (draft.organizerDisplayName != null)
+          'organizerDisplayName': draft.organizerDisplayName,
+        if (draft.demoSafetyLabel != null)
+          'demoSafetyLabel': draft.demoSafetyLabel,
         'startAt': draft.startAt,
         'endAt': draft.endAt,
         'scopeRefs': draft.scopeRefs

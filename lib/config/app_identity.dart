@@ -2,7 +2,8 @@ abstract final class AppIdentity {
   static const technicalName = 'InterfaceRecup33';
   static const productName = 'MobSanté';
   static const mobilizationSubtitle = 'Incendies Gironde';
-  static const productSubtitle = mobilizationSubtitle;
+  static const productSubtitle =
+      'Le bon professionnel, au bon endroit, au bon moment.';
   static const shortName = productName;
   static const institutionalSignature = 'URPS MK NA';
   static const pictogramAsset =

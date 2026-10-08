@@ -6,10 +6,15 @@ import {getFirestore as getAdminFirestore} from 'firebase-admin/firestore';
 import {deleteApp, initializeApp} from 'firebase/app';
 import {connectAuthEmulator, getAuth, signInWithEmailAndPassword} from 'firebase/auth';
 import {
+  collection,
   connectFirestoreEmulator,
   doc,
+  getDoc,
+  getDocs,
   getFirestore,
+  query,
   serverTimestamp,
+  where,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -160,6 +165,44 @@ test('verified MK can engage as MK but not as another open profession', async ()
   assert.equal(stored.profession, 'physiotherapist');
   const otherTarget = await mission();
   await assert.rejects(engage(identity, otherTarget, 'nurse'),
+    (error) => error.code === 'permission-denied');
+});
+
+test('one verified professional can engage in two Actions without exposing either engagement to another user', async () => {
+  const identity = await professional(true);
+  const other = await professional(true);
+  const targets = [];
+  for (const label of ['a', 'b']) {
+    const operationId = unique(`action-${label}`);
+    const target = await mission();
+    await adminDb.collection('operations').doc(operationId).set({
+      id: operationId, ownerOrganizationId: unique('organization'),
+      status: 'active', purpose: 'operational', visibility: 'platform',
+    });
+    await adminDb.collection('mobilizations').doc(target.mobilizationId)
+      .update({operationId});
+    await engage(identity, target, 'physiotherapist');
+    targets.push(target);
+  }
+  const own = await getDocs(query(collection(identity.firestore, 'engagements'),
+    where('volunteerId', '==', identity.uid)));
+  assert.ok(targets.every((target) => own.docs.some((snapshot) =>
+    snapshot.id === `${target.missionId}_${identity.uid}`)));
+  for (const target of targets) {
+    await assert.rejects(getDoc(doc(other.firestore, 'engagements',
+      `${target.missionId}_${identity.uid}`)),
+    (error) => error.code === 'permission-denied');
+  }
+  const completed = await mission();
+  const completedOperationId = unique('completed-demo');
+  await adminDb.collection('operations').doc(completedOperationId).set({
+    id: completedOperationId, ownerOrganizationId: unique('organization'),
+    status: 'completed', purpose: 'demonstration',
+    visibility: 'organization_private',
+  });
+  await adminDb.collection('mobilizations').doc(completed.mobilizationId)
+    .update({operationId: completedOperationId});
+  await assert.rejects(engage(identity, completed, 'physiotherapist'),
     (error) => error.code === 'permission-denied');
 });
 

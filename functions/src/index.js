@@ -66,6 +66,8 @@ import {
   readOrganizationAuthorization,
   resolveOrganizationAuthorization,
 } from './organization_authorization.js';
+import {canManageOperationLocation, resolveOperationAccess} from
+  './operation_access.js';
 import {verifyRpps} from './ans_rpps_verification.js';
 import {
   ProfessionalRppsVerificationError,
@@ -85,6 +87,7 @@ import {
   removeMobilizationCoordinator as removeMobilizationCoordinatorRequest,
   revokeHistoricalActionAccess as revokeHistoricalActionAccessRequest,
   setOperationCoordinator as setOperationCoordinatorRequest,
+  setOperationSiteAccess as setOperationSiteAccessRequest,
   transitionOperation as transitionOperationRequest,
   updateOperation as updateOperationRequest,
   updateMobilization as updateMobilizationRequest,
@@ -511,6 +514,16 @@ export const setOperationCoordinator = onCall(
   platformCallableOptions,
   async (request) => platformAdministrationCallable(() =>
     setOperationCoordinatorRequest({
+      callerUid: request.auth?.uid,
+      data: request.data,
+      services: platformServices(),
+    })),
+);
+
+export const setOperationSiteAccess = onCall(
+  platformCallableOptions,
+  async (request) => platformAdministrationCallable(() =>
+    setOperationSiteAccessRequest({
       callerUid: request.auth?.uid,
       data: request.data,
       services: platformServices(),
@@ -1286,11 +1299,28 @@ export function missionUpdateServices({firestore}) {
           )
           : null;
         const callerRole = caller.exists ? caller.data() : null;
+        let scopedAccess = null;
+        if (attachedOperation?.exists
+          && typeof attachedOperation.data().ownerOrganizationId === 'string') {
+          const organizationId = attachedOperation.data().ownerOrganizationId;
+          const [member, grant] = await Promise.all([
+            transaction.get(firestore.collection('organizationMemberships')
+              .doc(`${organizationId}_${callerUid}`)),
+            transaction.get(firestore.collection('operationAccess')
+              .doc(`${attachedOperationId}_${callerUid}`)),
+          ]);
+          scopedAccess = resolveOperationAccess({
+            operationId: attachedOperationId, organizationId, uid: callerUid,
+            membership: member.exists ? member.data() : null,
+            grant: grant.exists ? grant.data() : null,
+          });
+        }
         const mutation = missionUpdateMutation({
           request: {missionId, ...request},
           mission: missionData,
           mobilization: mobilizationData,
           operation: attachedOperation?.exists ? attachedOperation.data() : null,
+          operationAccess: scopedAccess,
           coordinatorAuthorized: canCoordinateMobilization({
             uid: callerUid,
             role: callerRole,
@@ -1360,6 +1390,7 @@ export function missionCreateServices({firestore}) {
         const roleData = role.exists ? role.data() : null;
         let organizationAuthorized = false;
         let attachedOperation = null;
+        let scopedAccess = null;
         if (mobilizationData?.status === 'active') {
           const operationId = mobilizationData.operationId;
           if (operationId === undefined) {
@@ -1382,18 +1413,22 @@ export function missionCreateServices({firestore}) {
             const ownerId = operation.exists
               ? operation.data().ownerOrganizationId : null;
             if (operation.exists && ownerId === undefined) {
-              organizationAuthorized = true;
+              organizationAuthorized = false;
             } else if (typeof ownerId === 'string'
                 && ownerId !== '' && !ownerId.includes('/')) {
-              const membership = await transaction.get(
-                firestore.collection('organizationMemberships')
-                  .doc(`${ownerId}_${callerUid}`),
-              );
-              organizationAuthorized = resolveOrganizationAuthorization({
-                organizationId: ownerId,
-                uid: callerUid,
+              const [membership, grant] = await Promise.all([
+                transaction.get(firestore.collection('organizationMemberships')
+                  .doc(`${ownerId}_${callerUid}`)),
+                transaction.get(firestore.collection('operationAccess')
+                  .doc(`${operationId}_${callerUid}`)),
+              ]);
+              scopedAccess = resolveOperationAccess({
+                operationId, organizationId: ownerId, uid: callerUid,
                 membership: membership.exists ? membership.data() : null,
-              }).hasActiveMembership;
+                grant: grant.exists ? grant.data() : null,
+              });
+              organizationAuthorized = canManageOperationLocation(
+                scopedAccess, request.locationId);
             }
           }
         }
@@ -1412,6 +1447,7 @@ export function missionCreateServices({firestore}) {
           organizationAuthorized,
           mobilization: mobilizationData,
           operation: attachedOperation,
+          operationAccess: scopedAccess,
           location: location.exists ? location.data() : null,
           serverTimestamp: FieldValue.serverTimestamp(),
           timestampFromMillis: (value) => new Date(value),
@@ -1573,6 +1609,7 @@ export function userDisplayIdentityServices({firestore, auth}) {
       const assignment = assignmentSnapshot.data();
       const mobilization = mobilizationSnapshot.data();
       let organizationId = LEGACY_ORGANIZATION_ID;
+      let scopedOperationId = null;
       if (typeof mobilization?.operationId === 'string'
         && mobilization.operationId !== '') {
         const operationSnapshot = await firestore
@@ -1591,19 +1628,37 @@ export function userDisplayIdentityServices({firestore, auth}) {
         }
         organizationId = operation.ownerOrganizationId
           ?? LEGACY_ORGANIZATION_ID;
+        scopedOperationId = mobilization.operationId;
       }
       const organizationAuthorization = await readOrganizationAuthorization({
         firestore,
         organizationId,
         uid: callerUid,
       });
-      const organizationAccess = !organizationAuthorization.usesLegacyFallback
-        && canReadOrganizationMissionTeam({
-          authorization: organizationAuthorization,
-          locationId: mission.locationId,
+      const [scopedMembership, scopedGrant] = scopedOperationId === null
+        ? [null, null] : await Promise.all([
+          firestore.collection('organizationMemberships')
+            .doc(`${organizationId}_${callerUid}`).get(),
+          firestore.collection('operationAccess')
+            .doc(`${scopedOperationId}_${callerUid}`).get(),
+        ]);
+      const operationAccess = scopedOperationId === null ? null
+        : resolveOperationAccess({
+          operationId: scopedOperationId, organizationId, uid: callerUid,
+          membership: scopedMembership?.exists
+            ? scopedMembership.data() : null,
+          grant: scopedGrant?.exists ? scopedGrant.data() : null,
         });
+      const organizationAccess = scopedOperationId !== null
+        ? canManageOperationLocation(operationAccess, mission.locationId)
+        : (!organizationAuthorization.usesLegacyFallback
+          && canReadOrganizationMissionTeam({
+            authorization: organizationAuthorization,
+            locationId: mission.locationId,
+          }));
       const legacyCoordinatorAccess =
-        organizationAuthorization.usesLegacyFallback
+        scopedOperationId === null
+        && organizationAuthorization.usesLegacyFallback
         && access !== null
         && canCoordinateMobilization({
           uid: callerUid,
@@ -1613,7 +1668,8 @@ export function userDisplayIdentityServices({firestore, auth}) {
           platformConfig: platformConfig.exists ? platformConfig.data() : null,
         });
       const legacyLocationAccess =
-        organizationAuthorization.usesLegacyFallback
+        scopedOperationId === null
+        && organizationAuthorization.usesLegacyFallback
         && access?.active === true
         && access.roles.includes('site_manager')
         && access.locationIds.includes(mission.locationId);

@@ -135,6 +135,10 @@ class OperationAdministrationDraft {
     required this.scopeRefs,
     this.context,
     this.endAt,
+    this.purpose = OperationPurpose.operational,
+    this.themeKey,
+    this.organizerDisplayName,
+    this.demoSafetyLabel,
   });
 
   final String operationId;
@@ -143,6 +147,10 @@ class OperationAdministrationDraft {
   final String? context;
   final DateTime startAt;
   final DateTime? endAt;
+  final OperationPurpose purpose;
+  final String? themeKey;
+  final String? organizerDisplayName;
+  final String? demoSafetyLabel;
   final List<OperationalScopeRef> scopeRefs;
 
   Map<String, Object?> toCallableData() => {
@@ -153,6 +161,11 @@ class OperationAdministrationDraft {
     'startAtMillis': startAt.millisecondsSinceEpoch,
     'endAtMillis': endAt?.millisecondsSinceEpoch,
     'scopeRefs': scopeRefs.map((ref) => ref.serializedValue).toList(),
+    'purpose': purpose.name,
+    if (themeKey != null) 'themeKey': themeKey,
+    if (organizerDisplayName != null)
+      'organizerDisplayName': organizerDisplayName,
+    if (demoSafetyLabel != null) 'demoSafetyLabel': demoSafetyLabel,
   };
 }
 

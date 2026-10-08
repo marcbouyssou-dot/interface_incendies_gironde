@@ -166,6 +166,14 @@ function organizationMembership(organizationId, uid, overrides = {}) {
   };
 }
 
+function operationAccess(operationId, organizationId, uid, roles,
+  locationIds = []) {
+  return {
+    operationId, organizationId, uid, roles, locationIds,
+    active: true, schemaVersion: 1,
+  };
+}
+
 async function seedOrganizations() {
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
@@ -272,7 +280,7 @@ async function seedMultiOrganizationCore() {
         'member-a',
         {roles: ['organization_admin', 'coordinator']},
       ],
-      ['organization-b', 'member-b', {}],
+      ['organization-b', 'member-b', {roles: ['coordinator']}],
       ['organization-a', 'inactive-member', {active: false}],
     ]) {
       await setDoc(
@@ -308,6 +316,14 @@ async function seedMultiOrganizationCore() {
         status: 'active',
         ...(operationId === null ? {} : {operationId}),
       });
+    }
+    for (const [operationId, organizationId, uid] of [
+      ['operation-a', 'organization-a', 'member-a'],
+      ['operation-b', 'organization-b', 'member-b'],
+    ]) {
+      await setDoc(doc(admin, `operationAccess/${operationId}_${uid}`),
+        operationAccess(operationId, organizationId, uid,
+          ['coordinator']));
     }
     await setDoc(doc(admin, 'roles/member-a'), {
       role: 'coordinator',
@@ -379,6 +395,15 @@ async function seedOrganizationRoleScope({
         active,
       }),
     );
+    const operationId = organizationId === 'organization-a'
+      ? 'operation-a' : 'operation-b';
+    const grantRoles = roles.filter((role) =>
+      role === 'coordinator' || role === 'site_manager');
+    if (grantRoles.length > 0) {
+      await setDoc(doc(admin, `operationAccess/${operationId}_${uid}`),
+        operationAccess(operationId, organizationId, uid,
+          grantRoles, locationIds));
+    }
     if (!seedDocuments) return;
     for (const [locationId, managingOrganizationId] of [
       ['site-rc43d-a', 'organization-a'],
@@ -2875,6 +2900,10 @@ test('JOB-0048: explicit mobilization cancellation stays organization-scoped', a
         locationIds: ['site-a'],
       }),
     );
+    await setDoc(doc(admin,
+      `operationAccess/operation-a_${authorizedUid}`),
+    operationAccess('operation-a', 'organization-a', authorizedUid,
+      ['site_manager'], ['site-a']));
   });
 
   await seedJob0048CancellationMission(authorizedUid, {
@@ -4232,6 +4261,21 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
         {uid, mobilizationId, role: 'coordinator', active: true},
       );
     }
+    for (const [uid, roles, locationIds, operationIds] of [
+      ['coord', ['coordinator'], [], ['operation-a']],
+      ['coord-b', ['coordinator'], [], ['operation-b']],
+      ['manager', ['site_manager'], ['site-a'],
+        ['operation-a', 'operation-b']],
+    ]) {
+      await setDoc(doc(admin, `organizationMemberships/legacy-gironde_${uid}`),
+        organizationMembership('legacy-gironde', uid,
+          {roles, locationIds}));
+      for (const operationId of operationIds) {
+        await setDoc(doc(admin, `operationAccess/${operationId}_${uid}`),
+          operationAccess(operationId, 'legacy-gironde', uid,
+            roles, locationIds));
+      }
+    }
     await setDoc(doc(admin, 'missions/mission-a1'), mission({
       id: 'mission-a1',
       mobilizationId: activeMobilizationId,
@@ -4296,10 +4340,11 @@ test('RC3.5: role scopes remain isolated across three active mobilizations', asy
     where('status', '==', 'active'),
   )));
   assert.equal(activeMobilizations.size, 3);
-  await assertFails(getDocs(query(
+  const visibleMobilizations = await assertSucceeds(getDocs(query(
     collection(db('coord'), 'mobilizations'),
     where('status', '==', 'active'),
   )));
+  assert.equal(visibleMobilizations.size, 3);
   let professionalMissionCount = 0;
   for (const mobilizationId of [
     activeMobilizationId,
@@ -4702,7 +4747,7 @@ test('RC4.3C: roles uid fallback is restricted to legacy Gironde', async () => {
     });
   });
 
-  await assertSucceeds(getDoc(doc(
+  await assertFails(getDoc(doc(
     db('legacy-only'),
     'operations/legacy-fallback-operation',
   )));
@@ -4757,11 +4802,12 @@ test('RC4.3D: site manager membership is limited to declared organization sites'
   });
 
   const managerDb = db('organization-manager-a');
-  await assertSucceeds(getDocs(query(
+  await assertFails(getDocs(query(
     collection(managerDb, 'operations'),
     where('ownerOrganizationId', '==', 'organization-a'),
     where('status', 'in', ['draft', 'planned', 'active', 'suspended']),
   )));
+  await assertSucceeds(getDoc(doc(managerDb, 'operations/operation-a')));
   await assertFails(getDocs(query(
     collection(managerDb, 'operations'),
     where('ownerOrganizationId', '==', 'organization-b'),
@@ -4792,6 +4838,18 @@ test('RC4.3D: site manager membership is limited to declared organization sites'
     managerDb,
     'engagements/mission-rc43d-b_professional',
   )));
+  // The same physical site in Action B is still outside this Action A grant.
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    await setDoc(doc(admin, 'missions/mission-rc43d-b-shared-site'), mission({
+      id: 'mission-rc43d-b-shared-site',
+      mobilizationId: 'mobilization-b',
+      locationId: 'site-rc43d-a',
+      locationName: 'site-rc43d-a',
+    }));
+  });
+  await assertFails(getDoc(doc(managerDb,
+    'missions/mission-rc43d-b-shared-site')));
 });
 
 test('RC4.3D: one UID keeps distinct coordinator and manager roles in A and B', async () => {
@@ -4919,10 +4977,12 @@ test('RC4.2G: organization member is isolated across the complete parent chain',
   await assertSucceeds(getDocs(query(
     collection(memberDb, 'engagements'),
     where('mobilizationId', '==', 'mobilization-a'),
+    where('missionId', '==', 'mission-org-a'),
   )));
   await assertFails(getDocs(query(
     collection(memberDb, 'engagements'),
     where('mobilizationId', '==', 'mobilization-b'),
+    where('missionId', '==', 'mission-org-b'),
   )));
 
   await assertSucceeds(setDoc(
@@ -5478,6 +5538,10 @@ async function seedHistoricalActions(status) {
         uid, operationId: 'incendies-gironde-fixture', roles,
         locationIds, active: true, schemaVersion: 1,
       });
+      await setDoc(doc(admin,
+        `operationAccess/incendies-gironde-fixture_${uid}`),
+      operationAccess('incendies-gironde-fixture', 'urps-fixture', uid,
+        roles, locationIds));
     }
   });
 }

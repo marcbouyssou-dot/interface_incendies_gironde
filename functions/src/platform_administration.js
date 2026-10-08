@@ -37,6 +37,10 @@ const OPERATION_FIELDS = Object.freeze([
   'operationId', 'name', 'type', 'context', 'startAtMillis', 'endAtMillis',
   'scopeRefs',
 ]);
+const OPERATION_OPTIONAL_FIELDS = Object.freeze([
+  'purpose', 'themeKey', 'organizerDisplayName', 'demoSafetyLabel',
+]);
+const OPERATION_PURPOSES = new Set(['operational', 'demonstration']);
 const OPERATION_TRANSITION_FIELDS = Object.freeze([
   'operationId', 'targetStatus',
 ]);
@@ -47,6 +51,9 @@ const HISTORICAL_REVOKE_REASONS = new Set([
   'incorrect_scope', 'privacy_request', 'administrative_correction',
 ]);
 const OPERATION_COORDINATOR_FIELDS = Object.freeze(['operationId', 'uid']);
+const OPERATION_SITE_ACCESS_FIELDS = Object.freeze([
+  'operationId', 'uid', 'locationIds',
+]);
 
 export class PlatformAdministrationError extends Error {
   constructor(code, message, options = {}) {
@@ -150,6 +157,24 @@ export async function setOperationCoordinator({callerUid, data, services}) {
     callerUid,
     operationId: validateDocumentId(data.operationId),
     uid: validateUid(data.uid),
+  });
+}
+
+export async function setOperationSiteAccess({callerUid, data, services}) {
+  requireCaller(callerUid);
+  requireServices(services, 'setOperationSiteAccess');
+  if (!isPlainObject(data)
+    || !hasExactlyKeys(data, OPERATION_SITE_ACCESS_FIELDS)
+    || !Array.isArray(data.locationIds)
+    || data.locationIds.length > 65
+    || new Set(data.locationIds).size !== data.locationIds.length) {
+    throw invalidArgument();
+  }
+  return services.setOperationSiteAccess({
+    callerUid,
+    operationId: validateDocumentId(data.operationId),
+    uid: validateUid(data.uid),
+    locationIds: data.locationIds.map(validateDocumentId),
   });
 }
 
@@ -260,7 +285,9 @@ function validateMobilizationPayload(data) {
 }
 
 function validateOperationPayload(data) {
-  if (!isPlainObject(data) || !hasExactlyKeys(data, OPERATION_FIELDS)) {
+  if (!isPlainObject(data) || !hasRequiredAndOnlyKeys(
+    data, OPERATION_FIELDS, OPERATION_OPTIONAL_FIELDS,
+  )) {
     throw invalidArgument();
   }
   if (!OPERATION_TYPES.has(data.type)) throw invalidArgument();
@@ -271,6 +298,22 @@ function validateOperationPayload(data) {
   if (endAtMillis !== null && endAtMillis <= startAtMillis) {
     throw invalidArgument();
   }
+  const purpose = Object.hasOwn(data, 'purpose') ? data.purpose : null;
+  if (purpose !== null && !OPERATION_PURPOSES.has(purpose)) {
+    throw invalidArgument();
+  }
+  const themeKey = Object.hasOwn(data, 'themeKey')
+    ? optionalText(data.themeKey, 80) : undefined;
+  if (themeKey && !/^[a-z][a-z0-9_-]*$/.test(themeKey)) {
+    throw invalidArgument();
+  }
+  const organizerDisplayName = Object.hasOwn(data, 'organizerDisplayName')
+    ? optionalText(data.organizerDisplayName, 160) : undefined;
+  const demoSafetyLabel = Object.hasOwn(data, 'demoSafetyLabel')
+    ? optionalText(data.demoSafetyLabel, 160) : undefined;
+  if (purpose === 'demonstration' && !demoSafetyLabel) {
+    throw invalidArgument();
+  }
   return Object.freeze({
     operationId: validateDocumentId(data.operationId),
     name: requiredText(data.name, 160),
@@ -279,6 +322,10 @@ function validateOperationPayload(data) {
     startAtMillis,
     endAtMillis,
     scopeRefs: validateScopeRefs(data.scopeRefs),
+    purpose,
+    themeKey,
+    organizerDisplayName,
+    demoSafetyLabel,
   });
 }
 

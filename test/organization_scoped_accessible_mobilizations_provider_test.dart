@@ -9,6 +9,7 @@ import 'package:interface_incendies_gironde/models/organization_role.dart';
 import 'package:interface_incendies_gironde/models/organization_visibility.dart';
 import 'package:interface_incendies_gironde/models/territory.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
+import 'package:interface_incendies_gironde/repositories/operation_access_read_repository.dart';
 import 'package:interface_incendies_gironde/services/accessible_mobilizations_provider.dart';
 import 'package:interface_incendies_gironde/services/legacy_organization_resolver.dart';
 import 'package:interface_incendies_gironde/services/organization_scoped_accessible_mobilizations_provider.dart';
@@ -27,6 +28,7 @@ void main() {
         legacyDelegate: legacy,
         organizationRepository: platform,
         context: context,
+        accessRepository: const _AccessRepository(),
       );
 
       expect(
@@ -144,8 +146,12 @@ class _PlatformRepository implements PlatformReadRepository {
   }) {
     reads++;
     return Stream.value([
-      _mobilization('organization-active'),
-      _mobilization('organization-inactive', active: false),
+      _mobilization('organization-active', operationId: 'action-a'),
+      _mobilization(
+        'organization-inactive',
+        active: false,
+        operationId: 'action-a',
+      ),
     ]);
   }
 
@@ -159,7 +165,27 @@ class _PlatformRepository implements PlatformReadRepository {
   Stream<List<Territory>> watchTerritories() => Stream.value(const []);
 }
 
-Mobilization _mobilization(String id, {bool active = true}) => Mobilization(
+class _AccessRepository implements OperationAccessReadRepository {
+  const _AccessRepository();
+
+  @override
+  Stream<List<OperationAccess>> watchForUser(String uid) => Stream.multi(
+    (controller) => controller.add(const [
+      OperationAccess(
+        operationId: 'action-a',
+        organizationId: 'organization-a',
+        roles: {OrganizationRole.coordinator},
+        locationIds: {},
+      ),
+    ]),
+  );
+}
+
+Mobilization _mobilization(
+  String id, {
+  bool active = true,
+  String? operationId,
+}) => Mobilization(
   id: id,
   territoryId: 'gironde',
   name: id,
@@ -170,4 +196,5 @@ Mobilization _mobilization(String id, {bool active = true}) => Mobilization(
   createdAt: DateTime.utc(2026, 8, 21),
   updatedAt: DateTime.utc(2026, 8, 21),
   schemaVersion: 1,
+  operationId: operationId,
 );

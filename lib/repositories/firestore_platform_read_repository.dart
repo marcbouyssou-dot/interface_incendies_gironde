@@ -285,7 +285,8 @@ class FirestorePlatformReadRepository
       ) {
         if (document == null) return null;
         final mobilization = _mobilizationFromDocument(document);
-        return mobilization.status == MobilizationStatus.active
+        return mobilization.operationId == null &&
+                mobilization.status == MobilizationStatus.active
             ? mobilization
             : null;
       });

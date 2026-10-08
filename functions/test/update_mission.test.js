@@ -92,6 +92,7 @@ function mutation(overrides = {}) {
       ? overrides.mobilization
       : {id: 'mobilization-active', status: 'active'},
     operation: overrides.operation ?? null,
+    operationAccess: overrides.operationAccess ?? null,
     coordinatorAuthorized: overrides.coordinatorAuthorized ?? true,
     destination: Object.hasOwn(overrides, 'destination')
       ? overrides.destination
@@ -496,6 +497,9 @@ test('closed or missing parent Action blocks mission update', () => {
     }), 'failed-precondition');
   }
   assertCode(() => mutation({mobilization}), 'failed-precondition');
+  assertCode(() => mutation({mobilization,
+    operation: {id: 'action-a', status: 'active'}}), 'permission-denied');
   assert.ok(mutation({mobilization,
-    operation: {id: 'action-a', status: 'active'}}).fields);
+    operation: {id: 'action-a', status: 'active'},
+    operationAccess: {coordinator: true, locationIds: []}}).fields);
 });

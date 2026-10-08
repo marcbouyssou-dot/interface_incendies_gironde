@@ -22,7 +22,8 @@ export function canCoordinateMobilization({
     return true;
   }
   if (!legacyFallbackIsAvailable(role)) return false;
-  return isPlainObject(platformConfig)
+  return !Object.hasOwn(mobilization, 'operationId')
+    && isPlainObject(platformConfig)
     && platformConfig.activeMobilizationId === mobilization.id;
 }
 

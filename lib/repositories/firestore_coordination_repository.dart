@@ -51,6 +51,8 @@ import 'platform_administration_read_repository.dart';
 import 'platform_actor_read_repository.dart';
 import 'platform_read_repository.dart';
 import 'platform_runtime.dart';
+import 'demo_history_read_repository.dart';
+import 'operation_access_read_repository.dart';
 import 'public_mobilization_read_repository.dart';
 import 'user_display_identity_resolver.dart';
 
@@ -256,6 +258,8 @@ class FirestoreCoordinationRepository
         MultiOperationPlatformRuntime,
         PlatformActorRuntime,
         OrganizationRuntime,
+        DemoHistoryRuntime,
+        OperationAccessRuntime,
         PlatformAccountAuthenticator,
         VisitorOperationalReadGate {
   FirestoreCoordinationRepository(
@@ -287,6 +291,14 @@ class FirestoreCoordinationRepository
   }
 
   final FirebaseFirestore _firestore;
+
+  @override
+  DemoHistoryReadRepository get demoHistoryReadRepository =>
+      FirestoreDemoHistoryReadRepository(_responsibleFirestore);
+
+  @override
+  OperationAccessReadRepository get operationAccessReadRepository =>
+      FirestoreOperationAccessReadRepository(_responsibleFirestore);
   final FirebaseAuth _auth;
   final MobilizationContextProvider _mobilizationProvider;
   final FirebaseFirestore _responsibleFirestore;

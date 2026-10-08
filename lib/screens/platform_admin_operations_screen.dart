@@ -1267,7 +1267,9 @@ class _OperationCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(V5Radius.control),
                       ),
                       child: Icon(
-                        Icons.domain_rounded,
+                        operation.themeKey == 'fire'
+                            ? Icons.local_fire_department_outlined
+                            : Icons.domain_rounded,
                         size: 21,
                         color: context.v5Colors.textSecondary,
                       ),
@@ -1292,6 +1294,13 @@ class _OperationCard extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                           ),
+                          if (operation.demoSafetyLabel case final label?) ...[
+                            const SizedBox(height: V5Spacing.xxs),
+                            Text(
+                              label,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1436,6 +1445,10 @@ class _OperationDetailHeader extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
           ),
+          if (operation.demoSafetyLabel case final label?) ...[
+            const SizedBox(height: V5Spacing.xs),
+            Text(label, key: const Key('operation-demo-safety-label')),
+          ],
           const SizedBox(height: V5Spacing.sm),
           Wrap(
             spacing: V5Spacing.xs,
@@ -1454,6 +1467,14 @@ class _OperationDetailHeader extends StatelessWidget {
           if (operation.context case final contextText?) ...[
             const SizedBox(height: V5Spacing.md),
             Text(contextText, style: Theme.of(context).textTheme.bodyMedium),
+          ],
+          if (operation.organizerDisplayName case final organizer?) ...[
+            const SizedBox(height: V5Spacing.md),
+            _OperationInformationRow(
+              icon: Icons.business_outlined,
+              label: 'Organisateur',
+              value: organizer,
+            ),
           ],
           const SizedBox(height: V5Spacing.md),
           _OperationInformationRow(

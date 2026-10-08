@@ -65,6 +65,46 @@ void main() {
     );
   });
 
+  test(
+    'demonstration contract round-trips without changing legacy actions',
+    () {
+      final legacy = Operation.fromMap(_operationData('legacy-action'));
+      expect(legacy.purpose, OperationPurpose.operational);
+      expect(legacy.toMap(), isNot(contains('purpose')));
+
+      final action = Operation.fromMap({
+        ..._operationData('demo-action'),
+        'status': 'completed',
+        'purpose': 'demonstration',
+        'themeKey': 'fire',
+        'organizerDisplayName': 'Organisation partenaire',
+        'demoSafetyLabel': 'Action de démonstration — données fictives',
+        'provenance': {
+          'sourceDataset': 'historical_action',
+          'sourceObjectType': 'mobilization',
+          'migrationLot': 'BETA-READY-004K',
+          'migrationDate': '2026-10-08T09:00:00.000Z',
+        },
+      });
+
+      expect(action.purpose, OperationPurpose.demonstration);
+      expect(action.themeKey, 'fire');
+      expect(action.organizerDisplayName, 'Organisation partenaire');
+      expect(action.isEngageable, isFalse);
+      expect(
+        Operation.fromMap(action.toMap()).provenance?.sourceDataset,
+        'historical_action',
+      );
+      expect(
+        () => Operation.fromMap({
+          ..._operationData('unlabelled'),
+          'purpose': 'demonstration',
+        }),
+        throwsFormatException,
+      );
+    },
+  );
+
   test('operation refuses a malformed coordinator identifier', () {
     expect(
       () => Operation.fromMap({
@@ -146,6 +186,24 @@ void main() {
       expect(mobilizations.map((mobilization) => mobilization.id), ['legacy']);
     },
   );
+
+  test('legacy pointer cannot select an Action-linked mobilization', () async {
+    final dataSource = _AccessibleDataSource(
+      ids: const [],
+      legacyId: 'action-mobilization',
+      documents: {
+        'action-mobilization': _mobilizationDocument(
+          'action-mobilization',
+          operationId: 'operation-a',
+        ),
+      },
+    );
+    final provider = DefaultAccessibleMobilizationsProvider(
+      dataSource: dataSource,
+    );
+
+    expect(await provider.watchAccessibleMobilizations().first, isEmpty);
+  });
 
   test(
     'an explicit assignment immediately replaces the legacy fallback',

@@ -8,5 +8,6 @@ export function operationAllowsOperationalMutation(mobilization, operation) {
     && operation !== null
     && typeof operation === 'object'
     && operation.id === mobilization.operationId
-    && operation.status === 'active';
+    && operation.status === 'active'
+    && operation.purpose !== 'demonstration';
 }

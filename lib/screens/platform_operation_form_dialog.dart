@@ -88,6 +88,10 @@ class _PlatformOperationFormDialogState
         context: _context.text.trim().isEmpty ? null : _context.text.trim(),
         startAt: _startAt,
         endAt: _endAt,
+        purpose: widget.operation?.purpose ?? OperationPurpose.operational,
+        themeKey: widget.operation?.themeKey,
+        organizerDisplayName: widget.operation?.organizerDisplayName,
+        demoSafetyLabel: widget.operation?.demoSafetyLabel,
         scopeRefs: [
           ...preservedLocationScopes,
           ..._territoryIds.map(

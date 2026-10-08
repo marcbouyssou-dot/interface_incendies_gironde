@@ -16,6 +16,7 @@ import 'package:interface_incendies_gironde/repositories/coordination_repository
 import 'package:interface_incendies_gironde/repositories/operation_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_scoped_mission_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_scoped_operation_read_repository.dart';
+import 'package:interface_incendies_gironde/repositories/operation_access_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/organization_scoped_platform_read_repository.dart';
 import 'package:interface_incendies_gironde/repositories/platform_read_repository.dart';
 import 'package:interface_incendies_gironde/services/legacy_organization_resolver.dart';
@@ -216,7 +217,7 @@ void main() {
     );
 
     test(
-      'legacy site manager with membership uses the same bounded read',
+      'legacy site manager with membership reads linked Actions only at their site',
       () async {
         final fixture = _Fixture()
           ..selectLegacySiteManager(withMembership: true);
@@ -231,7 +232,10 @@ void main() {
             .missionDataSource
             .requestedMobilizationLocationScopes
             .single;
-        expect(scope.mobilizationIds, {'mobilization-legacy'});
+        expect(scope.mobilizationIds, {
+          'mobilization-gironde',
+          'mobilization-legacy',
+        });
         expect(scope.locationIds, {'location-legacy'});
       },
     );
@@ -244,6 +248,7 @@ class _Fixture {
       missionDataSource = _MissionRepository(_missions()) {
     final operationRepository = OrganizationScopedOperationReadRepository(
       delegate: _OperationRepository(_operations()),
+      accessRepository: const _AccessRepository(),
       context: context,
     );
     final platformRepository = OrganizationScopedPlatformReadRepository(
@@ -337,6 +342,33 @@ class _Fixture {
       );
 
   void dispose() => context.dispose();
+}
+
+class _AccessRepository implements OperationAccessReadRepository {
+  const _AccessRepository();
+
+  @override
+  Stream<List<OperationAccess>> watchForUser(String uid) => Stream.multi(
+    (controller) => controller.add(switch (uid) {
+      'legacy-manager' => const [
+        OperationAccess(
+          operationId: 'operation-gironde',
+          organizationId: 'legacy-gironde',
+          roles: {OrganizationRole.siteManager},
+          locationIds: {'location-legacy'},
+        ),
+      ],
+      'test-user' => const [
+        OperationAccess(
+          operationId: 'operation-test',
+          organizationId: 'test-organization',
+          roles: {OrganizationRole.coordinator},
+          locationIds: {},
+        ),
+      ],
+      _ => const [],
+    }),
+  );
 }
 
 class _MissionRepository

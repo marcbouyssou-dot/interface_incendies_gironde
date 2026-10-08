@@ -9,6 +9,7 @@ import {
   sameHistoricalAccessGrant,
 } from './historical_access_lifecycle.js';
 import {publicMissionId} from './public_discovery/projector.js';
+import {resolveOrganizationAuthorization} from './organization_authorization.js';
 
 const MOBILIZATION_STATUSES = new Set([
   'draft',
@@ -58,6 +59,11 @@ export function platformAdministrationServices({
         request,
       }),
     setOperationCoordinator: (request) => runSetOperationCoordinator({
+      firestore,
+      serverTimestamp,
+      request,
+    }),
+    setOperationSiteAccess: (request) => runSetOperationSiteAccess({
       firestore,
       serverTimestamp,
       request,
@@ -123,6 +129,13 @@ async function runCreateOperation({firestore, serverTimestamp, request}) {
       name: request.name,
       type: request.type,
       status: 'draft',
+      purpose: request.purpose ?? 'operational',
+      ...(request.themeKey !== undefined
+        ? {themeKey: request.themeKey} : {}),
+      ...(request.organizerDisplayName !== undefined
+        ? {organizerDisplayName: request.organizerDisplayName} : {}),
+      ...(request.demoSafetyLabel !== undefined
+        ? {demoSafetyLabel: request.demoSafetyLabel} : {}),
       context: request.context,
       startAt: new Date(request.startAtMillis),
       endAt: request.endAtMillis === null
@@ -134,7 +147,7 @@ async function runCreateOperation({firestore, serverTimestamp, request}) {
       createdAt: timestamp,
       updatedBy: request.callerUid,
       updatedAt: timestamp,
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
     return {operationId: request.operationId, status: 'draft'};
   });
@@ -156,6 +169,15 @@ async function runUpdateOperation({firestore, serverTimestamp, request}) {
       );
     }
     requireValidScopes(request.scopeRefs, scopeSnapshots);
+    const nextPurpose = request.purpose ?? current.purpose ?? 'operational';
+    const nextLabel = request.demoSafetyLabel === undefined
+      ? current.demoSafetyLabel : request.demoSafetyLabel;
+    if (nextPurpose === 'demonstration' && !nextLabel) {
+      throw new PlatformAdministrationError(
+        'invalid-argument',
+        'Une action de démonstration doit porter un label explicite.',
+      );
+    }
     transaction.update(operationRef, {
       name: request.name,
       type: request.type,
@@ -165,6 +187,13 @@ async function runUpdateOperation({firestore, serverTimestamp, request}) {
         ? null
         : new Date(request.endAtMillis),
       scopeRefs: [...request.scopeRefs],
+      ...(request.purpose !== null ? {purpose: request.purpose} : {}),
+      ...(request.themeKey !== undefined
+        ? {themeKey: request.themeKey} : {}),
+      ...(request.organizerDisplayName !== undefined
+        ? {organizerDisplayName: request.organizerDisplayName} : {}),
+      ...(request.demoSafetyLabel !== undefined
+        ? {demoSafetyLabel: request.demoSafetyLabel} : {}),
       updatedBy: request.callerUid,
       updatedAt: serverTimestamp(),
     });
@@ -206,6 +235,12 @@ async function runTransitionOperation({firestore, serverTimestamp, request}) {
       ? await transaction.get(firestore.collection('historicalActionAccess')
         .where('operationId', '==', request.operationId))
       : {docs: []};
+    const currentScopes = createsHistory
+      ? await transaction.get(firestore.collection('operationAccess')
+        .where('operationId', '==', request.operationId))
+      : {docs: []};
+    const activeScopes = currentScopes.docs.filter((snapshot) =>
+      snapshot.data().active === true);
     const expectedGrantIds = new Set(grants.map((grant) =>
       `${request.operationId}_${grant.uid}`));
     if (actionGrants.docs.some((snapshot) => snapshot.data().active === true
@@ -233,7 +268,8 @@ async function runTransitionOperation({firestore, serverTimestamp, request}) {
     const newGrantCount = existingGrants.filter((snapshot) =>
       !snapshot.exists).length;
     // Count serverTimestamp transforms conservatively as additional writes.
-    if (2 + newGrantCount * 4 + publicMissionIds.length > 500) {
+    if (2 + newGrantCount * 4 + activeScopes.length * 2
+      + publicMissionIds.length > 500) {
       throw new PlatformAdministrationError(
         'failed-precondition',
         'Trop de fiches publiques pour une clôture atomique.',
@@ -268,6 +304,11 @@ async function runTransitionOperation({firestore, serverTimestamp, request}) {
         actorUid: request.callerUid,
         occurredAt: timestamp,
       });
+    }
+    for (const scope of activeScopes) {
+      transaction.update(scope.ref ?? firestore.collection('operationAccess')
+        .doc(scope.id), {active: false,
+          updatedBy: request.callerUid, updatedAt: timestamp});
     }
     for (const publicId of publicMissionIds) {
       transaction.delete(firestore.collection('publicMissionDiscovery')
@@ -316,60 +357,42 @@ async function prepareHistoricalActionGrants({
       'Trop de mobilisations pour une clôture atomique.',
     );
   }
-  const [missionSnapshots, assignmentSnapshots, siteManagerMemberships] =
+  const [missionSnapshots, scopedAccessSnapshots] =
     await Promise.all([
       Promise.all(scopedMobilizations.map(({id}) => transaction.get(
         firestore.collection('missions').where('mobilizationId', '==', id),
       ))),
-      Promise.all(scopedMobilizations.map(({id}) => transaction.get(
-        firestore.collection('mobilizationAssignments')
-          .where('mobilizationId', '==', id),
-      ))),
-      transaction.get(firestore.collection('organizationMemberships')
-        .where('organizationId', '==', organizationId)
-        .where('roles', 'array-contains', 'site_manager')),
+      transaction.get(firestore.collection('operationAccess')
+        .where('operationId', '==', operationId)),
     ]);
   const missions = missionSnapshots.flatMap((snapshot) => snapshot.docs)
     .map((snapshot) => ({id: snapshot.id, data: snapshot.data()}));
-  const assignments = assignmentSnapshots.flatMap((snapshot) => snapshot.docs)
+  const scopedAccess = scopedAccessSnapshots.docs
     .map((snapshot) => ({id: snapshot.id, data: snapshot.data()}));
-  if (missions.length > 1000 || siteManagerMemberships.docs.length > 200) {
+  if (missions.length > 1000 || scopedAccess.length > 200) {
     throw new PlatformAdministrationError(
       'failed-precondition',
       'Périmètre trop vaste pour une clôture atomique.',
     );
   }
-  const coordinatorUids = new Set([
-    ...(coordinatorUid === null ? [] : [coordinatorUid]),
-    ...assignments.filter(({data}) => data.role === 'coordinator'
-      && data.active === true).map(({data}) => data.uid),
-  ]);
-  if ([...coordinatorUids].some((uid) => !isHistoricalAccessId(uid))) {
+  if (scopedAccess.some(({data}) => !isHistoricalAccessId(data.uid))) {
     throw new PlatformAdministrationError(
       'failed-precondition',
-      'Affectation Coordinateur historique invalide.',
+      'Habilitation historique invalide.',
     );
   }
-  const coordinatorMemberships = await Promise.all([...coordinatorUids]
-    .map((uid) => transaction.get(firestore
+  const membershipSnapshots = await Promise.all(scopedAccess
+    .map((access) => transaction.get(firestore
       .collection('organizationMemberships')
-      .doc(`${organizationId}_${uid}`))));
-  const membershipMap = new Map(siteManagerMemberships.docs.map((snapshot) => [
-    snapshot.id, {id: snapshot.id, data: snapshot.data()},
-  ]));
-  for (const snapshot of coordinatorMemberships) {
-    if (snapshot.exists) membershipMap.set(snapshot.id, {
-      id: snapshot.id,
-      data: snapshot.data(),
-    });
-  }
+      .doc(`${organizationId}_${access.data.uid}`))));
   return planHistoricalAccessGrants({
     operationId,
     operation,
     mobilizations: scopedMobilizations,
     missions,
-    assignments,
-    memberships: [...membershipMap.values()],
+    operationAccess: scopedAccess,
+    memberships: membershipSnapshots.filter((snapshot) => snapshot.exists)
+      .map((snapshot) => ({id: snapshot.id, data: snapshot.data()})),
   });
 }
 
@@ -444,6 +467,46 @@ async function runSetOperationCoordinator({
         'Le compte cible doit être un Coordinateur V5 actif.',
       );
     }
+    const organizationId = currentOperation.ownerOrganizationId;
+    let scopedGrantUpdate = null;
+    if (isHistoricalAccessId(organizationId)) {
+      const membershipRef = firestore.collection('organizationMemberships')
+        .doc(`${organizationId}_${request.uid}`);
+      const targetGrantRef = firestore.collection('operationAccess')
+        .doc(`${request.operationId}_${request.uid}`);
+      const scopeQuery = firestore.collection('operationAccess')
+        .where('operationId', '==', request.operationId);
+      const [membership, targetGrant, existingScopes] = await Promise.all([
+        transaction.get(membershipRef),
+        transaction.get(targetGrantRef),
+        transaction.get(scopeQuery),
+      ]);
+      const authorization = resolveOrganizationAuthorization({
+        organizationId, uid: request.uid,
+        membership: membership.exists ? membership.data() : null,
+      });
+      if (!authorization.hasActiveMembership
+        || !authorization.isCoordinator) {
+        throw new PlatformAdministrationError('failed-precondition',
+          'Une membership Coordinateur active est requise pour cette Action.');
+      }
+      scopedGrantUpdate = {targetGrantRef, targetGrant,
+        existingScopes: existingScopes.docs.filter((scope) =>
+          scope.data().active === true
+          && Array.isArray(scope.data().roles)
+          && scope.data().roles.includes('coordinator')
+          && scope.data().uid !== request.uid),
+        preserveSiteManager: targetGrant.exists
+          && targetGrant.data().active === true
+          && targetGrant.data().operationId === request.operationId
+          && targetGrant.data().organizationId === organizationId
+          && targetGrant.data().uid === request.uid
+          && Array.isArray(targetGrant.data().roles)
+          && targetGrant.data().roles.includes('site_manager')
+          && authorization.isSiteManager
+          && Array.isArray(targetGrant.data().locationIds)
+          && targetGrant.data().locationIds.length > 0};
+    }
 
     const scopedMobilizations = mobilizations.docs.map((snapshot) => ({
       snapshot,
@@ -476,7 +539,9 @@ async function runSetOperationCoordinator({
       + scopedActiveAssignments.filter((snapshot) =>
         snapshot.id !== `${snapshot.data().mobilizationId}_${request.uid}`
           || snapshot.data().uid !== request.uid).length
-      + replacedUids.length;
+      + replacedUids.length
+      + (scopedGrantUpdate === null ? 0
+        : 1 + scopedGrantUpdate.existingScopes.length);
     if (estimatedWriteCount > 450) {
       throw new PlatformAdministrationError(
         'failed-precondition',
@@ -515,6 +580,31 @@ async function runSetOperationCoordinator({
       ]);
 
     const timestamp = serverTimestamp();
+    if (scopedGrantUpdate !== null) {
+      for (const scope of scopedGrantUpdate.existingScopes) {
+        const remainingRoles = scope.data().roles
+          .filter((role) => role !== 'coordinator');
+        transaction.update(scope.ref ?? firestore.collection('operationAccess')
+          .doc(scope.id), remainingRoles.length === 0
+          ? {active: false, updatedBy: request.callerUid,
+            updatedAt: timestamp}
+          : {roles: remainingRoles, updatedBy: request.callerUid,
+            updatedAt: timestamp});
+      }
+      const prior = scopedGrantUpdate.targetGrant.exists
+        ? scopedGrantUpdate.targetGrant.data() : null;
+      transaction.set(scopedGrantUpdate.targetGrantRef, {
+        uid: request.uid, operationId: request.operationId, organizationId,
+        roles: scopedGrantUpdate.preserveSiteManager
+          ? ['coordinator', 'site_manager'] : ['coordinator'],
+        locationIds: scopedGrantUpdate.preserveSiteManager
+          ? prior.locationIds : [],
+        active: true, schemaVersion: 1,
+        assignedBy: request.callerUid,
+        createdAt: prior?.createdAt ?? timestamp,
+        updatedBy: request.callerUid, updatedAt: timestamp,
+      }, {merge: false});
+    }
     transaction.update(operationRef, {
       coordinatorUid: request.uid,
       coordinatorUpdatedBy: request.callerUid,
@@ -578,6 +668,76 @@ async function runSetOperationCoordinator({
         ({data}) => data.status === 'active',
       ).length,
     };
+  });
+}
+
+async function runSetOperationSiteAccess({firestore, serverTimestamp, request}) {
+  return firestore.runTransaction(async (transaction) => {
+    await requirePlatformAdministrator({firestore, transaction, request});
+    const operationRef = operationReference(firestore, request.operationId);
+    const operationSnapshot = await transaction.get(operationRef);
+    const operation = requireOperation(operationSnapshot);
+    const organizationId = operation.ownerOrganizationId;
+    if (!isHistoricalAccessId(organizationId)
+      || operation.status === 'completed'
+      || operation.status === 'archived') {
+      throw new PlatformAdministrationError('failed-precondition',
+        'Cette Action ne peut plus recevoir une habilitation Responsable.');
+    }
+    const membershipRef = firestore.collection('organizationMemberships')
+      .doc(`${organizationId}_${request.uid}`);
+    const grantRef = firestore.collection('operationAccess')
+      .doc(`${request.operationId}_${request.uid}`);
+    const locationRefs = request.locationIds.map((id) =>
+      firestore.collection('locations').doc(id));
+    const [membership, grant, locations] = await Promise.all([
+      transaction.get(membershipRef),
+      transaction.get(grantRef),
+      Promise.all(locationRefs.map((ref) => transaction.get(ref))),
+    ]);
+    const authorization = resolveOrganizationAuthorization({
+      organizationId, uid: request.uid,
+      membership: membership.exists ? membership.data() : null,
+    });
+    if (!authorization.hasActiveMembership
+      || !authorization.isSiteManager
+      || request.locationIds.some((id) =>
+        !authorization.locationIds.includes(id))
+      || locations.some((snapshot) =>
+        !snapshot.exists
+        || snapshot.data().active === false
+        || (snapshot.data().managingOrganizationId ?? 'legacy-gironde')
+          !== organizationId)) {
+      throw new PlatformAdministrationError('failed-precondition',
+        'Le périmètre Responsable doit appartenir à cette Action et organisation.');
+    }
+    const current = grant.exists ? grant.data() : null;
+    if (current !== null && (current.uid !== request.uid
+      || current.operationId !== request.operationId
+      || current.organizationId !== organizationId)) {
+      throw new PlatformAdministrationError('failed-precondition',
+        'Habilitation d’Action incohérente.');
+    }
+    const keepCoordinator = current?.active === true
+      && Array.isArray(current.roles)
+      && current.roles.includes('coordinator')
+      && authorization.isCoordinator;
+    const active = keepCoordinator || request.locationIds.length > 0;
+    const timestamp = serverTimestamp();
+    transaction.set(grantRef, {
+      uid: request.uid, operationId: request.operationId, organizationId,
+      roles: [
+        ...(keepCoordinator ? ['coordinator'] : []),
+        ...(request.locationIds.length > 0 ? ['site_manager'] : []),
+      ],
+      locationIds: [...request.locationIds].sort(),
+      active, schemaVersion: 1,
+      assignedBy: request.callerUid,
+      createdAt: current?.createdAt ?? timestamp,
+      updatedBy: request.callerUid, updatedAt: timestamp,
+    }, {merge: false});
+    return {operationId: request.operationId, uid: request.uid,
+      locationIds: [...request.locationIds].sort(), active};
   });
 }
 
@@ -901,7 +1061,8 @@ async function runActivateMobilization({firestore, serverTimestamp, request}) {
     });
     // Fallback RC3.5A : le premier pointeur reste disponible pour les écrans
     // legacy, sans devenir une autorité pour les nouveaux flux.
-    if (configuredActiveId === null || configuredActiveId === undefined) {
+    if (!Object.hasOwn(current, 'operationId')
+      && (configuredActiveId === null || configuredActiveId === undefined)) {
       transaction.set(configRef, {
         activeMobilizationId: request.mobilizationId,
         updatedBy: request.callerUid,
@@ -943,7 +1104,7 @@ async function runDeactivateMobilization({
       updatedBy: request.callerUid,
       updatedAt: timestamp,
     });
-    if (config.exists
+    if (!Object.hasOwn(current, 'operationId') && config.exists
       && config.data().activeMobilizationId === request.mobilizationId) {
       transaction.set(configRef, {
         activeMobilizationId: null,
@@ -1009,7 +1170,7 @@ async function runAssignMobilizationCoordinator({
       : await transaction.get(
         operationReference(firestore, current.operationId),
       );
-    if (operation !== null && operationCoordinatorUid(requireOperation(operation)) !== null) {
+    if (operation !== null) {
       throw new PlatformAdministrationError(
         'failed-precondition',
         'Gérez le Coordinateur depuis l’opération.',
@@ -1086,7 +1247,7 @@ async function runRemoveMobilizationCoordinator({
       : await transaction.get(
         operationReference(firestore, current.operationId),
       );
-    if (operation !== null && operationCoordinatorUid(requireOperation(operation)) !== null) {
+    if (operation !== null) {
       throw new PlatformAdministrationError(
         'failed-precondition',
         'Gérez le Coordinateur depuis l’opération.',

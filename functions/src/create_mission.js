@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 
 import {parseResponsibleAccess} from './responsible_access.js';
 import {operationAllowsOperationalMutation} from './operation_activity.js';
+import {canManageOperationLocation} from './operation_access.js';
 import {globalMissionEquipmentLabels, normalizeMissionEquipment} from './mission_equipment.js';
 import {normalizeSiteEquipment, SiteEquipmentError} from './site_equipment.js';
 import {
@@ -90,6 +91,7 @@ export function missionCreateMutation({
   organizationAuthorized,
   mobilization,
   operation = null,
+  operationAccess = null,
   location,
   serverTimestamp,
   timestampFromMillis,
@@ -106,10 +108,13 @@ export function missionCreateMutation({
   } catch {
     throw outsideScope();
   }
-  if (!access.active || organizationAuthorized !== true
-      || !(access.roles.includes('coordinator') && coordinatorAuthorized === true)
-        && !(access.roles.includes('site_manager')
-          && access.locationIds.includes(request.locationId))) {
+  const scoped = mobilization.operationId === undefined
+    ? ((access.roles.includes('coordinator')
+        && coordinatorAuthorized === true)
+      || (access.roles.includes('site_manager')
+        && access.locationIds.includes(request.locationId)))
+    : canManageOperationLocation(operationAccess, request.locationId);
+  if (!access.active || organizationAuthorized !== true || !scoped) {
     throw outsideScope();
   }
   if (!isPlainObject(location)

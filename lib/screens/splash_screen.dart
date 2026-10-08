@@ -98,7 +98,6 @@ class _SplashScreenState extends State<SplashScreen> {
 
 Future<void> _precacheSplashAssets(BuildContext context) => Future.wait([
   precacheImage(const AssetImage(AppIdentity.pictogramAsset), context),
-  precacheImage(const AssetImage(AppIdentity.mobilizationSymbolAsset), context),
 ]);
 
 class _SplashIdentity extends StatelessWidget {
@@ -125,7 +124,7 @@ class _SplashIdentity extends StatelessWidget {
         ),
         SizedBox(height: V5Spacing.xs),
         Text(
-          AppIdentity.mobilizationSubtitle,
+          AppIdentity.productSubtitle,
           key: Key('splash-mobilization-subtitle'),
           textAlign: TextAlign.center,
           style: TextStyle(
@@ -135,8 +134,6 @@ class _SplashIdentity extends StatelessWidget {
             fontWeight: FontWeight.w400,
           ),
         ),
-        SizedBox(height: V5Spacing.xxxl),
-        _InstitutionalSignature(),
       ],
     );
   }
@@ -151,26 +148,6 @@ class _SplashPictogram extends StatelessWidget {
       key: Key('splash-pictogram'),
       size: 216,
       onDarkBackground: false,
-    );
-  }
-}
-
-class _InstitutionalSignature extends StatelessWidget {
-  const _InstitutionalSignature();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Text(
-      AppIdentity.institutionalSignature,
-      key: Key('splash-institutional-signature'),
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        color: _SplashVisuals.subtitle,
-        fontSize: 14,
-        height: 1.4,
-        letterSpacing: 1.6,
-        fontWeight: FontWeight.w600,
-      ),
     );
   }
 }

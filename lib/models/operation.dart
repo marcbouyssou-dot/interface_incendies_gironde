@@ -58,6 +58,55 @@ OperationStatus operationStatusFromValue(Object? value) {
   );
 }
 
+enum OperationPurpose { operational, demonstration }
+
+OperationPurpose operationPurposeFromValue(Object? value) =>
+    OperationPurpose.values.firstWhere(
+      (purpose) => purpose.name == value,
+      orElse: () =>
+          throw const FormatException('Finalité d’opération invalide.'),
+    );
+
+/// Provenance technique d'une importation, sans identité de personne source.
+class OperationProvenance {
+  const OperationProvenance({
+    required this.sourceDataset,
+    required this.sourceObjectType,
+    required this.migrationLot,
+    required this.migrationDate,
+  });
+
+  factory OperationProvenance.fromMap(Object? value) {
+    if (value is! Map) {
+      throw const FormatException('Provenance d’opération invalide.');
+    }
+    final data = Map<String, Object?>.from(value);
+    final rawDate = _requiredOperationText(data, 'migrationDate');
+    final parsedDate = DateTime.tryParse(rawDate);
+    if (parsedDate == null || !parsedDate.isUtc || !rawDate.endsWith('Z')) {
+      throw const FormatException('Date de migration invalide.');
+    }
+    return OperationProvenance(
+      sourceDataset: _requiredOperationText(data, 'sourceDataset'),
+      sourceObjectType: _requiredOperationText(data, 'sourceObjectType'),
+      migrationLot: _requiredOperationText(data, 'migrationLot'),
+      migrationDate: parsedDate,
+    );
+  }
+
+  final String sourceDataset;
+  final String sourceObjectType;
+  final String migrationLot;
+  final DateTime migrationDate;
+
+  Map<String, Object?> toMap() => {
+    'sourceDataset': sourceDataset,
+    'sourceObjectType': sourceObjectType,
+    'migrationLot': migrationLot,
+    'migrationDate': migrationDate.toUtc().toIso8601String(),
+  };
+}
+
 class Operation {
   const Operation({
     required this.id,
@@ -76,6 +125,11 @@ class Operation {
     this.coordinatorUid,
     this.ownerOrganizationId,
     this.visibility,
+    this.purpose = OperationPurpose.operational,
+    this.themeKey,
+    this.organizerDisplayName,
+    this.demoSafetyLabel,
+    this.provenance,
   });
 
   factory Operation.fromMap(Map<String, Object?> data) {
@@ -97,6 +151,13 @@ class Operation {
     }
     final schemaVersion = _requiredOperationValue<int>(data, 'schemaVersion');
     if (schemaVersion < 1) throw const FormatException('Opération invalide.');
+    final purpose = data['purpose'] == null
+        ? OperationPurpose.operational
+        : operationPurposeFromValue(data['purpose']);
+    final demoSafetyLabel = _optionalOperationText(data, 'demoSafetyLabel');
+    if (purpose == OperationPurpose.demonstration && demoSafetyLabel == null) {
+      throw const FormatException('Label de démonstration requis.');
+    }
     return Operation(
       id: _requiredOperationText(data, 'id'),
       name: _requiredOperationText(data, 'name'),
@@ -114,6 +175,16 @@ class Operation {
       updatedBy: _requiredOperationText(data, 'updatedBy'),
       updatedAt: _requiredOperationValue<DateTime>(data, 'updatedAt'),
       schemaVersion: schemaVersion,
+      purpose: purpose,
+      themeKey: _optionalOperationText(data, 'themeKey'),
+      organizerDisplayName: _optionalOperationText(
+        data,
+        'organizerDisplayName',
+      ),
+      demoSafetyLabel: demoSafetyLabel,
+      provenance: data['provenance'] == null
+          ? null
+          : OperationProvenance.fromMap(data['provenance']),
     );
   }
 
@@ -140,6 +211,15 @@ class Operation {
   final String updatedBy;
   final DateTime updatedAt;
   final int schemaVersion;
+  final OperationPurpose purpose;
+  final String? themeKey;
+  final String? organizerDisplayName;
+  final String? demoSafetyLabel;
+  final OperationProvenance? provenance;
+
+  bool get isEngageable =>
+      purpose == OperationPurpose.operational &&
+      status == OperationStatus.active;
 
   Map<String, Object?> toMap() => {
     'id': id,
@@ -158,6 +238,12 @@ class Operation {
     'updatedBy': updatedBy,
     'updatedAt': updatedAt,
     'schemaVersion': schemaVersion,
+    if (purpose != OperationPurpose.operational) 'purpose': purpose.name,
+    if (themeKey != null) 'themeKey': themeKey,
+    if (organizerDisplayName != null)
+      'organizerDisplayName': organizerDisplayName,
+    if (demoSafetyLabel != null) 'demoSafetyLabel': demoSafetyLabel,
+    if (provenance != null) 'provenance': provenance!.toMap(),
   };
 }
 

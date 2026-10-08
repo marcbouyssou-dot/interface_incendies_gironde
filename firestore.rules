@@ -74,7 +74,7 @@ service cloud.firestore {
     }
 
     function isV2RoleDocument(role) {
-      let validRoles = role.roles is list
+      let validRoles = 'roles' in role && role.roles is list
         && (role.roles == ['coordinator']
           || role.roles == ['site_manager']
           || role.roles == ['coordinator', 'site_manager']);
@@ -84,11 +84,13 @@ service cloud.firestore {
         && 'schemaVersion' in role
         && role.schemaVersion is int
         && role.schemaVersion == 2
-        && role.active is bool
+        && 'active' in role && role.active is bool
         && validRoles
+        && 'role' in role
         && role.role == (('coordinator' in role.roles)
           ? 'coordinator'
           : 'site_manager')
+        && 'locationIds' in role
         && (containsSiteManager
           ? validLocationIds(role.locationIds)
           : role.locationIds == []);
@@ -317,17 +319,17 @@ service cloud.firestore {
 
     function validMissionCreateQuotaData(data) {
       return !hasGenericQuotas(data)
-        ? (data.registeredMk == 0
+        ? (data.registeredMk is int
+          && data.registeredPp is int
+          && data.registeredMk == 0
           && data.registeredPp == 0
-          && validGenericQuotaData(data)
-          && totalRegistered(data) == 0
           && data.requiredMk is int
           && data.requiredPp is int
           && data.requiredMk >= 0
           && data.requiredMk <= 50
           && data.requiredPp >= 0
           && data.requiredPp <= 50
-          && totalRequired(data) > 0)
+          && data.requiredMk + data.requiredPp > 0)
         : validGenericMissionCreateQuotaData(data);
     }
 
@@ -915,6 +917,120 @@ service cloud.firestore {
       return /databases/$(database)/documents/operations/$(operationId);
     }
 
+    // A membership establishes role capability; this document grants its
+    // scope for one Action. Neither the role nor global locationIds alone
+    // authorize an Action-linked mobilization.
+    function operationAccessPath(operationId) {
+      return /databases/$(database)/documents/operationAccess/$(operationId + '_' + request.auth.uid);
+    }
+
+    function validCurrentOperationAccess(operationId, organizationId) {
+      let path = operationAccessPath(operationId);
+      let grantExists = isSignedIn()
+        && isNonBlankCanonicalText(operationId)
+        && isNonBlankCanonicalText(organizationId)
+        && exists(path);
+      let access = grantExists ? get(path).data : {};
+      let schemaVersion = access.get('schemaVersion', 0);
+      let roles = access.get('roles', []);
+      let locationIds = access.get('locationIds', []);
+      return grantExists
+        && access.get('operationId', '') == operationId
+        && access.get('organizationId', '') == organizationId
+        && access.get('uid', '') == request.auth.uid
+        && access.get('active', false) == true
+        && schemaVersion is int
+        && schemaVersion >= 1
+        && roles is list
+        && roles.size() > 0
+        && roles.toSet().hasOnly([
+          'coordinator', 'site_manager'
+        ])
+        && locationIds is list;
+    }
+
+    function canCoordinateOperation(operationId, organizationId) {
+      return validCurrentOperationAccess(operationId, organizationId)
+        && hasCompactMembershipRole(organizationId, 'coordinator')
+        && 'coordinator' in get(operationAccessPath(operationId)).data.roles;
+    }
+
+    function canManageOperationSite(operationId, organizationId, locationId) {
+      return validCurrentOperationAccess(operationId, organizationId)
+        && hasCompactMembershipRole(organizationId, 'site_manager')
+        && 'site_manager' in get(operationAccessPath(operationId)).data.roles
+        && locationId in get(operationAccessPath(operationId)).data.locationIds
+        && locationId in organizationMembershipLocationIds(organizationId);
+    }
+
+    // Resolve the Action grant and its membership once for a mission/need.
+    // Both documents are backend-controlled and must agree on role and site.
+    function canReadGrantedOperationLocation(
+      operationId, organizationId, locationId
+    ) {
+      let grantValid = validCurrentOperationAccess(
+        operationId, organizationId
+      );
+      let access = grantValid
+        ? get(operationAccessPath(operationId)).data : {};
+      let memberPath = organizationMembershipPath(
+        organizationId, request.auth.uid
+      );
+      let memberExists = grantValid && exists(memberPath);
+      let membership = memberExists
+        ? get(memberPath).data : {};
+      let roles = membership.get('roles', []);
+      let sites = membership.get('locationIds', []);
+      let schemaVersion = membership.get('schemaVersion', 0);
+      return grantValid
+        && memberExists
+        && membership.get('uid', '') == request.auth.uid
+        && membership.get('organizationId', '') == organizationId
+        && membership.get('active', false) == true
+        && schemaVersion is int
+        && schemaVersion >= 1
+        && roles is list
+        && sites is list
+        && (('coordinator' in access.roles && 'coordinator' in roles)
+          || ('site_manager' in access.roles
+            && 'site_manager' in roles
+            && locationId in access.locationIds
+            && locationId in sites));
+    }
+
+    function hasCompactMembershipRole(organizationId, roleName) {
+      let path = organizationMembershipPath(
+        organizationId, request.auth.uid
+      );
+      let membership = isSignedIn() && exists(path) ? get(path).data : {};
+      return isSignedIn() && exists(path)
+        && membership.get('uid', '') == request.auth.uid
+        && membership.get('organizationId', '') == organizationId
+        && membership.get('active', false) == true
+        && membership.get('schemaVersion', 0) is int
+        && membership.get('schemaVersion', 0) >= 1
+        && membership.get('roles', []) is list
+        && roleName in membership.roles;
+    }
+
+    function canReadOperationScope(operationId, organizationId) {
+      let grantValid = validCurrentOperationAccess(
+        operationId, organizationId
+      );
+      let access = grantValid
+        ? get(operationAccessPath(operationId)).data : {};
+      return hasCompactMembershipRole(organizationId, 'organization_admin')
+        || (grantValid
+          && (('coordinator' in access.roles
+              && hasCompactMembershipRole(organizationId, 'coordinator'))
+            || ('site_manager' in access.roles
+              && access.locationIds.size() > 0
+              && access.locationIds.toSet().hasAny(
+                organizationMembershipLocationIds(organizationId)
+              )
+              && hasCompactMembershipRole(organizationId, 'site_manager'))));
+    }
+
     function organizationPath(organizationId) {
       return /databases/$(database)/documents/organizations/$(organizationId);
     }
@@ -958,9 +1074,7 @@ service cloud.firestore {
     }
 
     function isPublishedOperation(operation) {
-      return operation.get('status', '') in [
-        'planned', 'active'
-      ];
+      return operation.get('status', '') in ['planned', 'active'];
     }
 
     function isPlatformDiscoverableOperation(operation) {
@@ -1018,13 +1132,13 @@ service cloud.firestore {
     function canReadOperationOrganization(operation) {
       let organizationId = operationOwnerOrganizationId(operation);
       return hasValidOperationOrganization(operation)
-        && canAccessOrganization(organizationId);
+        && canReadOperationScope(operation.get('id', ''), organizationId);
     }
 
     function hasOperationOrganizationMembership(operation) {
       let organizationId = operationOwnerOrganizationId(operation);
       return hasValidOperationOrganization(operation)
-        && hasActiveOrganizationMembership(organizationId);
+        && canReadOperationScope(operation.get('id', ''), organizationId);
     }
 
     function canReadOperationById(operationId) {
@@ -1163,7 +1277,11 @@ service cloud.firestore {
           || (hasValidMobilizationOperation(mobilization)
             && exists(currentOperationPath)
             && hasValidOperationOrganization(operation)))
-        && canOrganizationRoleReadMission(organizationId, locationId);
+        && (isLegacyMobilization(mobilization)
+          ? canOrganizationRoleReadMission(organizationId, locationId)
+          : canReadGrantedOperationLocation(
+              operationId, organizationId, locationId
+            ));
     }
 
     // Chemin d'autorisation compact pour rester sous la limite d'expressions
@@ -1207,11 +1325,16 @@ service cloud.firestore {
     }
 
     function canUseExplicitMobilizationOrganizationAsRole(mobilizationId) {
-      let mobilization = get(mobilizationPath(mobilizationId)).data;
+      let path = mobilizationPath(mobilizationId);
+      let mobilization = exists(path) ? get(path).data : {};
       let operationId = mobilization.get('operationId', '__missing__');
-      let operation = get(operationPath(operationId)).data;
-      return hasValidMobilizationOperation(mobilization)
-        && operation.status == 'active'
+      let validOperation = hasValidMobilizationOperation(mobilization)
+        && exists(operationPath(operationId));
+      let operation = validOperation
+        ? get(operationPath(operationId)).data : {};
+      return validOperation
+        && operation.get('status', '') == 'active'
+        && operation.get('purpose', 'operational') != 'demonstration'
         && (!('ownerOrganizationId' in operation)
           || hasActiveCanonicalMembershipDocument(
             operation.ownerOrganizationId
@@ -1219,10 +1342,13 @@ service cloud.firestore {
     }
 
     function canUseMobilizationOrganizationAsRole(mobilizationId) {
-      return (isLegacyMobilizationById(mobilizationId)
-          && (!hasOrganizationMembershipDocument(legacyOrganizationId())
-            || hasActiveLegacyOrganizationMembershipDocument()))
-        || canUseExplicitMobilizationOrganizationAsRole(mobilizationId);
+      let path = mobilizationPath(mobilizationId);
+      let mobilization = exists(path) ? get(path).data : {};
+      return exists(path)
+        && (isLegacyMobilization(mobilization)
+          ? (!hasOrganizationMembershipDocument(legacyOrganizationId())
+            || hasActiveLegacyOrganizationMembershipDocument())
+          : canUseExplicitMobilizationOrganizationAsRole(mobilizationId));
     }
 
     function canReadMissionOrganization(mission) {
@@ -1273,7 +1399,9 @@ service cloud.firestore {
       let path = operationPath(operationId);
       return hasValidMobilizationOperation(mobilization)
         && exists(path)
-        && get(path).data.status == 'active';
+        && get(path).data.status == 'active'
+        && get(path).data.get('purpose', 'operational')
+          != 'demonstration';
     }
 
     function isOperationalMobilization(mobilizationId) {
@@ -1336,6 +1464,33 @@ service cloud.firestore {
             && locationId in access.locationIds));
     }
 
+    function isCompletedDemoOperation(operationId) {
+      let path = operationPath(operationId);
+      return operationId is string
+        && isNonBlankCanonicalText(operationId)
+        && exists(path)
+        && get(path).data.get('purpose', '') == 'demonstration'
+        && get(path).data.get('status', '') in ['completed', 'archived'];
+    }
+
+    function canReadDemoActor(actor) {
+      let operationId = actor.get('operationId', '');
+      let grant = hasHistoricalActionGrant(operationId)
+        ? get(historicalAccessPath(operationId)).data : {};
+      return isCompletedDemoOperation(operationId)
+        && (isPlatformAdministrator()
+          || (hasHistoricalActionGrant(operationId)
+            && 'coordinator' in grant.roles));
+    }
+
+    function canReadDemoEngagement(engagement) {
+      let operationId = engagement.get('operationId', '');
+      let locationId = engagement.get('locationId', '');
+      return isCompletedDemoOperation(operationId)
+        && (isPlatformAdministrator()
+          || hasHistoricalActionAccess(operationId, locationId));
+    }
+
     function canHistoricallyReadMission(missionId, mission) {
       let mobilizationId = mission.get('mobilizationId', '');
       let mobilization = mobilizationId is string
@@ -1380,12 +1535,20 @@ service cloud.firestore {
       return /databases/$(database)/documents/mobilizationAssignments/$(mobilizationId + '_' + uid);
     }
 
+    function hasLegacyCoordinatorPointer(role, mobilizationId) {
+      let configPath = platformConfigPath();
+      return isLegacyMobilizationById(mobilizationId)
+        && (!('hasActiveMobilizationAssignments' in role)
+          || role.hasActiveMobilizationAssignments == false)
+        && exists(configPath)
+        && get(configPath).data.activeMobilizationId == mobilizationId;
+    }
+
     function isAssignedOrLegacyCoordinatorForMobilization(mobilizationId) {
       let assignmentPath = mobilizationAssignmentPath(
         mobilizationId,
         request.auth.uid
       );
-      let configPath = platformConfigPath();
       return isCoordinator()
         && (
           (exists(assignmentPath)
@@ -1393,76 +1556,26 @@ service cloud.firestore {
             && get(assignmentPath).data.mobilizationId == mobilizationId
             && get(assignmentPath).data.role == 'coordinator'
             && get(assignmentPath).data.active == true)
-          || ((!('hasActiveMobilizationAssignments' in currentRole())
-              || currentRole().hasActiveMobilizationAssignments == false)
-            && exists(configPath)
-            && get(configPath).data.activeMobilizationId == mobilizationId)
+          || hasLegacyCoordinatorPointer(currentRole(), mobilizationId)
         );
     }
 
     function canManageMobilizationLocation(mobilizationId, locationId) {
-      return (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
-          || (isActiveSiteManager()
-            && locationId in currentRole().locationIds))
-        && canUseMobilizationOrganizationAsRole(mobilizationId);
-    }
-
-    function canCreateMissionAtMobilizationLocation(
-      mobilizationId,
-      locationId
-    ) {
-      let currentRolePath = rolePath();
-      let role = isSignedIn() && exists(currentRolePath)
-        ? get(currentRolePath).data
-        : {};
-      let assignmentPath = mobilizationAssignmentPath(
-        mobilizationId,
-        request.auth.uid
-      );
-      let configPath = platformConfigPath();
-      return isSignedIn()
-        && exists(currentRolePath)
-        && isValidRoleDocument(role)
-        && role.active == true
-        && ((hasRole(role, 'coordinator')
-            && ((exists(assignmentPath)
-                && get(assignmentPath).data.uid == request.auth.uid
-                && get(assignmentPath).data.mobilizationId == mobilizationId
-                && get(assignmentPath).data.role == 'coordinator'
-                && get(assignmentPath).data.active == true)
-              || ((!('hasActiveMobilizationAssignments' in role)
-                    || role.hasActiveMobilizationAssignments == false)
-                && exists(configPath)
-                && get(configPath).data.activeMobilizationId
-                  == mobilizationId)))
-          || (hasRole(role, 'site_manager')
-            && locationId in role.locationIds))
-        && canUseMobilizationOrganizationAsRole(mobilizationId);
-    }
-
-    function canResolvedRoleManageMobilizationLocation(
-      role,
-      mobilizationId,
-      locationId
-    ) {
-      let assignmentPath = mobilizationAssignmentPath(
-        mobilizationId,
-        request.auth.uid
-      );
-      let configPath = platformConfigPath();
-      return (hasRole(role, 'coordinator')
-          && ((exists(assignmentPath)
-              && get(assignmentPath).data.uid == request.auth.uid
-              && get(assignmentPath).data.mobilizationId == mobilizationId
-              && get(assignmentPath).data.role == 'coordinator'
-              && get(assignmentPath).data.active == true)
-            || ((!('hasActiveMobilizationAssignments' in role)
-                  || role.hasActiveMobilizationAssignments == false)
-              && exists(configPath)
-              && get(configPath).data.activeMobilizationId
-                == mobilizationId)))
-        || (hasRole(role, 'site_manager')
-          && locationId in role.locationIds);
+      let mobilization = get(mobilizationPath(mobilizationId)).data;
+      let operationId = mobilization.get('operationId', '__missing__');
+      let operation = hasValidMobilizationOperation(mobilization)
+          && exists(operationPath(operationId))
+        ? get(operationPath(operationId)).data : {};
+      let organizationId = operationOwnerOrganizationId(operation);
+      return canUseMobilizationOrganizationAsRole(mobilizationId)
+        && (isLegacyMobilization(mobilization)
+          ? (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
+            || (isActiveSiteManager()
+              && locationId in currentRole().locationIds))
+          : (hasValidOperationOrganization(operation)
+            && canReadGrantedOperationLocation(
+              operationId, organizationId, locationId
+            )));
     }
 
     function canUseResolvedLegacyMobilizationOrganizationAsRole() {
@@ -1474,50 +1587,69 @@ service cloud.firestore {
         || get(membershipPath).data.get('active', false) == true;
     }
 
-    function canUseResolvedExplicitMobilizationOrganizationAsRole(
-      mobilization
-    ) {
-      let operationId = mobilization.get('operationId', '__missing__');
-      let operation = get(operationPath(operationId)).data;
-      return hasValidMobilizationOperation(mobilization)
-        && (!('ownerOrganizationId' in operation)
-          || hasActiveCanonicalMembershipDocument(
-            operation.ownerOrganizationId
-          ));
-    }
-
-    function canUseResolvedMobilizationOrganizationAsRole(mobilization) {
-      return (isLegacyMobilization(mobilization)
-          && canUseResolvedLegacyMobilizationOrganizationAsRole())
-        || canUseResolvedExplicitMobilizationOrganizationAsRole(mobilization);
-    }
-
-    // Chemin compact d'annulation : rôle et mobilisation ne sont résolus
-    // qu'une fois, sans modifier les invariants appliqués par les helpers
-    // génériques de gestion.
-    function canCancelMissionAtMobilizationLocation(
+    // A single bounded write decision for creation and cancellation.
+    function canWriteMissionAtMobilizationLocation(
       mobilizationId,
       locationId
     ) {
-      let currentRolePath = rolePath();
-      let roleExists = exists(currentRolePath);
-      let role = roleExists ? get(currentRolePath).data : {};
       let currentMobilizationPath = mobilizationPath(mobilizationId);
-      let mobilizationExists = exists(currentMobilizationPath);
+      let mobilizationExists = isSignedIn()
+        && exists(currentMobilizationPath);
       let mobilization = mobilizationExists
-        ? get(currentMobilizationPath).data
-        : {};
-      return roleExists
+        ? get(currentMobilizationPath).data : {};
+      let currentRolePath = rolePath();
+      // A missing role fails closed when read; this avoids a second document
+      // access in the write path, which also validates site existence.
+      let role = mobilizationExists
+        ? get(currentRolePath).data : {};
+      let operationId = mobilization.get('operationId', '__missing__');
+      let operationExists = hasValidMobilizationOperation(mobilization)
+        && exists(operationPath(operationId));
+      let operation = operationExists
+        ? get(operationPath(operationId)).data : {};
+      let assignmentPath = mobilizationAssignmentPath(
+        mobilizationId, request.auth.uid
+      );
+      let assignment = isLegacyMobilization(mobilization)
+          && mobilizationExists && exists(assignmentPath)
+        ? get(assignmentPath).data : {};
+      return mobilizationExists
         && isValidRoleDocument(role)
         && role.active == true
-        && mobilizationExists
-        && mobilization.status == 'active'
-        && canResolvedRoleManageMobilizationLocation(
-          role,
-          mobilizationId,
-          locationId
-        )
-        && canUseResolvedMobilizationOrganizationAsRole(mobilization);
+        && mobilization.get('status', '') == 'active'
+        && (isLegacyMobilization(mobilization)
+          ? (canUseResolvedLegacyMobilizationOrganizationAsRole()
+            && ((hasRole(role, 'coordinator')
+              && ((assignment.get('uid', '') == request.auth.uid
+                  && assignment.get('mobilizationId', '') == mobilizationId
+                  && assignment.get('role', '') == 'coordinator'
+                  && assignment.get('active', false) == true)
+                || hasLegacyCoordinatorPointer(role, mobilizationId)))
+              || (hasRole(role, 'site_manager')
+                && locationId in role.locationIds)))
+          : (operationExists
+            && operation.get('status', '') == 'active'
+            && operation.get('purpose', 'operational') != 'demonstration'
+            && hasValidOperationOrganization(operation)
+            && canReadGrantedOperationLocation(
+              operationId, operationOwnerOrganizationId(operation), locationId
+            )));
+    }
+
+    function canCreateMissionAtMobilizationLocation(
+      mobilizationId, locationId
+    ) {
+      return canWriteMissionAtMobilizationLocation(
+        mobilizationId, locationId
+      );
+    }
+
+    function canCancelMissionAtMobilizationLocation(
+      mobilizationId, locationId
+    ) {
+      return canWriteMissionAtMobilizationLocation(
+        mobilizationId, locationId
+      );
     }
 
     function canReadMissionScope(mobilizationId, locationId) {
@@ -1529,13 +1661,35 @@ service cloud.firestore {
         || (isVerifiedProfessional()
           && isPlatformDiscoverableMobilizationById(mobilizationId))
         || canReadOrganizationMissionScope(mobilizationId, locationId)
-        || ((isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
+        || (isLegacyMobilization(mobilization)
+          && (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
             || (isActiveSiteManager()
               && locationId in currentRole().locationIds))
-          && canUseMobilizationOrganizationAsRole(mobilizationId))
-        || (mobilizationId is string
-          && exists(path)
-          && hasMobilizationOrganizationMembership(mobilization));
+          && canUseMobilizationOrganizationAsRole(mobilizationId));
+    }
+
+    // Targeted Action-linked mission reads avoid the legacy role/engagement
+    // branches and their Firestore expression cost. Suspended Actions retain
+    // reads for already-granted organization members but block writes above.
+    function canReadScopedActiveMission(mission) {
+      let mobilizationId = mission.get('mobilizationId', '');
+      let path = mobilizationPath(mobilizationId);
+      let mobilization = mobilizationId is string && exists(path)
+        ? get(path).data : {};
+      let operationId = mobilization.get('operationId', '');
+      let operation = isNonBlankCanonicalText(operationId)
+          && exists(operationPath(operationId))
+        ? get(operationPath(operationId)).data : {};
+      let organizationId = operationOwnerOrganizationId(operation);
+      return mission.get('isActive', false) == true
+        && mobilization.get('status', '') == 'active'
+        && hasValidMobilizationOperation(mobilization)
+        && operation.get('status', '') in ['active', 'suspended']
+        && operation.get('purpose', 'operational') == 'operational'
+        && hasValidOperationOrganization(operation)
+        && canReadGrantedOperationLocation(
+          operationId, organizationId, mission.get('locationId', '')
+        );
     }
 
     function canReadManagedNeed(needId) {
@@ -1568,9 +1722,6 @@ service cloud.firestore {
           'isActive', 'createdBy'
         ])
         && request.resource.data.id == missionId
-        && isActiveMobilization(
-          request.resource.data.mobilizationId
-        )
         && request.resource.data.createdBy == request.auth.uid
         && validMissionCreateQuotaData(request.resource.data)
         && request.resource.data.startAt is timestamp
@@ -1713,7 +1864,6 @@ service cloud.firestore {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
       return isSignedIn()
         && resource.data.mobilizationId is string
-        && isOperationalMobilization(resource.data.mobilizationId)
         && resource.data.isActive == true
         && canCancelMissionAtMobilizationLocation(
           resource.data.mobilizationId,
@@ -1913,7 +2063,8 @@ service cloud.firestore {
     }
 
     match /missions/{missionId} {
-      allow get: if (isSignedIn()
+      allow get: if canReadScopedActiveMission(resource.data)
+        || (isSignedIn()
           && exists(engagementPath(missionId, request.auth.uid))
           && isHistoricallyVerifiedProfessional()
           && isActiveMobilization(resource.data.mobilizationId)
@@ -1950,13 +2101,11 @@ service cloud.firestore {
           && canHistoricallyReadMission(missionId, resource.data)
           && !isHistoricallyVerifiedProfessional());
       allow create: if isSignedIn() && validMissionCreate(missionId);
-      allow update: if existsAfter(
-          engagementPath(missionId, request.auth.uid)
-        ) && validMissionCounterUpdate(missionId);
-      allow update: if !existsAfter(
-          engagementPath(missionId, request.auth.uid)
-        ) && (request.resource.data.status == 'cancelled'
-          ? validMissionCancellation()
+      allow update: if request.resource.data.status == 'cancelled'
+        ? (!existsAfter(engagementPath(missionId, request.auth.uid))
+          && validMissionCancellation())
+        : (existsAfter(engagementPath(missionId, request.auth.uid))
+          ? validMissionCounterUpdate(missionId)
           : validManagedMissionCounterUpdate());
       allow delete: if false;
     }
@@ -2001,7 +2150,8 @@ service cloud.firestore {
         : (isHistoricalMobilization(resource.data.mobilizationId)
           ? canHistoricallyReadEngagement(resource.data)
           : (isActiveMobilization(resource.data.mobilizationId)
-            && ((isAssignedOrLegacyCoordinatorForMobilization(
+            && ((isLegacyMobilizationById(resource.data.mobilizationId)
+              && isAssignedOrLegacyCoordinatorForMobilization(
                 resource.data.mobilizationId
               ) && canUseMobilizationOrganizationAsRole(
                 resource.data.mobilizationId
@@ -2011,7 +2161,8 @@ service cloud.firestore {
         || (isHistoricalMobilization(resource.data.mobilizationId)
           ? canHistoricallyReadEngagement(resource.data)
           : (isActiveMobilization(resource.data.mobilizationId)
-            && ((isAssignedOrLegacyCoordinatorForMobilization(
+            && ((isLegacyMobilizationById(resource.data.mobilizationId)
+              && isAssignedOrLegacyCoordinatorForMobilization(
                 resource.data.mobilizationId
               ) && canUseMobilizationOrganizationAsRole(
                 resource.data.mobilizationId
@@ -2223,8 +2374,30 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /operationAccess/{accessId} {
+      allow get, list: if isPlatformAdministrator()
+        || (isSignedIn()
+          && resource.data.get('uid', '') == request.auth.uid
+          && resource.data.get('active', false) == true);
+      allow create, update, delete: if false;
+    }
+
     match /historicalActionAccessAudit/{eventId} {
       allow get, list: if isPlatformAdministrator();
+      allow create, update, delete: if false;
+    }
+
+    match /demoActors/{actorId} {
+      allow get: if resource.data.get('id', '') == actorId
+        && canReadDemoActor(resource.data);
+      allow list: if canReadDemoActor(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /demoEngagements/{engagementId} {
+      allow get: if resource.data.get('id', '') == engagementId
+        && canReadDemoEngagement(resource.data);
+      allow list: if canReadDemoEngagement(resource.data);
       allow create, update, delete: if false;
     }
 

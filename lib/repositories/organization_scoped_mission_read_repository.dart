@@ -1,8 +1,15 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../models/need.dart';
+import '../models/mobilization.dart';
+import '../models/organization_context.dart';
+import '../models/organization_role.dart';
 import '../utils/switch_latest.dart';
+import '../utils/value_listenable_stream.dart';
 import 'coordination_repository.dart';
+import 'operation_access_read_repository.dart';
 import 'platform_read_repository.dart';
 
 /// Projection des missions bornée aux mobilisations de l'organisation active.
@@ -21,13 +28,20 @@ class OrganizationScopedMissionReadRepository
     required MultiMobilizationCoordinationReadRepository delegate,
     required PlatformReadRepository platformRepository,
     required Future<CoordinationNeed?> Function(String missionId) missionLookup,
+    ValueListenable<OrganizationContext?>? context,
+    OperationAccessReadRepository accessRepository =
+        const EmptyOperationAccessReadRepository(),
   }) : _delegate = delegate,
        _platformRepository = platformRepository,
-       _missionLookup = missionLookup;
+       _missionLookup = missionLookup,
+       _context = context,
+       _accessRepository = accessRepository;
 
   final MultiMobilizationCoordinationReadRepository _delegate;
   final PlatformReadRepository _platformRepository;
   final Future<CoordinationNeed?> Function(String missionId) _missionLookup;
+  final ValueListenable<OrganizationContext?>? _context;
+  final OperationAccessReadRepository _accessRepository;
 
   @override
   Stream<CoordinationNeed?> watchAccessibleMission(String missionId) async* {
@@ -67,6 +81,15 @@ class OrganizationScopedMissionReadRepository
   @override
   Stream<List<CoordinationNeed>> watchAllActiveMissions() =>
       switchLatest(_platformRepository.watchMobilizations(), (mobilizations) {
+        if (_context?.value?.hasActiveMembership == true) {
+          return switchLatest(_watchGrants(), (grants) {
+            final accessibleIds = _coordinatorMobilizationIds(
+              mobilizations,
+              grants,
+            );
+            return _watchMissionsForAccessibleMobilizations(accessibleIds);
+          });
+        }
         final accessibleIds = mobilizations
             .map((mobilization) => mobilization.id)
             .toSet();
@@ -84,6 +107,20 @@ class OrganizationScopedMissionReadRepository
   ) {
     if (mobilizationIds.isEmpty) {
       return Stream<List<CoordinationNeed>>.value(const []);
+    }
+    if (_context?.value?.hasActiveMembership == true) {
+      return switchLatest(
+        _platformRepository.watchMobilizations(),
+        (mobilizations) => switchLatest(
+          _watchGrants(),
+          (grants) => _watchMissionsForAccessibleMobilizations(
+            _coordinatorMobilizationIds(
+              mobilizations,
+              grants,
+            ).intersection(mobilizationIds),
+          ),
+        ),
+      );
     }
     final platformRepository = _platformRepository;
     if (platformRepository is MobilizationLookupRepository) {
@@ -154,13 +191,20 @@ class OrganizationScopedMissionReadRepository
         missionRepository as MobilizationLocationMissionReadRepository;
     return switchLatest(
       responsiblePlatformRepository.watchResponsibleActiveMobilizations(),
-      (mobilizations) =>
-          scopedMissionRepository.watchMissionsForMobilizationsAndLocations(
-            mobilizationIds: mobilizations
-                .map((mobilization) => mobilization.id)
-                .toSet(),
-            locationIds: locationIds,
-          ),
+      (mobilizations) => _context == null
+          ? scopedMissionRepository.watchMissionsForMobilizationsAndLocations(
+              mobilizationIds: mobilizations.map((item) => item.id).toSet(),
+              locationIds: locationIds,
+            )
+          : switchLatest(
+              _watchGrants(),
+              (grants) => _watchResponsibleMissions(
+                mobilizations,
+                locationIds,
+                grants,
+                scopedMissionRepository,
+              ),
+            ),
     );
   }
 
@@ -186,6 +230,22 @@ class OrganizationScopedMissionReadRepository
             .toList(growable: false),
       );
     }
+    if (_context != null) {
+      return switchLatest(
+        _platformRepository.watchMobilizations(),
+        (mobilizations) => switchLatest(
+          _watchGrants(),
+          (grants) => _watchResponsibleMissions(
+            mobilizations
+                .where((item) => mobilizationIds.contains(item.id))
+                .toList(growable: false),
+            locationIds,
+            grants,
+            delegate as MobilizationLocationMissionReadRepository,
+          ),
+        ),
+      );
+    }
     return switchLatest(
       _watchReadableMobilizationIds(
         platformRepository as MobilizationLookupRepository,
@@ -199,6 +259,81 @@ class OrganizationScopedMissionReadRepository
                   locationIds: locationIds,
                 ),
     );
+  }
+
+  Stream<List<OperationAccess>> _watchGrants() {
+    final context = _context;
+    if (context == null) return Stream.value(const []);
+    return switchLatest(
+      watchValueListenable(context),
+      (value) => value == null
+          ? Stream.value(const <OperationAccess>[])
+          : _accessRepository.watchForUser(value.uid),
+    );
+  }
+
+  Set<String> _coordinatorMobilizationIds(
+    List<Mobilization> mobilizations,
+    List<OperationAccess> grants,
+  ) {
+    final context = _context?.value;
+    if (context == null || !context.hasRole(OrganizationRole.coordinator)) {
+      return {};
+    }
+    final actionIds = grants
+        .where(
+          (grant) =>
+              grant.roles.contains(OrganizationRole.coordinator) &&
+              grant.canRead(context),
+        )
+        .map((grant) => grant.operationId)
+        .toSet();
+    return mobilizations
+        .where((mobilization) => actionIds.contains(mobilization.operationId))
+        .map((mobilization) => mobilization.id)
+        .toSet();
+  }
+
+  Stream<List<CoordinationNeed>> _watchResponsibleMissions(
+    List<Mobilization> mobilizations,
+    Set<String> requestedSites,
+    List<OperationAccess> grants,
+    MobilizationLocationMissionReadRepository delegate,
+  ) {
+    final context = _context?.value;
+    if (context == null || !context.hasRole(OrganizationRole.siteManager)) {
+      return Stream.value(const []);
+    }
+    final streams = <Stream<List<CoordinationNeed>>>[];
+    for (final mobilization in mobilizations) {
+      final operationId = mobilization.operationId;
+      Set<String> sites;
+      if (operationId == null) {
+        sites = requestedSites;
+      } else {
+        final grant = grants
+            .where(
+              (item) =>
+                  item.operationId == operationId &&
+                  item.roles.contains(OrganizationRole.siteManager) &&
+                  item.canRead(context),
+            )
+            .firstOrNull;
+        sites = grant == null
+            ? const {}
+            : requestedSites
+                .intersection(grant.locationIds)
+                .intersection(context.membership!.locationIds);
+      }
+      if (sites.isEmpty) continue;
+      streams.add(
+        delegate.watchMissionsForMobilizationsAndLocations(
+          mobilizationIds: {mobilization.id},
+          locationIds: sites,
+        ),
+      );
+    }
+    return _combineMissionStreams(streams);
   }
 
   Stream<Set<String>> _watchReadableMobilizationIds(
@@ -279,4 +414,45 @@ class OrganizationScopedMissionReadRepository
 
   bool _isValidDocumentId(String value) =>
       value.isNotEmpty && value.trim() == value && !value.contains('/');
+}
+
+Stream<List<CoordinationNeed>> _combineMissionStreams(
+  List<Stream<List<CoordinationNeed>>> streams,
+) {
+  if (streams.isEmpty) return Stream.value(const []);
+  late final StreamController<List<CoordinationNeed>> controller;
+  final values = <int, List<CoordinationNeed>>{};
+  final subscriptions = <StreamSubscription<List<CoordinationNeed>>>[];
+
+  void emit() {
+    if (values.length != streams.length || controller.isClosed) return;
+    final seen = <String>{};
+    controller.add(
+      List.unmodifiable([
+        for (var index = 0; index < streams.length; index++)
+          for (final mission in values[index]!)
+            if (seen.add(mission.id)) mission,
+      ]),
+    );
+  }
+
+  controller = StreamController<List<CoordinationNeed>>(
+    onListen: () {
+      for (var index = 0; index < streams.length; index++) {
+        final key = index;
+        subscriptions.add(
+          streams[index].listen((missions) {
+            values[key] = missions;
+            emit();
+          }, onError: controller.addError),
+        );
+      }
+    },
+    onCancel: () async {
+      for (final subscription in subscriptions) {
+        await subscription.cancel();
+      }
+    },
+  );
+  return controller.stream;
 }

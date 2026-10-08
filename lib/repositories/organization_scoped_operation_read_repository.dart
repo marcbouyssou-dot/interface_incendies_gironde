@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/operation.dart';
@@ -9,6 +11,7 @@ import '../services/operation_visibility_resolver.dart';
 import '../utils/switch_latest.dart';
 import '../utils/value_listenable_stream.dart';
 import 'operation_read_repository.dart';
+import 'operation_access_read_repository.dart';
 
 /// Borne toutes les projections d'opérations à l'organisation courante.
 ///
@@ -20,16 +23,20 @@ class OrganizationScopedOperationReadRepository
     implements OperationReadRepository {
   const OrganizationScopedOperationReadRepository({
     required OperationReadRepository delegate,
+    OperationAccessReadRepository accessRepository =
+        const EmptyOperationAccessReadRepository(),
     required ValueListenable<OrganizationContext?> context,
     LegacyOrganizationResolver resolver = const LegacyOrganizationResolver(),
     OperationVisibilityResolver visibilityResolver =
         const OperationVisibilityResolver(),
   }) : _delegate = delegate,
+       _accessRepository = accessRepository,
        _context = context,
        _resolver = resolver,
        _visibilityResolver = visibilityResolver;
 
   final OperationReadRepository _delegate;
+  final OperationAccessReadRepository _accessRepository;
   final ValueListenable<OrganizationContext?> _context;
   final LegacyOrganizationResolver _resolver;
   final OperationVisibilityResolver _visibilityResolver;
@@ -48,8 +55,26 @@ class OrganizationScopedOperationReadRepository
         final delegate = _delegate;
         final isManager =
             context?.hasRole(OrganizationRole.coordinator) == true ||
-            context?.hasRole(OrganizationRole.siteManager) == true ||
-            context?.hasRole(OrganizationRole.organizationAdmin) == true;
+            context?.hasRole(OrganizationRole.siteManager) == true;
+        if (isManager &&
+            context?.hasActiveMembership == true &&
+            context?.isPlatformAdministrator != true) {
+          return switchLatest(
+            _accessRepository.watchForUser(context!.uid),
+            (grants) => _watchGrantedOperations(
+              grants
+                  .where(
+                    (grant) =>
+                        grant.organizationId == organizationId &&
+                        grant.canRead(context),
+                  )
+                  .map((grant) => grant.operationId)
+                  .toSet(),
+              organizationId: organizationId,
+              statuses: statuses,
+            ),
+          );
+        }
         final source =
             context?.isPlatformAdministrator != true &&
                 isManager &&
@@ -101,17 +126,90 @@ class OrganizationScopedOperationReadRepository
         if (organizationId == null) {
           return Stream<Operation?>.value(null);
         }
+        final isManager =
+            context!.hasRole(OrganizationRole.coordinator) ||
+            context.hasRole(OrganizationRole.siteManager);
+        if (isManager && context.hasActiveMembership) {
+          return switchLatest(_accessRepository.watchForUser(context.uid), (
+            grants,
+          ) {
+            if (!grants.any(
+              (grant) =>
+                  grant.operationId == operationId &&
+                  grant.organizationId == organizationId &&
+                  grant.canRead(context),
+            )) {
+              return Stream<Operation?>.value(null);
+            }
+            return _delegate
+                .watchOperation(operationId)
+                .map(
+                  (operation) =>
+                      operation != null &&
+                          _resolver.resolveOperationOrganizationId(operation) ==
+                              organizationId
+                      ? operation
+                      : null,
+                );
+          });
+        }
         return _delegate.watchOperation(operationId).map((operation) {
           if (operation == null) return null;
           return _canReadOperation(
                 operation: operation,
-                context: context!,
+                context: context,
                 organizationId: organizationId,
               )
               ? operation
               : null;
         });
       });
+
+  Stream<List<Operation>> _watchGrantedOperations(
+    Set<String> ids, {
+    required String organizationId,
+    Set<OperationStatus>? statuses,
+  }) {
+    if (ids.isEmpty) return Stream.value(const []);
+    late final StreamController<List<Operation>> controller;
+    final subscriptions = <StreamSubscription<Operation?>>[];
+    final values = <String, Operation?>{};
+
+    void emit() {
+      if (values.length != ids.length || controller.isClosed) return;
+      final operations =
+          values.values
+              .whereType<Operation>()
+              .where(
+                (operation) =>
+                    _resolver.resolveOperationOrganizationId(operation) ==
+                        organizationId &&
+                    (statuses == null || statuses.contains(operation.status)),
+              )
+              .toList(growable: false)
+            ..sort((a, b) => a.startAt.compareTo(b.startAt));
+      controller.add(List.unmodifiable(operations));
+    }
+
+    controller = StreamController<List<Operation>>(
+      onListen: () {
+        for (final id in ids) {
+          subscriptions.add(
+            _delegate.watchOperation(id).listen((operation) {
+              values[id] = operation;
+              emit();
+            }, onError: controller.addError),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      },
+    );
+    return controller.stream;
+  }
 
   bool _canReadOperation({
     required Operation operation,

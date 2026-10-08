@@ -13,7 +13,9 @@ import {publicMissionId} from '../../src/public_discovery/projector.js';
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   throw new Error('Firestore emulator required');
 }
-const app = initializeApp({projectId: 'demo-mobsante'}, 'public-discovery-test');
+// Rebuild scans entire collections: isolate it from other emulator suites.
+const app = initializeApp({projectId: 'demo-mobsante-public-discovery'},
+  'public-discovery-test');
 const firestore = getFirestore(app);
 after(async () => deleteApp(app));
 

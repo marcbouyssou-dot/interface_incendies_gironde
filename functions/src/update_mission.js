@@ -1,6 +1,7 @@
 import {isCanonicalBlankText, parseResponsibleAccess} from './responsible_access.js';
 import {globalMissionEquipmentLabels, normalizeMissionEquipment} from './mission_equipment.js';
 import {operationAllowsOperationalMutation} from './operation_activity.js';
+import {canManageOperationLocation} from './operation_access.js';
 
 const PROFESSIONS = Object.freeze([
   'physiotherapist',
@@ -106,6 +107,7 @@ export function missionUpdateMutation({
   mission,
   mobilization,
   operation = null,
+  operationAccess = null,
   coordinatorAuthorized,
   destination,
   callerRole,
@@ -135,8 +137,11 @@ export function missionUpdateMutation({
     );
   }
   const access = parseAccess(callerRole);
-  if (!canManage(access, mission.locationId, coordinatorAuthorized)
-      || !canManage(access, request.locationId, coordinatorAuthorized)) {
+  const canManageSite = (siteId) => mobilization.operationId === undefined
+    ? canManage(access, siteId, coordinatorAuthorized)
+    : canManageOperationLocation(operationAccess, siteId);
+  if (!canManageSite(mission.locationId)
+      || !canManageSite(request.locationId)) {
     throw outsideScope();
   }
   if (

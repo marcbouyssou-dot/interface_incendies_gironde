@@ -9,7 +9,7 @@ class BrandMark extends StatelessWidget {
     this.size = 50,
     this.assetPath = officialAssetPath,
     this.onDarkBackground = false,
-    this.showMobilizationSymbol = true,
+    this.showMobilizationSymbol = false,
   });
 
   static const officialAssetPath = AppIdentity.pictogramAsset;

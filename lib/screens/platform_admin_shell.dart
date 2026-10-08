@@ -7,6 +7,7 @@ import '../repositories/platform_actor_read_repository.dart';
 import '../repositories/platform_administration_read_repository.dart';
 import '../repositories/platform_admin_statistics_read_repository.dart';
 import '../repositories/platform_admin_history_read_repository.dart';
+import '../repositories/demo_history_read_repository.dart';
 import '../repositories/coordination_repository.dart';
 import '../repositories/platform_read_repository.dart';
 import '../repositories/operation_read_repository.dart';
@@ -34,6 +35,7 @@ class PlatformAdminShell extends StatefulWidget {
     this.missionRepository,
     this.locationStream,
     this.actorRepository = const NoPlatformActorReadRepository(),
+    this.demoHistoryRepository,
     this.initialIndex = 0,
   }) : assert(initialIndex >= 0 && initialIndex < 5);
 
@@ -46,6 +48,7 @@ class PlatformAdminShell extends StatefulWidget {
   final MultiMobilizationCoordinationReadRepository? missionRepository;
   final Stream<List<ResponsePlace>>? locationStream;
   final PlatformActorReadRepository actorRepository;
+  final DemoHistoryReadRepository? demoHistoryRepository;
   final int initialIndex;
 
   @override
@@ -100,6 +103,7 @@ class _PlatformAdminShellState extends State<PlatformAdminShell> {
       ),
     ),
     3 => PlatformAdminHistoryScreen(
+      demoHistoryRepository: widget.demoHistoryRepository,
       dataSource: RepositoryPlatformAdminHistoryDataSource(
         platformRepository: widget.platformRepository,
         operationRepository: widget.operationRepository,

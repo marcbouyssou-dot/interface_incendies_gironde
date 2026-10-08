@@ -237,6 +237,18 @@ test('organization memberships resolve coordinator and location-scoped manager',
         active: true,
         schemaVersion: 1,
       }),
+    db.collection('operationAccess')
+      .doc(`operation-organization-a_${uid}`)
+      .set({operationId: 'operation-organization-a',
+        organizationId: 'organization-a', uid,
+        roles: ['coordinator'], locationIds: [],
+        active: true, schemaVersion: 1}),
+    db.collection('operationAccess')
+      .doc(`operation-organization-b_${uid}`)
+      .set({operationId: 'operation-organization-b',
+        organizationId: 'organization-b', uid,
+        roles: ['site_manager'], locationIds: ['site-b'],
+        active: true, schemaVersion: 1}),
   ]);
 
   assert.deepEqual(await services.listMissionTeam({

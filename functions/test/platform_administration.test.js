@@ -13,6 +13,7 @@ import {
   removeMobilizationCoordinator,
   revokeHistoricalActionAccess,
   setOperationCoordinator,
+  setOperationSiteAccess,
   transitionOperation,
   updateOperation,
   updateMobilization,
@@ -299,6 +300,26 @@ test('valid activation writes mobilization and active pointer', async () => {
   });
 });
 
+test('activating an Action-linked mobilization never creates a global pointer', async () => {
+  const {firestore, services} = harness();
+  firestore.seed('operations/operation-a', operationDocument('operation-a', 'active'));
+  firestore.seed('mobilizations/action-mobilization',
+    mobilizationDocument('action-mobilization', 'draft', {
+      operationId: 'operation-a', schemaVersion: 2,
+    }));
+  seedAssignment(firestore, 'action-mobilization');
+
+  await activateMobilization({
+    callerUid: ADMIN_UID,
+    data: {mobilizationId: 'action-mobilization'},
+    services,
+  });
+
+  assert.equal(firestore.read('mobilizations/action-mobilization').status,
+    'active');
+  assert.equal(firestore.has('platform/config'), false);
+});
+
 test('activation preserves other active mobilizations and the legacy pointer', async () => {
   const {firestore, services} = harness();
   firestore.seed(
@@ -396,7 +417,8 @@ test('operation lifecycle follows the strict transition graph', async () => {
       coordinatorUid: null,
       createdAt: NOW,
       updatedAt: NOW,
-      schemaVersion: 2,
+      schemaVersion: 3,
+      purpose: 'operational',
     }),
   );
 
@@ -416,6 +438,31 @@ test('operation lifecycle follows the strict transition graph', async () => {
     }),
     'failed-precondition',
   );
+});
+
+test('generic demonstration fields are validated and stored on Operations', async () => {
+  const {firestore, services} = harness();
+  await createOperation({
+    callerUid: ADMIN_UID,
+    data: operationPayload({
+      purpose: 'demonstration', themeKey: 'fire',
+      organizerDisplayName: 'Organisation partenaire',
+      demoSafetyLabel: 'Action de démonstration — données fictives',
+    }),
+    services,
+  });
+  const stored = firestore.read('operations/operation-a');
+  assert.equal(stored.purpose, 'demonstration');
+  assert.equal(stored.themeKey, 'fire');
+  assert.equal(stored.organizerDisplayName, 'Organisation partenaire');
+  assert.equal(stored.demoSafetyLabel,
+    'Action de démonstration — données fictives');
+
+  await assertCode(() => createOperation({
+    callerUid: ADMIN_UID,
+    data: operationPayload({operationId: 'unlabelled', purpose: 'demonstration'}),
+    services,
+  }), 'invalid-argument');
 });
 
 function seedHistoricalLifecycle(firestore) {
@@ -446,6 +493,17 @@ function seedHistoricalLifecycle(firestore) {
     uid: 'fire-coordinator', organizationId: 'urps-na',
     roles: ['coordinator'], locationIds: [], active: true, schemaVersion: 1,
   });
+  firestore.seed('operationAccess/fire-action_fire-manager', {
+    uid: 'fire-manager', organizationId: 'urps-na',
+    operationId: 'fire-action', roles: ['site_manager'],
+    locationIds: ['fire-site', 'unrelated-site'],
+    active: true, schemaVersion: 1,
+  });
+  firestore.seed('operationAccess/fire-action_fire-coordinator', {
+    uid: 'fire-coordinator', organizationId: 'urps-na',
+    operationId: 'fire-action', roles: ['coordinator'], locationIds: [],
+    active: true, schemaVersion: 1,
+  });
   firestore.seed('operations/flood-action', operationDocument(
     'flood-action', 'active', {
       ownerOrganizationId: 'urps-na', coordinatorUid: 'flood-coordinator',
@@ -466,6 +524,16 @@ function seedHistoricalLifecycle(firestore) {
   firestore.seed('organizationMemberships/urps-na_flood-coordinator', {
     uid: 'flood-coordinator', organizationId: 'urps-na',
     roles: ['coordinator'], locationIds: [], active: true, schemaVersion: 1,
+  });
+  firestore.seed('operationAccess/flood-action_flood-manager', {
+    uid: 'flood-manager', organizationId: 'urps-na',
+    operationId: 'flood-action', roles: ['site_manager'],
+    locationIds: ['flood-site'], active: true, schemaVersion: 1,
+  });
+  firestore.seed('operationAccess/flood-action_flood-coordinator', {
+    uid: 'flood-coordinator', organizationId: 'urps-na',
+    operationId: 'flood-action', roles: ['coordinator'], locationIds: [],
+    active: true, schemaVersion: 1,
   });
 }
 
@@ -491,6 +559,12 @@ test('historical grants follow the Action lifecycle with exact sites and retry s
     assert.deepEqual(manager.locationIds, ['fire-site']);
     assert.deepEqual(coordinator.roles, ['coordinator']);
     assert.deepEqual(coordinator.locationIds, []);
+    assert.equal(firestore.read(
+      'operationAccess/fire-action_fire-manager').active, false);
+    assert.equal(firestore.read(
+      'operationAccess/fire-action_fire-coordinator').active, false);
+    assert.equal(firestore.read(
+      'operationAccess/flood-action_flood-manager').active, true);
     assert.equal(manager.createdBy, ADMIN_UID);
     assert.equal(manager.sourceTransition, 'active:completed');
     assert.equal(manager.createdAt.toISOString(), NOW.toISOString());
@@ -768,6 +842,79 @@ test('replacement atomically harmonizes divergent assignments', async () => {
       .hasActiveMobilizationAssignments,
     false,
   );
+});
+
+test('operation coordinator grant is explicit for one Action and preserves another',
+  async () => {
+    const {firestore, services} = harness();
+    for (const operationId of ['action-a', 'action-b']) {
+      firestore.seed(`operations/${operationId}`,
+        operationDocument(operationId, 'active', {
+          ownerOrganizationId: 'urps-na',
+        }));
+    }
+    firestore.seed(`organizationMemberships/urps-na_${COORDINATOR_UID}`, {
+      uid: COORDINATOR_UID, organizationId: 'urps-na',
+      roles: ['coordinator'], locationIds: [], active: true,
+      schemaVersion: 1,
+    });
+    for (const operationId of ['action-a', 'action-b']) {
+      await setOperationCoordinator({callerUid: ADMIN_UID,
+        data: {operationId, uid: COORDINATOR_UID}, services});
+    }
+    assert.equal(firestore.read(
+      `operationAccess/action-a_${COORDINATOR_UID}`).active, true);
+    assert.equal(firestore.read(
+      `operationAccess/action-b_${COORDINATOR_UID}`).active, true);
+    firestore.seed('roles/other-coordinator', {
+      role: 'coordinator', roles: ['coordinator'], locationIds: [],
+      active: true, schemaVersion: 2,
+    });
+    firestore.seed('organizationMemberships/urps-na_other-coordinator', {
+      uid: 'other-coordinator', organizationId: 'urps-na',
+      roles: ['coordinator'], locationIds: [], active: true,
+      schemaVersion: 1,
+    });
+    await setOperationCoordinator({callerUid: ADMIN_UID,
+      data: {operationId: 'action-a', uid: 'other-coordinator'}, services});
+    assert.equal(firestore.read(
+      `operationAccess/action-a_${COORDINATOR_UID}`).active, false);
+    assert.equal(firestore.read(
+      `operationAccess/action-b_${COORDINATOR_UID}`).active, true);
+    assert.equal(firestore.read(
+      'operationAccess/action-a_other-coordinator').active, true);
+  });
+
+test('site manager grant is bound to one Action and selected sites', async () => {
+  const {firestore, services} = harness();
+  for (const operationId of ['action-a', 'action-b']) {
+    firestore.seed(`operations/${operationId}`,
+      operationDocument(operationId, 'active', {
+        ownerOrganizationId: 'urps-na',
+      }));
+  }
+  for (const locationId of ['site-x', 'site-y']) {
+    firestore.seed(`locations/${locationId}`, {
+      id: locationId, managingOrganizationId: 'urps-na', active: true,
+    });
+  }
+  firestore.seed('organizationMemberships/urps-na_manager', {
+    uid: 'manager', organizationId: 'urps-na', roles: ['site_manager'],
+    locationIds: ['site-x', 'site-y'], active: true, schemaVersion: 1,
+  });
+  await assertCode(() => setOperationSiteAccess({callerUid: 'manager',
+    data: {operationId: 'action-a', uid: 'manager',
+      locationIds: ['site-x']}, services}), 'permission-denied');
+  await setOperationSiteAccess({callerUid: ADMIN_UID,
+    data: {operationId: 'action-a', uid: 'manager',
+      locationIds: ['site-x']}, services});
+  assert.deepEqual(firestore.read('operationAccess/action-a_manager').locationIds,
+    ['site-x']);
+  assert.equal(firestore.has('operationAccess/action-b_manager'), false);
+  await setOperationSiteAccess({callerUid: ADMIN_UID,
+    data: {operationId: 'action-a', uid: 'manager',
+      locationIds: []}, services});
+  assert.equal(firestore.read('operationAccess/action-a_manager').active, false);
 });
 
 test('failed operation coordinator replacement leaves every record unchanged', async () => {

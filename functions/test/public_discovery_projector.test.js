@@ -88,6 +88,9 @@ test('new actions require explicit platform visibility', () => {
     visibility: 'platform', status: 'active',
   }}));
   assert.equal(projectPublicMission({...input, operation: {
+    visibility: 'platform', status: 'active', purpose: 'demonstration',
+  }}), null);
+  assert.equal(projectPublicMission({...input, operation: {
     visibility: 'platform', status: 'suspended',
   }}), null);
 });

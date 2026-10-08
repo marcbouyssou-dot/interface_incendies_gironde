@@ -299,6 +299,72 @@ test('site manager must manage the source and destination', async () => {
   }
 });
 
+test('same site in two Actions requires a separate Action grant for writes',
+  async () => {
+    const organizationId = unique('organization');
+    const actionA = unique('action-a');
+    const actionB = unique('action-b');
+    const mobilizationA = unique('mobilization-a');
+    const mobilizationB = unique('mobilization-b');
+    const site = unique('shared-site');
+    await seedLocation(site, {managingOrganizationId: organizationId});
+    for (const [operationId, mobilizationId] of [
+      [actionA, mobilizationA], [actionB, mobilizationB],
+    ]) {
+      await db.collection('operations').doc(operationId).set({
+        id: operationId, status: 'active', purpose: 'operational',
+        ownerOrganizationId: organizationId,
+      });
+      await db.collection('mobilizations').doc(mobilizationId).set({
+        id: mobilizationId, operationId, status: 'active',
+      });
+    }
+    const missionA = await seedMission(site, {mobilizationId: mobilizationA});
+    const missionB = await seedMission(site, {mobilizationId: mobilizationB});
+    const manager = await createUser(managerRole([site]));
+    await db.collection('organizationMemberships')
+      .doc(`${organizationId}_${manager.uid}`).set({
+        uid: manager.uid, organizationId, roles: ['site_manager'],
+        locationIds: [site], active: true, schemaVersion: 1,
+      });
+    await db.collection('operationAccess')
+      .doc(`${actionA}_${manager.uid}`).set({
+        uid: manager.uid, operationId: actionA, organizationId,
+        roles: ['site_manager'], locationIds: [site],
+        active: true, schemaVersion: 1,
+      });
+    const update = await callable(manager);
+    await update(updateRequest(missionA, site));
+    await assertCode(() => update(updateRequest(missionB, site)),
+      'permission-denied');
+    await db.collection('operationAccess')
+      .doc(`${actionB}_${manager.uid}`).set({
+        uid: manager.uid, operationId: actionB, organizationId,
+        roles: ['site_manager'], locationIds: [site],
+        active: true, schemaVersion: 1,
+      });
+    await update(updateRequest(missionB, site));
+    assert.equal((await db.collection('missions').doc(missionB).get())
+      .data().details, 'Après');
+    const coordinator = await createUser(coordinatorRole(),
+      {assignCoordinator: false});
+    await db.collection('organizationMemberships')
+      .doc(`${organizationId}_${coordinator.uid}`).set({
+        uid: coordinator.uid, organizationId, roles: ['coordinator'],
+        locationIds: [], active: true, schemaVersion: 1,
+      });
+    await db.collection('operationAccess')
+      .doc(`${actionA}_${coordinator.uid}`).set({
+        uid: coordinator.uid, operationId: actionA, organizationId,
+        roles: ['coordinator'], locationIds: [],
+        active: true, schemaVersion: 1,
+      });
+    const coordinatorUpdate = await callable(coordinator);
+    await coordinatorUpdate(updateRequest(missionA, site));
+    await assertCode(() => coordinatorUpdate(updateRequest(missionB, site)),
+      'permission-denied');
+  });
+
 test('active-today mission remains editable before its end', async () => {
   const source = unique('source');
   await seedLocation(source);

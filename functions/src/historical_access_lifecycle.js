@@ -1,4 +1,4 @@
-import {resolveOrganizationAuthorization} from './organization_authorization.js';
+import {resolveOperationAccess} from './operation_access.js';
 import {PlatformAdministrationError} from './platform_administration.js';
 
 const MAX_GRANTS = 200;
@@ -30,14 +30,14 @@ function addScopedLocations(target, scopeRefs) {
   }
 }
 
-/** A snapshot is derived only from an Action's own missions/scopes and the
- * current canonical organization memberships or coordinator assignments. */
+/** A snapshot is derived from explicit Action grants and the same Action's
+ * sites. An organization role or legacy locationIds alone never mint history. */
 export function planHistoricalAccessGrants({
   operationId,
   operation,
   mobilizations,
   missions,
-  assignments,
+  operationAccess = [],
   memberships,
 }) {
   const organizationId = operation.ownerOrganizationId;
@@ -58,39 +58,24 @@ export function planHistoricalAccessGrants({
       || !isHistoricalAccessId(mission.data.locationId)) throw invalidSource();
     actionSiteIds.add(mission.data.locationId);
   }
-  const coordinatorUids = new Set();
-  if (operation.coordinatorUid !== null
-    && operation.coordinatorUid !== undefined) {
-    if (!isHistoricalAccessId(operation.coordinatorUid)) throw invalidSource();
-    coordinatorUids.add(operation.coordinatorUid);
-  }
-  for (const assignment of assignments) {
-    const {uid, mobilizationId, role, active} = assignment.data;
-    if (active !== true || role !== 'coordinator') continue;
-    if (!isHistoricalAccessId(uid)
-      || !mobilizationIds.has(mobilizationId)
-      || assignment.id !== `${mobilizationId}_${uid}`) throw invalidSource();
-    coordinatorUids.add(uid);
-  }
+  const membershipByUid = new Map(memberships.map((entry) =>
+    [entry.data.uid, entry]));
   const grants = [];
   const seenUids = new Set();
-  for (const membership of memberships) {
-    const {uid} = membership.data;
+  for (const scope of operationAccess) {
+    const {uid} = scope.data;
     if (!isHistoricalAccessId(uid)
-      || membership.id !== `${organizationId}_${uid}`
+      || scope.id !== `${operationId}_${uid}`
       || seenUids.has(uid)) throw invalidSource();
     seenUids.add(uid);
-    const authorization = resolveOrganizationAuthorization({
-      organizationId,
-      uid,
-      membership: membership.data,
-    });
-    if (!authorization.hasActiveMembership) continue;
-    const coordinator = authorization.isCoordinator
-      && coordinatorUids.has(uid);
-    const locationIds = authorization.isSiteManager
-      ? authorization.locationIds.filter((id) => actionSiteIds.has(id)).sort()
-      : [];
+    const membership = membershipByUid.get(uid);
+    if (membership !== undefined
+      && membership.id !== `${organizationId}_${uid}`) throw invalidSource();
+    const resolved = resolveOperationAccess({operationId, organizationId,
+      uid, membership: membership?.data ?? null, grant: scope.data});
+    const coordinator = resolved.coordinator;
+    const locationIds = resolved.locationIds
+      .filter((id) => actionSiteIds.has(id)).sort();
     if (!coordinator && locationIds.length === 0) continue;
     grants.push({
       uid,

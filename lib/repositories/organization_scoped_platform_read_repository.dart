@@ -53,7 +53,8 @@ class OrganizationScopedPlatformReadRepository
         if (organizationId == null) {
           return Stream<List<Mobilization>>.value(const []);
         }
-        if (organizationId != LegacyOrganizationResolver.legacyOrganizationId) {
+        if (organizationId != LegacyOrganizationResolver.legacyOrganizationId ||
+            context?.hasActiveMembership == true) {
           return _watchMobilizationsForContext(
             context: context,
             organizationId: organizationId,
@@ -224,19 +225,10 @@ class OrganizationScopedPlatformReadRepository
               if (mobilization == null) {
                 return Stream<List<Mobilization>>.value(const []);
               }
-              final operationId = mobilization.operationId;
-              if (operationId == null) {
+              if (mobilization.operationId == null) {
                 return Stream<List<Mobilization>>.value([mobilization]);
               }
-              // Une opération historique sans ownerOrganizationId n'est pas
-              // listable par requête bornée, mais reste vérifiable par ID.
-              return _operationRepository
-                  .watchOperation(operationId)
-                  .map(
-                    (operation) => operation == null
-                        ? const <Mobilization>[]
-                        : [mobilization],
-                  );
+              return Stream<List<Mobilization>>.value(const []);
             },
           );
         });
@@ -274,50 +266,24 @@ class OrganizationScopedPlatformReadRepository
         }
         final organizationId =
             OrganizationContextReadPolicy.readableOrganizationId(context);
-        if (organizationId == null) {
+        if (organizationId != LegacyOrganizationResolver.legacyOrganizationId ||
+            context?.hasInactiveMembership == true) {
           return Stream<Mobilization?>.value(null);
         }
-        if (context?.isPlatformAdministrator != true &&
-            _delegate is MobilizationLookupRepository) {
-          return switchLatest(
-            _delegate.watchPlatformConfig(),
-            (id) => id == null
-                ? Stream<Mobilization?>.value(null)
-                : watchMobilization(id).map(
-                    (mobilization) =>
-                        mobilization?.status == MobilizationStatus.active
-                        ? mobilization
-                        : null,
-                  ),
-          );
-        }
-        final source =
-            context?.isPlatformAdministrator == true ||
-                _delegate is! MobilizationLookupRepository
-            ? _delegate.watchActiveMobilization()
-            : switchLatest(
-                _delegate.watchPlatformConfig(),
-                (id) => id == null
-                    ? Stream<Mobilization?>.value(null)
-                    : _lookupMobilization(id),
-              );
-        return _combineLatestOperationsAndMobilizations<Mobilization?>(
-          _operationRepository.watchOperations(),
-          source,
-          (operations, mobilization) {
-            if (mobilization == null) return null;
-            final accessibleOperationIds = operations
-                .map((operation) => operation.id)
-                .toSet();
-            return _resolver.isMobilizationAccessible(
-                  mobilization: mobilization,
-                  organizationId: organizationId,
-                  accessibleOperationIds: accessibleOperationIds,
-                )
-                ? mobilization
-                : null;
-          },
-        );
+        return _delegate.watchActiveMobilization().map((mobilization) {
+          if (mobilization == null ||
+              mobilization.operationId != null ||
+              mobilization.status != MobilizationStatus.active) {
+            return null;
+          }
+          return _resolver.isMobilizationAccessible(
+                mobilization: mobilization,
+                organizationId: organizationId!,
+                accessibleOperationIds: const {},
+              )
+              ? mobilization
+              : null;
+        });
       });
 
   List<Mobilization> _filterMobilizations({
