@@ -33,11 +33,6 @@ service cloud.firestore {
       return value is string && hasNoBlankLocationIds([value]);
     }
 
-    function isValidAdminInvitationEmail(value) {
-      return value is string
-        && value.matches('^[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*[^\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]{1,255}[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*$')
-        && value.matches('^[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*[^@\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+@[^@\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+\\.[^@\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*$');
-    }
 
     function validLocationIds(values) {
       return hasOnlyStringLocationIds(values)
@@ -47,15 +42,6 @@ service cloud.firestore {
         && values.size() > 0;
     }
 
-    function hasValidInvitationScope(invitation) {
-      return 'locationIds' in invitation
-        && (
-          (invitation.role == 'site_manager'
-            && validLocationIds(invitation.locationIds))
-          || (invitation.role == 'coordinator'
-            && invitation.locationIds == [])
-        );
-    }
 
     function isLegacyRoleDocument(role) {
       return !('roles' in role)
@@ -125,26 +111,11 @@ service cloud.firestore {
         && hasRole(currentRole(), 'site_manager');
     }
 
-    function canManageLocation(locationId) {
-      return hasActiveRole()
-        && (
-          hasRole(currentRole(), 'coordinator')
-          || (hasRole(currentRole(), 'site_manager')
-            && locationId in currentRole().locationIds)
-        );
-    }
 
     function isVolunteerOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    function canGetOwnEngagement(engagementId) {
-      let path = /databases/$(database)/documents/engagements/$(engagementId);
-      return isSignedIn()
-        && engagementId.matches('^.+_' + request.auth.uid + '$')
-        && (!exists(path)
-          || resource.data.volunteerId == request.auth.uid);
-    }
 
     function validProfession(value) {
       return value in [
@@ -154,9 +125,6 @@ service cloud.firestore {
       ];
     }
 
-    function validProfileProfession(value) {
-      return validProfession(value);
-    }
 
     function canonicalProfession(value) {
       return value == 'mk' || value == 'physiotherapist'
@@ -175,30 +143,7 @@ service cloud.firestore {
                   : 'invalid')))));
     }
 
-    function validQuotaMap(value) {
-      return value is map
-        && value.keys().hasOnly([
-          'physiotherapist', 'podiatrist', 'physician', 'nurse',
-          'veterinarian', 'other_health_professional'
-        ])
-        && value.get('physiotherapist', 0) is int
-        && value.get('podiatrist', 0) is int
-        && value.get('physician', 0) is int
-        && value.get('nurse', 0) is int
-        && value.get('veterinarian', 0) is int
-        && value.get('other_health_professional', 0) is int
-        && value.get('physiotherapist', 0) >= 0
-        && value.get('podiatrist', 0) >= 0
-        && value.get('physician', 0) >= 0
-        && value.get('nurse', 0) >= 0
-        && value.get('veterinarian', 0) >= 0
-        && value.get('other_health_professional', 0) >= 0;
-    }
 
-    function hasGenericQuotas(data) {
-      return 'requiredByProfession' in data
-        || 'registeredByProfession' in data;
-    }
 
     function requiredQuota(data, profession) {
       return 'requiredByProfession' in data
@@ -216,183 +161,15 @@ service cloud.firestore {
           : (profession == 'podiatrist' ? data.registeredPp : 0));
     }
 
-    function validGenericQuotaData(data) {
-      return !hasGenericQuotas(data)
-        ? (data.registeredMk is int
-          && data.registeredPp is int
-          && data.registeredMk >= 0
-          && data.registeredPp >= 0
-          && data.registeredMk <= data.requiredMk
-          && data.registeredPp <= data.requiredPp)
-        : ('requiredByProfession' in data
-          && 'registeredByProfession' in data
-          && validQuotaMap(data.requiredByProfession)
-          && validQuotaMap(data.registeredByProfession)
-          && validGenericQuotaValues(data));
-    }
 
-    function validGenericQuotaValues(data) {
-      return data.registeredByProfession.get('physiotherapist', 0)
-          <= data.requiredByProfession.get('physiotherapist', 0)
-        && data.registeredByProfession.get('podiatrist', 0)
-          <= data.requiredByProfession.get('podiatrist', 0)
-        && data.registeredByProfession.get('physician', 0)
-          <= data.requiredByProfession.get('physician', 0)
-        && data.registeredByProfession.get('nurse', 0)
-          <= data.requiredByProfession.get('nurse', 0)
-        && data.registeredByProfession.get('veterinarian', 0)
-          <= data.requiredByProfession.get('veterinarian', 0)
-        && data.registeredByProfession.get('other_health_professional', 0)
-          <= data.requiredByProfession.get('other_health_professional', 0)
-        && data.requiredMk
-          == data.requiredByProfession.get('physiotherapist', 0)
-        && data.requiredPp
-          == data.requiredByProfession.get('podiatrist', 0)
-        && data.registeredMk
-          == data.registeredByProfession.get('physiotherapist', 0)
-        && data.registeredPp
-          == data.registeredByProfession.get('podiatrist', 0);
-    }
 
-    function missionCreateQuotaValues(value) {
-      return [
-        value.get('physiotherapist', 0),
-        value.get('podiatrist', 0),
-        value.get('physician', 0),
-        value.get('nurse', 0),
-        value.get('veterinarian', 0),
-        value.get('other_health_professional', 0)
-      ];
-    }
 
-    function validMissionCreateQuotaValues(values) {
-      return values[0] is int
-        && values[1] is int
-        && values[2] is int
-        && values[3] is int
-        && values[4] is int
-        && values[5] is int
-        && values[0] >= 0
-        && values[1] >= 0
-        && values[2] >= 0
-        && values[3] >= 0
-        && values[4] >= 0
-        && values[5] >= 0;
-    }
 
-    function validGenericMissionCreateQuotaData(data) {
-      let required = data.get('requiredByProfession', null);
-      let registered = data.get('registeredByProfession', null);
-      let requiredValues = required is map
-        ? missionCreateQuotaValues(required)
-        : [];
-      let registeredValues = registered is map
-        ? missionCreateQuotaValues(registered)
-        : [];
-      return required is map
-        && registered is map
-        && required.keys().hasOnly([
-          'physiotherapist', 'podiatrist', 'physician', 'nurse',
-          'veterinarian', 'other_health_professional'
-        ])
-        && registered.keys().hasOnly([
-          'physiotherapist', 'podiatrist', 'physician', 'nurse',
-          'veterinarian', 'other_health_professional'
-        ])
-        && validMissionCreateQuotaValues(requiredValues)
-        && validMissionCreateQuotaValues(registeredValues)
-        && registeredValues[0] <= requiredValues[0]
-        && registeredValues[1] <= requiredValues[1]
-        && registeredValues[2] <= requiredValues[2]
-        && registeredValues[3] <= requiredValues[3]
-        && registeredValues[4] <= requiredValues[4]
-        && registeredValues[5] <= requiredValues[5]
-        && data.requiredMk == requiredValues[0]
-        && data.requiredPp == requiredValues[1]
-        && data.registeredMk == registeredValues[0]
-        && data.registeredPp == registeredValues[1]
-        && registeredValues == [0, 0, 0, 0, 0, 0]
-        && data.requiredMk <= 50
-        && data.requiredPp <= 50
-        && requiredValues != [0, 0, 0, 0, 0, 0];
-    }
 
-    function validMissionCreateQuotaData(data) {
-      return !hasGenericQuotas(data)
-        ? (data.registeredMk is int
-          && data.registeredPp is int
-          && data.registeredMk == 0
-          && data.registeredPp == 0
-          && data.requiredMk is int
-          && data.requiredPp is int
-          && data.requiredMk >= 0
-          && data.requiredMk <= 50
-          && data.requiredPp >= 0
-          && data.requiredPp <= 50
-          && data.requiredMk + data.requiredPp > 0)
-        : validGenericMissionCreateQuotaData(data);
-    }
 
-    function validCounterQuotaData(before, after) {
-      return !hasGenericQuotas(after)
-        ? (sameRequiredQuotas(before, after)
-          && validGenericQuotaData(after))
-        : ('requiredByProfession' in after
-          && 'registeredByProfession' in after
-          && sameRequiredQuotas(before, after)
-          && validQuotaMap(after.registeredByProfession)
-          && validGenericQuotaValues(after));
-    }
 
-    function validEngagementCounterData(before, after, professionValue) {
-      let profession = canonicalProfession(professionValue);
-      return 'requiredByProfession' in before
-        ? ('requiredByProfession' in after
-          && 'registeredByProfession' in after
-          && after.requiredByProfession
-            .diff(before.requiredByProfession)
-            .affectedKeys()
-            .size() == 0
-          && after.requiredMk == before.requiredMk
-          && after.requiredPp == before.requiredPp
-          && after.registeredByProfession.get(profession, -1) is int
-          && after.registeredByProfession.get(profession, -1) >= 0
-          && after.registeredByProfession.get(profession, -1)
-            <= after.requiredByProfession.get(profession, 0)
-          && (profession == 'physiotherapist'
-            ? (after.registeredMk
-                == after.registeredByProfession.get('physiotherapist', 0)
-              && after.registeredPp == before.registeredPp)
-            : (profession == 'podiatrist'
-              ? (after.registeredPp
-                  == after.registeredByProfession.get('podiatrist', 0)
-                && after.registeredMk == before.registeredMk)
-              : (after.registeredMk == before.registeredMk
-                && after.registeredPp == before.registeredPp))))
-        : validCounterQuotaData(before, after);
-    }
 
-    function totalRequired(data) {
-      return 'requiredByProfession' in data
-        ? data.requiredByProfession.get('physiotherapist', 0)
-          + data.requiredByProfession.get('podiatrist', 0)
-          + data.requiredByProfession.get('physician', 0)
-          + data.requiredByProfession.get('nurse', 0)
-          + data.requiredByProfession.get('veterinarian', 0)
-          + data.requiredByProfession.get('other_health_professional', 0)
-        : data.requiredMk + data.requiredPp;
-    }
 
-    function totalRegistered(data) {
-      return 'registeredByProfession' in data
-        ? data.registeredByProfession.get('physiotherapist', 0)
-          + data.registeredByProfession.get('podiatrist', 0)
-          + data.registeredByProfession.get('physician', 0)
-          + data.registeredByProfession.get('nurse', 0)
-          + data.registeredByProfession.get('veterinarian', 0)
-          + data.registeredByProfession.get('other_health_professional', 0)
-        : data.registeredMk + data.registeredPp;
-    }
 
     function validRegisteredDelta(before, after, professionValue, delta) {
       let profession = canonicalProfession(professionValue);
@@ -413,240 +190,20 @@ service cloud.firestore {
               .hasOnly([profession])));
     }
 
-    function sameRequiredQuotas(before, after) {
-      return after.requiredMk == before.requiredMk
-        && after.requiredPp == before.requiredPp
-        && (!('requiredByProfession' in before)
-          ? (!('requiredByProfession' in after)
-            || (after.requiredByProfession.get('physician', 0) == 0
-              && after.requiredByProfession.get('nurse', 0) == 0
-              && after.requiredByProfession.get('veterinarian', 0) == 0
-              && after.requiredByProfession
-                .get('other_health_professional', 0) == 0))
-          : ('requiredByProfession' in after
-            && after.requiredByProfession == before.requiredByProfession));
-    }
 
-    function exactlyOneRegisteredDelta(before, after) {
-      let delta = totalRegistered(after) - totalRegistered(before);
-      return (delta == 1 || delta == -1)
-        && (
-          ('registeredByProfession' in before
-            && 'registeredByProfession' in after
-            && after.registeredByProfession
-              .diff(before.registeredByProfession)
-              .affectedKeys()
-              .size() == 1)
-          || (!('registeredByProfession' in before)
-            && ((after.registeredMk
-                == before.registeredMk + delta
-                && after.registeredPp == before.registeredPp)
-              || (after.registeredPp
-                == before.registeredPp + delta
-                && after.registeredMk == before.registeredMk)))
-        );
-    }
 
-    function validEngagementStatus(value) {
-      return value == 'pending'
-        || value == 'confirmed'
-        || value == 'standby'
-        || value == 'cancelled';
-    }
 
-    function validProfessionalIdentity(data) {
-      let hasType = 'professionalIdType' in data;
-      let hasValue = 'professionalIdValue' in data;
-      return !hasType && !hasValue
-        ? ('rpps' in data
-          && data.rpps is string
-          && data.rpps.matches('^[0-9]{11}$'))
-        : (hasType
-          && hasValue
-          && data.professionalIdType in ['rpps', 'ordinal', 'none']
-          && data.professionalIdValue is string
-          && (data.professionalIdType == 'rpps'
-            ? (data.professionalIdValue.matches('^[0-9]{11}$')
-              && 'rpps' in data
-              && data.rpps == data.professionalIdValue)
-            : (data.professionalIdType == 'ordinal'
-              ? (data.professionalIdValue.size() > 0
-                && !('rpps' in data))
-              : (data.professionalIdValue == ''
-                && !('rpps' in data)))));
-    }
 
-    function validOptionalCpts(data) {
-      let cptsId = data.get('cptsId', '');
-      let cptsLabel = data.get('cptsLabel', '');
-      return cptsId is string
-        && cptsLabel is string
-        && cptsId.size() <= 160
-        && cptsLabel.size() <= 160;
-    }
 
-    function validProfessionalAddress(data) {
-      let addressKeys = [
-        'professionalAddressLine1', 'professionalAddressLine2',
-        'professionalPostalCode', 'professionalCity',
-        'professionalCountryCode'
-      ];
-      let line1 = data.get('professionalAddressLine1', '');
-      let line2 = data.get('professionalAddressLine2', '');
-      let postalCode = data.get('professionalPostalCode', '');
-      let city = data.get('professionalCity', '');
-      let countryCode = data.get('professionalCountryCode', 'FR');
-      let hasAddress = line1 != ''
-        || line2 != ''
-        || postalCode != ''
-        || city != '';
-      return !data.keys().hasAny(addressKeys)
-        || (line1 is string
-          && line2 is string
-          && postalCode is string
-          && city is string
-          && countryCode is string
-          && line1.size() <= 240
-          && line2.size() <= 240
-          && postalCode.size() <= 16
-          && city.size() <= 120
-          && countryCode.matches('^[A-Z]{2}$')
-          && (!hasAddress
-            || (isNonBlankCanonicalText(line1)
-              && isNonBlankCanonicalText(city)
-              && (countryCode == 'FR'
-                ? postalCode.matches('^[0-9]{5}$')
-                : postalCode.matches(
-                  '^[A-Za-z0-9][A-Za-z0-9 -]{1,15}$'
-                )))));
-    }
 
-    function validOptionalEquipmentDetails(data) {
-      let details = data.get('otherEquipmentDetails', '');
-      let customizableEquipment = [
-        'other_equipment',
-        'profession_specific_equipment',
-        'other_veterinary_equipment'
-      ];
-      return details is string
-        && (!data.equipment.hasAny(customizableEquipment)
-          || isNonBlankCanonicalText(details));
-    }
 
-    function validOptionalProfileSchemaVersion(data) {
-      let version = data.get('profileSchemaVersion', 1);
-      return version is int && version >= 1;
-    }
 
-    function validOpenPreferenceList(block, key) {
-      let values = block.get(key, []);
-      return values is list;
-    }
 
-    function validOptionalCompetencies(data) {
-      let block = data.get('competencies', {});
-      let details = block.get('otherSkillDetails', '');
-      let taxonomyVersion = block.get('taxonomyVersion', 1);
-      return !('competencies' in data)
-        || (block is map
-          && block.keys().hasOnly([
-            'skillIds', 'otherSkillDetails', 'taxonomyVersion'
-          ])
-          && validOpenPreferenceList(block, 'skillIds')
-          && details is string
-          && taxonomyVersion is int
-          && taxonomyVersion >= 1);
-    }
 
-    function validOptionalMobilizationPreferences(data) {
-      let block = data.get('mobilizationPreferences', {});
-      let weekdays = block.get('preferredWeekdays', []);
-      let schemaVersion = block.get('schemaVersion', 1);
-      return !('mobilizationPreferences' in data)
-        || (block is map
-          && block.keys().hasOnly([
-            'preferredMobilizationTypes', 'territoryIds', 'locationIds',
-            'preferredWeekdays', 'preferredTimeBands', 'schemaVersion'
-          ])
-          && validOpenPreferenceList(block, 'preferredMobilizationTypes')
-          && validOpenPreferenceList(block, 'territoryIds')
-          && validOpenPreferenceList(block, 'locationIds')
-          && weekdays is list
-          && weekdays.size() <= 7
-          && weekdays.toSet().hasOnly([
-            'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
-            'saturday', 'sunday'
-          ])
-          && validOpenPreferenceList(block, 'preferredTimeBands')
-          && schemaVersion is int
-          && schemaVersion >= 1);
-    }
 
-    function validOptionalCommunicationPreferences(data) {
-      let block = data.get('communicationPreferences', {});
-      let hasQuietStart = 'quietHoursStart' in block;
-      let hasQuietEnd = 'quietHoursEnd' in block;
-      let quietStart = block.get('quietHoursStart', 0);
-      let quietEnd = block.get('quietHoursEnd', 0);
-      let schemaVersion = block.get('schemaVersion', 1);
-      let channelValues = [
-        block.get('push', false), block.get('email', false),
-        block.get('sms', false), block.get('compatibleMissions', false),
-        block.get('engagementUpdates', false),
-        block.get('operationalAlerts', false)
-      ];
-      return !('communicationPreferences' in data)
-        || (block is map
-          && block.keys().hasOnly([
-            'push', 'email', 'sms', 'compatibleMissions',
-            'engagementUpdates', 'operationalAlerts', 'quietHoursStart',
-            'quietHoursEnd', 'schemaVersion'
-          ])
-          && channelValues.toSet().hasOnly([true, false])
-          && hasQuietStart == hasQuietEnd
-          && (!hasQuietStart
-            || (quietStart is int
-              && quietStart >= 0
-              && quietStart <= 23
-              && quietEnd is int
-              && quietEnd >= 0
-              && quietEnd <= 23))
-          && schemaVersion is int
-          && schemaVersion >= 1);
-    }
 
-    function validProfessionalConsentRecord(record) {
-      return record is map
-        && record.keys().hasOnly([
-          'type', 'version', 'state', 'recordedAt', 'source'
-        ])
-        && record.get('type', '').matches(
-          '^[a-z0-9][a-z0-9._-]{0,79}$'
-        )
-        && record.get('version', '').matches('^.{1,80}$')
-        && record.get('state', '').matches(
-          '^[a-z0-9][a-z0-9._-]{0,79}$'
-        )
-        && record.recordedAt is timestamp
-        && record.get('source', '').matches(
-          '^[a-z0-9][a-z0-9._-]{0,79}$'
-        );
-    }
 
-    function validProfessionalConsentRecords(records) {
-      return records is list
-        && records.size() <= 5
-        && (records.size() < 1 || validProfessionalConsentRecord(records[0]))
-        && (records.size() < 2 || validProfessionalConsentRecord(records[1]))
-        && (records.size() < 3 || validProfessionalConsentRecord(records[2]))
-        && (records.size() < 4 || validProfessionalConsentRecord(records[3]))
-        && (records.size() < 5 || validProfessionalConsentRecord(records[4]));
-    }
 
-    function validOptionalProfessionalConsentRecords(data) {
-      return !('consentRecords' in data)
-        || validProfessionalConsentRecords(data.consentRecords);
-    }
 
     function hasNoVerifiedIdentityFields(data) {
       return !('verificationSource' in data)
@@ -692,105 +249,9 @@ service cloud.firestore {
       return isUnverifiedProfile(data) || isCompleteVerifiedProfile(data);
     }
 
-    function clientVerificationUpdateIsSafe() {
-      let professionalIdentityChanged = request.resource.data.profession
-          != resource.data.profession
-        || request.resource.data.get('professionalIdType', '')
-          != resource.data.get('professionalIdType', '')
-        || request.resource.data.get('professionalIdValue', '')
-          != resource.data.get('professionalIdValue', '');
-      let verifiedFields = [
-        'verificationStatus', 'verificationSource', 'verifiedFirstName',
-        'verifiedLastName', 'verifiedProfessionCode',
-        'verifiedProfessionLabel', 'verifiedAt'
-      ];
-      return (isUnverifiedProfile(request.resource.data)
-          && (isUnverifiedProfile(resource.data) || professionalIdentityChanged))
-        || (isCompleteVerifiedProfile(request.resource.data)
-          && isCompleteVerifiedProfile(resource.data)
-          && !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(verifiedFields)
-          && !professionalIdentityChanged);
-    }
 
-    function clientAdmissionProjectionIsSafe() {
-      return (!('admissionScopes' in request.resource.data)
-          && !('admissionScopes' in resource.data))
-        || (request.resource.data.get('admissionScopes', {})
-          == resource.data.get('admissionScopes', {}));
-    }
 
-    function validVolunteerData(uid) {
-      return request.resource.data.keys().hasOnly([
-          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
-          'rpps', 'professionalIdType', 'professionalIdValue',
-          'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
-          'professionalAddressLine1', 'professionalAddressLine2',
-          'professionalPostalCode', 'professionalCity',
-          'professionalCountryCode',
-          'verificationStatus', 'verificationSource', 'verifiedFirstName',
-          'verifiedLastName', 'verifiedProfessionCode',
-          'verifiedProfessionLabel', 'verifiedAt',
-          'profileSchemaVersion', 'competencies',
-          'mobilizationPreferences', 'communicationPreferences',
-          'consentRecords',
-          'admissionScopes',
-          'createdAt', 'updatedAt'
-        ])
-        && request.resource.data.keys().hasAll([
-          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
-          'equipment', 'createdAt', 'updatedAt'
-        ])
-        && request.resource.data.uid == uid
-        && validProfileProfession(request.resource.data.profession)
-        && request.resource.data.firstName is string
-        && request.resource.data.lastName is string
-        && request.resource.data.phone is string
-        && request.resource.data.equipment is list
-        && request.resource.data.email is string
-        && request.resource.data.email.size() > 0
-        && validProfessionalIdentity(request.resource.data)
-        && validOptionalCpts(request.resource.data)
-        && validProfessionalAddress(request.resource.data)
-        && validOptionalEquipmentDetails(request.resource.data)
-        && validOptionalProfileSchemaVersion(request.resource.data)
-        && validOptionalCompetencies(request.resource.data)
-        && validOptionalMobilizationPreferences(request.resource.data)
-        && validOptionalCommunicationPreferences(request.resource.data)
-        && validOptionalProfessionalConsentRecords(request.resource.data);
-    }
 
-    // Invited registration is already bound to a verified Auth identity and a
-    // server permit. Keep this create check small enough for the rules engine;
-    // the full schema check still applies to every later owner update.
-    function validInvitedVolunteerData(uid) {
-      let data = request.resource.data;
-      return data.keys().hasOnly([
-          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
-          'rpps', 'professionalIdType', 'professionalIdValue',
-          'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
-          'professionalAddressLine1', 'professionalAddressLine2',
-          'professionalPostalCode', 'professionalCity',
-          'professionalCountryCode', 'verificationStatus',
-          'profileSchemaVersion', 'competencies',
-          'mobilizationPreferences', 'communicationPreferences',
-          'consentRecords', 'createdAt', 'updatedAt'
-        ])
-        && data.keys().hasAll([
-          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
-          'equipment', 'createdAt', 'updatedAt'
-        ])
-        && data.uid == uid
-        && validProfileProfession(data.profession)
-        && data.firstName is string
-        && data.lastName is string
-        && data.phone is string
-        && data.email is string
-        && data.email.size() > 0
-        && data.email == request.auth.token.email
-        && data.equipment is list
-        && validProfessionalIdentity(data);
-    }
 
     function platformAdministratorPath(uid) {
       return /databases/$(database)/documents/platformAdministrators/$(uid);
@@ -806,13 +267,6 @@ service cloud.firestore {
       return /databases/$(database)/documents/organizationMemberships/$(organizationId + '_' + uid);
     }
 
-    function isCanonicalOrganizationMembership(membershipId, membership) {
-      let organizationId = membership.get('organizationId', '');
-      let uid = membership.get('uid', '');
-      return organizationId is string
-        && uid is string
-        && membershipId == organizationId + '_' + uid;
-    }
 
     function hasValidOrganizationRoles(roles) {
       return roles is list
@@ -925,15 +379,6 @@ service cloud.firestore {
       return hasOrganizationRole(organizationId, 'professional');
     }
 
-    function canOrganizationSiteManagerAccessLocation(
-      organizationId,
-      locationId
-    ) {
-      return (hasOrganizationRole(organizationId, 'site_manager')
-          && locationId in organizationMembershipLocationIds(organizationId))
-        || (hasLegacyOrganizationRole(organizationId, 'site_manager')
-          && locationId in currentRole().locationIds);
-    }
 
     function hasActiveCanonicalMembershipDocument(organizationId) {
       return hasActiveOrganizationMembership(organizationId);
@@ -1144,32 +589,9 @@ service cloud.firestore {
         || isOrganizationSiteManager(organizationId);
     }
 
-    function locationManagingOrganizationId(location) {
-      return location.get('managingOrganizationId', legacyOrganizationId());
-    }
 
-    function hasValidLocationOrganization(location) {
-      return isNonBlankCanonicalText(
-        locationManagingOrganizationId(location)
-      );
-    }
 
-    function isLegacyPublicLocation(location) {
-      return hasValidLocationOrganization(location)
-        && locationManagingOrganizationId(location) == legacyOrganizationId();
-    }
 
-    function canReadPrivilegedLocation(locationId, location) {
-      let organizationId = locationManagingOrganizationId(location);
-      return hasValidLocationOrganization(location)
-        && (isPlatformAdministrator()
-          || isOrganizationAdmin(organizationId)
-          || isOrganizationCoordinator(organizationId)
-          || canOrganizationSiteManagerAccessLocation(
-            organizationId,
-            locationId
-          ));
-    }
 
     function canReadOperationOrganization(operation) {
       let organizationId = operationOwnerOrganizationId(operation);
@@ -1177,11 +599,6 @@ service cloud.firestore {
         && canReadOperationScope(operation.get('id', ''), organizationId);
     }
 
-    function hasOperationOrganizationMembership(operation) {
-      let organizationId = operationOwnerOrganizationId(operation);
-      return hasValidOperationOrganization(operation)
-        && canReadOperationScope(operation.get('id', ''), organizationId);
-    }
 
     function canReadOperationById(operationId) {
       let path = operationPath(operationId);
@@ -1191,23 +608,8 @@ service cloud.firestore {
         && canReadOperationOrganization(get(path).data);
     }
 
-    function canReadOwnOrganizationMembership(membershipId) {
-      return isSignedIn()
-        && isCanonicalOrganizationMembership(membershipId, resource.data)
-        && resource.data.get('uid', '') == request.auth.uid;
-    }
 
-    function canOrganizationAdminReadMembership(membershipId) {
-      let organizationId = resource.data.get('organizationId', '');
-      return isCanonicalOrganizationMembership(membershipId, resource.data)
-        && isOrganizationAdmin(organizationId);
-    }
 
-    function canOrganizationAdminListMembership() {
-      let organizationId = resource.data.get('organizationId', '');
-      return isNonBlankCanonicalText(organizationId)
-        && isOrganizationAdmin(organizationId);
-    }
 
     function canUseProfessionalOwnerWritePath() {
       // Professional writes are authorized by their own profile, admission,
@@ -1248,24 +650,7 @@ service cloud.firestore {
           && isPlatformDiscoverableOperation(get(path).data));
     }
 
-    function isExplicitPlatformDiscoverableMobilization(mobilization) {
-      let operationId = mobilization.get('operationId', '__missing__');
-      let path = operationPath(operationId);
-      return hasValidMobilizationOperation(mobilization)
-        && exists(path)
-        && isExplicitPlatformDiscoverableOperation(get(path).data);
-    }
 
-    function isPlatformDiscoverableMobilizationById(mobilizationId) {
-      let path = mobilizationPath(mobilizationId);
-      return mobilizationId is string
-        && isNonBlankCanonicalText(mobilizationId)
-        && exists(path)
-        && isPlatformDiscoverableMobilization(
-          mobilizationId,
-          get(path).data
-        );
-    }
 
     function canReadMobilizationOrganization(mobilization) {
       let operationId = mobilization.get('operationId', '__missing__');
@@ -1281,18 +666,6 @@ service cloud.firestore {
             || canReadOperationOrganization(operation)));
     }
 
-    function hasMobilizationOrganizationMembership(mobilization) {
-      let operationId = mobilization.get('operationId', '__missing__');
-      let operation = hasValidMobilizationOperation(mobilization)
-        && exists(operationPath(operationId))
-        ? get(operationPath(operationId)).data
-        : {};
-      return (hasValidMobilizationOperation(mobilization)
-          && exists(operationPath(operationId))
-          && hasOperationOrganizationMembership(operation))
-        || (isLegacyMobilization(mobilization)
-          && hasActiveOrganizationMembership(legacyOrganizationId()));
-    }
 
     function canReadMobilizationById(mobilizationId) {
       let path = mobilizationPath(mobilizationId);
@@ -1400,31 +773,7 @@ service cloud.firestore {
         && canReadMobilizationById(mission.mobilizationId);
     }
 
-    function canReadEngagementOrganization(engagement) {
-      let missionId = engagement.get('missionId', '__missing__');
-      let path = missionPath(missionId);
-      return missionId is string
-        && isNonBlankCanonicalText(missionId)
-        && exists(path)
-        && get(path).data.get('mobilizationId', '')
-          == engagement.get('mobilizationId', '')
-        && canUseMobilizationOrganizationAsRole(
-          engagement.get('mobilizationId', '')
-        );
-    }
 
-    function canReadOrganizationEngagement(engagement) {
-      let missionId = engagement.get('missionId', '__missing__');
-      let path = missionPath(missionId);
-      let mission = exists(path) ? get(path).data : {};
-      return exists(path)
-        && mission.get('mobilizationId', '')
-          == engagement.get('mobilizationId', '')
-        && canReadOrganizationMissionScope(
-          mission.get('mobilizationId', ''),
-          mission.get('locationId', '')
-        );
-    }
 
     function platformConfigPath() {
       return /databases/$(database)/documents/platform/config;
@@ -1447,16 +796,6 @@ service cloud.firestore {
         && request.auth.token.get('cguVersion', '') == requiredCguVersion();
     }
 
-    function validProfessionalRegistrationPermit(uid) {
-      let permitPath = /databases/$(database)/documents/professionalRegistrationPermits/$(uid);
-      let permit = get(permitPath).data;
-      return permit.get('uid', '') == uid
-        && permit.get('verifiedAuthEmail', '') == request.auth.token.email
-        && permit.get('expiresAt', request.time) > request.time
-        && permit.get('revoked', false) == false
-        && canonicalProfession(request.resource.data.profession)
-          == permit.get('expectedProfession', '');
-    }
 
     function professionalAdmissionPath(operationId) {
       return /databases/$(database)/documents/professionalAdmissions/$(operationId + '_' + request.auth.uid);
@@ -1476,34 +815,7 @@ service cloud.firestore {
         && admission.get('expiresAt', request.time) > request.time;
     }
 
-    function professionalMayAccessMobilization(mobilizationId, profession) {
-      let mode = professionalAdmissionMode();
-      let mobilization = mode == 'invitation_only'
-        ? get(mobilizationPath(mobilizationId)).data : {};
-      return mode == 'open'
-        || (mode == 'invitation_only'
-          && mobilization.get('operationId', '') is string
-          && hasProfessionalAdmission(mobilization.operationId, profession));
-    }
 
-    // Engagements already read the profile in the same atomic batch. The
-    // backend-maintained projection avoids another rules document access.
-    function profileMayEngageMobilization(mobilizationId, profile) {
-      let mode = professionalAdmissionMode();
-      let mobilization = mode == 'invitation_only'
-        ? get(mobilizationPath(mobilizationId)).data : {};
-      let operationId = mobilization.get('operationId', '');
-      let scope = profile.get('admissionScopes', {}).get(operationId, {});
-      return mode == 'open'
-        || (mode == 'invitation_only'
-          && hasAcceptedCurrentCgu()
-          && scope.get('status', '') == 'active'
-          && scope.get('profession', '') == profile.profession
-          && scope.get('organizationId', '') == operationOwnerOrganizationId(
-            get(operationPath(operationId)).data
-          )
-          && scope.get('expiresAt', request.time) > request.time);
-    }
 
     function isActiveMobilization(mobilizationId) {
       return mobilizationId is string
@@ -1592,86 +904,10 @@ service cloud.firestore {
         && get(path).data.get('status', '') in ['completed', 'archived'];
     }
 
-    function canReadDemoActor(actor) {
-      let operationId = actor.get('operationId', '');
-      let grant = hasHistoricalActionGrant(operationId)
-        ? get(historicalAccessPath(operationId)).data : {};
-      return isCompletedDemoOperation(operationId)
-        && (isPlatformAdministrator()
-          || (hasHistoricalActionGrant(operationId)
-            && 'coordinator' in grant.roles));
-    }
 
-    function canReadDemoEngagement(engagement) {
-      let operationId = engagement.get('operationId', '');
-      let locationId = engagement.get('locationId', '');
-      return isCompletedDemoOperation(operationId)
-        && (isPlatformAdministrator()
-          || hasHistoricalActionAccess(operationId, locationId));
-    }
 
-    function canHistoricallyReadMission(missionId, mission) {
-      let mobilizationId = mission.get('mobilizationId', '');
-      let mobilization = mobilizationId is string
-          && exists(mobilizationPath(mobilizationId))
-        ? get(mobilizationPath(mobilizationId)).data : {};
-      let engagement = isSignedIn()
-          && exists(engagementPath(missionId, request.auth.uid))
-        ? get(engagementPath(missionId, request.auth.uid)).data : {};
-      return isHistoricalMobilization(mobilizationId)
-        && (isPlatformAdministrator()
-          || (isHistoricallyVerifiedProfessional()
-            && engagement.get('volunteerId', '') == request.auth.uid
-            && engagement.get('missionId', '') == missionId
-            && engagement.get('mobilizationId', '') == mobilizationId)
-          || (hasValidMobilizationOperation(mobilization)
-            && hasHistoricalActionAccess(
-              mobilization.operationId, mission.get('locationId', '')
-            )));
-    }
 
-    // Only reached when the general active discovery path did not grant the
-    // read. Resolve the existing engagement and mobilization once.
-    function canProfessionalReadOwnCurrentMission(missionId, mission, profile) {
-      let ownPath = engagementPath(missionId, request.auth.uid);
-      let ownsPath = isSignedIn() && exists(ownPath);
-      let engagement = ownsPath ? get(ownPath).data : {};
-      let mobilizationId = mission.get('mobilizationId', '');
-      let safeMobilizationId = mobilizationId is string
-        ? mobilizationId : '__invalid__';
-      let currentMobilizationPath = mobilizationPath(safeMobilizationId);
-      let mobilization = ownsPath && mobilizationId is string
-          && exists(currentMobilizationPath)
-        ? get(currentMobilizationPath).data : {};
-      return ownsPath
-        && engagement.get('volunteerId', '') == request.auth.uid
-        && engagement.get('mobilizationId', '') == mobilizationId
-        && profile.get('verificationStatus', '') == 'verified'
-        && mobilization.get('status', '') == 'active'
-        && (professionalAdmissionMode() != 'invitation_only'
-          || hasAcceptedCurrentCgu())
-        && !isHistoricalMobilizationData(mobilization);
-    }
 
-    function canHistoricallyReadEngagement(engagement) {
-      let missionId = engagement.get('missionId', '');
-      let path = missionPath(missionId);
-      let mission = missionId is string && exists(path) ? get(path).data : {};
-      let mobilizationId = engagement.get('mobilizationId', '');
-      return missionId is string
-        && isNonBlankCanonicalText(missionId)
-        && exists(path)
-        && mission.get('mobilizationId', '') == mobilizationId
-        && isHistoricalMobilization(mobilizationId)
-        && (isPlatformAdministrator()
-          || (hasValidMobilizationOperation(
-              get(mobilizationPath(mobilizationId)).data
-            )
-            && hasHistoricalActionAccess(
-              get(mobilizationPath(mobilizationId)).data.operationId,
-              mission.get('locationId', '')
-            )));
-    }
 
     function mobilizationAssignmentPath(mobilizationId, uid) {
       return /databases/$(database)/documents/mobilizationAssignments/$(mobilizationId + '_' + uid);
@@ -1720,181 +956,21 @@ service cloud.firestore {
             )));
     }
 
-    function canUseResolvedLegacyMobilizationOrganizationAsRole() {
-      let membershipPath = organizationMembershipPath(
-        legacyOrganizationId(),
-        request.auth.uid
-      );
-      return !exists(membershipPath)
-        || get(membershipPath).data.get('active', false) == true;
-    }
 
     // A single bounded write decision for creation and cancellation.
-    function canWriteMissionAtMobilizationLocation(
-      mobilizationId,
-      locationId
-    ) {
-      let currentMobilizationPath = mobilizationPath(mobilizationId);
-      let mobilizationExists = isSignedIn()
-        && exists(currentMobilizationPath);
-      let mobilization = mobilizationExists
-        ? get(currentMobilizationPath).data : {};
-      let currentRolePath = rolePath();
-      // A missing role fails closed when read; this avoids a second document
-      // access in the write path, which also validates site existence.
-      let role = mobilizationExists
-        ? get(currentRolePath).data : {};
-      let operationId = mobilization.get('operationId', '__missing__');
-      let operationExists = hasValidMobilizationOperation(mobilization)
-        && exists(operationPath(operationId));
-      let operation = operationExists
-        ? get(operationPath(operationId)).data : {};
-      let assignmentPath = mobilizationAssignmentPath(
-        mobilizationId, request.auth.uid
-      );
-      let assignment = isLegacyMobilization(mobilization)
-          && mobilizationExists && exists(assignmentPath)
-        ? get(assignmentPath).data : {};
-      return mobilizationExists
-        && isValidRoleDocument(role)
-        && role.active == true
-        && mobilization.get('status', '') == 'active'
-        && (isLegacyMobilization(mobilization)
-          ? (canUseResolvedLegacyMobilizationOrganizationAsRole()
-            && ((hasRole(role, 'coordinator')
-              && ((assignment.get('uid', '') == request.auth.uid
-                  && assignment.get('mobilizationId', '') == mobilizationId
-                  && assignment.get('role', '') == 'coordinator'
-                  && assignment.get('active', false) == true)
-                || hasLegacyCoordinatorPointer(role, mobilizationId)))
-              || (hasRole(role, 'site_manager')
-                && locationId in role.locationIds)))
-          : (operationExists
-            && operation.get('status', '') == 'active'
-            && operation.get('purpose', 'operational') != 'demonstration'
-            && hasValidOperationOrganization(operation)
-            && canReadGrantedOperationLocation(
-              operationId, operationOwnerOrganizationId(operation), locationId
-            )));
-    }
 
-    function canCreateMissionAtMobilizationLocation(
-      mobilizationId, locationId
-    ) {
-      return canWriteMissionAtMobilizationLocation(
-        mobilizationId, locationId
-      );
-    }
 
-    function canCancelMissionAtMobilizationLocation(
-      mobilizationId, locationId
-    ) {
-      return canWriteMissionAtMobilizationLocation(
-        mobilizationId, locationId
-      );
-    }
 
-    function canReadMissionScope(mobilizationId, locationId) {
-      let path = mobilizationPath(mobilizationId);
-      let mobilization = mobilizationId is string && exists(path)
-        ? get(path).data
-        : {};
-      return isPlatformAdministrator()
-        || (isVerifiedProfessional()
-          && professionalMayAccessMobilization(
-            mobilizationId,
-            get(volunteerPath(request.auth.uid)).data.profession
-          )
-          && (professionalAdmissionMode() == 'invitation_only'
-            || isPlatformDiscoverableMobilizationById(mobilizationId)))
-        || canReadOrganizationMissionScope(mobilizationId, locationId)
-        || (isLegacyMobilization(mobilization)
-          && (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
-            || (isActiveSiteManager()
-              && locationId in currentRole().locationIds))
-          && canUseMobilizationOrganizationAsRole(mobilizationId));
-    }
 
-    function canProfessionalReadActiveMission(mission, profile) {
-      let mobilizationId = mission.get('mobilizationId', '');
-      let mode = professionalAdmissionMode();
-      return mission.get('isActive', false) == true
-        && mobilizationId is string
-        && isNonBlankCanonicalText(mobilizationId)
-        && (mode == 'invitation_only'
-          ? canInvitedProfessionalReadMobilization(mobilizationId, profile)
-          : (mode == 'open'
-            && canProfessionalReadOpenMobilization(
-              mobilizationId, profile
-            )));
-    }
 
-    function canProfessionalReadOpenMobilization(mobilizationId, profile) {
-      let mobilization = get(mobilizationPath(mobilizationId)).data;
-      let operationId = mobilization.get('operationId', '__missing__');
-      let operation = hasValidMobilizationOperation(mobilization)
-        ? get(operationPath(operationId)).data : {};
-      return mobilization.get('status', '') == 'active'
-        && operation.get('status', '') != 'suspended'
-        && (isLegacyMobilization(mobilization)
-          ? isConfiguredLegacyMobilization(mobilizationId, mobilization)
-          : isPlatformDiscoverableOperation(operation))
-        && isCompleteVerifiedProfile(profile);
-    }
 
-    function canProfessionalGetMission(missionId, mission) {
-      let profile = get(volunteerPath(request.auth.uid)).data;
-      return canProfessionalReadActiveMission(mission, profile)
-        || canProfessionalReadOwnCurrentMission(missionId, mission, profile)
-        || canHistoricallyReadMission(missionId, mission);
-    }
 
     // Keep the invited read path compact: the general role resolver is close
     // to Firestore's expression limit and is irrelevant to a volunteer UID.
-    function canInvitedProfessionalReadMobilization(mobilizationId, profile) {
-      let mobilization = get(mobilizationPath(mobilizationId)).data;
-      let operationId = mobilization.get('operationId', '');
-      let operation = get(operationPath(operationId)).data;
-      let admissionPath = professionalAdmissionPath(operationId);
-      let admission = get(admissionPath).data;
-      return isSignedIn()
-        && isCompleteVerifiedProfile(profile)
-        && hasAcceptedCurrentCgu()
-        && mobilization.get('status', '') == 'active'
-        && operation.get('status', '') == 'active'
-        && operation.get('purpose', 'operational') == 'operational'
-        && admission.get('uid', '') == request.auth.uid
-        && admission.get('operationId', '') == operationId
-        && admission.get('organizationId', '')
-          == operationOwnerOrganizationId(operation)
-        && admission.get('profession', '') == profile.profession
-        && admission.get('status', '') == 'active'
-        && admission.get('expiresAt', request.time) > request.time;
-    }
 
     // Targeted Action-linked mission reads avoid the legacy role/engagement
     // branches and their Firestore expression cost. Suspended Actions retain
     // reads for already-granted organization members but block writes above.
-    function canReadScopedActiveMission(mission) {
-      let mobilizationId = mission.get('mobilizationId', '');
-      let path = mobilizationPath(mobilizationId);
-      let mobilization = mobilizationId is string && exists(path)
-        ? get(path).data : {};
-      let operationId = mobilization.get('operationId', '');
-      let operation = isNonBlankCanonicalText(operationId)
-          && exists(operationPath(operationId))
-        ? get(operationPath(operationId)).data : {};
-      let organizationId = operationOwnerOrganizationId(operation);
-      return mission.get('isActive', false) == true
-        && mobilization.get('status', '') == 'active'
-        && hasValidMobilizationOperation(mobilization)
-        && operation.get('status', '') in ['active', 'suspended']
-        && operation.get('purpose', 'operational') == 'operational'
-        && hasValidOperationOrganization(operation)
-        && canReadGrantedOperationLocation(
-          operationId, organizationId, mission.get('locationId', '')
-        );
-    }
 
     function canReadManagedNeed(needId) {
       let path = missionPath(needId);
@@ -1909,44 +985,7 @@ service cloud.firestore {
           || canManageMobilizationLocation(mobilizationId, locationId));
     }
 
-    function validMissionCreate(missionId) {
-      return request.resource.data.keys().hasOnly([
-          'id', 'mobilizationId', 'locationId', 'locationName',
-          'territorialGroup', 'startAt',
-          'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
-          'requiredByProfession', 'registeredByProfession',
-          'requestedEquipment', 'details', 'priority', 'status', 'createdAt', 'updatedAt',
-          'isActive', 'createdBy'
-        ])
-      && request.resource.data.keys().hasAll([
-          'id', 'mobilizationId', 'locationId', 'locationName',
-          'territorialGroup', 'startAt',
-          'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
-          'requestedEquipment', 'details', 'priority', 'status', 'createdAt', 'updatedAt',
-          'isActive', 'createdBy'
-        ])
-        && request.resource.data.id == missionId
-        && request.resource.data.createdBy == request.auth.uid
-        && validMissionCreateQuotaData(request.resource.data)
-        && request.resource.data.startAt is timestamp
-        && request.resource.data.endAt is timestamp
-        && request.resource.data.endAt > request.resource.data.startAt
-        && request.resource.data.priority is string
-        && request.resource.data.priority in [
-          'standard', 'priority', 'urgent', 'crisis'
-        ]
-        && request.resource.data.isActive == true
-        && request.resource.data.status == 'critical'
-        && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
-        && canCreateMissionAtMobilizationLocation(
-          request.resource.data.mobilizationId,
-          request.resource.data.locationId
-        );
-    }
 
-    function engagementPath(missionId, uid) {
-      return /databases/$(database)/documents/engagements/$(missionId + '_' + uid);
-    }
 
     function volunteerPath(uid) {
       return /databases/$(database)/documents/volunteers/$(uid);
@@ -1973,292 +1012,18 @@ service cloud.firestore {
           .get('verificationStatus', '') == 'verified';
     }
 
-    function professionAllowsNoIdentifier(profession) {
-      return canonicalProfession(profession) == 'other_health_professional';
-    }
 
-    function hasParticipationProfessionalIdentifier(data) {
-      return 'professionalIdType' in data
-        && 'professionalIdValue' in data
-        && ((data.professionalIdType in ['rpps', 'ordinal']
-            && isNonBlankCanonicalText(data.professionalIdValue))
-          || (data.professionalIdType == 'none'
-            && data.professionalIdValue == ''
-            && professionAllowsNoIdentifier(data.get('profession', ''))));
-    }
 
-    function expectedStatus(data) {
-      let required = totalRequired(data);
-      let registered = totalRegistered(data);
-      return registered == required
-        ? 'complete'
-        : (registered * 2 < required
-          ? 'critical'
-          : 'toComplete');
-    }
 
-    function validMissionCounterUpdate(missionId) {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let path = engagementPath(missionId, request.auth.uid);
-      let engagementBeforeExists = exists(path);
-      let engagementBefore = get(path).data;
-      let engagementAfter = getAfter(path).data;
-      let beforeStatus = !engagementBeforeExists
-        ? 'absent'
-        : ('status' in engagementBefore
-          ? engagementBefore.status
-          : 'confirmed');
-      let afterStatus = engagementAfter.status;
-      let delta = ((beforeStatus == 'absent'
-          || beforeStatus == 'pending'
-          || beforeStatus == 'cancelled')
-          && afterStatus == 'confirmed')
-        ? 1
-        : (beforeStatus == 'confirmed' && afterStatus == 'cancelled'
-          ? -1
-          : 0);
-      let profession = delta == 1
-        ? engagementAfter.profession
-        : engagementBefore.profession;
-      return isSignedIn()
-        && changed.hasOnly([
-          'registeredMk', 'registeredPp', 'registeredByProfession',
-          'requiredByProfession', 'status', 'updatedAt'
-        ])
-        && resource.data.isActive == true
-        && isOperationalMobilization(resource.data.mobilizationId)
-        && resource.data.status != 'cancelled'
-        && request.time < resource.data.endAt
-        && validEngagementCounterData(
-          resource.data, request.resource.data, profession
-        )
-        && request.resource.data.status == expectedStatus(request.resource.data)
-        && request.resource.data.updatedAt == request.time
-        && existsAfter(path)
-        && engagementAfter.missionId == missionId
-        && engagementAfter.mobilizationId == resource.data.mobilizationId
-        && engagementAfter.volunteerId == request.auth.uid
-        && delta != 0
-        && validRegisteredDelta(
-          resource.data, request.resource.data, profession, delta
-        );
-    }
 
-    function validManagedMissionCounterUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return isAssignedOrLegacyCoordinatorForMobilization(
-          resource.data.mobilizationId
-        )
-        && changed.hasOnly([
-          'registeredMk', 'registeredPp', 'registeredByProfession',
-          'requiredByProfession', 'status', 'updatedAt'
-        ])
-        && resource.data.isActive == true
-        && isOperationalMobilization(resource.data.mobilizationId)
-        && resource.data.status != 'cancelled'
-        && request.time < resource.data.endAt
-        && validCounterQuotaData(resource.data, request.resource.data)
-        && request.resource.data.status == expectedStatus(request.resource.data)
-        && request.resource.data.updatedAt == request.time
-        && exactlyOneRegisteredDelta(resource.data, request.resource.data);
-    }
 
-    function validMissionCancellation() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return isSignedIn()
-        && resource.data.mobilizationId is string
-        && resource.data.isActive == true
-        && canCancelMissionAtMobilizationLocation(
-          resource.data.mobilizationId,
-          resource.data.locationId
-        )
-        && resource.data.status != 'cancelled'
-        && changed.hasOnly([
-          'status', 'isActive', 'cancelledAt', 'cancelledBy',
-          'cancellationReason', 'updatedAt'
-        ])
-        && request.resource.data.status == 'cancelled'
-        && request.resource.data.isActive == false
-        && request.resource.data.cancelledBy == request.auth.uid
-        && request.resource.data.cancelledAt == request.time
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.cancellationReason is string
-        && request.resource.data.cancellationReason.size() <= 300
-        && resource.data.createdBy == request.auth.uid;
-    }
 
-    function validEngagementCreate(engagementId) {
-      let missionId = request.resource.data.missionId;
-      let missionBefore = get(
-        /databases/$(database)/documents/missions/$(missionId)
-      ).data;
-      let missionAfter = getAfter(
-        /databases/$(database)/documents/missions/$(missionId)
-      ).data;
-      let profession = request.resource.data.profession;
-      return canUseProfessionalOwnerWritePath()
-        && request.resource.data.keys().hasOnly([
-          'missionId', 'mobilizationId', 'volunteerId', 'profession',
-          'createdAt', 'updatedAt', 'status'
-        ])
-        && request.resource.data.keys().hasAll([
-          'missionId', 'mobilizationId', 'volunteerId', 'profession',
-          'createdAt', 'updatedAt', 'status'
-        ])
-        && engagementId == missionId + '_' + request.auth.uid
-        && request.resource.data.volunteerId == request.auth.uid
-        && request.resource.data.mobilizationId
-          == missionBefore.mobilizationId
-        && isOperationalMobilization(
-          request.resource.data.mobilizationId
-        )
-        && validProfession(profession)
-        && request.resource.data.status == 'confirmed'
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time
-        && existsAfter(volunteerPath(request.auth.uid))
-        && getAfter(volunteerPath(request.auth.uid)).data.uid
-          == request.auth.uid
-        && getAfter(volunteerPath(request.auth.uid)).data.profession
-          == profession
-        && isCompleteVerifiedProfile(
-          getAfter(volunteerPath(request.auth.uid)).data
-        )
-        && profileMayEngageMobilization(
-          request.resource.data.mobilizationId,
-          getAfter(volunteerPath(request.auth.uid)).data
-        )
-        && hasParticipationProfessionalIdentifier(
-          getAfter(volunteerPath(request.auth.uid)).data
-        )
-        && exists(/databases/$(database)/documents/missions/$(missionId))
-        && existsAfter(
-          /databases/$(database)/documents/missions/$(missionId)
-        )
-        && missionBefore.isActive == true
-        && missionBefore.status != 'cancelled'
-        && request.time < missionBefore.endAt
-        && missionAfter.updatedAt == request.time;
-    }
 
-    function currentEngagementStatus() {
-      return 'status' in resource.data
-        ? resource.data.status
-        : 'confirmed';
-    }
 
-    function validCoordinatorTransition(from, to) {
-      return (from == 'pending'
-          && (to == 'confirmed' || to == 'standby' || to == 'cancelled'))
-        || (from == 'confirmed'
-          && (to == 'standby' || to == 'cancelled'))
-        || (from == 'standby'
-          && (to == 'confirmed' || to == 'cancelled'));
-    }
 
-    function validEngagementMissionEffect(from, to) {
-      let missionPath = /databases/$(database)/documents/missions/$(resource.data.missionId);
-      let before = get(missionPath).data;
-      let after = getAfter(missionPath).data;
-      let profession = resource.data.profession;
-      let delta = (from == 'pending' && to == 'confirmed')
-          || (from == 'standby' && to == 'confirmed')
-          || (from == 'cancelled' && to == 'confirmed')
-        ? 1
-        : ((from == 'confirmed' && (to == 'standby' || to == 'cancelled'))
-          ? -1
-          : 0);
-      return exists(missionPath)
-        && existsAfter(missionPath)
-        && resource.data.mobilizationId == before.mobilizationId
-        && request.resource.data.mobilizationId == before.mobilizationId
-        && isOperationalMobilization(before.mobilizationId)
-        && before.isActive == true
-        && before.status != 'cancelled'
-        && request.time < before.endAt
-        && (
-          (delta == 0
-            && validRegisteredDelta(before, after, profession, 0))
-          || (delta != 0
-            && validRegisteredDelta(before, after, profession, delta))
-        );
-    }
 
-    function validEngagementStatusUpdate() {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let from = currentEngagementStatus();
-      let to = request.resource.data.status;
-      let mission = get(
-        /databases/$(database)/documents/missions/$(resource.data.missionId)
-      ).data;
-      return isAssignedOrLegacyCoordinatorForMobilization(
-          resource.data.mobilizationId
-        )
-        && canReadEngagementOrganization(resource.data)
-        && changed.hasOnly(['status', 'updatedAt'])
-        && resource.data.mobilizationId == mission.mobilizationId
-        && isOperationalMobilization(resource.data.mobilizationId)
-        && validEngagementStatus(to)
-        && request.resource.data.updatedAt == request.time
-        && validCoordinatorTransition(from, to)
-        && validEngagementMissionEffect(from, to);
-    }
 
-    function validOwnerCancellation(engagementId) {
-      let from = currentEngagementStatus();
-      let missionAfter = getAfter(
-        /databases/$(database)/documents/missions/$(resource.data.missionId)
-      ).data;
-      return canUseProfessionalOwnerWritePath()
-        && engagementId == resource.data.missionId + '_' + request.auth.uid
-        && resource.data.volunteerId == request.auth.uid
-        && resource.data.mobilizationId == missionAfter.mobilizationId
-        && isOperationalMobilization(resource.data.mobilizationId)
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'updatedAt'])
-        && request.resource.data.status == 'cancelled'
-        && request.resource.data.updatedAt == request.time
-        && (from == 'pending' || from == 'standby' || from == 'confirmed')
-        && (from == 'pending'
-          || from == 'standby'
-          || missionAfter.updatedAt == request.time);
-    }
 
-    function validOwnerReengagement(engagementId) {
-      let changed = request.resource.data.diff(resource.data).affectedKeys();
-      let mission = get(
-        /databases/$(database)/documents/missions/$(resource.data.missionId)
-      ).data;
-      return canUseProfessionalOwnerWritePath()
-        && engagementId == resource.data.missionId + '_' + request.auth.uid
-        && resource.data.volunteerId == request.auth.uid
-        && resource.data.mobilizationId == mission.mobilizationId
-        && isOperationalMobilization(resource.data.mobilizationId)
-        && (resource.data.status == 'cancelled'
-          || resource.data.status == 'pending')
-        && changed.hasOnly(['status', 'updatedAt', 'profession'])
-        && request.resource.data.status == 'confirmed'
-        && request.resource.data.updatedAt == request.time
-        && validProfession(request.resource.data.profession)
-        && existsAfter(volunteerPath(request.auth.uid))
-        && getAfter(volunteerPath(request.auth.uid)).data.uid
-          == request.auth.uid
-        && getAfter(volunteerPath(request.auth.uid)).data.profession
-          == request.resource.data.profession
-        && isCompleteVerifiedProfile(
-          getAfter(volunteerPath(request.auth.uid)).data
-        )
-        && profileMayEngageMobilization(
-          resource.data.mobilizationId,
-          getAfter(volunteerPath(request.auth.uid)).data
-        )
-        && mission.isActive == true
-        && mission.status != 'cancelled'
-        && request.time < mission.endAt
-        && getAfter(
-          /databases/$(database)/documents/missions/$(resource.data.missionId)
-        ).data.updatedAt == request.time;
-    }
 
     match /publicMissionDiscovery/{publicId} {
       allow get, list: if true;
@@ -2266,6 +1031,43 @@ service cloud.firestore {
     }
 
     match /locations/{locationId} {
+      function canOrganizationSiteManagerAccessLocation(
+        organizationId,
+        locationId
+      ) {
+        return (hasOrganizationRole(organizationId, 'site_manager')
+            && locationId in organizationMembershipLocationIds(organizationId))
+          || (hasLegacyOrganizationRole(organizationId, 'site_manager')
+            && locationId in currentRole().locationIds);
+      }
+
+      function locationManagingOrganizationId(location) {
+        return location.get('managingOrganizationId', legacyOrganizationId());
+      }
+
+      function hasValidLocationOrganization(location) {
+        return isNonBlankCanonicalText(
+          locationManagingOrganizationId(location)
+        );
+      }
+
+      function isLegacyPublicLocation(location) {
+        return hasValidLocationOrganization(location)
+          && locationManagingOrganizationId(location) == legacyOrganizationId();
+      }
+
+      function canReadPrivilegedLocation(locationId, location) {
+        let organizationId = locationManagingOrganizationId(location);
+        return hasValidLocationOrganization(location)
+          && (isPlatformAdministrator()
+            || isOrganizationAdmin(organizationId)
+            || isOrganizationCoordinator(organizationId)
+            || canOrganizationSiteManagerAccessLocation(
+              organizationId,
+              locationId
+            ));
+      }
+
       // Les sites historiques restent lisibles par les professionnels vérifiés.
       allow get, list: if (isVerifiedProfessional()
           && professionalAdmissionMode() == 'open'
@@ -2275,6 +1077,623 @@ service cloud.firestore {
     }
 
     match /missions/{missionId} {
+      function canManageLocation(locationId) {
+        return hasActiveRole()
+          && (
+            hasRole(currentRole(), 'coordinator')
+            || (hasRole(currentRole(), 'site_manager')
+              && locationId in currentRole().locationIds)
+          );
+      }
+
+      function validQuotaMap(value) {
+        return value is map
+          && value.keys().hasOnly([
+            'physiotherapist', 'podiatrist', 'physician', 'nurse',
+            'veterinarian', 'other_health_professional'
+          ])
+          && value.get('physiotherapist', 0) is int
+          && value.get('podiatrist', 0) is int
+          && value.get('physician', 0) is int
+          && value.get('nurse', 0) is int
+          && value.get('veterinarian', 0) is int
+          && value.get('other_health_professional', 0) is int
+          && value.get('physiotherapist', 0) >= 0
+          && value.get('podiatrist', 0) >= 0
+          && value.get('physician', 0) >= 0
+          && value.get('nurse', 0) >= 0
+          && value.get('veterinarian', 0) >= 0
+          && value.get('other_health_professional', 0) >= 0;
+      }
+
+      function hasGenericQuotas(data) {
+        return 'requiredByProfession' in data
+          || 'registeredByProfession' in data;
+      }
+
+      function validGenericQuotaData(data) {
+        return !hasGenericQuotas(data)
+          ? (data.registeredMk is int
+            && data.registeredPp is int
+            && data.registeredMk >= 0
+            && data.registeredPp >= 0
+            && data.registeredMk <= data.requiredMk
+            && data.registeredPp <= data.requiredPp)
+          : ('requiredByProfession' in data
+            && 'registeredByProfession' in data
+            && validQuotaMap(data.requiredByProfession)
+            && validQuotaMap(data.registeredByProfession)
+            && validGenericQuotaValues(data));
+      }
+
+      function validGenericQuotaValues(data) {
+        return data.registeredByProfession.get('physiotherapist', 0)
+            <= data.requiredByProfession.get('physiotherapist', 0)
+          && data.registeredByProfession.get('podiatrist', 0)
+            <= data.requiredByProfession.get('podiatrist', 0)
+          && data.registeredByProfession.get('physician', 0)
+            <= data.requiredByProfession.get('physician', 0)
+          && data.registeredByProfession.get('nurse', 0)
+            <= data.requiredByProfession.get('nurse', 0)
+          && data.registeredByProfession.get('veterinarian', 0)
+            <= data.requiredByProfession.get('veterinarian', 0)
+          && data.registeredByProfession.get('other_health_professional', 0)
+            <= data.requiredByProfession.get('other_health_professional', 0)
+          && data.requiredMk
+            == data.requiredByProfession.get('physiotherapist', 0)
+          && data.requiredPp
+            == data.requiredByProfession.get('podiatrist', 0)
+          && data.registeredMk
+            == data.registeredByProfession.get('physiotherapist', 0)
+          && data.registeredPp
+            == data.registeredByProfession.get('podiatrist', 0);
+      }
+
+      function missionCreateQuotaValues(value) {
+        return [
+          value.get('physiotherapist', 0),
+          value.get('podiatrist', 0),
+          value.get('physician', 0),
+          value.get('nurse', 0),
+          value.get('veterinarian', 0),
+          value.get('other_health_professional', 0)
+        ];
+      }
+
+      function validMissionCreateQuotaValues(values) {
+        return values[0] is int
+          && values[1] is int
+          && values[2] is int
+          && values[3] is int
+          && values[4] is int
+          && values[5] is int
+          && values[0] >= 0
+          && values[1] >= 0
+          && values[2] >= 0
+          && values[3] >= 0
+          && values[4] >= 0
+          && values[5] >= 0;
+      }
+
+      function validGenericMissionCreateQuotaData(data) {
+        let required = data.get('requiredByProfession', null);
+        let registered = data.get('registeredByProfession', null);
+        let requiredValues = required is map
+          ? missionCreateQuotaValues(required)
+          : [];
+        let registeredValues = registered is map
+          ? missionCreateQuotaValues(registered)
+          : [];
+        return required is map
+          && registered is map
+          && required.keys().hasOnly([
+            'physiotherapist', 'podiatrist', 'physician', 'nurse',
+            'veterinarian', 'other_health_professional'
+          ])
+          && registered.keys().hasOnly([
+            'physiotherapist', 'podiatrist', 'physician', 'nurse',
+            'veterinarian', 'other_health_professional'
+          ])
+          && validMissionCreateQuotaValues(requiredValues)
+          && validMissionCreateQuotaValues(registeredValues)
+          && registeredValues[0] <= requiredValues[0]
+          && registeredValues[1] <= requiredValues[1]
+          && registeredValues[2] <= requiredValues[2]
+          && registeredValues[3] <= requiredValues[3]
+          && registeredValues[4] <= requiredValues[4]
+          && registeredValues[5] <= requiredValues[5]
+          && data.requiredMk == requiredValues[0]
+          && data.requiredPp == requiredValues[1]
+          && data.registeredMk == registeredValues[0]
+          && data.registeredPp == registeredValues[1]
+          && registeredValues == [0, 0, 0, 0, 0, 0]
+          && data.requiredMk <= 50
+          && data.requiredPp <= 50
+          && requiredValues != [0, 0, 0, 0, 0, 0];
+      }
+
+      function validMissionCreateQuotaData(data) {
+        return !hasGenericQuotas(data)
+          ? (data.registeredMk is int
+            && data.registeredPp is int
+            && data.registeredMk == 0
+            && data.registeredPp == 0
+            && data.requiredMk is int
+            && data.requiredPp is int
+            && data.requiredMk >= 0
+            && data.requiredMk <= 50
+            && data.requiredPp >= 0
+            && data.requiredPp <= 50
+            && data.requiredMk + data.requiredPp > 0)
+          : validGenericMissionCreateQuotaData(data);
+      }
+
+      function validCounterQuotaData(before, after) {
+        return !hasGenericQuotas(after)
+          ? (sameRequiredQuotas(before, after)
+            && validGenericQuotaData(after))
+          : ('requiredByProfession' in after
+            && 'registeredByProfession' in after
+            && sameRequiredQuotas(before, after)
+            && validQuotaMap(after.registeredByProfession)
+            && validGenericQuotaValues(after));
+      }
+
+      function validEngagementCounterData(before, after, professionValue) {
+        let profession = canonicalProfession(professionValue);
+        return 'requiredByProfession' in before
+          ? ('requiredByProfession' in after
+            && 'registeredByProfession' in after
+            && after.requiredByProfession
+              .diff(before.requiredByProfession)
+              .affectedKeys()
+              .size() == 0
+            && after.requiredMk == before.requiredMk
+            && after.requiredPp == before.requiredPp
+            && after.registeredByProfession.get(profession, -1) is int
+            && after.registeredByProfession.get(profession, -1) >= 0
+            && after.registeredByProfession.get(profession, -1)
+              <= after.requiredByProfession.get(profession, 0)
+            && (profession == 'physiotherapist'
+              ? (after.registeredMk
+                  == after.registeredByProfession.get('physiotherapist', 0)
+                && after.registeredPp == before.registeredPp)
+              : (profession == 'podiatrist'
+                ? (after.registeredPp
+                    == after.registeredByProfession.get('podiatrist', 0)
+                  && after.registeredMk == before.registeredMk)
+                : (after.registeredMk == before.registeredMk
+                  && after.registeredPp == before.registeredPp))))
+          : validCounterQuotaData(before, after);
+      }
+
+      function totalRequired(data) {
+        return 'requiredByProfession' in data
+          ? data.requiredByProfession.get('physiotherapist', 0)
+            + data.requiredByProfession.get('podiatrist', 0)
+            + data.requiredByProfession.get('physician', 0)
+            + data.requiredByProfession.get('nurse', 0)
+            + data.requiredByProfession.get('veterinarian', 0)
+            + data.requiredByProfession.get('other_health_professional', 0)
+          : data.requiredMk + data.requiredPp;
+      }
+
+      function totalRegistered(data) {
+        return 'registeredByProfession' in data
+          ? data.registeredByProfession.get('physiotherapist', 0)
+            + data.registeredByProfession.get('podiatrist', 0)
+            + data.registeredByProfession.get('physician', 0)
+            + data.registeredByProfession.get('nurse', 0)
+            + data.registeredByProfession.get('veterinarian', 0)
+            + data.registeredByProfession.get('other_health_professional', 0)
+          : data.registeredMk + data.registeredPp;
+      }
+
+      function sameRequiredQuotas(before, after) {
+        return after.requiredMk == before.requiredMk
+          && after.requiredPp == before.requiredPp
+          && (!('requiredByProfession' in before)
+            ? (!('requiredByProfession' in after)
+              || (after.requiredByProfession.get('physician', 0) == 0
+                && after.requiredByProfession.get('nurse', 0) == 0
+                && after.requiredByProfession.get('veterinarian', 0) == 0
+                && after.requiredByProfession
+                  .get('other_health_professional', 0) == 0))
+            : ('requiredByProfession' in after
+              && after.requiredByProfession == before.requiredByProfession));
+      }
+
+      function exactlyOneRegisteredDelta(before, after) {
+        let delta = totalRegistered(after) - totalRegistered(before);
+        return (delta == 1 || delta == -1)
+          && (
+            ('registeredByProfession' in before
+              && 'registeredByProfession' in after
+              && after.registeredByProfession
+                .diff(before.registeredByProfession)
+                .affectedKeys()
+                .size() == 1)
+            || (!('registeredByProfession' in before)
+              && ((after.registeredMk
+                  == before.registeredMk + delta
+                  && after.registeredPp == before.registeredPp)
+                || (after.registeredPp
+                  == before.registeredPp + delta
+                  && after.registeredMk == before.registeredMk)))
+          );
+      }
+
+      function isPlatformDiscoverableMobilizationById(mobilizationId) {
+        let path = mobilizationPath(mobilizationId);
+        return mobilizationId is string
+          && isNonBlankCanonicalText(mobilizationId)
+          && exists(path)
+          && isPlatformDiscoverableMobilization(
+            mobilizationId,
+            get(path).data
+          );
+      }
+
+      function professionalMayAccessMobilization(mobilizationId, profession) {
+        let mode = professionalAdmissionMode();
+        let mobilization = mode == 'invitation_only'
+          ? get(mobilizationPath(mobilizationId)).data : {};
+        return mode == 'open'
+          || (mode == 'invitation_only'
+            && mobilization.get('operationId', '') is string
+            && hasProfessionalAdmission(mobilization.operationId, profession));
+      }
+
+      function canHistoricallyReadMission(missionId, mission) {
+        let mobilizationId = mission.get('mobilizationId', '');
+        let mobilization = mobilizationId is string
+            && exists(mobilizationPath(mobilizationId))
+          ? get(mobilizationPath(mobilizationId)).data : {};
+        let engagement = isSignedIn()
+            && exists(engagementPath(missionId, request.auth.uid))
+          ? get(engagementPath(missionId, request.auth.uid)).data : {};
+        return isHistoricalMobilization(mobilizationId)
+          && (isPlatformAdministrator()
+            || (isHistoricallyVerifiedProfessional()
+              && engagement.get('volunteerId', '') == request.auth.uid
+              && engagement.get('missionId', '') == missionId
+              && engagement.get('mobilizationId', '') == mobilizationId)
+            || (hasValidMobilizationOperation(mobilization)
+              && hasHistoricalActionAccess(
+                mobilization.operationId, mission.get('locationId', '')
+              )));
+      }
+
+      function canProfessionalReadOwnCurrentMission(missionId, mission, profile) {
+        let ownPath = engagementPath(missionId, request.auth.uid);
+        let ownsPath = isSignedIn() && exists(ownPath);
+        let engagement = ownsPath ? get(ownPath).data : {};
+        let mobilizationId = mission.get('mobilizationId', '');
+        let safeMobilizationId = mobilizationId is string
+          ? mobilizationId : '__invalid__';
+        let currentMobilizationPath = mobilizationPath(safeMobilizationId);
+        let mobilization = ownsPath && mobilizationId is string
+            && exists(currentMobilizationPath)
+          ? get(currentMobilizationPath).data : {};
+        return ownsPath
+          && engagement.get('volunteerId', '') == request.auth.uid
+          && engagement.get('mobilizationId', '') == mobilizationId
+          && profile.get('verificationStatus', '') == 'verified'
+          && mobilization.get('status', '') == 'active'
+          && (professionalAdmissionMode() != 'invitation_only'
+            || hasAcceptedCurrentCgu())
+          && !isHistoricalMobilizationData(mobilization);
+      }
+
+      function canUseResolvedLegacyMobilizationOrganizationAsRole() {
+        let membershipPath = organizationMembershipPath(
+          legacyOrganizationId(),
+          request.auth.uid
+        );
+        return !exists(membershipPath)
+          || get(membershipPath).data.get('active', false) == true;
+      }
+
+      function canWriteMissionAtMobilizationLocation(
+        mobilizationId,
+        locationId
+      ) {
+        let currentMobilizationPath = mobilizationPath(mobilizationId);
+        let mobilizationExists = isSignedIn()
+          && exists(currentMobilizationPath);
+        let mobilization = mobilizationExists
+          ? get(currentMobilizationPath).data : {};
+        let currentRolePath = rolePath();
+        // A missing role fails closed when read; this avoids a second document
+        // access in the write path, which also validates site existence.
+        let role = mobilizationExists
+          ? get(currentRolePath).data : {};
+        let operationId = mobilization.get('operationId', '__missing__');
+        let operationExists = hasValidMobilizationOperation(mobilization)
+          && exists(operationPath(operationId));
+        let operation = operationExists
+          ? get(operationPath(operationId)).data : {};
+        let assignmentPath = mobilizationAssignmentPath(
+          mobilizationId, request.auth.uid
+        );
+        let assignment = isLegacyMobilization(mobilization)
+            && mobilizationExists && exists(assignmentPath)
+          ? get(assignmentPath).data : {};
+        return mobilizationExists
+          && isValidRoleDocument(role)
+          && role.active == true
+          && mobilization.get('status', '') == 'active'
+          && (isLegacyMobilization(mobilization)
+            ? (canUseResolvedLegacyMobilizationOrganizationAsRole()
+              && ((hasRole(role, 'coordinator')
+                && ((assignment.get('uid', '') == request.auth.uid
+                    && assignment.get('mobilizationId', '') == mobilizationId
+                    && assignment.get('role', '') == 'coordinator'
+                    && assignment.get('active', false) == true)
+                  || hasLegacyCoordinatorPointer(role, mobilizationId)))
+                || (hasRole(role, 'site_manager')
+                  && locationId in role.locationIds)))
+            : (operationExists
+              && operation.get('status', '') == 'active'
+              && operation.get('purpose', 'operational') != 'demonstration'
+              && hasValidOperationOrganization(operation)
+              && canReadGrantedOperationLocation(
+                operationId, operationOwnerOrganizationId(operation), locationId
+              )));
+      }
+
+      function canCreateMissionAtMobilizationLocation(
+        mobilizationId, locationId
+      ) {
+        return canWriteMissionAtMobilizationLocation(
+          mobilizationId, locationId
+        );
+      }
+
+      function canCancelMissionAtMobilizationLocation(
+        mobilizationId, locationId
+      ) {
+        return canWriteMissionAtMobilizationLocation(
+          mobilizationId, locationId
+        );
+      }
+
+      function canReadMissionScope(mobilizationId, locationId) {
+        let path = mobilizationPath(mobilizationId);
+        let mobilization = mobilizationId is string && exists(path)
+          ? get(path).data
+          : {};
+        return isPlatformAdministrator()
+          || (isVerifiedProfessional()
+            && professionalMayAccessMobilization(
+              mobilizationId,
+              get(volunteerPath(request.auth.uid)).data.profession
+            )
+            && (professionalAdmissionMode() == 'invitation_only'
+              || isPlatformDiscoverableMobilizationById(mobilizationId)))
+          || canReadOrganizationMissionScope(mobilizationId, locationId)
+          || (isLegacyMobilization(mobilization)
+            && (isAssignedOrLegacyCoordinatorForMobilization(mobilizationId)
+              || (isActiveSiteManager()
+                && locationId in currentRole().locationIds))
+            && canUseMobilizationOrganizationAsRole(mobilizationId));
+      }
+
+      function canProfessionalReadActiveMission(mission, profile) {
+        let mobilizationId = mission.get('mobilizationId', '');
+        let mode = professionalAdmissionMode();
+        return mission.get('isActive', false) == true
+          && mobilizationId is string
+          && isNonBlankCanonicalText(mobilizationId)
+          && (mode == 'invitation_only'
+            ? canInvitedProfessionalReadMobilization(mobilizationId, profile)
+            : (mode == 'open'
+              && canProfessionalReadOpenMobilization(
+                mobilizationId, profile
+              )));
+      }
+
+      function canProfessionalReadOpenMobilization(mobilizationId, profile) {
+        let mobilization = get(mobilizationPath(mobilizationId)).data;
+        let operationId = mobilization.get('operationId', '__missing__');
+        let operation = hasValidMobilizationOperation(mobilization)
+          ? get(operationPath(operationId)).data : {};
+        return mobilization.get('status', '') == 'active'
+          && operation.get('status', '') != 'suspended'
+          && (isLegacyMobilization(mobilization)
+            ? isConfiguredLegacyMobilization(mobilizationId, mobilization)
+            : isPlatformDiscoverableOperation(operation))
+          && isCompleteVerifiedProfile(profile);
+      }
+
+      function canProfessionalGetMission(missionId, mission) {
+        let profile = get(volunteerPath(request.auth.uid)).data;
+        return canProfessionalReadActiveMission(mission, profile)
+          || canProfessionalReadOwnCurrentMission(missionId, mission, profile)
+          || canHistoricallyReadMission(missionId, mission);
+      }
+
+      function canInvitedProfessionalReadMobilization(mobilizationId, profile) {
+        let mobilization = get(mobilizationPath(mobilizationId)).data;
+        let operationId = mobilization.get('operationId', '');
+        let operation = get(operationPath(operationId)).data;
+        let admissionPath = professionalAdmissionPath(operationId);
+        let admission = get(admissionPath).data;
+        return isSignedIn()
+          && isCompleteVerifiedProfile(profile)
+          && hasAcceptedCurrentCgu()
+          && mobilization.get('status', '') == 'active'
+          && operation.get('status', '') == 'active'
+          && operation.get('purpose', 'operational') == 'operational'
+          && admission.get('uid', '') == request.auth.uid
+          && admission.get('operationId', '') == operationId
+          && admission.get('organizationId', '')
+            == operationOwnerOrganizationId(operation)
+          && admission.get('profession', '') == profile.profession
+          && admission.get('status', '') == 'active'
+          && admission.get('expiresAt', request.time) > request.time;
+      }
+
+      function canReadScopedActiveMission(mission) {
+        let mobilizationId = mission.get('mobilizationId', '');
+        let path = mobilizationPath(mobilizationId);
+        let mobilization = mobilizationId is string && exists(path)
+          ? get(path).data : {};
+        let operationId = mobilization.get('operationId', '');
+        let operation = isNonBlankCanonicalText(operationId)
+            && exists(operationPath(operationId))
+          ? get(operationPath(operationId)).data : {};
+        let organizationId = operationOwnerOrganizationId(operation);
+        return mission.get('isActive', false) == true
+          && mobilization.get('status', '') == 'active'
+          && hasValidMobilizationOperation(mobilization)
+          && operation.get('status', '') in ['active', 'suspended']
+          && operation.get('purpose', 'operational') == 'operational'
+          && hasValidOperationOrganization(operation)
+          && canReadGrantedOperationLocation(
+            operationId, organizationId, mission.get('locationId', '')
+          );
+      }
+
+      function validMissionCreate(missionId) {
+        return request.resource.data.keys().hasOnly([
+            'id', 'mobilizationId', 'locationId', 'locationName',
+            'territorialGroup', 'startAt',
+            'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
+            'requiredByProfession', 'registeredByProfession',
+            'requestedEquipment', 'details', 'priority', 'status', 'createdAt', 'updatedAt',
+            'isActive', 'createdBy'
+          ])
+        && request.resource.data.keys().hasAll([
+            'id', 'mobilizationId', 'locationId', 'locationName',
+            'territorialGroup', 'startAt',
+            'endAt', 'requiredMk', 'requiredPp', 'registeredMk', 'registeredPp',
+            'requestedEquipment', 'details', 'priority', 'status', 'createdAt', 'updatedAt',
+            'isActive', 'createdBy'
+          ])
+          && request.resource.data.id == missionId
+          && request.resource.data.createdBy == request.auth.uid
+          && validMissionCreateQuotaData(request.resource.data)
+          && request.resource.data.startAt is timestamp
+          && request.resource.data.endAt is timestamp
+          && request.resource.data.endAt > request.resource.data.startAt
+          && request.resource.data.priority is string
+          && request.resource.data.priority in [
+            'standard', 'priority', 'urgent', 'crisis'
+          ]
+          && request.resource.data.isActive == true
+          && request.resource.data.status == 'critical'
+          && exists(/databases/$(database)/documents/locations/$(request.resource.data.locationId))
+          && canCreateMissionAtMobilizationLocation(
+            request.resource.data.mobilizationId,
+            request.resource.data.locationId
+          );
+      }
+
+      function engagementPath(missionId, uid) {
+        return /databases/$(database)/documents/engagements/$(missionId + '_' + uid);
+      }
+
+      function expectedStatus(data) {
+        let required = totalRequired(data);
+        let registered = totalRegistered(data);
+        return registered == required
+          ? 'complete'
+          : (registered * 2 < required
+            ? 'critical'
+            : 'toComplete');
+      }
+
+      function validMissionCounterUpdate(missionId) {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let path = engagementPath(missionId, request.auth.uid);
+        let engagementBeforeExists = exists(path);
+        let engagementBefore = get(path).data;
+        let engagementAfter = getAfter(path).data;
+        let beforeStatus = !engagementBeforeExists
+          ? 'absent'
+          : ('status' in engagementBefore
+            ? engagementBefore.status
+            : 'confirmed');
+        let afterStatus = engagementAfter.status;
+        let delta = ((beforeStatus == 'absent'
+            || beforeStatus == 'pending'
+            || beforeStatus == 'cancelled')
+            && afterStatus == 'confirmed')
+          ? 1
+          : (beforeStatus == 'confirmed' && afterStatus == 'cancelled'
+            ? -1
+            : 0);
+        let profession = delta == 1
+          ? engagementAfter.profession
+          : engagementBefore.profession;
+        return isSignedIn()
+          && changed.hasOnly([
+            'registeredMk', 'registeredPp', 'registeredByProfession',
+            'requiredByProfession', 'status', 'updatedAt'
+          ])
+          && resource.data.isActive == true
+          && isOperationalMobilization(resource.data.mobilizationId)
+          && resource.data.status != 'cancelled'
+          && request.time < resource.data.endAt
+          && validEngagementCounterData(
+            resource.data, request.resource.data, profession
+          )
+          && request.resource.data.status == expectedStatus(request.resource.data)
+          && request.resource.data.updatedAt == request.time
+          && existsAfter(path)
+          && engagementAfter.missionId == missionId
+          && engagementAfter.mobilizationId == resource.data.mobilizationId
+          && engagementAfter.volunteerId == request.auth.uid
+          && delta != 0
+          && validRegisteredDelta(
+            resource.data, request.resource.data, profession, delta
+          );
+      }
+
+      function validManagedMissionCounterUpdate() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return isAssignedOrLegacyCoordinatorForMobilization(
+            resource.data.mobilizationId
+          )
+          && changed.hasOnly([
+            'registeredMk', 'registeredPp', 'registeredByProfession',
+            'requiredByProfession', 'status', 'updatedAt'
+          ])
+          && resource.data.isActive == true
+          && isOperationalMobilization(resource.data.mobilizationId)
+          && resource.data.status != 'cancelled'
+          && request.time < resource.data.endAt
+          && validCounterQuotaData(resource.data, request.resource.data)
+          && request.resource.data.status == expectedStatus(request.resource.data)
+          && request.resource.data.updatedAt == request.time
+          && exactlyOneRegisteredDelta(resource.data, request.resource.data);
+      }
+
+      function validMissionCancellation() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return isSignedIn()
+          && resource.data.mobilizationId is string
+          && resource.data.isActive == true
+          && canCancelMissionAtMobilizationLocation(
+            resource.data.mobilizationId,
+            resource.data.locationId
+          )
+          && resource.data.status != 'cancelled'
+          && changed.hasOnly([
+            'status', 'isActive', 'cancelledAt', 'cancelledBy',
+            'cancellationReason', 'updatedAt'
+          ])
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.isActive == false
+          && request.resource.data.cancelledBy == request.auth.uid
+          && request.resource.data.cancelledAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.cancellationReason is string
+          && request.resource.data.cancellationReason.size() <= 300
+          && resource.data.createdBy == request.auth.uid;
+      }
+
       allow get: if isPlatformAdministrator()
         || (hasProfessionalProfile()
           && canProfessionalGetMission(missionId, resource.data))
@@ -2327,6 +1746,315 @@ service cloud.firestore {
     }
 
     match /volunteers/{uid} {
+      function validProfileProfession(value) {
+        return validProfession(value);
+      }
+
+      function validProfessionalIdentity(data) {
+        let hasType = 'professionalIdType' in data;
+        let hasValue = 'professionalIdValue' in data;
+        return !hasType && !hasValue
+          ? ('rpps' in data
+            && data.rpps is string
+            && data.rpps.matches('^[0-9]{11}$'))
+          : (hasType
+            && hasValue
+            && data.professionalIdType in ['rpps', 'ordinal', 'none']
+            && data.professionalIdValue is string
+            && (data.professionalIdType == 'rpps'
+              ? (data.professionalIdValue.matches('^[0-9]{11}$')
+                && 'rpps' in data
+                && data.rpps == data.professionalIdValue)
+              : (data.professionalIdType == 'ordinal'
+                ? (data.professionalIdValue.size() > 0
+                  && !('rpps' in data))
+                : (data.professionalIdValue == ''
+                  && !('rpps' in data)))));
+      }
+
+      function validOptionalCpts(data) {
+        let cptsId = data.get('cptsId', '');
+        let cptsLabel = data.get('cptsLabel', '');
+        return cptsId is string
+          && cptsLabel is string
+          && cptsId.size() <= 160
+          && cptsLabel.size() <= 160;
+      }
+
+      function validProfessionalAddress(data) {
+        let addressKeys = [
+          'professionalAddressLine1', 'professionalAddressLine2',
+          'professionalPostalCode', 'professionalCity',
+          'professionalCountryCode'
+        ];
+        let line1 = data.get('professionalAddressLine1', '');
+        let line2 = data.get('professionalAddressLine2', '');
+        let postalCode = data.get('professionalPostalCode', '');
+        let city = data.get('professionalCity', '');
+        let countryCode = data.get('professionalCountryCode', 'FR');
+        let hasAddress = line1 != ''
+          || line2 != ''
+          || postalCode != ''
+          || city != '';
+        return !data.keys().hasAny(addressKeys)
+          || (line1 is string
+            && line2 is string
+            && postalCode is string
+            && city is string
+            && countryCode is string
+            && line1.size() <= 240
+            && line2.size() <= 240
+            && postalCode.size() <= 16
+            && city.size() <= 120
+            && countryCode.matches('^[A-Z]{2}$')
+            && (!hasAddress
+              || (isNonBlankCanonicalText(line1)
+                && isNonBlankCanonicalText(city)
+                && (countryCode == 'FR'
+                  ? postalCode.matches('^[0-9]{5}$')
+                  : postalCode.matches(
+                    '^[A-Za-z0-9][A-Za-z0-9 -]{1,15}$'
+                  )))));
+      }
+
+      function validOptionalEquipmentDetails(data) {
+        let details = data.get('otherEquipmentDetails', '');
+        let customizableEquipment = [
+          'other_equipment',
+          'profession_specific_equipment',
+          'other_veterinary_equipment'
+        ];
+        return details is string
+          && (!data.equipment.hasAny(customizableEquipment)
+            || isNonBlankCanonicalText(details));
+      }
+
+      function validOptionalProfileSchemaVersion(data) {
+        let version = data.get('profileSchemaVersion', 1);
+        return version is int && version >= 1;
+      }
+
+      function validOpenPreferenceList(block, key) {
+        let values = block.get(key, []);
+        return values is list;
+      }
+
+      function validOptionalCompetencies(data) {
+        let block = data.get('competencies', {});
+        let details = block.get('otherSkillDetails', '');
+        let taxonomyVersion = block.get('taxonomyVersion', 1);
+        return !('competencies' in data)
+          || (block is map
+            && block.keys().hasOnly([
+              'skillIds', 'otherSkillDetails', 'taxonomyVersion'
+            ])
+            && validOpenPreferenceList(block, 'skillIds')
+            && details is string
+            && taxonomyVersion is int
+            && taxonomyVersion >= 1);
+      }
+
+      function validOptionalMobilizationPreferences(data) {
+        let block = data.get('mobilizationPreferences', {});
+        let weekdays = block.get('preferredWeekdays', []);
+        let schemaVersion = block.get('schemaVersion', 1);
+        return !('mobilizationPreferences' in data)
+          || (block is map
+            && block.keys().hasOnly([
+              'preferredMobilizationTypes', 'territoryIds', 'locationIds',
+              'preferredWeekdays', 'preferredTimeBands', 'schemaVersion'
+            ])
+            && validOpenPreferenceList(block, 'preferredMobilizationTypes')
+            && validOpenPreferenceList(block, 'territoryIds')
+            && validOpenPreferenceList(block, 'locationIds')
+            && weekdays is list
+            && weekdays.size() <= 7
+            && weekdays.toSet().hasOnly([
+              'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+              'saturday', 'sunday'
+            ])
+            && validOpenPreferenceList(block, 'preferredTimeBands')
+            && schemaVersion is int
+            && schemaVersion >= 1);
+      }
+
+      function validOptionalCommunicationPreferences(data) {
+        let block = data.get('communicationPreferences', {});
+        let hasQuietStart = 'quietHoursStart' in block;
+        let hasQuietEnd = 'quietHoursEnd' in block;
+        let quietStart = block.get('quietHoursStart', 0);
+        let quietEnd = block.get('quietHoursEnd', 0);
+        let schemaVersion = block.get('schemaVersion', 1);
+        let channelValues = [
+          block.get('push', false), block.get('email', false),
+          block.get('sms', false), block.get('compatibleMissions', false),
+          block.get('engagementUpdates', false),
+          block.get('operationalAlerts', false)
+        ];
+        return !('communicationPreferences' in data)
+          || (block is map
+            && block.keys().hasOnly([
+              'push', 'email', 'sms', 'compatibleMissions',
+              'engagementUpdates', 'operationalAlerts', 'quietHoursStart',
+              'quietHoursEnd', 'schemaVersion'
+            ])
+            && channelValues.toSet().hasOnly([true, false])
+            && hasQuietStart == hasQuietEnd
+            && (!hasQuietStart
+              || (quietStart is int
+                && quietStart >= 0
+                && quietStart <= 23
+                && quietEnd is int
+                && quietEnd >= 0
+                && quietEnd <= 23))
+            && schemaVersion is int
+            && schemaVersion >= 1);
+      }
+
+      function validProfessionalConsentRecord(record) {
+        return record is map
+          && record.keys().hasOnly([
+            'type', 'version', 'state', 'recordedAt', 'source'
+          ])
+          && record.get('type', '').matches(
+            '^[a-z0-9][a-z0-9._-]{0,79}$'
+          )
+          && record.get('version', '').matches('^.{1,80}$')
+          && record.get('state', '').matches(
+            '^[a-z0-9][a-z0-9._-]{0,79}$'
+          )
+          && record.recordedAt is timestamp
+          && record.get('source', '').matches(
+            '^[a-z0-9][a-z0-9._-]{0,79}$'
+          );
+      }
+
+      function validProfessionalConsentRecords(records) {
+        return records is list
+          && records.size() <= 5
+          && (records.size() < 1 || validProfessionalConsentRecord(records[0]))
+          && (records.size() < 2 || validProfessionalConsentRecord(records[1]))
+          && (records.size() < 3 || validProfessionalConsentRecord(records[2]))
+          && (records.size() < 4 || validProfessionalConsentRecord(records[3]))
+          && (records.size() < 5 || validProfessionalConsentRecord(records[4]));
+      }
+
+      function validOptionalProfessionalConsentRecords(data) {
+        return !('consentRecords' in data)
+          || validProfessionalConsentRecords(data.consentRecords);
+      }
+
+      function clientVerificationUpdateIsSafe() {
+        let professionalIdentityChanged = request.resource.data.profession
+            != resource.data.profession
+          || request.resource.data.get('professionalIdType', '')
+            != resource.data.get('professionalIdType', '')
+          || request.resource.data.get('professionalIdValue', '')
+            != resource.data.get('professionalIdValue', '');
+        let verifiedFields = [
+          'verificationStatus', 'verificationSource', 'verifiedFirstName',
+          'verifiedLastName', 'verifiedProfessionCode',
+          'verifiedProfessionLabel', 'verifiedAt'
+        ];
+        return (isUnverifiedProfile(request.resource.data)
+            && (isUnverifiedProfile(resource.data) || professionalIdentityChanged))
+          || (isCompleteVerifiedProfile(request.resource.data)
+            && isCompleteVerifiedProfile(resource.data)
+            && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(verifiedFields)
+            && !professionalIdentityChanged);
+      }
+
+      function clientAdmissionProjectionIsSafe() {
+        return (!('admissionScopes' in request.resource.data)
+            && !('admissionScopes' in resource.data))
+          || (request.resource.data.get('admissionScopes', {})
+            == resource.data.get('admissionScopes', {}));
+      }
+
+      function validVolunteerData(uid) {
+        return request.resource.data.keys().hasOnly([
+            'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+            'rpps', 'professionalIdType', 'professionalIdValue',
+            'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
+            'professionalAddressLine1', 'professionalAddressLine2',
+            'professionalPostalCode', 'professionalCity',
+            'professionalCountryCode',
+            'verificationStatus', 'verificationSource', 'verifiedFirstName',
+            'verifiedLastName', 'verifiedProfessionCode',
+            'verifiedProfessionLabel', 'verifiedAt',
+            'profileSchemaVersion', 'competencies',
+            'mobilizationPreferences', 'communicationPreferences',
+            'consentRecords',
+            'admissionScopes',
+            'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.keys().hasAll([
+            'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+            'equipment', 'createdAt', 'updatedAt'
+          ])
+          && request.resource.data.uid == uid
+          && validProfileProfession(request.resource.data.profession)
+          && request.resource.data.firstName is string
+          && request.resource.data.lastName is string
+          && request.resource.data.phone is string
+          && request.resource.data.equipment is list
+          && request.resource.data.email is string
+          && request.resource.data.email.size() > 0
+          && validProfessionalIdentity(request.resource.data)
+          && validOptionalCpts(request.resource.data)
+          && validProfessionalAddress(request.resource.data)
+          && validOptionalEquipmentDetails(request.resource.data)
+          && validOptionalProfileSchemaVersion(request.resource.data)
+          && validOptionalCompetencies(request.resource.data)
+          && validOptionalMobilizationPreferences(request.resource.data)
+          && validOptionalCommunicationPreferences(request.resource.data)
+          && validOptionalProfessionalConsentRecords(request.resource.data);
+      }
+
+      // Invited registration is already bound to a verified Auth identity and a
+      // server permit. Keep this create check small enough for the rules engine;
+      // the full schema check still applies to every later owner update.
+      function validInvitedVolunteerData(uid) {
+        let data = request.resource.data;
+        return data.keys().hasOnly([
+            'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+            'rpps', 'professionalIdType', 'professionalIdValue',
+            'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
+            'professionalAddressLine1', 'professionalAddressLine2',
+            'professionalPostalCode', 'professionalCity',
+            'professionalCountryCode', 'verificationStatus',
+            'profileSchemaVersion', 'competencies',
+            'mobilizationPreferences', 'communicationPreferences',
+            'consentRecords', 'createdAt', 'updatedAt'
+          ])
+          && data.keys().hasAll([
+            'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+            'equipment', 'createdAt', 'updatedAt'
+          ])
+          && data.uid == uid
+          && validProfileProfession(data.profession)
+          && data.firstName is string
+          && data.lastName is string
+          && data.phone is string
+          && data.email is string
+          && data.email.size() > 0
+          && data.email == request.auth.token.email
+          && data.equipment is list
+          && validProfessionalIdentity(data);
+      }
+
+      function validProfessionalRegistrationPermit(uid) {
+        let permitPath = /databases/$(database)/documents/professionalRegistrationPermits/$(uid);
+        let permit = get(permitPath).data;
+        return permit.get('uid', '') == uid
+          && permit.get('verifiedAuthEmail', '') == request.auth.token.email
+          && permit.get('expiresAt', request.time) > request.time
+          && permit.get('revoked', false) == false
+          && canonicalProfession(request.resource.data.profession)
+            == permit.get('expectedProfession', '');
+      }
+
       allow create: if isVolunteerOwner(uid)
         && canUseProfessionalOwnerWritePath()
         && (professionalAdmissionMode() == 'open'
@@ -2422,6 +2150,275 @@ service cloud.firestore {
     }
 
     match /engagements/{engagementId} {
+      function canGetOwnEngagement(engagementId) {
+        let path = /databases/$(database)/documents/engagements/$(engagementId);
+        return isSignedIn()
+          && engagementId.matches('^.+_' + request.auth.uid + '$')
+          && (!exists(path)
+            || resource.data.volunteerId == request.auth.uid);
+      }
+
+      function validEngagementStatus(value) {
+        return value == 'pending'
+          || value == 'confirmed'
+          || value == 'standby'
+          || value == 'cancelled';
+      }
+
+      function canReadEngagementOrganization(engagement) {
+        let missionId = engagement.get('missionId', '__missing__');
+        let path = missionPath(missionId);
+        return missionId is string
+          && isNonBlankCanonicalText(missionId)
+          && exists(path)
+          && get(path).data.get('mobilizationId', '')
+            == engagement.get('mobilizationId', '')
+          && canUseMobilizationOrganizationAsRole(
+            engagement.get('mobilizationId', '')
+          );
+      }
+
+      function canReadOrganizationEngagement(engagement) {
+        let missionId = engagement.get('missionId', '__missing__');
+        let path = missionPath(missionId);
+        let mission = exists(path) ? get(path).data : {};
+        return exists(path)
+          && mission.get('mobilizationId', '')
+            == engagement.get('mobilizationId', '')
+          && canReadOrganizationMissionScope(
+            mission.get('mobilizationId', ''),
+            mission.get('locationId', '')
+          );
+      }
+
+      // Engagements already read the profile in the same atomic batch. The
+      // backend-maintained projection avoids another rules document access.
+      function profileMayEngageMobilization(mobilizationId, profile) {
+        let mode = professionalAdmissionMode();
+        let mobilization = mode == 'invitation_only'
+          ? get(mobilizationPath(mobilizationId)).data : {};
+        let operationId = mobilization.get('operationId', '');
+        let scope = profile.get('admissionScopes', {}).get(operationId, {});
+        return mode == 'open'
+          || (mode == 'invitation_only'
+            && hasAcceptedCurrentCgu()
+            && scope.get('status', '') == 'active'
+            && scope.get('profession', '') == profile.profession
+            && scope.get('organizationId', '') == operationOwnerOrganizationId(
+              get(operationPath(operationId)).data
+            )
+            && scope.get('expiresAt', request.time) > request.time);
+      }
+
+      // Only reached when the general active discovery path did not grant the
+      // read. Resolve the existing engagement and mobilization once.
+      function canHistoricallyReadEngagement(engagement) {
+        let missionId = engagement.get('missionId', '');
+        let path = missionPath(missionId);
+        let mission = missionId is string && exists(path) ? get(path).data : {};
+        let mobilizationId = engagement.get('mobilizationId', '');
+        return missionId is string
+          && isNonBlankCanonicalText(missionId)
+          && exists(path)
+          && mission.get('mobilizationId', '') == mobilizationId
+          && isHistoricalMobilization(mobilizationId)
+          && (isPlatformAdministrator()
+            || (hasValidMobilizationOperation(
+                get(mobilizationPath(mobilizationId)).data
+              )
+              && hasHistoricalActionAccess(
+                get(mobilizationPath(mobilizationId)).data.operationId,
+                mission.get('locationId', '')
+              )));
+      }
+
+      function professionAllowsNoIdentifier(profession) {
+        return canonicalProfession(profession) == 'other_health_professional';
+      }
+
+      function hasParticipationProfessionalIdentifier(data) {
+        return 'professionalIdType' in data
+          && 'professionalIdValue' in data
+          && ((data.professionalIdType in ['rpps', 'ordinal']
+              && isNonBlankCanonicalText(data.professionalIdValue))
+            || (data.professionalIdType == 'none'
+              && data.professionalIdValue == ''
+              && professionAllowsNoIdentifier(data.get('profession', ''))));
+      }
+
+      function validEngagementCreate(engagementId) {
+        let missionId = request.resource.data.missionId;
+        let missionBefore = get(
+          /databases/$(database)/documents/missions/$(missionId)
+        ).data;
+        let missionAfter = getAfter(
+          /databases/$(database)/documents/missions/$(missionId)
+        ).data;
+        let profession = request.resource.data.profession;
+        return canUseProfessionalOwnerWritePath()
+          && request.resource.data.keys().hasOnly([
+            'missionId', 'mobilizationId', 'volunteerId', 'profession',
+            'createdAt', 'updatedAt', 'status'
+          ])
+          && request.resource.data.keys().hasAll([
+            'missionId', 'mobilizationId', 'volunteerId', 'profession',
+            'createdAt', 'updatedAt', 'status'
+          ])
+          && engagementId == missionId + '_' + request.auth.uid
+          && request.resource.data.volunteerId == request.auth.uid
+          && request.resource.data.mobilizationId
+            == missionBefore.mobilizationId
+          && isOperationalMobilization(
+            request.resource.data.mobilizationId
+          )
+          && validProfession(profession)
+          && request.resource.data.status == 'confirmed'
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && existsAfter(volunteerPath(request.auth.uid))
+          && getAfter(volunteerPath(request.auth.uid)).data.uid
+            == request.auth.uid
+          && getAfter(volunteerPath(request.auth.uid)).data.profession
+            == profession
+          && isCompleteVerifiedProfile(
+            getAfter(volunteerPath(request.auth.uid)).data
+          )
+          && profileMayEngageMobilization(
+            request.resource.data.mobilizationId,
+            getAfter(volunteerPath(request.auth.uid)).data
+          )
+          && hasParticipationProfessionalIdentifier(
+            getAfter(volunteerPath(request.auth.uid)).data
+          )
+          && exists(/databases/$(database)/documents/missions/$(missionId))
+          && existsAfter(
+            /databases/$(database)/documents/missions/$(missionId)
+          )
+          && missionBefore.isActive == true
+          && missionBefore.status != 'cancelled'
+          && request.time < missionBefore.endAt
+          && missionAfter.updatedAt == request.time;
+      }
+
+      function currentEngagementStatus() {
+        return 'status' in resource.data
+          ? resource.data.status
+          : 'confirmed';
+      }
+
+      function validCoordinatorTransition(from, to) {
+        return (from == 'pending'
+            && (to == 'confirmed' || to == 'standby' || to == 'cancelled'))
+          || (from == 'confirmed'
+            && (to == 'standby' || to == 'cancelled'))
+          || (from == 'standby'
+            && (to == 'confirmed' || to == 'cancelled'));
+      }
+
+      function validEngagementMissionEffect(from, to) {
+        let missionPath = /databases/$(database)/documents/missions/$(resource.data.missionId);
+        let before = get(missionPath).data;
+        let after = getAfter(missionPath).data;
+        let profession = resource.data.profession;
+        let delta = (from == 'pending' && to == 'confirmed')
+            || (from == 'standby' && to == 'confirmed')
+            || (from == 'cancelled' && to == 'confirmed')
+          ? 1
+          : ((from == 'confirmed' && (to == 'standby' || to == 'cancelled'))
+            ? -1
+            : 0);
+        return exists(missionPath)
+          && existsAfter(missionPath)
+          && resource.data.mobilizationId == before.mobilizationId
+          && request.resource.data.mobilizationId == before.mobilizationId
+          && isOperationalMobilization(before.mobilizationId)
+          && before.isActive == true
+          && before.status != 'cancelled'
+          && request.time < before.endAt
+          && (
+            (delta == 0
+              && validRegisteredDelta(before, after, profession, 0))
+            || (delta != 0
+              && validRegisteredDelta(before, after, profession, delta))
+          );
+      }
+
+      function validEngagementStatusUpdate() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let from = currentEngagementStatus();
+        let to = request.resource.data.status;
+        let mission = get(
+          /databases/$(database)/documents/missions/$(resource.data.missionId)
+        ).data;
+        return isAssignedOrLegacyCoordinatorForMobilization(
+            resource.data.mobilizationId
+          )
+          && canReadEngagementOrganization(resource.data)
+          && changed.hasOnly(['status', 'updatedAt'])
+          && resource.data.mobilizationId == mission.mobilizationId
+          && isOperationalMobilization(resource.data.mobilizationId)
+          && validEngagementStatus(to)
+          && request.resource.data.updatedAt == request.time
+          && validCoordinatorTransition(from, to)
+          && validEngagementMissionEffect(from, to);
+      }
+
+      function validOwnerCancellation(engagementId) {
+        let from = currentEngagementStatus();
+        let missionAfter = getAfter(
+          /databases/$(database)/documents/missions/$(resource.data.missionId)
+        ).data;
+        return canUseProfessionalOwnerWritePath()
+          && engagementId == resource.data.missionId + '_' + request.auth.uid
+          && resource.data.volunteerId == request.auth.uid
+          && resource.data.mobilizationId == missionAfter.mobilizationId
+          && isOperationalMobilization(resource.data.mobilizationId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedAt'])
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.updatedAt == request.time
+          && (from == 'pending' || from == 'standby' || from == 'confirmed')
+          && (from == 'pending'
+            || from == 'standby'
+            || missionAfter.updatedAt == request.time);
+      }
+
+      function validOwnerReengagement(engagementId) {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let mission = get(
+          /databases/$(database)/documents/missions/$(resource.data.missionId)
+        ).data;
+        return canUseProfessionalOwnerWritePath()
+          && engagementId == resource.data.missionId + '_' + request.auth.uid
+          && resource.data.volunteerId == request.auth.uid
+          && resource.data.mobilizationId == mission.mobilizationId
+          && isOperationalMobilization(resource.data.mobilizationId)
+          && (resource.data.status == 'cancelled'
+            || resource.data.status == 'pending')
+          && changed.hasOnly(['status', 'updatedAt', 'profession'])
+          && request.resource.data.status == 'confirmed'
+          && request.resource.data.updatedAt == request.time
+          && validProfession(request.resource.data.profession)
+          && existsAfter(volunteerPath(request.auth.uid))
+          && getAfter(volunteerPath(request.auth.uid)).data.uid
+            == request.auth.uid
+          && getAfter(volunteerPath(request.auth.uid)).data.profession
+            == request.resource.data.profession
+          && isCompleteVerifiedProfile(
+            getAfter(volunteerPath(request.auth.uid)).data
+          )
+          && profileMayEngageMobilization(
+            resource.data.mobilizationId,
+            getAfter(volunteerPath(request.auth.uid)).data
+          )
+          && mission.isActive == true
+          && mission.status != 'cancelled'
+          && request.time < mission.endAt
+          && getAfter(
+            /databases/$(database)/documents/missions/$(resource.data.missionId)
+          ).data.updatedAt == request.time;
+      }
+
       allow create: if validEngagementCreate(engagementId);
       allow get: if canGetOwnEngagement(engagementId)
         ? (!exists(
@@ -2549,6 +2546,22 @@ service cloud.firestore {
     }
 
     match /adminInvitations/{invitationId} {
+      function isValidAdminInvitationEmail(value) {
+        return value is string
+          && value.matches('^[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*[^\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]{1,255}[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*$')
+          && value.matches('^[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*[^@\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+@[^@\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+\\.[^@\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*$');
+      }
+
+      function hasValidInvitationScope(invitation) {
+        return 'locationIds' in invitation
+          && (
+            (invitation.role == 'site_manager'
+              && validLocationIds(invitation.locationIds))
+            || (invitation.role == 'coordinator'
+              && invitation.locationIds == [])
+          );
+      }
+
       allow read: if isCoordinator() || isPlatformAdministrator();
       allow create: if (isCoordinator() || isPlatformAdministrator())
         && request.resource.data.keys().hasOnly([
@@ -2597,6 +2610,33 @@ service cloud.firestore {
     }
 
     match /mobilizations/{mobilizationId} {
+      function hasOperationOrganizationMembership(operation) {
+        let organizationId = operationOwnerOrganizationId(operation);
+        return hasValidOperationOrganization(operation)
+          && canReadOperationScope(operation.get('id', ''), organizationId);
+      }
+
+      function isExplicitPlatformDiscoverableMobilization(mobilization) {
+        let operationId = mobilization.get('operationId', '__missing__');
+        let path = operationPath(operationId);
+        return hasValidMobilizationOperation(mobilization)
+          && exists(path)
+          && isExplicitPlatformDiscoverableOperation(get(path).data);
+      }
+
+      function hasMobilizationOrganizationMembership(mobilization) {
+        let operationId = mobilization.get('operationId', '__missing__');
+        let operation = hasValidMobilizationOperation(mobilization)
+          && exists(operationPath(operationId))
+          ? get(operationPath(operationId)).data
+          : {};
+        return (hasValidMobilizationOperation(mobilization)
+            && exists(operationPath(operationId))
+            && hasOperationOrganizationMembership(operation))
+          || (isLegacyMobilization(mobilization)
+            && hasActiveOrganizationMembership(legacyOrganizationId()));
+      }
+
       allow get: if isPlatformAdministrator()
         || (professionalAdmissionMode() == 'invitation_only'
           && resource.data.get('status', '') == 'active'
@@ -2747,6 +2787,16 @@ service cloud.firestore {
     }
 
     match /demoActors/{actorId} {
+      function canReadDemoActor(actor) {
+        let operationId = actor.get('operationId', '');
+        let grant = hasHistoricalActionGrant(operationId)
+          ? get(historicalAccessPath(operationId)).data : {};
+        return isCompletedDemoOperation(operationId)
+          && (isPlatformAdministrator()
+            || (hasHistoricalActionGrant(operationId)
+              && 'coordinator' in grant.roles));
+      }
+
       allow get: if resource.data.get('id', '') == actorId
         && canReadDemoActor(resource.data);
       allow list: if canReadDemoActor(resource.data);
@@ -2754,6 +2804,14 @@ service cloud.firestore {
     }
 
     match /demoEngagements/{engagementId} {
+      function canReadDemoEngagement(engagement) {
+        let operationId = engagement.get('operationId', '');
+        let locationId = engagement.get('locationId', '');
+        return isCompletedDemoOperation(operationId)
+          && (isPlatformAdministrator()
+            || hasHistoricalActionAccess(operationId, locationId));
+      }
+
       allow get: if resource.data.get('id', '') == engagementId
         && canReadDemoEngagement(resource.data);
       allow list: if canReadDemoEngagement(resource.data);
@@ -2767,6 +2825,32 @@ service cloud.firestore {
     }
 
     match /organizationMemberships/{membershipId} {
+      function isCanonicalOrganizationMembership(membershipId, membership) {
+        let organizationId = membership.get('organizationId', '');
+        let uid = membership.get('uid', '');
+        return organizationId is string
+          && uid is string
+          && membershipId == organizationId + '_' + uid;
+      }
+
+      function canReadOwnOrganizationMembership(membershipId) {
+        return isSignedIn()
+          && isCanonicalOrganizationMembership(membershipId, resource.data)
+          && resource.data.get('uid', '') == request.auth.uid;
+      }
+
+      function canOrganizationAdminReadMembership(membershipId) {
+        let organizationId = resource.data.get('organizationId', '');
+        return isCanonicalOrganizationMembership(membershipId, resource.data)
+          && isOrganizationAdmin(organizationId);
+      }
+
+      function canOrganizationAdminListMembership() {
+        let organizationId = resource.data.get('organizationId', '');
+        return isNonBlankCanonicalText(organizationId)
+          && isOrganizationAdmin(organizationId);
+      }
+
       allow get: if isPlatformAdministrator()
         || canReadOwnOrganizationMembership(membershipId)
         || canOrganizationAdminReadMembership(membershipId);

@@ -2,6 +2,9 @@
   "functions": {
     "source": "functions",
     "runtime": "nodejs20",
+    "predeploy": [
+      "node scripts/verify_functions_package.mjs"
+    ],
     "ignore": [
       "node_modules",
       ".git",
