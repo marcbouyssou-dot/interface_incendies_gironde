@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_identity.dart';
+import '../config/beta_terms.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/common.dart';
@@ -54,15 +55,20 @@ class InformationConsentScreen extends StatelessWidget {
                       icon: Icons.rule_outlined,
                       title: 'Conditions d’utilisation',
                       items: [
-                        'MobSanté est un outil de coordination de professionnels '
-                            'mobilisés dans le cadre d’Actions organisées par '
-                            'différentes organisations.',
+                        'Version ${BetaTerms.version}. MobSanté Beta V1 est un '
+                            'service expérimental gratuit, fermé, accessible aux '
+                            'professionnels invités avec un compte personnel.',
                         'L’application ne remplace ni les services d’urgence ni les '
                             'consignes données par les autorités et responsables '
-                            'opérationnels.',
+                            'opérationnels. Sa disponibilité n’est pas garantie '
+                            'comme celle d’un service de secours critique.',
                         'Chaque utilisateur emploie le service uniquement pour les '
                             'missions proposées et respecte les règles de sécurité '
                             'et d’organisation communiquées sur le terrain.',
+                        'Des Actions peuvent être organisées par différentes '
+                            'organisations, chacune dans son périmètre.',
+                        'Les notifications sont une aide à la coordination, jamais '
+                            'l’unique canal de sécurité ou d’alerte.',
                       ],
                     ),
                     const SizedBox(height: 13),
@@ -78,6 +84,8 @@ class InformationConsentScreen extends StatelessWidget {
                         'Utiliser les informations accessibles dans l’application '
                             'avec discrétion et uniquement pour la coordination du '
                             'dispositif.',
+                        'Ne saisissez aucune donnée permettant d’identifier un '
+                            'patient ou concernant son état de santé.',
                       ],
                     ),
                     const SizedBox(height: 13),
@@ -91,18 +99,37 @@ class InformationConsentScreen extends StatelessWidget {
                         'Le professionnel met à jour son profil avant toute nouvelle '
                             'participation lorsque sa situation ou ses coordonnées '
                             'ont changé.',
+                        'Le compte est personnel et ne doit pas être partagé. '
+                            'Une invitation peut être révoquée ou expirer.',
+                      ],
+                    ),
+                    const SizedBox(height: 13),
+                    const _InformationSection(
+                      icon: Icons.admin_panel_settings_outlined,
+                      title: 'Accès et fin de la Beta',
+                      items: [
+                        'L’accès à une Action dépend de la vérification du profil, '
+                            'de la profession et des droits accordés. Une '
+                            'participation doit rester exacte et à jour.',
+                        'Un accès peut être suspendu ou révoqué en cas d’usage '
+                            'incompatible avec ces conditions ou à la fin de la Beta. '
+                            'L’intégrité du service et de ses contenus doit être respectée.',
+                        'Pour toute question, contactez Marc Bouyssou via '
+                            'confidentialite@mobsante.fr. Cette adresse doit être '
+                            'confirmée avant l’ouverture de la Beta.',
                       ],
                     ),
                     const SizedBox(height: 13),
                     const _InformationSection(
                       icon: Icons.check_circle_outline_rounded,
-                      title: 'Prise de connaissance',
+                      title: 'Acceptation des CGU',
                       items: [
-                        'La confirmation d’une mission manifeste la prise de '
-                            'connaissance de ces informations. Elle reste distincte '
-                            'de la consultation de cette page et intervient '
-                            'uniquement avec l’action de participation prévue dans '
-                            'le formulaire.',
+                        'L’accès opérationnel sur invitation requiert une '
+                            'acceptation explicite de la version en vigueur. '
+                            'Une nouvelle version obligatoire pourra nécessiter '
+                            'une nouvelle acceptation.',
+                        'Les choix facultatifs pour les notifications et le ciblage '
+                            'restent distincts de cette acceptation.',
                       ],
                     ),
                     const SizedBox(height: 22),

@@ -36,7 +36,10 @@ class _UnavailableMissionsRepository extends MockCoordinationRepository
 }
 
 class _InvitationOnlyRepository extends MockCoordinationRepository
-    implements ProfessionalAdmissionRepository, VisitorOperationalReadGate {
+    implements
+        ProfessionalAdmissionRepository,
+        BetaTermsAcceptanceRepository,
+        VisitorOperationalReadGate {
   _InvitationOnlyRepository({required bool verified})
     : super(
         responsibleAccess: null,
@@ -46,6 +49,8 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
       );
 
   String? redeemedCode;
+  bool termsAccepted = false;
+  String? preparedCode;
   int operationalReads = 0;
   bool anonymous = false;
   bool emailVerified = true;
@@ -65,7 +70,18 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
 
   @override
   Future<void> redeemProfessionalInvitation(String code) async {
+    if (!termsAccepted) throw StateError('CGU required');
     redeemedCode = code;
+  }
+
+  @override
+  Future<void> acceptCurrentBetaTerms() async {
+    termsAccepted = true;
+  }
+
+  @override
+  Future<void> prepareProfessionalRegistration(String code) async {
+    preparedCode = code;
   }
 
   @override
@@ -454,6 +470,14 @@ void main() {
     repository.emailVerified = true;
     await tester.tap(find.text('J’ai vérifié mon e-mail'));
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Valider'))
+          .onPressed,
+      isNull,
+    );
+    await tester.tap(find.byKey(const Key('professional-accept-beta-terms')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Valider'));
     await tester.pumpAndSettle();
     expect(repository.redeemedCode, 'opaque-test-code');
@@ -486,6 +510,8 @@ void main() {
         find.byKey(const Key('professional-invitation-code')),
         'local-test-code',
       );
+      await tester.tap(find.byKey(const Key('professional-accept-beta-terms')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Valider'));
       await tester.pumpAndSettle();
       expect(repository.redeemedCode, 'local-test-code');

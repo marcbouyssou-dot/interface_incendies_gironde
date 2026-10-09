@@ -60,3 +60,26 @@ test('creation requires a recipient before any invitation write', async () => {
   assert.match(result.code, /^[A-Za-z0-9_-]{43}$/);
   assert.notEqual(result.invitationId, result.code);
 });
+
+test('invitation preparation refuses invalid admission modes before writing', async () => {
+  for (const admissionMode of [null, 'unexpected']) {
+    let writes = 0;
+    const db = {
+      collection() {
+        return {doc() {
+          return {
+            get: async () => ({exists: true, data: () => ({active: true})}),
+            create: async () => { writes++; },
+          };
+        }};
+      },
+      doc() {
+        return {get: async () => ({data: () => ({admissionMode})})};
+      },
+    };
+    await assert.rejects(() => createProfessionalInvitation({
+      db, callerUid: 'admin', data: {},
+    }), {code: 'failed-precondition'});
+    assert.equal(writes, 0);
+  }
+});

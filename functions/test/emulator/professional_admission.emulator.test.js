@@ -27,14 +27,21 @@ after(async () => {
 });
 
 async function actor({administrator = false, verified = false, emailVerified = true,
+  withProfile = true, termsAccepted = true,
   profession = 'physiotherapist'} = {}) {
   const uid = unique('actor');
   const email = `${uid}@example.test`;
   const password = 'Test-only-password-42!';
   await adminAuth.createUser({uid, email, password, emailVerified});
+  if (emailVerified && termsAccepted) {
+    await adminDb.collection('termsAcceptances').doc(uid).set({
+      uid, acceptedVersion: 'beta-v1', acceptedAt: Timestamp.now(),
+    });
+    await adminAuth.setCustomUserClaims(uid, {cguVersion: 'beta-v1'});
+  }
   if (administrator) {
     await adminDb.collection('platformAdministrators').doc(uid).set({active: true});
-  } else {
+  } else if (withProfile) {
     await adminDb.collection('volunteers').doc(uid).set({
       uid, profession, firstName: 'Alice', lastName: 'EXEMPLE', phone: '', email,
       equipment: [], professionalIdType: 'rpps', professionalIdValue: '10123456789',
@@ -60,8 +67,12 @@ async function actor({administrator = false, verified = false, emailVerified = t
   return {
     uid, email, auth, firestore,
     create: httpsCallable(functions, 'createProfessionalInvitation'),
+    send: httpsCallable(functions, 'sendProfessionalInvitationEmail'),
     status: httpsCallable(functions, 'getProfessionalInvitationStatus'),
+    list: httpsCallable(functions, 'listProfessionalInvitations'),
     redeem: httpsCallable(functions, 'redeemProfessionalInvitation'),
+    acceptTerms: httpsCallable(functions, 'acceptBetaTerms'),
+    prepare: httpsCallable(functions, 'prepareProfessionalRegistration'),
     revoke: httpsCallable(functions, 'revokeProfessionalInvitation'),
     missionLocations: httpsCallable(functions, 'listProfessionalMissionLocations'),
   };
@@ -110,6 +121,82 @@ async function denied(operation) {
       || error.code === 'functions/already-exists');
 }
 
+test('closed registration requires a live invitation bound to verified email and profession', async () => {
+  const admin = await actor({administrator: true});
+  const newcomer = await actor({withProfile: false});
+  const other = await actor({withProfile: false});
+  const target = await action();
+  const issued = await invitation(admin, target, newcomer);
+  const profile = (uid, email, profession = 'physiotherapist') => ({
+    uid, email, profession, firstName: 'Alice', lastName: 'EXEMPLE',
+    phone: '', equipment: [], verificationStatus: 'unverified',
+    rpps: '10123456789', professionalIdType: 'rpps',
+    professionalIdValue: '10123456789',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  const profileRef = doc(newcomer.firestore, 'volunteers', newcomer.uid);
+  await denied(() => setDoc(profileRef, profile(newcomer.uid, newcomer.email)));
+  await denied(() => other.prepare({code: issued.code}));
+  await newcomer.prepare({code: issued.code});
+  await denied(() => getDoc(doc(newcomer.firestore,
+    'professionalRegistrationPermits', newcomer.uid)));
+  await denied(() => setDoc(profileRef,
+    profile(newcomer.uid, newcomer.email, 'nurse')));
+  await assert.rejects(() => newcomer.redeem({code: issued.code}),
+    (error) => error.code === 'functions/permission-denied');
+  await setDoc(profileRef, profile(newcomer.uid, newcomer.email));
+  assert.equal((await getDoc(profileRef)).exists(), true);
+  await denied(() => newcomer.redeem({code: issued.code}));
+});
+
+test('Admin can send one individual invitation email without exposing its code in status', async () => {
+  const admin = await actor({administrator: true});
+  const recipient = await actor({verified: true});
+  const target = await action();
+  const issued = await invitation(admin, target, recipient);
+  await denied(() => recipient.send({code: issued.code}));
+  assert.equal((await admin.send({code: issued.code})).data.alreadySent, false);
+  assert.equal((await admin.send({code: issued.code})).data.alreadySent, true);
+  const status = (await admin.status({invitationId: issued.invitationId})).data;
+  assert.equal(status.deliveryStatus, 'sent');
+  assert.equal(JSON.stringify(status).includes(issued.code), false);
+  await denied(() => recipient.list({}));
+  const listed = (await admin.list({})).data.invitations;
+  assert.equal(listed.some((item) => item.invitationId === issued.invitationId
+    && item.deliveryStatus === 'sent'), true);
+  assert.equal(JSON.stringify(listed).includes(issued.code), false);
+});
+
+test('revocation and expiration close prepared registration before profile creation', async () => {
+  const admin = await actor({administrator: true});
+  const newcomer = await actor({withProfile: false});
+  const target = await action();
+  const issued = await invitation(admin, target, newcomer);
+  await newcomer.prepare({code: issued.code});
+  await admin.revoke({invitationId: issued.invitationId});
+  await denied(() => setDoc(doc(newcomer.firestore, 'volunteers', newcomer.uid), {
+    uid: newcomer.uid, email: newcomer.email, profession: 'physiotherapist',
+    firstName: 'Alice', lastName: 'EXEMPLE', phone: '', equipment: [],
+    rpps: '10123456789', professionalIdType: 'rpps',
+    professionalIdValue: '10123456789',
+    verificationStatus: 'unverified', createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+  await denied(() => newcomer.prepare({code: issued.code}));
+  const expiring = await actor({withProfile: false});
+  const shortLived = await invitation(admin, target, expiring);
+  await expiring.prepare({code: shortLived.code});
+  await adminDb.collection('professionalRegistrationPermits').doc(expiring.uid)
+    .update({expiresAt: Timestamp.fromMillis(Date.now() - 1000)});
+  await denied(() => setDoc(doc(expiring.firestore, 'volunteers', expiring.uid), {
+    uid: expiring.uid, email: expiring.email, profession: 'physiotherapist',
+    firstName: 'Alice', lastName: 'EXEMPLE', phone: '', equipment: [],
+    rpps: '10123456789', professionalIdType: 'rpps',
+    professionalIdValue: '10123456789', verificationStatus: 'unverified',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  }));
+});
+
 test('transferred link cannot be consumed and target can use it for one Action', async () => {
   const admin = await actor({administrator: true});
   const targetUser = await actor({verified: true});
@@ -149,6 +236,11 @@ test('unverified email and anonymous identity cannot redeem', async () => {
   await denied(() => targetUser.redeem({code: issued.code}));
   assert.equal((await admin.status({invitationId: issued.invitationId})).data.status, 'valid');
   await adminAuth.updateUser(targetUser.uid, {emailVerified: true});
+  await adminDb.collection('termsAcceptances').doc(targetUser.uid).set({
+    uid: targetUser.uid, acceptedVersion: 'beta-v1', acceptedAt: Timestamp.now(),
+  });
+  await adminAuth.setCustomUserClaims(targetUser.uid, {cguVersion: 'beta-v1'});
+  await targetUser.auth.currentUser.getIdToken(true);
   const anonymousApp = initializeApp({projectId, apiKey: 'fake-api-key'}, unique('anonymous'));
   apps.push(anonymousApp);
   const anonymousAuth = getAuth(anonymousApp);
@@ -285,9 +377,43 @@ test('linking an anonymous professional keeps the UID and needs email verificati
   assert.equal(auth.currentUser.uid, uid);
   await denied(() => redeem({code: issued.code}));
   await adminAuth.updateUser(uid, {emailVerified: true});
+  await adminDb.collection('termsAcceptances').doc(uid).set({
+    uid, acceptedVersion: 'beta-v1', acceptedAt: Timestamp.now(),
+  });
+  await adminAuth.setCustomUserClaims(uid, {cguVersion: 'beta-v1'});
+  await auth.currentUser.getIdToken(true);
   assert.equal((await redeem({code: issued.code})).data.operationId, target.operationId);
   assert.equal((await adminDb.collection('professionalAdmissions')
     .doc(`${target.operationId}_${uid}`).get()).data().uid, uid);
+});
+
+test('current CGU acceptance gates admission and a later mandatory version', async () => {
+  const admin = await actor({administrator: true});
+  const professional = await actor({verified: true, termsAccepted: false});
+  const target = await action();
+  const issued = await invitation(admin, target, professional);
+  await denied(() => professional.redeem({code: issued.code}));
+  await denied(() => setDoc(doc(professional.firestore,
+    'termsAcceptances', professional.uid), {
+    uid: professional.uid, acceptedVersion: 'beta-v1',
+    acceptedAt: serverTimestamp(),
+  }));
+  await professional.acceptTerms({version: 'beta-v1'});
+  await professional.auth.currentUser.getIdToken(true);
+  await professional.redeem({code: issued.code});
+  assert.equal((await getDoc(doc(professional.firestore, 'missions',
+    target.missionId))).exists(), true);
+  await adminDb.doc('platform/config').set({mandatoryCguVersion: 'beta-v2'}, {merge: true});
+  try {
+    await denied(() => getDoc(doc(professional.firestore, 'missions', target.missionId)));
+    await denied(() => professional.acceptTerms({version: 'beta-v1'}));
+    await professional.acceptTerms({version: 'beta-v2'});
+    await professional.auth.currentUser.getIdToken(true);
+    assert.equal((await getDoc(doc(professional.firestore, 'missions',
+      target.missionId))).exists(), true);
+  } finally {
+    await adminDb.doc('platform/config').set({mandatoryCguVersion: 'beta-v1'}, {merge: true});
+  }
 });
 
 function engage(actor, target) {
@@ -418,6 +544,28 @@ test('open mode still requires RPPS verification', async () => {
   assert.equal((await getDoc(doc(verified.firestore, 'missions', target.missionId))).exists(), true);
   await denied(() => engage(unverified, target));
   await adminDb.doc('platform/config').set({admissionMode: 'invitation_only'}, {merge: true});
+});
+
+test('Admin can stage an invitation before switching to invitation-only', async () => {
+  const admin = await actor({administrator: true});
+  const professional = await actor({verified: true});
+  const target = await action();
+  const originalProfile = (await adminDb.collection('volunteers')
+    .doc(professional.uid).get()).data();
+  await adminDb.doc('platform/config').set({admissionMode: 'open'}, {merge: true});
+  const issued = await invitation(admin, target, professional);
+  assert.equal((await adminDb.collection('professionalAdmissions')
+    .doc(`${target.operationId}_${professional.uid}`).get()).exists, false);
+  await denied(() => professional.redeem({code: issued.code}));
+  await adminDb.doc('platform/config').set({admissionMode: 'invitation_only'}, {merge: true});
+  await denied(() => getDoc(doc(professional.firestore, 'missions', target.missionId)));
+  await professional.redeem({code: issued.code});
+  const transitionedProfile = (await adminDb.collection('volunteers')
+    .doc(professional.uid).get()).data();
+  assert.equal(transitionedProfile.uid, professional.uid);
+  assert.equal(transitionedProfile.rpps, originalProfile.rpps);
+  assert.equal(transitionedProfile.verificationStatus, 'verified');
+  assert.equal((await getDoc(doc(professional.firestore, 'missions', target.missionId))).exists(), true);
 });
 
 test('mission site details are projected only for the invited Action', async () => {

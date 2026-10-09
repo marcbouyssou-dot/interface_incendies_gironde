@@ -539,6 +539,65 @@ function volunteer(uid, overrides = {}) {
   };
 }
 
+test('closed professional profile creation requires a live server permit and private contacts stay owner-only', async () => {
+  await seed();
+  const invited = env.authenticatedContext('invitee', {
+    email: 'invitee@example.test', email_verified: true,
+  }).firestore();
+  const stranger = db('stranger');
+  const profileRef = doc(invited, 'volunteers/invitee');
+  const profile = volunteer('invitee', {
+    email: 'invitee@example.test', profession: 'mk',
+    professionalAddressLine1: '1 rue privée', phone: '0600000000',
+  });
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'platform/config'), {
+      admissionMode: 'invitation_only',
+    }, {merge: true});
+    await setDoc(doc(context.firestore(), 'platformAdministrators/platform-admin'), {
+      active: true,
+    });
+  });
+  await assertFails(setDoc(profileRef, profile));
+  await env.withSecurityRulesDisabled(async (context) => {
+    const admin = context.firestore();
+    const expiresAt = Timestamp.fromMillis(Date.now() + 60 * 60 * 1000);
+    await setDoc(doc(admin, 'professionalInvitations/invite-1'), {
+      id: 'invite-1', status: 'valid', expectedProfession: 'physiotherapist',
+      targetEmailNormalized: 'invitee@example.test', expiresAt,
+    });
+    await setDoc(doc(admin, 'professionalRegistrationPermits/invitee'), {
+      uid: 'invitee', invitationId: 'invite-1',
+      verifiedAuthEmail: 'invitee@example.test',
+      expectedProfession: 'physiotherapist', expiresAt, revoked: false,
+    });
+    await setDoc(doc(admin, 'professionalTargeting/invitee'), {
+      uid: 'invitee', enabled: true, latitude: 44.84, longitude: -0.58,
+      radiusKm: 20, source: 'selected_point',
+      createdAt: Timestamp.now(), updatedAt: Timestamp.now(),
+    });
+    await setDoc(doc(admin, 'notificationPreferences/invitee'), {
+      uid: 'invitee', compatibleMissions: true,
+      engagementUpdates: true, operationalAlerts: true,
+      quietHoursStart: 22, quietHoursEnd: 7,
+      updatedAt: Timestamp.now(),
+    });
+  });
+  await assertFails(setDoc(profileRef, {...profile, profession: 'nurse'}));
+  await assertSucceeds(setDoc(profileRef, profile));
+  await assertFails(getDoc(doc(stranger, 'volunteers/invitee')));
+  await assertFails(getDoc(doc(db('coord'), 'volunteers/invitee')));
+  await assertFails(getDoc(doc(db('platform-admin'), 'volunteers/invitee')));
+  for (const root of ['professionalTargeting', 'notificationPreferences']) {
+    for (const uid of ['stranger', 'coord', 'manager', 'platform-admin']) {
+      await assertFails(getDoc(doc(db(uid), `${root}/invitee`)));
+    }
+    await assertSucceeds(getDoc(doc(invited, `${root}/invitee`)));
+  }
+  await assertFails(getDoc(doc(stranger, 'professionalRegistrationPermits/invitee')));
+  await assertFails(getDoc(doc(stranger, 'professionalInvitations/invite-1')));
+});
+
 function verifiedVolunteer(uid, overrides = {}) {
   const profession = canonicalProfession(overrides.profession ?? 'mk');
   const verification = {

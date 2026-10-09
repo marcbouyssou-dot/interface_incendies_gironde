@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../data/mock_data.dart' show places;
+import '../config/beta_terms.dart';
 import '../models/health_profession.dart';
 import '../models/app_notification.dart';
 import '../models/mobilization_context.dart';
@@ -268,6 +269,7 @@ class FirestoreCoordinationRepository
         PlatformAccountAuthenticator,
         VisitorOperationalReadGate,
         ProfessionalAdmissionRepository,
+        BetaTermsAcceptanceRepository,
         ProfessionalTargetingRepository,
         ReferenceGeocodingService {
   FirestoreCoordinationRepository(
@@ -396,30 +398,57 @@ class FirestoreCoordinationRepository
             ),
           );
         }
-        return _firestore
-            .collection('professionalAdmissions')
-            .where('uid', isEqualTo: uid)
-            .snapshots()
-            .map((snapshot) {
-              final now = DateTime.now();
-              final operationIds = snapshot.docs
-                  .where((document) {
-                    final data = document.data();
-                    final expiry = data['expiresAt'];
-                    return data['status'] == 'active' &&
-                        expiry is Timestamp &&
-                        expiry.toDate().isAfter(now);
-                  })
-                  .map((document) => document.data()['operationId'])
-                  .whereType<String>()
-                  .toSet();
-              return ProfessionalAdmissionState(
-                mode: ProfessionalAdmissionMode.invitationOnly,
-                operationIds: operationIds,
-              );
-            });
+        final requiredVersion =
+            config.data()?['mandatoryCguVersion'] ?? BetaTerms.version;
+        return switchLatest(
+          _firestore.collection('termsAcceptances').doc(uid).snapshots(),
+          (terms) => _firestore
+              .collection('professionalAdmissions')
+              .where('uid', isEqualTo: uid)
+              .snapshots()
+              .map((snapshot) {
+                final now = DateTime.now();
+                final operationIds = snapshot.docs
+                    .where((document) {
+                      final data = document.data();
+                      final expiry = data['expiresAt'];
+                      return data['status'] == 'active' &&
+                          expiry is Timestamp &&
+                          expiry.toDate().isAfter(now);
+                    })
+                    .map((document) => document.data()['operationId'])
+                    .whereType<String>()
+                    .toSet();
+                return ProfessionalAdmissionState(
+                  mode: ProfessionalAdmissionMode.invitationOnly,
+                  operationIds: operationIds,
+                  termsAccepted:
+                      terms.data()?['acceptedVersion'] == requiredVersion &&
+                      terms.data()?['uid'] == uid,
+                );
+              }),
+        );
       },
     );
+  }
+
+  @override
+  Future<void> acceptCurrentBetaTerms() async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous || !user.emailVerified) {
+      throw StateError('Compte avec adresse e-mail vérifiée requis.');
+    }
+    try {
+      await _volunteerFunctions
+          .httpsCallable('acceptBetaTerms')
+          .call<Map<String, dynamic>>({'version': BetaTerms.version});
+    } on FirebaseFunctionsException catch (error) {
+      if (error.code == 'failed-precondition') {
+        throw StateError('Mettez l’application à jour pour accepter les CGU.');
+      }
+      rethrow;
+    }
+    await user.getIdToken(true);
   }
 
   @override
@@ -591,6 +620,28 @@ class FirestoreCoordinationRepository
           'Invitation indisponible pour ce compte ou profil professionnel non vérifié.',
         'invalid-argument' => 'Invitation indisponible.',
         _ => 'Impossible d’utiliser cette invitation pour le moment.',
+      });
+    }
+  }
+
+  @override
+  Future<void> prepareProfessionalRegistration(String code) async {
+    final identity = await professionalEmailIdentity();
+    if (identity.isAnonymous || !identity.emailVerified) {
+      throw const RepositoryException(
+        'Connectez-vous avec une adresse e-mail vérifiée avant de préparer le profil.',
+      );
+    }
+    try {
+      await _volunteerFunctions
+          .httpsCallable('prepareProfessionalRegistration')
+          .call<Object?>({'code': code.trim()})
+          .timeout(const Duration(seconds: 15));
+    } on FirebaseFunctionsException catch (error) {
+      throw RepositoryException(switch (error.code) {
+        'failed-precondition' => 'Invitation indisponible ou expirée.',
+        'permission-denied' => 'Invitation indisponible pour ce compte.',
+        _ => 'Impossible de préparer le profil pour le moment.',
       });
     }
   }

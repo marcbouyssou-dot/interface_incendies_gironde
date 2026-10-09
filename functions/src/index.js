@@ -82,8 +82,12 @@ import {
 } from './professional_identity_claims.js';
 import {
   ProfessionalAdmissionError,
+  acceptBetaTerms as acceptBetaTermsRequest,
   createProfessionalInvitation as createProfessionalInvitationRequest,
+  prepareProfessionalRegistration as prepareProfessionalRegistrationRequest,
+  sendProfessionalInvitationEmail as sendProfessionalInvitationEmailRequest,
   getProfessionalInvitationStatus as getProfessionalInvitationStatusRequest,
+  listProfessionalInvitations as listProfessionalInvitationsRequest,
   redeemProfessionalInvitation as redeemProfessionalInvitationRequest,
   revokeProfessionalInvitation as revokeProfessionalInvitationRequest,
   listProfessionalMissionLocations as listProfessionalMissionLocationsRequest,
@@ -130,6 +134,7 @@ import {
 } from './operational_notifications/event_factory.js';
 import {
   dispatchOperationalEvent,
+  operationalNotificationsPaused,
   persistCanonicalEvents,
   processPendingDeliveries,
 } from './operational_notifications/firestore_service.js';
@@ -271,19 +276,27 @@ export const emitEngagementChanges = onDocumentUpdated(
 
 export const dispatchOperationalNotification = onDocumentCreated(
   {...operationalTriggerOptions, document: 'notificationEvents/{eventId}'},
-  async (event) => dispatchOperationalEvent({
-    firestore: getFirestore(),
-    messaging: getMessaging(),
-    event: event.data.data(),
-  }),
+  async (event) => {
+    const firestore = getFirestore();
+    if (await operationalNotificationsPaused(firestore)) return;
+    return dispatchOperationalEvent({
+      firestore,
+      messaging: getMessaging(),
+      event: event.data.data(),
+    });
+  },
 );
 
 export const retryDeferredNotifications = onSchedule(
   {region: 'europe-west1', schedule: 'every 15 minutes', retryCount: 3},
-  async () => processPendingDeliveries({
-    firestore: getFirestore(),
-    messaging: getMessaging(),
-  }),
+  async () => {
+    const firestore = getFirestore();
+    if (await operationalNotificationsPaused(firestore)) return;
+    return processPendingDeliveries({
+      firestore,
+      messaging: getMessaging(),
+    });
+  },
 );
 
 const solicitationJournalCallableOptions = Object.freeze({
@@ -699,11 +712,63 @@ export const redeemProfessionalInvitation = onCall(
     })),
 );
 
+export const acceptBetaTerms = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    acceptBetaTermsRequest({
+      db: getFirestore(), auth: getAuth(), callerUid: request.auth?.uid,
+      data: request.data,
+    })),
+);
+
+export const prepareProfessionalRegistration = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    prepareProfessionalRegistrationRequest({
+      db: getFirestore(), auth: getAuth(), callerUid: request.auth?.uid,
+      data: request.data,
+    })),
+);
+
+export const sendProfessionalInvitationEmail = onCall(
+  {
+    region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator,
+    secrets: resendApiKey === null ? [] : [resendApiKey],
+  },
+  (request) => professionalAdmissionCallable(() => {
+    const mode = notificationMode.value();
+    if ((mode === 'fake' && !isFunctionsEmulator)
+      || !new Set(['fake', 'resend']).has(mode)) {
+      throw new ProfessionalAdmissionError('failed-precondition', 'Envoi indisponible.');
+    }
+    return sendProfessionalInvitationEmailRequest({
+      db: getFirestore(), callerUid: request.auth?.uid, data: request.data,
+      appUrl: appUrl.value(),
+      notificationService: createServerNotificationService({
+        mode: mode === 'fake' ? 'emulator' : 'real',
+        configuration: isFunctionsEmulator ? undefined : {
+          apiKey: resendApiKey?.value(), fromEmail: emailFrom.value(),
+          fromName: emailFromName.value(), replyTo: emailReplyTo.value(),
+          appUrl: appUrl.value(),
+        },
+      }),
+    });
+  }),
+);
+
 export const getProfessionalInvitationStatus = onCall(
   {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
   (request) => professionalAdmissionCallable(() =>
     getProfessionalInvitationStatusRequest({
       db: getFirestore(), callerUid: request.auth?.uid, data: request.data,
+    })),
+);
+
+export const listProfessionalInvitations = onCall(
+  {region: 'europe-west1', enforceAppCheck: !isFunctionsEmulator},
+  (request) => professionalAdmissionCallable(() =>
+    listProfessionalInvitationsRequest({
+      db: getFirestore(), callerUid: request.auth?.uid,
     })),
 );
 

@@ -17,7 +17,7 @@ const relationshipFields = new Set([
   'uid', 'volunteerId', 'professionalUid', 'organizationId', 'operationId',
   'mobilizationId', 'locationId', 'missionId', 'role', 'status', 'profession',
   'recipientUid', 'sourceInvitationId', 'createdAt', 'updatedAt',
-  'acceptedAt', 'admittedAt', 'revokedAt', 'expiresAt', 'active',
+  'acceptedAt', 'acceptedVersion', 'admittedAt', 'revokedAt', 'expiresAt', 'active',
 ]);
 const targetingFields = new Set([
   'uid', 'enabled', 'radiusKm', 'latitude', 'longitude', 'source',
@@ -42,6 +42,7 @@ const ownDocumentRoots = new Set([
   'mobilizationAssignments', 'operationAccess', 'historicalActionAccess',
   'engagements', 'professionalAdmissions', 'professionalTargeting',
   'notificationPreferences', 'notificationDeliveries',
+  'notifications', 'professionalRegistrationPermits', 'termsAcceptances',
   'professionalSolicitationJournal', 'pushSubscriptions',
 ]);
 const uidFields = new Set([
@@ -96,8 +97,9 @@ function projection(data, allowed) {
 
 function isOwnDocument(doc, uid, root, fields) {
   if (!ownDocumentRoots.has(root)) return false;
-  if (['volunteers', 'roles', 'notificationPreferences',
-    'professionalTargeting'].includes(root)) {
+    if (['volunteers', 'roles', 'notificationPreferences',
+    'professionalTargeting', 'professionalRegistrationPermits',
+    'termsAcceptances'].includes(root)) {
     return doc.path === `${root}/${uid}`;
   }
   return fields.some((field) => {
@@ -137,7 +139,7 @@ export function buildSubjectReview({uid, documents, authRecord = null}) {
       : root === 'professionalTargeting' ? targetingFields
         : root === 'notificationPreferences' ? preferenceFields
           : root === 'pushSubscriptions' ? pushSubscriptionFields
-            : root === 'notificationDeliveries' ? notificationFields
+            : ['notificationDeliveries', 'notifications'].includes(root) ? notificationFields
               : relationshipFields;
     const safe = projection(doc.data, allowed);
     for (const key of ['uid', 'volunteerId', 'professionalUid', 'recipientUid']) {

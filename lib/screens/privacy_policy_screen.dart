@@ -47,18 +47,49 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     _PrivacyHeader(),
                     SizedBox(height: 22),
                     _PrivacySection(
+                      icon: Icons.info_outline,
+                      title: 'MobSanté Beta V1',
+                      paragraphs: [
+                        'MobSanté aide à mobiliser des professionnels de santé '
+                            'vérifiés pour des Actions et missions. La Beta est '
+                            'gratuite, fermée et accessible sur invitation. '
+                            'La découverte des seules informations publiques '
+                            'autorisées peut rester accessible sans admission.',
+                        'Éditeur et responsable du traitement : Marc Bouyssou. '
+                            'Aucune donnée patient ne doit être saisie. '
+                            'MobSanté n’est pas présenté comme un dispositif médical.',
+                      ],
+                    ),
+                    SizedBox(height: 13),
+                    _PrivacySection(
                       icon: Icons.inventory_2_outlined,
                       title: 'Données collectées',
                       paragraphs: [
                         'Selon votre rôle, MobSanté traite les informations de '
                             'compte et de profil : identité, coordonnées, '
-                            'profession, identifiant professionnel, statut de '
+                            'profession, RPPS ou autre identifiant professionnel, statut de '
                             'vérification, CPTS et matériel déclaré lorsque ces '
                             'champs sont renseignés.',
                         'Le service enregistre aussi les rôles, invitations, '
                             'Actions, missions, engagements et statuts associés. '
                             'Les notifications, abonnements push et journaux '
-                            'techniques utilisent des identifiants et des dates.',
+                            'techniques utilisent des identifiants et des dates. '
+                            'Le point privé de ciblage, si activé, reste facultatif.',
+                      ],
+                    ),
+                    SizedBox(height: 13),
+                    _PrivacySection(
+                      icon: Icons.gavel_outlined,
+                      title: 'Bases envisagées pour la Beta',
+                      paragraphs: [
+                        'Compte, profil, RPPS et participation : nécessité du '
+                            'service liée aux CGU Beta envisagée. Sécurité et '
+                            'journaux nécessaires : intérêt légitime envisagé, '
+                            'sous réserve d’une mise en balance documentée.',
+                        'Notifications facultatives et futur ciblage par point '
+                            'géographique : choix explicite et révocable. '
+                            'Cette matrice est une proposition à valider '
+                            'juridiquement avant l’ouverture.',
                       ],
                     ),
                     SizedBox(height: 13),
@@ -84,9 +115,19 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.schedule_outlined,
                       title: 'Durées de conservation',
                       paragraphs: [
-                        'Aucune purge automatique par catégorie n’est actuellement '
-                            'configurée. Les durées et critères de conservation '
-                            'doivent être validés avant l’ouverture de la bêta.',
+                        'Compte et profil : pendant la participation, avec réexamen '
+                            'après 12 mois d’inactivité. Invitation expirée : '
+                            'proposition de 30 jours après expiration, sauf audit '
+                            'justifié. Abonnement push et point privé : jusqu’à '
+                            'désactivation, retrait ou fermeture.',
+                        'Journaux techniques : proposition de 90 jours par défaut. '
+                            'Participation à une Action terminée : proposition '
+                            'de 12 mois nominatifs puis revue pour détachement '
+                            'ou anonymisation. Une démonstration ultérieure '
+                            'doit être sans données personnelles réelles.',
+                        'Ces durées sont des propositions à valider juridiquement. '
+                            'Aucune purge automatique par catégorie n’est '
+                            'actuellement configurée.',
                         'Les exports CSV de gestion produits par l’administration '
                             'ne sont pas un export individuel déclenchable par les '
                             'professionnels dans l’application.',
@@ -111,10 +152,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.contact_mail_outlined,
                       title: 'Exercer vos droits',
                       paragraphs: [
-                        'Une demande peut être signalée à l’administration '
-                            'MobSanté ou à l’organisation qui vous a invité. '
-                            'Un canal de contact dédié doit être confirmé avant '
-                            'l’ouverture de la bêta. Une preuve d’identité ne sera '
+                        'Contact : confidentialite@mobsante.fr (fonctionnement '
+                            'à confirmer avant l’ouverture). Les demandes sont '
+                            'traitées par un opérateur habilité. Une preuve d’identité ne sera '
                             'demandée que si elle est nécessaire pour sécuriser '
                             'la demande.',
                       ],
@@ -127,7 +167,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
                         'Le client Web est servi par Netlify. Les comptes, données '
                             'et notifications utilisent Firebase / Google Cloud. '
                             'Des courriels d’invitation peuvent être envoyés '
-                            'par Resend.',
+                            'par Resend. Ces fournisseurs actuels comportent '
+                            'des dépendances américaines ; les lieux de traitement, '
+                            'sous-traitants et éventuels transferts doivent être '
+                            'validés contractuellement. IGN intervient seulement '
+                            'lorsqu’un géocodage est utilisé.',
                       ],
                     ),
                   ],

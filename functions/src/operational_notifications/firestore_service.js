@@ -18,6 +18,13 @@ import {
   ensureCanonicalSolicitationEntry,
 } from './solicitation_journal.js';
 
+// Operator-controlled incident pause. New events remain persisted for review;
+// resumption requires an explicit replay plan for events created while paused.
+export async function operationalNotificationsPaused(firestore) {
+  const config = await firestore.doc('platform/config').get();
+  return config.data()?.notificationDispatchPaused === true;
+}
+
 export async function persistCanonicalEvents({firestore, events}) {
   if (events.length === 0) return;
   await firestore.runTransaction(async (transaction) => {

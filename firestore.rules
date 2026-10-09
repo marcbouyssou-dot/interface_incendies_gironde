@@ -760,6 +760,38 @@ service cloud.firestore {
         && validOptionalProfessionalConsentRecords(request.resource.data);
     }
 
+    // Invited registration is already bound to a verified Auth identity and a
+    // server permit. Keep this create check small enough for the rules engine;
+    // the full schema check still applies to every later owner update.
+    function validInvitedVolunteerData(uid) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+          'rpps', 'professionalIdType', 'professionalIdValue',
+          'cptsId', 'cptsLabel', 'equipment', 'otherEquipmentDetails',
+          'professionalAddressLine1', 'professionalAddressLine2',
+          'professionalPostalCode', 'professionalCity',
+          'professionalCountryCode', 'verificationStatus',
+          'profileSchemaVersion', 'competencies',
+          'mobilizationPreferences', 'communicationPreferences',
+          'consentRecords', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'uid', 'profession', 'firstName', 'lastName', 'phone', 'email',
+          'equipment', 'createdAt', 'updatedAt'
+        ])
+        && data.uid == uid
+        && validProfileProfession(data.profession)
+        && data.firstName is string
+        && data.lastName is string
+        && data.phone is string
+        && data.email is string
+        && data.email.size() > 0
+        && data.email == request.auth.token.email
+        && data.equipment is list
+        && validProfessionalIdentity(data);
+    }
+
     function platformAdministratorPath(uid) {
       return /databases/$(database)/documents/platformAdministrators/$(uid);
     }
@@ -1406,6 +1438,26 @@ service cloud.firestore {
         : 'open';
     }
 
+    function requiredCguVersion() {
+      return get(platformConfigPath()).data.get('mandatoryCguVersion', 'beta-v1');
+    }
+
+    function hasAcceptedCurrentCgu() {
+      return isSignedIn()
+        && request.auth.token.get('cguVersion', '') == requiredCguVersion();
+    }
+
+    function validProfessionalRegistrationPermit(uid) {
+      let permitPath = /databases/$(database)/documents/professionalRegistrationPermits/$(uid);
+      let permit = get(permitPath).data;
+      return permit.get('uid', '') == uid
+        && permit.get('verifiedAuthEmail', '') == request.auth.token.email
+        && permit.get('expiresAt', request.time) > request.time
+        && permit.get('revoked', false) == false
+        && canonicalProfession(request.resource.data.profession)
+          == permit.get('expectedProfession', '');
+    }
+
     function professionalAdmissionPath(operationId) {
       return /databases/$(database)/documents/professionalAdmissions/$(operationId + '_' + request.auth.uid);
     }
@@ -1414,6 +1466,7 @@ service cloud.firestore {
       let path = professionalAdmissionPath(operationId);
       let admission = get(path).data;
       return isSignedIn()
+        && hasAcceptedCurrentCgu()
         && operationId is string
         && operationId.size() > 0
         && admission.get('uid', '') == request.auth.uid
@@ -1443,6 +1496,7 @@ service cloud.firestore {
       let scope = profile.get('admissionScopes', {}).get(operationId, {});
       return mode == 'open'
         || (mode == 'invitation_only'
+          && hasAcceptedCurrentCgu()
           && scope.get('status', '') == 'active'
           && scope.get('profession', '') == profile.profession
           && scope.get('organizationId', '') == operationOwnerOrganizationId(
@@ -1594,6 +1648,8 @@ service cloud.firestore {
         && engagement.get('mobilizationId', '') == mobilizationId
         && profile.get('verificationStatus', '') == 'verified'
         && mobilization.get('status', '') == 'active'
+        && (professionalAdmissionMode() != 'invitation_only'
+          || hasAcceptedCurrentCgu())
         && !isHistoricalMobilizationData(mobilization);
     }
 
@@ -1803,6 +1859,7 @@ service cloud.firestore {
       let admission = get(admissionPath).data;
       return isSignedIn()
         && isCompleteVerifiedProfile(profile)
+        && hasAcceptedCurrentCgu()
         && mobilization.get('status', '') == 'active'
         && operation.get('status', '') == 'active'
         && operation.get('purpose', 'operational') == 'operational'
@@ -2272,7 +2329,13 @@ service cloud.firestore {
     match /volunteers/{uid} {
       allow create: if isVolunteerOwner(uid)
         && canUseProfessionalOwnerWritePath()
-        && validVolunteerData(uid)
+        && (professionalAdmissionMode() == 'open'
+          ? validVolunteerData(uid)
+          : (professionalAdmissionMode() == 'invitation_only'
+            && request.auth.token.email_verified == true
+            && exists(/databases/$(database)/documents/professionalRegistrationPermits/$(uid))
+            && validProfessionalRegistrationPermit(uid)
+            && validInvitedVolunteerData(uid)))
         && !('admissionScopes' in request.resource.data)
         && isUnverifiedProfile(request.resource.data)
         && request.resource.data.createdAt == request.time
@@ -2663,10 +2726,19 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /professionalRegistrationPermits/{uid} {
+      allow read, write: if false;
+    }
+
     match /professionalAdmissions/{admissionId} {
       allow get, list: if isSignedIn()
         && resource.data.get('uid', '') == request.auth.uid;
       allow create, update, delete: if false;
+    }
+
+    match /termsAcceptances/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
     }
 
     match /historicalActionAccessAudit/{eventId} {

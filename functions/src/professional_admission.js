@@ -38,6 +38,13 @@ function invitationIdFor(code) {
   return createHash('sha256').update(code).digest('hex');
 }
 
+function requireInvitationCode(code) {
+  if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(code)) {
+    throw new ProfessionalAdmissionError('permission-denied', 'Invitation indisponible.');
+  }
+  return invitationIdFor(code);
+}
+
 function requireCaller(uid) {
   if (typeof uid !== 'string' || uid.length === 0) {
     throw new ProfessionalAdmissionError('unauthenticated', 'Session requise.');
@@ -59,12 +66,23 @@ async function requireInvitationMode(db) {
   }
 }
 
+async function requireInvitationPreparationMode(db) {
+  const config = await db.doc('platform/config').get();
+  const configuredMode = config.data()?.admissionMode;
+  const mode = configuredMode === undefined ? 'open' : configuredMode;
+  if (mode !== 'open' && mode !== 'invitation_only') {
+    throw new ProfessionalAdmissionError('failed-precondition', 'Mode d’admission invalide.');
+  }
+}
+
 // The returned 256-bit code is shown once to the administrator. Only its
 // SHA-256 digest is persisted. The verified Auth email, never the profile
 // email or the code alone, proves recipient ownership at redemption.
 export async function createProfessionalInvitation({db, callerUid, data}) {
   await requireAdministrator(db, callerUid);
-  await requireInvitationMode(db);
+  // Administrators may stage invitations before the admission cutover.
+  // Redemption and operational access remain gated by invitation_only.
+  await requireInvitationPreparationMode(db);
   const organizationId = requireId(data?.organizationId);
   const operationId = requireId(data?.operationId);
   const expectedProfession = canonicalAdmissionProfession(data?.expectedProfession);
@@ -106,29 +124,75 @@ export async function createProfessionalInvitation({db, callerUid, data}) {
     revokedAt: null,
     revokedBy: null,
     provenance: 'professional_admission_v1',
+    deliveryStatus: 'pending',
   });
   return {invitationId, code};
+}
+
+export async function sendProfessionalInvitationEmail({
+  db, callerUid, data, notificationService, appUrl,
+}) {
+  await requireAdministrator(db, callerUid);
+  const invitationId = requireInvitationCode(data?.code);
+  if (!notificationService || typeof notificationService.send !== 'function'
+    || typeof appUrl !== 'string' || !/^https?:\/\//.test(appUrl)) {
+    throw new ProfessionalAdmissionError('failed-precondition', 'Envoi indisponible.');
+  }
+  const invitationRef = db.collection('professionalInvitations').doc(invitationId);
+  const invitation = (await invitationRef.get()).data();
+  if (!invitation || invitation.status !== 'valid'
+    || !invitation.expiresAt?.toMillis
+    || invitation.expiresAt.toMillis() <= Date.now()) {
+    throw new ProfessionalAdmissionError('failed-precondition', 'Invitation indisponible.');
+  }
+  if (invitation.deliveryStatus === 'sent') return {alreadySent: true};
+  try {
+    const result = await notificationService.send({
+      channel: 'email',
+      recipient: invitation.targetEmailNormalized,
+      subject: 'Votre invitation MobSanté',
+      text: `Vous êtes invité(e) à rejoindre une Action MobSanté.\n\n` +
+        `Ouvrez ${appUrl} et saisissez ce code personnel : ${data.code}\n\n` +
+        `Ce code expire le ${invitation.expiresAt.toDate().toISOString()}. ` +
+        `Ne le transférez pas. Aucune donnée de santé patient ne doit être envoyée par e-mail.`,
+    }, {idempotencyKey: `professional-invitation:${invitationId}`});
+    await invitationRef.update({
+      deliveryStatus: 'sent', deliveredAt: Timestamp.now(),
+      deliveryProvider: result.provider,
+    });
+    return {alreadySent: false};
+  } catch {
+    await invitationRef.update({deliveryStatus: 'failed', deliveryFailedAt: Timestamp.now()});
+    throw new ProfessionalAdmissionError('unavailable', 'L’e-mail n’a pas pu être envoyé.');
+  }
 }
 
 export async function redeemProfessionalInvitation({db, auth, callerUid, data}) {
   requireCaller(callerUid);
   await requireInvitationMode(db);
-  const code = data?.code;
-  if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(code)) {
-    throw new ProfessionalAdmissionError('permission-denied', 'Invitation indisponible.');
-  }
+  const invitationId = requireInvitationCode(data?.code);
   const identity = await auth.getUser(callerUid);
   const verifiedEmail = normalizeProfessionalInvitationEmail(identity.email);
   if (identity.disabled || !identity.emailVerified || !verifiedEmail) {
     throw new ProfessionalAdmissionError('permission-denied', 'Compte avec adresse e-mail vérifiée requis.');
   }
-  const invitationId = invitationIdFor(code);
   const invitationRef = db.collection('professionalInvitations').doc(invitationId);
   const profileRef = db.collection('volunteers').doc(callerUid);
   return db.runTransaction(async (transaction) => {
-    const [invitationSnapshot, profileSnapshot] = await Promise.all([
+    const [invitationSnapshot, profileSnapshot, acceptanceSnapshot,
+      configSnapshot] = await Promise.all([
       transaction.get(invitationRef), transaction.get(profileRef),
+      transaction.get(db.collection('termsAcceptances').doc(callerUid)),
+      transaction.get(db.doc('platform/config')),
     ]);
+    const requiredVersion = configSnapshot.data()?.mandatoryCguVersion ?? 'beta-v1';
+    if (acceptanceSnapshot.data()?.uid !== callerUid
+      || acceptanceSnapshot.data()?.acceptedVersion !== requiredVersion
+      || !acceptanceSnapshot.data()?.acceptedAt) {
+      throw new ProfessionalAdmissionError(
+        'failed-precondition', 'Acceptez les CGU Beta en vigueur avant de valider l’invitation.',
+      );
+    }
     const invitation = invitationSnapshot.data();
     const profile = profileSnapshot.data();
     if (!invitation || !invitation.targetEmailNormalized
@@ -160,6 +224,10 @@ export async function redeemProfessionalInvitation({db, auth, callerUid, data}) 
     }
     const operationRef = db.collection('operations').doc(invitation.operationId);
     const operation = (await transaction.get(operationRef)).data();
+    const permitRef = invitation.preparedBy === callerUid
+      ? db.collection('professionalRegistrationPermits').doc(callerUid)
+      : null;
+    const permit = permitRef ? (await transaction.get(permitRef)).data() : null;
     if (!operation
       || operation.ownerOrganizationId !== invitation.organizationId
       || operation.status !== 'active'
@@ -170,6 +238,9 @@ export async function redeemProfessionalInvitation({db, auth, callerUid, data}) 
     transaction.update(invitationRef, {
       status: 'consumed', consumedAt: now, consumedBy: callerUid,
     });
+    if (permit?.invitationId === invitationId) {
+      transaction.update(permitRef, {revoked: true, consumedAt: now});
+    }
     transaction.set(admissionRef, {
       uid: callerUid,
       organizationId: invitation.organizationId,
@@ -197,6 +268,77 @@ export async function redeemProfessionalInvitation({db, auth, callerUid, data}) 
   });
 }
 
+export async function acceptBetaTerms({db, auth, callerUid, data}) {
+  requireCaller(callerUid);
+  const identity = await auth.getUser(callerUid);
+  if (identity.disabled || !identity.emailVerified || !identity.email) {
+    throw new ProfessionalAdmissionError('permission-denied', 'Compte avec adresse e-mail vérifiée requis.');
+  }
+  const config = await db.doc('platform/config').get();
+  const requiredVersion = config.data()?.mandatoryCguVersion ?? 'beta-v1';
+  if (data?.version !== requiredVersion) {
+    throw new ProfessionalAdmissionError('failed-precondition', 'Mettez l’application à jour pour accepter les CGU.');
+  }
+  await db.collection('termsAcceptances').doc(callerUid).set({
+    uid: callerUid, acceptedVersion: requiredVersion,
+    acceptedAt: Timestamp.now(),
+  });
+  await auth.setCustomUserClaims(callerUid, {
+    ...(identity.customClaims ?? {}), cguVersion: requiredVersion,
+  });
+  return {acceptedVersion: requiredVersion};
+}
+
+// A verified invitee may prepare an unverified profile before RPPS verification.
+// The permit is bound to this UID; revocation updates it in the same transaction
+// as the invitation. Firestore rules enforce its expiry and revoked state.
+export async function prepareProfessionalRegistration({db, auth, callerUid, data}) {
+  requireCaller(callerUid);
+  await requireInvitationMode(db);
+  const invitationId = requireInvitationCode(data?.code);
+  const identity = await auth.getUser(callerUid);
+  const verifiedEmail = normalizeProfessionalInvitationEmail(identity.email);
+  if (identity.disabled || !identity.emailVerified || !verifiedEmail) {
+    throw new ProfessionalAdmissionError('permission-denied', 'Compte avec adresse e-mail vérifiée requis.');
+  }
+  const invitationRef = db.collection('professionalInvitations').doc(invitationId);
+  const permitRef = db.collection('professionalRegistrationPermits').doc(callerUid);
+  return db.runTransaction(async (transaction) => {
+    const [invitationSnapshot, profileSnapshot] = await Promise.all([
+      transaction.get(invitationRef),
+      transaction.get(db.collection('volunteers').doc(callerUid)),
+    ]);
+    const invitation = invitationSnapshot.data();
+    if (!invitation || invitation.status !== 'valid'
+      || invitation.targetEmailNormalized !== verifiedEmail
+      || !invitation.expiresAt?.toMillis
+      || invitation.expiresAt.toMillis() <= Date.now()
+      || !canonicalAdmissionProfession(invitation.expectedProfession)
+      || (invitation.preparedBy && invitation.preparedBy !== callerUid)
+      || profileSnapshot.exists) {
+      throw new ProfessionalAdmissionError('permission-denied', 'Invitation indisponible.');
+    }
+    const operation = (await transaction.get(
+      db.collection('operations').doc(invitation.operationId))).data();
+    if (!operation || operation.ownerOrganizationId !== invitation.organizationId
+      || operation.status !== 'active'
+      || (operation.purpose ?? 'operational') !== 'operational') {
+      throw new ProfessionalAdmissionError('failed-precondition', 'Action indisponible.');
+    }
+    transaction.set(permitRef, {
+      uid: callerUid,
+      verifiedAuthEmail: identity.email,
+      invitationId,
+      expectedProfession: invitation.expectedProfession,
+      expiresAt: invitation.expiresAt,
+      preparedAt: Timestamp.now(),
+      revoked: false,
+    });
+    transaction.update(invitationRef, {preparedBy: callerUid});
+    return {operationId: invitation.operationId};
+  });
+}
+
 export async function getProfessionalInvitationStatus({db, callerUid, data}) {
   await requireAdministrator(db, callerUid);
   const invitationId = requireId(data?.invitationId);
@@ -212,10 +354,29 @@ export async function getProfessionalInvitationStatus({db, callerUid, data}) {
     operationId: invitation.operationId,
     expectedProfession: invitation.expectedProfession,
     status: invitation.status,
+    deliveryStatus: invitation.deliveryStatus ?? 'unknown',
     expiresAt: invitation.expiresAt?.toDate().toISOString() ?? null,
     consumedAt: invitation.consumedAt?.toDate().toISOString() ?? null,
     revokedAt: invitation.revokedAt?.toDate().toISOString() ?? null,
   };
+}
+
+export async function listProfessionalInvitations({db, callerUid}) {
+  await requireAdministrator(db, callerUid);
+  const snapshot = await db.collection('professionalInvitations')
+    .orderBy('createdAt', 'desc').limit(50).get();
+  return {invitations: snapshot.docs.map((document) => {
+    const invitation = document.data();
+    return {
+      invitationId: document.id,
+      targetEmailNormalized: invitation.targetEmailNormalized ?? null,
+      operationId: invitation.operationId ?? null,
+      expectedProfession: invitation.expectedProfession ?? null,
+      status: invitation.status ?? 'unknown',
+      deliveryStatus: invitation.deliveryStatus ?? 'unknown',
+      expiresAt: invitation.expiresAt?.toDate().toISOString() ?? null,
+    };
+  })};
 }
 
 export async function revokeProfessionalInvitation({db, callerUid, data}) {
@@ -237,11 +398,18 @@ export async function revokeProfessionalInvitation({db, callerUid, data}) {
       ? db.collection('volunteers').doc(invitation.consumedBy)
       : null;
     const profile = profileRef ? (await transaction.get(profileRef)).data() : null;
+    const permitRef = invitation.preparedBy
+      ? db.collection('professionalRegistrationPermits').doc(invitation.preparedBy)
+      : null;
+    const permit = permitRef ? (await transaction.get(permitRef)).data() : null;
     if (invitation.status === 'revoked') return {revoked: true};
     const now = Timestamp.now();
     transaction.update(invitationRef, {
       status: 'revoked', revokedAt: now, revokedBy: callerUid,
     });
+    if (permit?.invitationId === invitationId) {
+      transaction.update(permitRef, {revoked: true, revokedAt: now});
+    }
     if (admission?.sourceInvitationId === invitationId) {
       transaction.update(admissionRef, {
         status: 'revoked', revokedAt: now, revokedBy: callerUid,

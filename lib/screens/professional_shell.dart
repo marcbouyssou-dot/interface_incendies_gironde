@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../dev/role_preview.dart';
+import '../config/beta_terms.dart';
 import '../models/volunteer_profile.dart';
 import '../models/public_mission_discovery.dart';
 import '../repositories/live_data_scope.dart';
@@ -21,6 +22,7 @@ import 'development_settings_screen.dart';
 import 'professional_engagements_screen.dart';
 import 'professional_profile_screen.dart';
 import 'notification_center_screen.dart';
+import 'information_consent_screen.dart';
 import 'slots_screen.dart';
 
 class ProfessionalShell extends StatefulWidget {
@@ -161,9 +163,11 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
                   admission.mode == ProfessionalAdmissionMode.invitationOnly,
               verified: verified,
               hasProfile: snapshot.data != null,
-              onUseInvitation: snapshot.data == null
-                  ? () => _selectTab(2)
-                  : _useInvitation,
+              onUseInvitation: _useInvitation,
+              onAcceptTerms:
+                  admission.operationIds.isNotEmpty && !admission.termsAccepted
+                  ? _acceptUpdatedTerms
+                  : null,
               onCompleteProfile: () => _selectTab(2),
               publicMissions: _publicMissions,
             );
@@ -181,10 +185,13 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   Future<void> _useInvitation() async {
     final repository = RepositoryScope.of(context);
     if (repository is! ProfessionalAdmissionRepository) return;
+    final hasProfile = await repository.getVolunteerProfile() != null;
+    if (!mounted) return;
     final redeemed = await showDialog<bool>(
       context: context,
       builder: (_) => _ProfessionalInvitationDialog(
         repository: repository as ProfessionalAdmissionRepository,
+        hasProfile: hasProfile,
       ),
     );
     if (!mounted) return;
@@ -194,11 +201,29 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
       _screens[2] = _createScreen(2);
     });
     if (redeemed == true) {
+      if (!hasProfile) _selectTab(2);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invitation enregistrée pour cette Action.'),
+        SnackBar(
+          content: Text(
+            hasProfile
+                ? 'Invitation enregistrée pour cette Action.'
+                : 'Invitation vérifiée. Complétez votre profil, puis confirmez votre RPPS et revenez valider l’invitation.',
+          ),
         ),
       );
+    }
+  }
+
+  Future<void> _acceptUpdatedTerms() async {
+    final repository = RepositoryScope.of(context);
+    if (repository is! BetaTermsAcceptanceRepository) return;
+    final termsRepository = repository as BetaTermsAcceptanceRepository;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (_) => _BetaTermsDialog(repository: termsRepository),
+    );
+    if (accepted == true && mounted) {
+      setState(() => _admission = _admissionStream(repository));
     }
   }
 
@@ -296,14 +321,89 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
   }
 }
 
+class _BetaTermsDialog extends StatefulWidget {
+  const _BetaTermsDialog({required this.repository});
+
+  final BetaTermsAcceptanceRepository repository;
+
+  @override
+  State<_BetaTermsDialog> createState() => _BetaTermsDialogState();
+}
+
+class _BetaTermsDialogState extends State<_BetaTermsDialog> {
+  bool _checked = false;
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _accept() async {
+    setState(() => _busy = true);
+    try {
+      await widget.repository.acceptCurrentBetaTerms();
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _error = error is StateError
+              ? 'Mettez l’application à jour pour accepter les CGU.'
+              : 'Acceptation indisponible. Réessayez.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('CGU Beta V1'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'Votre accès à l’Action nécessite l’acceptation des CGU en vigueur.',
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).push(
+            AppPageRoute<void>(
+              builder: (_) => const InformationConsentScreen(),
+            ),
+          ),
+          child: const Text('Lire les CGU Beta'),
+        ),
+        CheckboxListTile(
+          value: _checked,
+          onChanged: _busy
+              ? null
+              : (value) => setState(() => _checked = value == true),
+          title: const Text('J’accepte les CGU Beta V1'),
+          subtitle: const Text('Version ${BetaTerms.version}'),
+        ),
+        if (_error != null) Text(_error!),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+        child: const Text('Plus tard'),
+      ),
+      FilledButton(
+        onPressed: _busy || !_checked ? null : _accept,
+        child: const Text('Accepter'),
+      ),
+    ],
+  );
+}
+
 class _ProfessionalInvitationDialog extends StatefulWidget {
   const _ProfessionalInvitationDialog({
     required this.repository,
     this.invitationRequired = true,
+    this.hasProfile = true,
   });
 
   final ProfessionalAdmissionRepository repository;
   final bool invitationRequired;
+  final bool hasProfile;
 
   @override
   State<_ProfessionalInvitationDialog> createState() =>
@@ -320,6 +420,7 @@ class _ProfessionalInvitationDialogState
   bool _busy = false;
   bool _recoveringPassword = false;
   bool _recoveryRequested = false;
+  bool _termsChecked = false;
 
   @override
   void initState() {
@@ -338,7 +439,15 @@ class _ProfessionalInvitationDialogState
   Future<void> _refreshIdentity() async {
     try {
       final identity = await widget.repository.professionalEmailIdentity();
-      if (mounted) setState(() => _identity = identity);
+      if (mounted) {
+        setState(() {
+          if (_identity?.email != identity.email ||
+              _identity?.isAnonymous != identity.isAnonymous) {
+            _termsChecked = false;
+          }
+          _identity = identity;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _message = 'Session indisponible. Réessayez.');
@@ -368,7 +477,19 @@ class _ProfessionalInvitationDialogState
       return;
     }
     await _perform(() async {
-      await widget.repository.redeemProfessionalInvitation(_code.text.trim());
+      if (!_termsChecked ||
+          widget.repository is! BetaTermsAcceptanceRepository) {
+        throw StateError('Acceptez les CGU Beta avant de continuer.');
+      }
+      await (widget.repository as BetaTermsAcceptanceRepository)
+          .acceptCurrentBetaTerms();
+      if (widget.hasProfile) {
+        await widget.repository.redeemProfessionalInvitation(_code.text.trim());
+      } else {
+        await widget.repository.prepareProfessionalRegistration(
+          _code.text.trim(),
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     });
   }
@@ -420,7 +541,8 @@ class _ProfessionalInvitationDialogState
           else if (widget.invitationRequired) ...[
             const Text(
               'Cette invitation est personnelle. Connectez-vous avec '
-              'l’adresse vérifiée du destinataire, puis complétez votre profil professionnel.',
+              'l’adresse vérifiée du destinataire. Préparez ensuite votre profil '
+              'et confirmez votre RPPS avant de valider l’accès à l’Action.',
             ),
             const SizedBox(height: 12),
             TextField(
@@ -544,6 +666,28 @@ class _ProfessionalInvitationDialogState
                   : () => _perform(widget.repository.signOutProfessionalEmail),
               child: const Text('Changer de compte'),
             ),
+            if (widget.invitationRequired && identity.emailVerified) ...[
+              TextButton(
+                key: const Key('professional-read-beta-terms'),
+                onPressed: () => Navigator.of(context).push(
+                  AppPageRoute<void>(
+                    builder: (_) => const InformationConsentScreen(),
+                  ),
+                ),
+                child: const Text('Lire les CGU Beta'),
+              ),
+              CheckboxListTile(
+                key: const Key('professional-accept-beta-terms'),
+                value: _termsChecked,
+                onChanged: _busy
+                    ? null
+                    : (value) => setState(() => _termsChecked = value == true),
+                title: const Text('J’accepte les CGU Beta V1'),
+                subtitle: const Text('Version ${BetaTerms.version}'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
           ],
           if (_message != null) ...[
             const SizedBox(height: 8),
@@ -558,10 +702,11 @@ class _ProfessionalInvitationDialogState
         ),
         if (widget.invitationRequired && !_recoveringPassword)
           FilledButton(
-            onPressed: _busy || identity?.emailVerified != true
+            onPressed:
+                _busy || identity?.emailVerified != true || !_termsChecked
                 ? null
                 : _redeem,
-            child: const Text('Valider'),
+            child: Text(widget.hasProfile ? 'Valider' : 'Préparer mon profil'),
           ),
       ],
     );
@@ -575,6 +720,7 @@ class _ProfessionalDiscoveryState extends StatelessWidget {
     required this.verified,
     required this.hasProfile,
     required this.onUseInvitation,
+    required this.onAcceptTerms,
     required this.onCompleteProfile,
     required this.publicMissions,
   });
@@ -584,6 +730,7 @@ class _ProfessionalDiscoveryState extends StatelessWidget {
   final bool verified;
   final bool hasProfile;
   final VoidCallback onUseInvitation;
+  final VoidCallback? onAcceptTerms;
   final VoidCallback onCompleteProfile;
   final Stream<List<PublicMissionDiscovery>> publicMissions;
 
@@ -622,10 +769,20 @@ class _ProfessionalDiscoveryState extends StatelessWidget {
                     if (!hasProfile) ...[
                       const SizedBox(height: V5Spacing.xs),
                       const Text(
-                        'Enregistrez votre profil professionnel avant d’utiliser votre code d’invitation.',
+                        'Utilisez votre code d’invitation avant de créer votre profil professionnel.',
                       ),
                     ],
                     const SizedBox(height: V5Spacing.sm),
+                    if (onAcceptTerms != null) ...[
+                      const Text(
+                        'Une acceptation des CGU Beta en vigueur est requise pour accéder à votre Action.',
+                      ),
+                      FilledButton(
+                        key: const Key('professional-reaccept-beta-terms'),
+                        onPressed: onAcceptTerms,
+                        child: const Text('Accepter les CGU en vigueur'),
+                      ),
+                    ],
                     OutlinedButton(
                       key: const Key('professional-use-invitation'),
                       onPressed: onUseInvitation,

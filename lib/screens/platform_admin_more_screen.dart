@@ -9,6 +9,7 @@ import '../widgets/professional_page_header.dart';
 import '../widgets/v5_form_system.dart';
 import 'notification_center_screen.dart';
 import 'platform_admin_profile_screen.dart';
+import 'platform_admin_professional_invitations_screen.dart';
 
 class PlatformAdminMoreScreen extends StatefulWidget {
   const PlatformAdminMoreScreen({
@@ -50,6 +51,14 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
         builder: (_) => PlatformAdminProfileScreen(
           administrationService: widget.administrationService,
         ),
+      ),
+    );
+  }
+
+  void _openProfessionalInvitations() {
+    Navigator.of(context).push(
+      AppPageRoute<void>(
+        builder: (_) => const PlatformAdminProfessionalInvitationsScreen(),
       ),
     );
   }
@@ -131,6 +140,15 @@ class _PlatformAdminMoreScreenState extends State<PlatformAdminMoreScreen> {
                         label: 'Profil',
                         accent: accent,
                         onTap: _openProfile,
+                      ),
+                      _MoreRow(
+                        key: const Key(
+                          'platform-admin-professional-invitations',
+                        ),
+                        icon: Icons.mail_outline,
+                        label: 'Invitations Professionnels',
+                        accent: accent,
+                        onTap: _openProfessionalInvitations,
                       ),
                     ],
                   ),

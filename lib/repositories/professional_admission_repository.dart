@@ -4,13 +4,21 @@ class ProfessionalAdmissionState {
   const ProfessionalAdmissionState({
     required this.mode,
     this.operationIds = const {},
+    this.termsAccepted = true,
   });
 
   final ProfessionalAdmissionMode mode;
   final Set<String> operationIds;
+  final bool termsAccepted;
 
   bool get canReadOperationalData =>
-      mode == ProfessionalAdmissionMode.open || operationIds.isNotEmpty;
+      mode == ProfessionalAdmissionMode.open ||
+      (termsAccepted && operationIds.isNotEmpty);
+}
+
+/// Terms acceptance is separate from optional notification and location consent.
+abstract interface class BetaTermsAcceptanceRepository {
+  Future<void> acceptCurrentBetaTerms();
 }
 
 class ProfessionalEmailIdentity {
@@ -31,6 +39,8 @@ abstract interface class ProfessionalAdmissionRepository {
   Stream<ProfessionalAdmissionState> watchProfessionalAdmission();
 
   Future<void> redeemProfessionalInvitation(String code);
+
+  Future<void> prepareProfessionalRegistration(String code);
 
   Future<ProfessionalEmailIdentity> professionalEmailIdentity();
 

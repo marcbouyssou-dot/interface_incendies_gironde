@@ -15,7 +15,15 @@ import {
 import {
   deliveryClaimDecision,
   isInvalidToken,
+  operationalNotificationsPaused,
 } from '../src/operational_notifications/firestore_service.js';
+
+test('operator notification pause is explicit and fails to active only for true', async () => {
+  const firestore = (value) => ({doc: () => ({get: async () => ({data: () => value})})});
+  assert.equal(await operationalNotificationsPaused(firestore({notificationDispatchPaused: true})), true);
+  assert.equal(await operationalNotificationsPaused(firestore({notificationDispatchPaused: false})), false);
+  assert.equal(await operationalNotificationsPaused(firestore({})), false);
+});
 
 const timestamp = (milliseconds) => ({toMillis: () => milliseconds});
 const now = Date.UTC(2026, 7, 15, 12);

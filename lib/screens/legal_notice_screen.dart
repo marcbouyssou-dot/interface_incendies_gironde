@@ -163,6 +163,24 @@ class _LegalInformationPanel extends StatelessWidget {
       child: Column(
         children: [
           _LegalInformationRow(
+            icon: Icons.person_outline,
+            title: 'Éditeur',
+            content: 'Marc Bouyssou',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Responsable du traitement',
+            content: 'Marc Bouyssou',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.email_outlined,
+            title: 'Contact confidentialité',
+            content: 'confidentialite@mobsante.fr',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
             icon: Icons.cloud_outlined,
             title: 'Hébergement du client Web',
             content: 'Netlify, Inc. — mobsante.netlify.app',
