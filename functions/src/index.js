@@ -77,6 +77,10 @@ import {
   confirmProfessionalRpps as confirmProfessionalRppsRequest,
 } from './confirm_professional_rpps.js';
 import {
+  claimVerifiedProfessionalIdentity,
+  ProfessionalIdentityClaimError,
+} from './professional_identity_claims.js';
+import {
   ProfessionalAdmissionError,
   createProfessionalInvitation as createProfessionalInvitationRequest,
   getProfessionalInvitationStatus as getProfessionalInvitationStatusRequest,
@@ -336,6 +340,9 @@ const resendApiKey = isFunctionsEmulator
 const ansRppsApiKey = isFunctionsEmulator
   ? null
   : defineSecret('ESANTE_API_KEY');
+const professionalClaimKey = isFunctionsEmulator
+  ? null
+  : defineSecret('PROFESSIONAL_IDENTITY_CLAIM_KEY');
 const injectedEmulatorFailures = new Set();
 const injectedEmulatorNotificationFailures = new Set();
 
@@ -634,7 +641,7 @@ export const confirmProfessionalRpps = onCall(
   {
     region: 'europe-west1',
     enforceAppCheck: true,
-    secrets: ansRppsApiKey === null ? [] : [ansRppsApiKey],
+    secrets: [ansRppsApiKey, professionalClaimKey].filter((value) => value !== null),
   },
   async (request) => professionalRppsVerificationCallable(() => {
     const firestore = getFirestore();
@@ -649,32 +656,13 @@ export const confirmProfessionalRpps = onCall(
           const snapshot = await firestore.collection('volunteers').doc(uid).get();
           return snapshot.exists ? snapshot.data() : null;
         },
-        persistVerifiedProfile: (uid, result, expectedProfession) => {
-          const reference = firestore.collection('volunteers').doc(uid);
-          return firestore.runTransaction(async (transaction) => {
-            const snapshot = await transaction.get(reference);
-            if (
-              !snapshot.exists
-              || snapshot.data()?.profession !== expectedProfession
-            ) {
-              return false;
-            }
-            transaction.update(reference, {
-              professionalIdType: 'rpps',
-              professionalIdValue: result.rpps,
-              rpps: result.rpps,
-              verificationStatus: 'verified',
-              verificationSource: 'ans_rpps',
-              verifiedFirstName: result.firstName,
-              verifiedLastName: result.lastName,
-              verifiedProfessionCode: result.professionCode,
-              verifiedProfessionLabel: result.professionLabel,
-              verifiedAt: FieldValue.serverTimestamp(),
-              updatedAt: FieldValue.serverTimestamp(),
-            });
-            return true;
-          });
-        },
+        persistVerifiedProfile: (uid, result, expectedProfession) =>
+          claimVerifiedProfessionalIdentity({
+            firestore, uid, result, expectedProfession,
+            secret: professionalClaimKey?.value()
+              ?? process.env.PROFESSIONAL_IDENTITY_CLAIM_KEY,
+            serverTimestamp: () => FieldValue.serverTimestamp(),
+          }),
       },
     });
   }),
@@ -1968,7 +1956,8 @@ async function professionalRppsVerificationCallable(action) {
   try {
     return await action();
   } catch (error) {
-    if (error instanceof ProfessionalRppsVerificationError) {
+    if (error instanceof ProfessionalRppsVerificationError
+      || error instanceof ProfessionalIdentityClaimError) {
       throw new HttpsError(error.code, error.message);
     }
     console.error('PROFESSIONAL_RPPS_VERIFICATION_FAILED', {

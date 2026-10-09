@@ -1469,7 +1469,22 @@ test('volunteers: owner create/update/read; other access denied', async () => {
   await assertFails(updateDoc(doc(db('bob'), 'volunteers/alice'), {phone: 'x'}));
 });
 
-test('RC3.8F.3: platform admin cannot use professional owner writes', async () => {
+test('professional identity claims are server-only, including reads and transfers', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'professionalIdentityClaims/synthetic-digest'), {
+      uid: 'alice', identityType: 'rpps',
+    });
+  });
+  const claim = doc(db('alice'), 'professionalIdentityClaims/synthetic-digest');
+  await assertFails(getDoc(claim));
+  await assertFails(updateDoc(claim, {uid: 'bob'}));
+  await assertFails(deleteDoc(claim));
+  await assertFails(setDoc(doc(db('alice'), 'professionalIdentityClaims/other-digest'), {
+    uid: 'alice', identityType: 'rpps',
+  }));
+});
+
+test('RC3.8F.3: multi-role admin keeps professional owner writes', async () => {
   await seed();
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
@@ -1497,7 +1512,7 @@ test('RC3.8F.3: platform admin cannot use professional owner writes', async () =
 
   const adminDb = db('platform-admin');
 
-  // Existing owner reads remain unchanged; only professional writes are gated.
+  // Management capabilities do not remove the owner's professional path.
   await assertSucceeds(getDoc(
     doc(adminDb, 'volunteers/platform-admin'),
   ));
@@ -1505,7 +1520,7 @@ test('RC3.8F.3: platform admin cannot use professional owner writes', async () =
     doc(adminDb, 'engagements/mission-a_platform-admin'),
   ));
 
-  await assertFails(updateDoc(
+  await assertSucceeds(updateDoc(
     doc(adminDb, 'volunteers/platform-admin'),
     {phone: '0611111111', updatedAt: serverTimestamp()},
   ));
@@ -1519,7 +1534,7 @@ test('RC3.8F.3: platform admin cannot use professional owner writes', async () =
     status: 'critical',
     updatedAt: serverTimestamp(),
   });
-  await assertFails(cancellation.commit());
+  await assertSucceeds(cancellation.commit());
 
   await env.withSecurityRulesDisabled(async (context) => {
     const admin = context.firestore();
@@ -1531,7 +1546,7 @@ test('RC3.8F.3: platform admin cannot use professional owner writes', async () =
     });
   });
 
-  await assertFails(setDoc(
+  await assertSucceeds(setDoc(
     doc(adminDb, 'volunteers/platform-admin'),
     volunteer('platform-admin'),
   ));

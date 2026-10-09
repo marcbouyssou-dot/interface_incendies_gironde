@@ -2288,6 +2288,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Claims contain only a keyed digest in the document ID. All lifecycle
+    // changes are performed by trusted server transactions.
+    match /professionalIdentityClaims/{claimId} {
+      allow read, write: if false;
+    }
+
     match /professionalTargeting/{uid} {
       function validTargeting() {
         let data = request.resource.data;

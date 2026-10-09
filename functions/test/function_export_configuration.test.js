@@ -95,14 +95,17 @@ test('RPPS verification binds only the ANS secret in production', () => {
   assert.equal(endpoint.appCheckEnforced, true);
 });
 
-test('RPPS confirmation keeps callable, App Check, region and ANS secret', () => {
+test('RPPS confirmation keeps callable, App Check, region and both secrets', () => {
   const endpoint = discoverExport({
     GCLOUD_PROJECT: 'mobilisation-sante',
   }, 'confirmProfessionalRpps');
 
   assert.equal(endpoint.callable, true);
   assert.deepEqual(endpoint.region, ['europe-west1']);
-  assert.deepEqual(endpoint.secrets, [{key: 'ESANTE_API_KEY'}]);
+  assert.deepEqual(endpoint.secrets, [
+    {key: 'ESANTE_API_KEY'},
+    {key: 'PROFESSIONAL_IDENTITY_CLAIM_KEY'},
+  ]);
   assert.equal(endpoint.appCheckEnforced, true);
 });
 

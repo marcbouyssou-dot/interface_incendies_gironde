@@ -28,6 +28,7 @@ class ProfessionalShell extends StatefulWidget {
     this.initialIndex = 0,
     this.verificationService = const FakeProfessionalVerificationService(),
     this.showResponsibleLogin = true,
+    this.showProfessionalEmailLogin = false,
     this.publicMissionDiscoveryRepository =
         const EmptyPublicMissionDiscoveryRepository(),
   }) : assert(initialIndex >= 0 && initialIndex < 3);
@@ -35,6 +36,7 @@ class ProfessionalShell extends StatefulWidget {
   final int initialIndex;
   final ProfessionalVerificationService verificationService;
   final bool showResponsibleLogin;
+  final bool showProfessionalEmailLogin;
   final PublicMissionDiscoveryRepository publicMissionDiscoveryRepository;
 
   @override
@@ -91,6 +93,9 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     1 => const ProfessionalEngagementsScreen(),
     2 => ProfessionalProfileScreen(
       onOpenResponsibleAccess: _openResponsibleAccess,
+      onOpenProfessionalAccount: widget.showProfessionalEmailLogin
+          ? _openProfessionalAccount
+          : null,
       showResponsibleLogin: widget.showResponsibleLogin,
       onOpenSettings: _openSettings,
       onOpenNotifications: _openNotifications,
@@ -196,6 +201,24 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
     }
   }
 
+  Future<void> _openProfessionalAccount() async {
+    final repository = RepositoryScope.of(context);
+    if (repository is! ProfessionalAdmissionRepository) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _ProfessionalInvitationDialog(
+        repository: repository as ProfessionalAdmissionRepository,
+        invitationRequired: false,
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _profile = repository.getVolunteerProfile();
+      _admission = _admissionStream(repository);
+      _screens[2] = _createScreen(2);
+    });
+  }
+
   void _openResponsibleAccess() {
     final repository = RepositoryScope.of(context);
     Navigator.of(context).push(
@@ -273,9 +296,13 @@ class _ProfessionalShellState extends State<ProfessionalShell> {
 }
 
 class _ProfessionalInvitationDialog extends StatefulWidget {
-  const _ProfessionalInvitationDialog({required this.repository});
+  const _ProfessionalInvitationDialog({
+    required this.repository,
+    this.invitationRequired = true,
+  });
 
   final ProfessionalAdmissionRepository repository;
+  final bool invitationRequired;
 
   @override
   State<_ProfessionalInvitationDialog> createState() =>
@@ -348,22 +375,29 @@ class _ProfessionalInvitationDialogState
     final identity = _identity;
     return AlertDialog(
       scrollable: true,
-      title: const Text('Utiliser une invitation'),
+      title: Text(
+        widget.invitationRequired
+            ? 'Utiliser une invitation'
+            : 'Compte professionnel',
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Cette invitation est personnelle. Connectez-vous avec '
-            'l’adresse vérifiée du destinataire, puis complétez votre profil professionnel.',
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('professional-invitation-code'),
-            controller: _code,
-            autocorrect: false,
-            decoration: const InputDecoration(labelText: 'Code d’invitation'),
-          ),
+          if (widget.invitationRequired) ...[
+            const Text(
+              'Cette invitation est personnelle. Connectez-vous avec '
+              'l’adresse vérifiée du destinataire, puis complétez votre profil professionnel.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('professional-invitation-code'),
+              controller: _code,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'Code d’invitation'),
+            ),
+          ] else
+            const Text('Connectez-vous à votre compte professionnel existant.'),
           if (identity == null) const LinearProgressIndicator(),
           if (identity?.isAnonymous == true) ...[
             const SizedBox(height: 12),
@@ -388,17 +422,18 @@ class _ProfessionalInvitationDialogState
             Wrap(
               spacing: 8,
               children: [
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _perform(
-                          () => widget.repository.linkProfessionalEmail(
-                            _email.text,
-                            _password.text,
+                if (widget.invitationRequired)
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _perform(
+                            () => widget.repository.linkProfessionalEmail(
+                              _email.text,
+                              _password.text,
+                            ),
                           ),
-                        ),
-                  child: const Text('Associer mon compte'),
-                ),
+                    child: const Text('Associer mon compte'),
+                  ),
                 TextButton(
                   onPressed: _busy
                       ? null
@@ -456,10 +491,13 @@ class _ProfessionalInvitationDialogState
           onPressed: _busy ? null : () => Navigator.pop(context),
           child: const Text('Fermer'),
         ),
-        FilledButton(
-          onPressed: _busy || identity?.emailVerified != true ? null : _redeem,
-          child: const Text('Valider'),
-        ),
+        if (widget.invitationRequired)
+          FilledButton(
+            onPressed: _busy || identity?.emailVerified != true
+                ? null
+                : _redeem,
+            child: const Text('Valider'),
+          ),
       ],
     );
   }

@@ -104,6 +104,19 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
   }
 }
 
+class _OpenAccountRepository extends _InvitationOnlyRepository {
+  _OpenAccountRepository() : super(verified: false) {
+    anonymous = true;
+    emailVerified = false;
+  }
+
+  @override
+  Stream<ProfessionalAdmissionState> watchProfessionalAdmission() =>
+      Stream.value(
+        const ProfessionalAdmissionState(mode: ProfessionalAdmissionMode.open),
+      );
+}
+
 class _PublicDiscoveryFixture implements PublicMissionDiscoveryRepository {
   int reads = 0;
 
@@ -156,6 +169,46 @@ void _expectIdentity(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'open mode exposes existing professional email login without invitation',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repository = _OpenAccountRepository();
+      await tester.pumpWidget(FireCoordinationApp(repository: repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Profil'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('open-professional-account')),
+        300,
+      );
+      await tester.tap(find.byKey(const Key('open-professional-account')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Compte professionnel'), findsWidgets);
+      expect(
+        find.byKey(const Key('professional-invitation-code')),
+        findsNothing,
+      );
+      expect(find.text('Associer mon compte'), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('professional-invitation-email')),
+        'existing@example.test',
+      );
+      await tester.enterText(
+        find.byKey(const Key('professional-invitation-password')),
+        'synthetic-password',
+      );
+      await tester.tap(find.text('Se connecter'));
+      await tester.pumpAndSettle();
+      expect(repository.linkedEmail, 'existing@example.test');
+      expect(repository.anonymous, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('invitation waits for verified email on compact iPhone', (
     tester,
   ) async {
