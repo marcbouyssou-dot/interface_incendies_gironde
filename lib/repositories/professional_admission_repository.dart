@@ -38,7 +38,7 @@ abstract interface class ProfessionalAdmissionRepository {
 
   Future<void> signInProfessionalEmail(String email, String password);
 
-  Future<void> sendProfessionalPasswordReset(String email);
+  Future<void> sendAccountPasswordReset(String email);
 
   Future<void> sendProfessionalEmailVerification();
 

@@ -9,6 +9,7 @@ import '../repositories/professional_admission_repository.dart';
 import '../repositories/repository_scope.dart';
 import '../services/professional_verification_service.dart';
 import '../theme/v5_foundation.dart';
+import '../utils/account_password_recovery.dart';
 import '../utils/app_page_route.dart';
 import '../widgets/native_interactions.dart';
 import '../widgets/professional_page_header.dart';
@@ -375,8 +376,8 @@ class _ProfessionalInvitationDialogState
   Future<void> _requestPasswordReset() async {
     if (_busy || _recoveryRequested) return;
     final email = _email.text.trim();
-    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-      setState(() => _message = 'Saisissez une adresse e-mail valide.');
+    if (!isValidAccountRecoveryEmail(email)) {
+      setState(() => _message = accountPasswordRecoveryInvalidEmailMessage);
       return;
     }
     setState(() {
@@ -384,20 +385,16 @@ class _ProfessionalInvitationDialogState
       _message = null;
     });
     try {
-      await widget.repository.sendProfessionalPasswordReset(email);
+      await widget.repository.sendAccountPasswordReset(email);
       if (mounted) {
         setState(() {
           _recoveryRequested = true;
-          _message =
-              'Si un compte correspond à cette adresse, un e-mail de récupération a été envoyé.';
+          _message = accountPasswordRecoverySuccessMessage;
         });
       }
     } catch (_) {
       if (mounted) {
-        setState(
-          () =>
-              _message = 'Récupération temporairement indisponible. Réessayez.',
-        );
+        setState(() => _message = accountPasswordRecoveryFailureMessage);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -412,7 +409,7 @@ class _ProfessionalInvitationDialogState
       title: Text(
         widget.invitationRequired
             ? 'Utiliser une invitation'
-            : 'Compte professionnel',
+            : 'Compte MobSanté',
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,

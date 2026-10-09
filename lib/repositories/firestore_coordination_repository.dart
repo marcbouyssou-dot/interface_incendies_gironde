@@ -650,7 +650,7 @@ class FirestoreCoordinationRepository
   }
 
   @override
-  Future<void> sendProfessionalPasswordReset(String email) async {
+  Future<void> sendAccountPasswordReset(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim().toLowerCase());
     } on FirebaseAuthException catch (error) {

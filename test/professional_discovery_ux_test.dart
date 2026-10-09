@@ -9,6 +9,7 @@ import 'package:interface_incendies_gironde/repositories/mock_coordination_repos
 import 'package:interface_incendies_gironde/repositories/public_mission_discovery_repository.dart';
 import 'package:interface_incendies_gironde/repositories/professional_admission_repository.dart';
 import 'package:interface_incendies_gironde/screens/professional_engagements_screen.dart';
+import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/screens/slots_screen.dart';
 import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
 
@@ -90,7 +91,7 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
   }
 
   @override
-  Future<void> sendProfessionalPasswordReset(String email) async {
+  Future<void> sendAccountPasswordReset(String email) async {
     passwordResetRequests++;
     passwordResetEmail = email;
     if (passwordResetFails) {
@@ -199,7 +200,8 @@ void main() {
       await tester.tap(find.byKey(const Key('open-professional-account')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Compte professionnel'), findsWidgets);
+      expect(find.text('Compte MobSanté'), findsWidgets);
+      expect(find.byKey(const Key('open-responsible-access')), findsNothing);
       expect(
         find.byKey(const Key('professional-invitation-code')),
         findsNothing,
@@ -235,6 +237,9 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('open-professional-account')),
       300,
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('open-professional-account')),
     );
     await tester.tap(find.byKey(const Key('open-professional-account')));
     await tester.pumpAndSettle();
@@ -317,6 +322,61 @@ void main() {
       find.byKey(const Key('professional-password-reset-submit')),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('common MobSanté login shares password recovery and sign-in', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _OpenAccountRepository();
+    var signedIn = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ResponsibleLogin(
+            repository: repository,
+            onSignedIn: () => signedIn = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('COMPTE MOBSANTÉ'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('manager-email')), 'invalid');
+    await tester.tap(find.byKey(const Key('account-forgot-password')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('manager-password')), findsNothing);
+    await tester.tap(find.byKey(const Key('account-password-reset-submit')));
+    await tester.pumpAndSettle();
+    expect(repository.passwordResetRequests, 0);
+    expect(find.text('Saisissez une adresse e-mail valide.'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('manager-email')),
+      'synthetic@example.test',
+    );
+    await tester.tap(find.byKey(const Key('account-password-reset-submit')));
+    await tester.pumpAndSettle();
+    expect(repository.passwordResetRequests, 1);
+    expect(
+      find.text(
+        'Si un compte correspond à cette adresse, un e-mail de récupération a été envoyé.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Retour à la connexion'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('manager-password')),
+      'synthetic-password',
+    );
+    await tester.tap(find.byKey(const Key('manager-sign-in')));
+    await tester.pumpAndSettle();
+    expect(repository.linkedEmail, 'synthetic@example.test');
+    expect(signedIn, isTrue);
     expect(tester.takeException(), isNull);
   });
 

@@ -286,7 +286,7 @@ class _VerifiedRppsResult extends StatelessWidget {
               borderRadius: BorderRadius.circular(V5Radius.pill),
             ),
             child: Text(
-              'Profil vérifié',
+              'RPPS reconnu',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: colors.success,
                 fontWeight: FontWeight.w700,
@@ -317,6 +317,8 @@ class _VerifiedRppsResult extends StatelessWidget {
               context,
             ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
+          const SizedBox(height: V5Spacing.sm),
+          const Text('Confirmez votre identité pour vérifier votre profil.'),
           const SizedBox(height: V5Spacing.sm),
           V5Button(
             key: const Key('confirm-professional-identity'),

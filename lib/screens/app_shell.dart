@@ -1065,7 +1065,8 @@ class _AppShellState extends State<AppShell> {
             !crossRolePreview &&
             !canCoordinate &&
             !canManageSite &&
-            !isPlatformAdministrator,
+            !isPlatformAdministrator &&
+            _repository is! ProfessionalAdmissionRepository,
         showProfessionalEmailLogin: !crossRolePreview,
       ),
       _AppJourney.responsible => ResponsibleShell(

@@ -404,7 +404,7 @@ class _ProfessionalProfileScreenState extends State<ProfessionalProfileScreen> {
                       key: const Key('open-professional-account'),
                       onPressed: widget.onOpenProfessionalAccount,
                       icon: const Icon(Icons.login_rounded),
-                      label: const Text('Compte professionnel'),
+                      label: const Text('Compte MobSanté'),
                     ),
                   TextButton.icon(
                     key: const Key('professional-sign-out'),

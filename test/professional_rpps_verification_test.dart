@@ -120,7 +120,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('affiche identité, profession et badge vérifié', (tester) async {
+  testWidgets('affiche identité et confirmation encore nécessaire', (
+    tester,
+  ) async {
     final service = StubProfessionalVerificationService(
       (_) async => result(ProfessionalVerificationStatus.verified),
     );
@@ -130,7 +132,12 @@ void main() {
 
     expect(find.text('Alice EXEMPLE'), findsOneWidget);
     expect(find.text('Masseur-Kinésithérapeute'), findsOneWidget);
-    expect(find.text('Profil vérifié'), findsOneWidget);
+    expect(find.text('RPPS reconnu'), findsOneWidget);
+    expect(find.text('Profil vérifié'), findsNothing);
+    expect(
+      find.text('Confirmez votre identité pour vérifier votre profil.'),
+      findsOneWidget,
+    );
     expect(find.text('Confirmer mon identité'), findsOneWidget);
   });
 
@@ -201,8 +208,34 @@ void main() {
       find.byKey(const Key('professional-rpps-persisted-verified')),
       findsOneWidget,
     );
+    expect(find.text('Profil vérifié'), findsOneWidget);
     expect(find.byKey(const Key('verify-professional-rpps')), findsNothing);
     expect(find.text('RPPS •••••••0000'), findsOneWidget);
+  });
+
+  testWidgets('la confirmation reste accessible sur petit iPhone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var confirmed = false;
+    await pumpVerification(
+      tester,
+      service: StubProfessionalVerificationService(
+        (_) async => result(ProfessionalVerificationStatus.verified),
+      ),
+      onConfirmed: (_) => confirmed = true,
+    );
+    await enterAndVerify(tester, rpps);
+    await tester.pumpAndSettle();
+    final confirm = find.byKey(const Key('confirm-professional-identity'));
+    await tester.ensureVisible(confirm);
+    await tester.pumpAndSettle();
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(confirmed, isTrue);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('changer le RPPS remet la vérification à zéro', (tester) async {
@@ -212,7 +245,7 @@ void main() {
     await pumpVerification(tester, service: service);
     await enterAndVerify(tester, rpps);
     await tester.pumpAndSettle();
-    expect(find.text('Profil vérifié'), findsOneWidget);
+    expect(find.text('RPPS reconnu'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('professional-rpps-field')),

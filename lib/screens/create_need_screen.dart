@@ -10,11 +10,13 @@ import '../repositories/coordination_repository.dart';
 import '../repositories/diffusion_read_repository.dart';
 import '../repositories/diffusion_read_repository_scope.dart';
 import '../repositories/platform_runtime.dart';
+import '../repositories/professional_admission_repository.dart';
 import '../repositories/live_data_scope.dart';
 import '../repositories/repository_scope.dart';
 import '../theme/app_theme.dart';
 import '../theme/v5_foundation.dart';
 import '../utils/app_page_route.dart';
+import '../utils/account_password_recovery.dart';
 import '../utils/french_date_time.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/common.dart';
@@ -1202,6 +1204,9 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
+  bool _recoveringPassword = false;
+  bool _recoveryRequested = false;
+  bool _messageIsSuccess = false;
   String? _message;
 
   @override
@@ -1228,7 +1233,10 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
     });
     try {
       final repository = widget.repository;
-      final signIn = repository is PlatformAccountAuthenticator
+      final signIn = repository is ProfessionalAdmissionRepository
+          ? (repository as ProfessionalAdmissionRepository)
+                .signInProfessionalEmail(_email.text, _password.text)
+          : repository is PlatformAccountAuthenticator
           ? (repository as PlatformAccountAuthenticator)
                 .signInPlatformOrResponsible(
                   email: _email.text,
@@ -1243,9 +1251,41 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
     } on RepositoryException catch (error) {
       if (mounted) setState(() => _message = error.message);
     } catch (error, stackTrace) {
-      debugPrint('Connexion responsable impossible : $error');
+      debugPrint('Connexion MobSanté impossible : ${error.runtimeType}');
       debugPrintStack(stackTrace: stackTrace);
       if (mounted) setState(() => _message = 'Identifiants incorrects.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _requestPasswordReset() async {
+    if (_loading || _recoveryRequested) return;
+    final repository = widget.repository;
+    if (repository is! ProfessionalAdmissionRepository) return;
+    if (!isValidAccountRecoveryEmail(_email.text)) {
+      setState(() => _message = accountPasswordRecoveryInvalidEmailMessage);
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _message = null;
+      _messageIsSuccess = false;
+    });
+    try {
+      await (repository as ProfessionalAdmissionRepository)
+          .sendAccountPasswordReset(_email.text);
+      if (mounted) {
+        setState(() {
+          _recoveryRequested = true;
+          _message = accountPasswordRecoverySuccessMessage;
+          _messageIsSuccess = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message = accountPasswordRecoveryFailureMessage);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1295,15 +1335,31 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                           prefixIcon: const Icon(Icons.alternate_email_rounded),
                         ),
                         const SizedBox(height: 14),
-                        V5TextField(
-                          key: const Key('manager-password'),
-                          label: 'Mot de passe',
-                          controller: _password,
-                          obscureText: true,
-                          autofillHints: const [AutofillHints.password],
-                          onFieldSubmitted: (_) => _loading ? null : _signIn(),
-                          prefixIcon: const Icon(Icons.lock_outline_rounded),
-                        ),
+                        if (!_recoveringPassword) ...[
+                          V5TextField(
+                            key: const Key('manager-password'),
+                            label: 'Mot de passe',
+                            controller: _password,
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.password],
+                            onFieldSubmitted: (_) =>
+                                _loading ? null : _signIn(),
+                            prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          ),
+                          if (widget.repository
+                              is ProfessionalAdmissionRepository)
+                            TextButton(
+                              key: const Key('account-forgot-password'),
+                              onPressed: _loading
+                                  ? null
+                                  : () => setState(() {
+                                      _password.clear();
+                                      _recoveringPassword = true;
+                                      _message = null;
+                                    }),
+                              child: const Text('Mot de passe oublié ?'),
+                            ),
+                        ],
                         if (_message != null) ...[
                           const SizedBox(height: 12),
                           Container(
@@ -1313,16 +1369,24 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                               vertical: 11,
                             ),
                             decoration: BoxDecoration(
-                              color: colors.dangerContainer,
+                              color: _messageIsSuccess
+                                  ? colors.successContainer
+                                  : colors.dangerContainer,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: colors.danger.withValues(alpha: 0.3),
+                                color:
+                                    (_messageIsSuccess
+                                            ? colors.success
+                                            : colors.danger)
+                                        .withValues(alpha: 0.3),
                               ),
                             ),
                             child: Text(
                               _message!,
                               style: TextStyle(
-                                color: colors.danger,
+                                color: _messageIsSuccess
+                                    ? colors.success
+                                    : colors.danger,
                                 fontSize: 13,
                                 height: 1.35,
                                 fontWeight: FontWeight.w700,
@@ -1331,15 +1395,41 @@ class _ResponsibleLoginState extends State<ResponsibleLogin> {
                           ),
                         ],
                         const SizedBox(height: 22),
-                        V5Button(
-                          key: const Key('manager-sign-in'),
-                          expanded: true,
-                          backgroundColor: colors.accent,
-                          foregroundColor: colors.onAccent,
-                          loading: _loading,
-                          onPressed: _loading ? null : _signIn,
-                          label: _loading ? 'Connexion…' : 'Se connecter',
-                        ),
+                        if (_recoveringPassword) ...[
+                          if (_recoveryRequested)
+                            const Text('Pensez à vérifier aussi vos spams.')
+                          else
+                            V5Button(
+                              key: const Key('account-password-reset-submit'),
+                              expanded: true,
+                              backgroundColor: colors.accent,
+                              foregroundColor: colors.onAccent,
+                              loading: _loading,
+                              onPressed: _loading
+                                  ? null
+                                  : _requestPasswordReset,
+                              label: 'Envoyer l’e-mail de récupération',
+                            ),
+                          TextButton(
+                            onPressed: _loading
+                                ? null
+                                : () => setState(() {
+                                    _recoveringPassword = false;
+                                    _message = null;
+                                    _messageIsSuccess = false;
+                                  }),
+                            child: const Text('Retour à la connexion'),
+                          ),
+                        ] else
+                          V5Button(
+                            key: const Key('manager-sign-in'),
+                            expanded: true,
+                            backgroundColor: colors.accent,
+                            foregroundColor: colors.onAccent,
+                            loading: _loading,
+                            onPressed: _loading ? null : _signIn,
+                            label: _loading ? 'Connexion…' : 'Se connecter',
+                          ),
                       ],
                     ),
                   ),
@@ -1381,7 +1471,7 @@ class _ResponsibleLoginHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'ESPACE RESPONSABLE',
+                    'COMPTE MOBSANTÉ',
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 12,
@@ -1407,7 +1497,7 @@ class _ResponsibleLoginHeader extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Vous devez vous connecter pour déclarer un besoin.',
+          'Connectez-vous à votre compte MobSanté pour accéder à vos perspectives.',
           style: TextStyle(
             color: colors.textSecondary,
             fontSize: 14,
