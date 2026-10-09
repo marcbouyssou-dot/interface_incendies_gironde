@@ -317,6 +317,8 @@ class _ProfessionalInvitationDialogState
   ProfessionalEmailIdentity? _identity;
   String? _message;
   bool _busy = false;
+  bool _recoveringPassword = false;
+  bool _recoveryRequested = false;
 
   @override
   void initState() {
@@ -370,6 +372,38 @@ class _ProfessionalInvitationDialogState
     });
   }
 
+  Future<void> _requestPasswordReset() async {
+    if (_busy || _recoveryRequested) return;
+    final email = _email.text.trim();
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+      setState(() => _message = 'Saisissez une adresse e-mail valide.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await widget.repository.sendProfessionalPasswordReset(email);
+      if (mounted) {
+        setState(() {
+          _recoveryRequested = true;
+          _message =
+              'Si un compte correspond à cette adresse, un e-mail de récupération a été envoyé.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () =>
+              _message = 'Récupération temporairement indisponible. Réessayez.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final identity = _identity;
@@ -384,7 +418,9 @@ class _ProfessionalInvitationDialogState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.invitationRequired) ...[
+          if (_recoveringPassword)
+            const Text('Saisissez l’adresse de votre compte professionnel.')
+          else if (widget.invitationRequired) ...[
             const Text(
               'Cette invitation est personnelle. Connectez-vous avec '
               'l’adresse vérifiée du destinataire, puis complétez votre profil professionnel.',
@@ -408,45 +444,77 @@ class _ProfessionalInvitationDialogState
               autocorrect: false,
               decoration: const InputDecoration(labelText: 'Adresse e-mail'),
             ),
-            TextField(
-              key: const Key('professional-invitation-password'),
-              controller: _password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Mot de passe'),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Associer conserve votre profil actuel. Se connecter '
-              'ouvre un compte déjà existant.',
-            ),
-            Wrap(
-              spacing: 8,
-              children: [
-                if (widget.invitationRequired)
+            if (_recoveringPassword) ...[
+              const SizedBox(height: 8),
+              if (_recoveryRequested)
+                const Text('Pensez à vérifier aussi vos spams.')
+              else
+                FilledButton(
+                  key: const Key('professional-password-reset-submit'),
+                  onPressed: _busy ? null : _requestPasswordReset,
+                  child: const Text('Envoyer l’e-mail de récupération'),
+                ),
+              TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _recoveringPassword = false;
+                        _message = null;
+                      }),
+                child: const Text('Retour à la connexion'),
+              ),
+            ] else ...[
+              TextField(
+                key: const Key('professional-invitation-password'),
+                controller: _password,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Mot de passe'),
+              ),
+              TextButton(
+                key: const Key('professional-forgot-password'),
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _password.clear();
+                        _recoveringPassword = true;
+                        _message = null;
+                      }),
+                child: const Text('Mot de passe oublié ?'),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Associer conserve votre profil actuel. Se connecter '
+                'ouvre un compte déjà existant.',
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (widget.invitationRequired)
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _perform(
+                              () => widget.repository.linkProfessionalEmail(
+                                _email.text,
+                                _password.text,
+                              ),
+                            ),
+                      child: const Text('Associer mon compte'),
+                    ),
                   TextButton(
                     onPressed: _busy
                         ? null
                         : () => _perform(
-                            () => widget.repository.linkProfessionalEmail(
+                            () => widget.repository.signInProfessionalEmail(
                               _email.text,
                               _password.text,
                             ),
                           ),
-                    child: const Text('Associer mon compte'),
+                    child: const Text('Se connecter'),
                   ),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => _perform(
-                          () => widget.repository.signInProfessionalEmail(
-                            _email.text,
-                            _password.text,
-                          ),
-                        ),
-                  child: const Text('Se connecter'),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
           if (identity != null && !identity.isAnonymous) ...[
             const SizedBox(height: 12),
@@ -491,7 +559,7 @@ class _ProfessionalInvitationDialogState
           onPressed: _busy ? null : () => Navigator.pop(context),
           child: const Text('Fermer'),
         ),
-        if (widget.invitationRequired)
+        if (widget.invitationRequired && !_recoveringPassword)
           FilledButton(
             onPressed: _busy || identity?.emailVerified != true
                 ? null

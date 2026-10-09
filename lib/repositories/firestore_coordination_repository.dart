@@ -650,6 +650,20 @@ class FirestoreCoordinationRepository
   }
 
   @override
+  Future<void> sendProfessionalPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim().toLowerCase());
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'user-not-found' || error.code == 'user-disabled') {
+        return;
+      }
+      throw const RepositoryException(
+        'Récupération temporairement indisponible. Réessayez.',
+      );
+    }
+  }
+
+  @override
   Future<void> sendProfessionalEmailVerification() async {
     final user = _auth.currentUser;
     if (user == null || user.isAnonymous) {

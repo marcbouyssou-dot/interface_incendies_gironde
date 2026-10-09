@@ -50,6 +50,9 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
   bool emailVerified = true;
   String? linkedEmail;
   int verificationEmails = 0;
+  int passwordResetRequests = 0;
+  String? passwordResetEmail;
+  bool passwordResetFails = false;
 
   @override
   Stream<ProfessionalAdmissionState> watchProfessionalAdmission() =>
@@ -84,6 +87,15 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
   Future<void> signInProfessionalEmail(String email, String password) async {
     linkedEmail = email;
     anonymous = false;
+  }
+
+  @override
+  Future<void> sendProfessionalPasswordReset(String email) async {
+    passwordResetRequests++;
+    passwordResetEmail = email;
+    if (passwordResetFails) {
+      throw StateError('Synthetic network error with private account details');
+    }
   }
 
   @override
@@ -208,6 +220,140 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('professional password recovery is neutral on compact iPhone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _OpenAccountRepository();
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profil'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('open-professional-account')),
+      300,
+    );
+    await tester.tap(find.byKey(const Key('open-professional-account')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('professional-forgot-password')),
+    );
+    await tester.tap(find.byKey(const Key('professional-forgot-password')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('professional-invitation-password')),
+      findsNothing,
+    );
+    expect(find.text('Retour à la connexion'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('professional-invitation-email')),
+      'adresse-invalide',
+    );
+    await tester.tap(
+      find.byKey(const Key('professional-password-reset-submit')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Saisissez une adresse e-mail valide.'), findsOneWidget);
+    expect(repository.passwordResetRequests, 0);
+
+    await tester.enterText(
+      find.byKey(const Key('professional-invitation-email')),
+      'synthetic@example.test',
+    );
+    await tester.tap(
+      find.byKey(const Key('professional-password-reset-submit')),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.passwordResetRequests, 1);
+    expect(repository.passwordResetEmail, 'synthetic@example.test');
+    expect(
+      find.text(
+        'Si un compte correspond à cette adresse, un e-mail de récupération a été envoyé.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('professional-password-reset-submit')),
+      findsNothing,
+    );
+    expect(find.text('Pensez à vérifier aussi vos spams.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('professional password recovery hides network details', (
+    tester,
+  ) async {
+    final repository = _OpenAccountRepository()..passwordResetFails = true;
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profil'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('open-professional-account')),
+      300,
+    );
+    await tester.tap(find.byKey(const Key('open-professional-account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('professional-forgot-password')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('professional-invitation-email')),
+      'synthetic@example.test',
+    );
+    await tester.tap(
+      find.byKey(const Key('professional-password-reset-submit')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Récupération temporairement indisponible. Réessayez.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Synthetic network error'), findsNothing);
+    expect(
+      find.byKey(const Key('professional-password-reset-submit')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('password recovery hides invitation controls on compact iPhone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _InvitationOnlyRepository(verified: true)
+      ..anonymous = true;
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('professional-use-invitation')),
+      300,
+    );
+    await tester.tap(find.byKey(const Key('professional-use-invitation')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const Key('professional-forgot-password')),
+    );
+    await tester.tap(find.byKey(const Key('professional-forgot-password')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Saisissez l’adresse de votre compte professionnel.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('professional-invitation-code')), findsNothing);
+    expect(find.text('Valider'), findsNothing);
+    expect(
+      find.byKey(const Key('professional-password-reset-submit')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('invitation waits for verified email on compact iPhone', (
     tester,
