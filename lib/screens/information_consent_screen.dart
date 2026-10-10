@@ -56,14 +56,17 @@ class InformationConsentScreen extends StatelessWidget {
                       title: 'Conditions d’utilisation',
                       items: [
                         'Version ${BetaTerms.version}. MobSanté Beta V1 est un '
-                            'service expérimental gratuit, fermé, accessible aux '
-                            'professionnels invités avec un compte personnel.',
+                            'service expérimental gratuit et fermé, destiné à '
+                            '20 professionnels invités au maximum. Chaque '
+                            'personne utilise son propre compte ; un même '
+                            'compte peut porter plusieurs capacités et vues.',
                         'L’application ne remplace ni les services d’urgence ni les '
                             'consignes données par les autorités et responsables '
                             'opérationnels. Sa disponibilité n’est pas garantie '
                             'comme celle d’un service de secours critique.',
-                        'Chaque utilisateur emploie le service uniquement pour les '
-                            'missions proposées et respecte les règles de sécurité '
+                        'Chaque utilisateur emploie le service uniquement '
+                            'pour les Actions et missions auxquelles il est '
+                            'autorisé. Il respecte les consignes de sécurité '
                             'et d’organisation communiquées sur le terrain.',
                         'Des Actions peuvent être organisées par différentes '
                             'organisations, chacune dans son périmètre.',
@@ -96,11 +99,14 @@ class InformationConsentScreen extends StatelessWidget {
                         'Les informations d’identité, de contact, de profession et '
                             'd’identification professionnelle doivent être exactes '
                             'et à jour.',
-                        'Le professionnel met à jour son profil avant toute nouvelle '
-                            'participation lorsque sa situation ou ses coordonnées '
-                            'ont changé.',
+                        'Le professionnel met à jour son profil avant toute '
+                            'nouvelle participation lorsque sa situation ou '
+                            'ses coordonnées ont changé. Son identité, sa '
+                            'profession et son RPPS sont vérifiés avant '
+                            'l’admission opérationnelle.',
                         'Le compte est personnel et ne doit pas être partagé. '
-                            'Une invitation peut être révoquée ou expirer.',
+                            'Une invitation peut être révoquée ou expirer ; '
+                            'elle ne vaut pas admission à elle seule.',
                       ],
                     ),
                     const SizedBox(height: 13),
@@ -112,11 +118,29 @@ class InformationConsentScreen extends StatelessWidget {
                             'de la profession et des droits accordés. Une '
                             'participation doit rester exacte et à jour.',
                         'Un accès peut être suspendu ou révoqué en cas d’usage '
-                            'incompatible avec ces conditions ou à la fin de la Beta. '
-                            'L’intégrité du service et de ses contenus doit être respectée.',
+                            'incompatible avec ces conditions ou à la fin de la '
+                            'Beta. L’intégrité du service et de ses contenus '
+                            'doit être respectée. Le support est assuré par '
+                            'une personne pendant cette Beta contrôlée.',
                         'Pour toute question, contactez Marc Bouyssou via '
-                            'confidentialite@mobsante.fr. Cette adresse doit être '
-                            'confirmée avant l’ouverture de la Beta.',
+                            'confidentialite@mobsante.fr. Pour vos droits sur '
+                            'les données, consultez la notice de confidentialité.',
+                      ],
+                    ),
+                    const SizedBox(height: 13),
+                    const _InformationSection(
+                      icon: Icons.history_outlined,
+                      title: 'Historique des Actions',
+                      items: [
+                        'Une participation peut rester nominative après la fin '
+                            'd’une Action pour l’historique, la traçabilité et '
+                            'le retour d’expérience. La période proposée pour '
+                            'la Beta V1 est de 12 mois après cette fin, suivie '
+                            'd’un réexamen.',
+                        'L’historique d’une Action peut subsister après la '
+                            'suppression des comptes participants. Il est '
+                            'distinct des démonstrations, qui ne doivent pas '
+                            'exposer de données personnelles réelles.',
                       ],
                     ),
                     const SizedBox(height: 13),

@@ -51,13 +51,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       title: 'MobSanté Beta V1',
                       paragraphs: [
                         'MobSanté aide à mobiliser des professionnels de santé '
-                            'vérifiés pour des Actions et missions. La Beta est '
-                            'gratuite, fermée et accessible sur invitation. '
+                            'vérifiés pour des Actions et missions. La Beta V1 '
+                            'est gratuite et fermée. Elle est destinée à un '
+                            'maximum de 20 professionnels invités. '
                             'La découverte des seules informations publiques '
                             'autorisées peut rester accessible sans admission.',
-                        'Éditeur et responsable du traitement : Marc Bouyssou. '
+                        'Éditeur en nom personnel et responsable du '
+                            'traitement : Marc Bouyssou. '
                             'Aucune donnée patient ne doit être saisie. '
-                            'MobSanté n’est pas présenté comme un dispositif médical.',
+                            'MobSanté n’est pas un service de secours critique.',
                       ],
                     ),
                     SizedBox(height: 13),
@@ -70,8 +72,10 @@ class PrivacyPolicyScreen extends StatelessWidget {
                             'profession, RPPS ou autre identifiant professionnel, statut de '
                             'vérification, CPTS et matériel déclaré lorsque ces '
                             'champs sont renseignés.',
-                        'Le service enregistre aussi les rôles, invitations, '
-                            'Actions, missions, engagements et statuts associés. '
+                        'Le service enregistre aussi les rôles, invitations et '
+                            'admissions, Actions, missions, engagements et '
+                            'statuts associés. Les coordonnées de contact '
+                            'professionnelles restent privées. '
                             'Les notifications, abonnements push et journaux '
                             'techniques utilisent des identifiants et des dates. '
                             'Le point privé de ciblage, si activé, reste facultatif.',
@@ -80,16 +84,25 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     SizedBox(height: 13),
                     _PrivacySection(
                       icon: Icons.gavel_outlined,
-                      title: 'Bases envisagées pour la Beta',
+                      title: 'Bases juridiques proposées',
                       paragraphs: [
-                        'Compte, profil, RPPS et participation : nécessité du '
-                            'service liée aux CGU Beta envisagée. Sécurité et '
-                            'journaux nécessaires : intérêt légitime envisagé, '
-                            'sous réserve d’une mise en balance documentée.',
-                        'Notifications facultatives et futur ciblage par point '
-                            'géographique : choix explicite et révocable. '
-                            'Cette matrice est une proposition à valider '
-                            'juridiquement avant l’ouverture.',
+                        'Compte, profil, participation et vérification du '
+                            'RPPS nécessaires au service : exécution des CGU '
+                            'Beta envisagée, sous réserve de vérifier la '
+                            'nécessité de chaque donnée. Les journaux de '
+                            'sécurité nécessaires pourraient relever de '
+                            'l’intérêt légitime, après mise en balance '
+                            'documentée.',
+                        'Les notifications push facultatives et le point '
+                            'privé de ciblage reposeraient sur des choix '
+                            'distincts et révocables. Le ciblage Beta V1 '
+                            'reste fondé sur les préférences existantes. Le '
+                            'ciblage géographique strict, envisagé après la '
+                            'Beta, demanderait un consentement distinct.',
+                        'Cette matrice est une proposition à valider avant '
+                            'l’ouverture, pas un avis juridique définitif. '
+                            'L’acceptation des CGU ne vaut pas consentement '
+                            'global à tous les traitements.',
                       ],
                     ),
                     SizedBox(height: 13),
@@ -115,19 +128,24 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.schedule_outlined,
                       title: 'Durées de conservation',
                       paragraphs: [
-                        'Compte et profil : pendant la participation, avec réexamen '
-                            'après 12 mois d’inactivité. Invitation expirée : '
-                            'proposition de 30 jours après expiration, sauf audit '
-                            'justifié. Abonnement push et point privé : jusqu’à '
-                            'désactivation, retrait ou fermeture.',
-                        'Journaux techniques : proposition de 90 jours par défaut. '
-                            'Participation à une Action terminée : proposition '
-                            'de 12 mois nominatifs puis revue pour détachement '
-                            'ou anonymisation. Une démonstration ultérieure '
-                            'doit être sans données personnelles réelles.',
-                        'Ces durées sont des propositions à valider juridiquement. '
-                            'Aucune purge automatique par catégorie n’est '
-                            'actuellement configurée.',
+                        'Compte et profil : pendant la participation, avec '
+                            'réexamen après 12 mois d’inactivité. '
+                            'Invitation expirée : 30 jours après '
+                            'expiration, sauf audit justifié. Abonnement push '
+                            ': jusqu’à désactivation, invalidation ou '
+                            'fermeture. Point privé de ciblage : jusqu’au '
+                            'retrait du choix ou à la fermeture.',
+                        'Journaux techniques : 90 jours par défaut. '
+                            'Participation à une Action terminée : 12 mois '
+                            'nominatifs après sa fin, puis '
+                            'réexamen pour détachement, anonymisation ou '
+                            'usage en démonstration sans données personnelles '
+                            'réelles, selon le besoin. L’historique '
+                            'de l’Action peut subsister après suppression '
+                            'des comptes participants.',
+                        'Ces durées cadrent la Beta V1 et restent soumises à '
+                            'validation juridique. Aucune purge automatique '
+                            'par catégorie n’est actuellement configurée.',
                         'Les exports CSV de gestion produits par l’administration '
                             'ne sont pas un export individuel déclenchable par les '
                             'professionnels dans l’application.',
@@ -152,11 +170,28 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.contact_mail_outlined,
                       title: 'Exercer vos droits',
                       paragraphs: [
-                        'Contact : confidentialite@mobsante.fr (fonctionnement '
-                            'à confirmer avant l’ouverture). Les demandes sont '
-                            'traitées par un opérateur habilité. Une preuve d’identité ne sera '
-                            'demandée que si elle est nécessaire pour sécuriser '
-                            'la demande.',
+                        'Contact : confidentialite@mobsante.fr. Les demandes '
+                            'sont traitées avec l’aide d’un opérateur habilité ; '
+                            'aucun bouton d’export ou d’effacement individuel '
+                            'en libre-service n’est proposé. Une preuve '
+                            'd’identité n’est demandée que si elle est '
+                            'nécessaire pour sécuriser la demande.',
+                      ],
+                    ),
+                    SizedBox(height: 13),
+                    _PrivacySection(
+                      icon: Icons.tune_outlined,
+                      title: 'Choix facultatifs',
+                      paragraphs: [
+                        'Les notifications facultatives et le point privé de '
+                            'ciblage peuvent être désactivés ou retirés sans '
+                            'retirer l’acceptation des CGU. En Beta V1, le '
+                            'ciblage reste fondé sur les préférences existantes.',
+                        'Les démonstrations sont distinctes de l’historique '
+                            'réel. Aucune donnée personnelle réelle ne doit '
+                            'être exposée dans une démonstration ; la relecture '
+                            'générique des démonstrations est prévue après '
+                            'la Beta.',
                       ],
                     ),
                     SizedBox(height: 13),
@@ -164,14 +199,21 @@ class PrivacyPolicyScreen extends StatelessWidget {
                       icon: Icons.cloud_outlined,
                       title: 'Prestataires techniques',
                       paragraphs: [
-                        'Le client Web est servi par Netlify. Les comptes, données '
-                            'et notifications utilisent Firebase / Google Cloud. '
-                            'Des courriels d’invitation peuvent être envoyés '
-                            'par Resend. Ces fournisseurs actuels comportent '
-                            'des dépendances américaines ; les lieux de traitement, '
-                            'sous-traitants et éventuels transferts doivent être '
-                            'validés contractuellement. IGN intervient seulement '
-                            'lorsqu’un géocodage est utilisé.',
+                        'Le client Web est servi par Netlify, Inc. Les '
+                            'comptes, données et notifications utilisent '
+                            'Firebase / Google Cloud. Les courriels de la '
+                            'Beta utilisent Resend (Plus Five Five, Inc.). '
+                            'IGN intervient seulement lorsqu’un géocodage '
+                            'est utilisé.',
+                        'L’utilisation de Netlify et Resend implique des '
+                            'traitements aux États-Unis ; les services '
+                            'Firebase / Google peuvent aussi traiter des '
+                            'données hors de l’Espace économique européen. '
+                            'Les fournisseurs publient des garanties de '
+                            'transfert, notamment des clauses contractuelles '
+                            'types. Leur application précise à MobSanté et '
+                            'les sous-traitants concernés restent à vérifier. '
+                            'Cette infrastructure Beta pourra évoluer.',
                       ],
                     ),
                   ],

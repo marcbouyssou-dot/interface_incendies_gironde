@@ -355,6 +355,7 @@ class _BetaTermsDialogState extends State<_BetaTermsDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: const Text('CGU Beta V1'),
     content: Column(
       mainAxisSize: MainAxisSize.min,

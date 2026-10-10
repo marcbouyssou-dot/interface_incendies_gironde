@@ -41,9 +41,7 @@ void main() {
     expect(application.title, isNot(AppIdentity.technicalName));
   });
 
-  testWidgets('About content is factual, provisional and responsive', (
-    tester,
-  ) async {
+  testWidgets('About content is factual and responsive', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -77,14 +75,22 @@ void main() {
     await tester.tap(find.text('Confidentialité'));
     await tester.pumpAndSettle();
     expect(find.text(AboutScreen.dataUseNotice), findsOneWidget);
-    expect(find.text(AboutScreen.provisionalLegalNotice), findsOneWidget);
+    expect(
+      find.textContaining('La notice de confidentialité détaille'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Confidentialité'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Mentions légales'));
     await tester.pumpAndSettle();
-    expect(find.text(AboutScreen.provisionalLegalNotice), findsOneWidget);
+    expect(find.text(AboutScreen.legalSummary), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('design-credit')),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
     final credit = tester.widget<Text>(find.byKey(const Key('design-credit')));
     expect(credit.style?.fontSize, 12);
     expect(credit.style?.fontWeight, FontWeight.w400);

@@ -400,6 +400,21 @@ test('current CGU acceptance gates admission and a later mandatory version', asy
   }));
   await professional.acceptTerms({version: 'beta-v1'});
   await professional.auth.currentUser.getIdToken(true);
+  const receipt = (await adminDb.collection('termsAcceptances')
+    .doc(professional.uid).get()).data();
+  assert.equal(receipt.uid, professional.uid);
+  assert.equal(receipt.acceptedVersion, 'beta-v1');
+  assert.ok(receipt.acceptedAt instanceof Timestamp);
+  const other = await actor({verified: true, termsAccepted: false});
+  await denied(() => getDoc(doc(other.firestore,
+    'termsAcceptances', professional.uid)));
+  await denied(() => setDoc(doc(other.firestore,
+    'termsAcceptances', professional.uid), {
+    uid: professional.uid, acceptedVersion: 'beta-v1',
+    acceptedAt: serverTimestamp(),
+  }));
+  assert.equal((await adminDb.collection('termsAcceptances')
+    .doc(other.uid).get()).exists, false);
   await professional.redeem({code: issued.code});
   assert.equal((await getDoc(doc(professional.firestore, 'missions',
     target.missionId))).exists(), true);

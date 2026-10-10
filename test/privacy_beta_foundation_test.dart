@@ -16,9 +16,11 @@ void main() {
       'lib/screens/privacy_policy_screen.dart',
       'lib/screens/legal_notice_screen.dart',
       'lib/screens/information_consent_screen.dart',
+      'lib/screens/about_screen.dart',
     ].map((path) => File(path).readAsStringSync()).join('\n');
     expect(copy, isNot(contains('Incendies Gironde')));
     expect(copy, isNot(contains('URPS MK Nouvelle-Aquitaine')));
+    expect(copy, isNot(contains('SELARLU')));
   });
 
   testWidgets(
@@ -29,8 +31,17 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(const MaterialApp(home: LegalNoticeScreen()));
       await tester.pumpAndSettle();
+      expect(find.text('Marc Bouyssou, en nom personnel'), findsOneWidget);
+      expect(find.textContaining('Rue Combe Maurette'), findsOneWidget);
+      expect(find.text('05 55 27 96 51'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Contact hébergeur'),
+        300,
+        scrollable: find.byType(Scrollable),
+      );
       expect(find.text('Hébergement du client Web'), findsOneWidget);
-      expect(find.text('Netlify, Inc. — mobsante.netlify.app'), findsOneWidget);
+      expect(find.textContaining('Netlify, Inc.'), findsOneWidget);
+      expect(find.text('support@netlify.com'), findsOneWidget);
       expect(find.text('Comptes et données'), findsOneWidget);
       expect(find.text('Organisateur d’une Action'), findsOneWidget);
       expect(find.textContaining('Éditeur de l’application'), findsNothing);
@@ -39,6 +50,24 @@ void main() {
     },
   );
 
+  testWidgets('legal information remains scrollable at 320x568', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const MaterialApp(home: LegalNoticeScreen()));
+    await tester.pumpAndSettle();
+    expect(find.text('Marc Bouyssou, en nom personnel'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Contact hébergeur'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+    expect(find.text('support@netlify.com'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('information text describes multiple Actions', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(home: InformationConsentScreen()),
@@ -46,6 +75,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('différentes organisations'), findsOneWidget);
     expect(find.textContaining('Incendies Gironde'), findsNothing);
+  });
+
+  testWidgets('Beta CGU remain readable and navigable on a compact iPhone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      const MaterialApp(home: InformationConsentScreen()),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Conditions d’utilisation'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Acceptation des CGU'),
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+    expect(find.text('Acceptation des CGU'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('operation context warns against patient data', (tester) async {

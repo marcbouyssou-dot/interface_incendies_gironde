@@ -8,9 +8,13 @@ import '../widgets/v5_secondary_navigation.dart';
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
-  static const provisionalLegalNotice =
-      'Les catégories de données, leurs usages et les prestataires techniques '
-      'sont décrits dans la politique de confidentialité.';
+  static const legalSummary =
+      'Éditeur en nom personnel et responsable du traitement : Marc Bouyssou. '
+      'Adresse professionnelle : Maison Médicale, rue Combe Maurette, '
+      '19700 Seilhac, France. Téléphone : 05 55 27 96 51. '
+      'Contact confidentialité : confidentialite@mobsante.fr. '
+      'Client Web hébergé par Netlify ; comptes et données sur Firebase / '
+      'Google Cloud.';
   static const dataUseNotice =
       'Les coordonnées renseignées servent à gérer le compte et la '
       'mobilisation. Les accès aux informations de mission dépendent du rôle '
@@ -61,7 +65,8 @@ class AboutScreen extends StatelessWidget {
                         Text(dataUseNotice),
                         SizedBox(height: 10),
                         Text(
-                          provisionalLegalNotice,
+                          'La notice de confidentialité détaille les données, '
+                          'les prestataires et vos droits.',
                           style: TextStyle(color: AppColors.textMuted),
                         ),
                       ],
@@ -71,7 +76,7 @@ class AboutScreen extends StatelessWidget {
                       key: Key('legal-section'),
                       title: Text('Mentions légales'),
                       childrenPadding: EdgeInsets.fromLTRB(16, 0, 16, 18),
-                      children: [Text(provisionalLegalNotice)],
+                      children: [Text(legalSummary)],
                     ),
                   ],
                 ),

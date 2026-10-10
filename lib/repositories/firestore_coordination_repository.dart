@@ -424,7 +424,8 @@ class FirestoreCoordinationRepository
                   operationIds: operationIds,
                   termsAccepted:
                       terms.data()?['acceptedVersion'] == requiredVersion &&
-                      terms.data()?['uid'] == uid,
+                      terms.data()?['uid'] == uid &&
+                      terms.data()?['acceptedAt'] is Timestamp,
                 );
               }),
         );

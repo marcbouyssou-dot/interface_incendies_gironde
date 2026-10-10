@@ -12,6 +12,7 @@ import 'package:interface_incendies_gironde/screens/professional_engagements_scr
 import 'package:interface_incendies_gironde/screens/create_need_screen.dart';
 import 'package:interface_incendies_gironde/screens/slots_screen.dart';
 import 'package:interface_incendies_gironde/widgets/brand_mark.dart';
+import 'package:interface_incendies_gironde/widgets/v5_secondary_navigation.dart';
 
 import 'support/verified_professional_profile.dart';
 
@@ -50,6 +51,7 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
 
   String? redeemedCode;
   bool termsAccepted = false;
+  bool existingAdmission = false;
   String? preparedCode;
   int operationalReads = 0;
   bool anonymous = false;
@@ -63,8 +65,10 @@ class _InvitationOnlyRepository extends MockCoordinationRepository
   @override
   Stream<ProfessionalAdmissionState> watchProfessionalAdmission() =>
       Stream.value(
-        const ProfessionalAdmissionState(
+        ProfessionalAdmissionState(
           mode: ProfessionalAdmissionMode.invitationOnly,
+          operationIds: existingAdmission ? {'test-operation'} : const {},
+          termsAccepted: termsAccepted,
         ),
       );
 
@@ -481,6 +485,36 @@ void main() {
     await tester.tap(find.text('Valider'));
     await tester.pumpAndSettle();
     expect(repository.redeemedCode, 'opaque-test-code');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('current CGU acceptance stays usable on compact iPhone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _InvitationOnlyRepository(verified: true)
+      ..existingAdmission = true;
+    await tester.pumpWidget(FireCoordinationApp(repository: repository));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Accepter les CGU en vigueur'));
+    await tester.tap(find.text('Accepter les CGU en vigueur'));
+    await tester.pumpAndSettle();
+
+    final accept = find.widgetWithText(FilledButton, 'Accepter');
+    expect(tester.widget<FilledButton>(accept).onPressed, isNull);
+    await tester.tap(find.text('Lire les CGU Beta'));
+    await tester.pumpAndSettle();
+    expect(find.text('Conditions d’utilisation'), findsOneWidget);
+    await tester.tap(find.byType(V5BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('J’accepte les CGU Beta V1'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
+    await tester.tap(accept);
+    await tester.pumpAndSettle();
+    expect(repository.termsAccepted, isTrue);
     expect(tester.takeException(), isNull);
   });
 

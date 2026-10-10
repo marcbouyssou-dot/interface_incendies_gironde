@@ -165,7 +165,26 @@ class _LegalInformationPanel extends StatelessWidget {
           _LegalInformationRow(
             icon: Icons.person_outline,
             title: 'Éditeur',
-            content: 'Marc Bouyssou',
+            content: 'Marc Bouyssou, en nom personnel',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.location_on_outlined,
+            title: 'Adresse professionnelle',
+            content:
+                'Maison Médicale\nRue Combe Maurette\n19700 Seilhac\nFrance',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.phone_outlined,
+            title: 'Téléphone professionnel',
+            content: '05 55 27 96 51',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.info_outline,
+            title: 'Service',
+            content: 'MobSanté Beta V1, gratuite et fermée sur invitation',
           ),
           _LegalDivider(),
           _LegalInformationRow(
@@ -183,7 +202,14 @@ class _LegalInformationPanel extends StatelessWidget {
           _LegalInformationRow(
             icon: Icons.cloud_outlined,
             title: 'Hébergement du client Web',
-            content: 'Netlify, Inc. — mobsante.netlify.app',
+            content:
+                'Netlify, Inc.\n101 2nd Street\nSan Francisco, CA 94105\nÉtats-Unis\nmobsante.netlify.app',
+          ),
+          _LegalDivider(),
+          _LegalInformationRow(
+            icon: Icons.mail_outline,
+            title: 'Contact hébergeur',
+            content: 'support@netlify.com',
           ),
           _LegalDivider(),
           _LegalInformationRow(
